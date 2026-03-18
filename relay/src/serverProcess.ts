@@ -28,10 +28,8 @@ export class GameManager {
      * IMPORTANT! Tags here need to be lower case!
     */
     this.queueLength = {
-      "g/hhu-adam/robo": 2,
-      "g/leanprover-community/nng4": 5,
-      "g/djvelleman/stg4": 2,
-      "g/trequetrum/lean4game-logic": 2,
+      "g/leanprover-community/nng4": 2,
+      "g/ryyanmapes/visualtest": 2,
     };
     /** We keep queues of started Lean Server processes to be ready when a user arrives */
     this.queue = {};

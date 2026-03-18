@@ -35,6 +35,7 @@ WORKDIR /NNG4
 # lake exe cache get saves hours of compilation.
 RUN elan toolchain install "$(cat lean-toolchain)"
 RUN lake exe cache get
+RUN lake update -Klean4game.local
 RUN lake build
 
 # ── VisualTest ────────────────────────────────────────────────────────────
@@ -66,8 +67,11 @@ RUN npm run build:relay && npm run build:client
 # ── Stage 3: Production image ──────────────────────────────────────────────
 FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl libatomic1 ca-certificates \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      curl libatomic1 ca-certificates bubblewrap tzdata \
+    && ln -sf /usr/share/zoneinfo/UTC /etc/localtime \
+    && echo "UTC" > /etc/timezone \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -80,10 +84,12 @@ ENV PATH="${PATH}:/root/.elan/bin"
 WORKDIR /app
 
 # Node relay and compiled client
-COPY --from=node-builder /app/relay/dist   ./relay/dist
-COPY --from=node-builder /app/client/dist  ./client/dist
-COPY --from=node-builder /app/node_modules ./node_modules
-COPY --from=node-builder /app/package.json ./package.json
+COPY --from=node-builder /app/relay/dist    ./relay/dist
+COPY --from=node-builder /app/relay/scripts ./relay/scripts
+COPY --from=node-builder /app/client/dist   ./client/dist
+COPY --from=node-builder /app/node_modules  ./node_modules
+COPY --from=node-builder /app/package.json  ./package.json
+RUN chmod +x ./relay/scripts/*.sh
 
 # Games: relay maps URL /g/{owner}/{repo} → games/{owner}/{repo} on disk.
 # Docker follows symlinks in COPY so .lake/packages/* are inlined as real dirs.

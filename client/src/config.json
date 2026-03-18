@@ -1,6 +1,7 @@
 {
   "allGames": [
     "leanprover-community/nng4",
+    "ryyanmapes/visualtest",
     "hhu-adam/robo",
     "alexkontorovich/realanalysisgame",
     "djvelleman/stg4",
