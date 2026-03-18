@@ -46,6 +46,7 @@ COPY VisualTest /VisualTest
 # with the real file since Docker cannot follow cross-directory symlinks.
 RUN cp /lean4game/server/lean-toolchain /VisualTest/lean-toolchain
 WORKDIR /VisualTest
+RUN lake update
 RUN lake build
 
 # ── Stage 2: Build Node.js relay and client ────────────────────────────────
