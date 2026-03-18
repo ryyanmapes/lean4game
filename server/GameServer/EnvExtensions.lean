@@ -77,8 +77,14 @@ structure InventoryTemplate where
 
 /-- A full inventory item including the processing by `MakeGame`, which creates these
 from the `InventoryTemplate`s and modifies them. -/
+inductive TheoremKind where
+| equality
+| proposition
+deriving ToJson, FromJson, Repr, Inhabited, BEq
+
 structure InventoryItem extends InventoryTemplate where
   statement: String := ""
+  theoremKind?: Option TheoremKind := none
   deriving ToJson, Repr, Inhabited
 
 /-- A reduced variant of `InventoryItem` which is used for the tiles in the doc -/

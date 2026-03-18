@@ -2,6 +2,7 @@ import Lean
 import GameServer.RpcHandlers
 import GameServer.SaveData
 import GameServer.Tactic.LetIntros
+import GameServer.Tactic.Visual
 import GameServer.Helpers.DeclSig
 
 namespace GameServer

@@ -335,6 +335,33 @@ td code  {
   width: 1.8rem;
 }
 
+.unlock-levels-btn {
+  margin: 0;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+}
+
+.unlock-levels-btn.active {
+  background: var(--clr-primary);
+  color: white;
+}
+
+.unlock-levels-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.unlock-levels-state {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .tmp-pusher {
   align-items: center;
   display: flex;

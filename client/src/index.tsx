@@ -9,6 +9,7 @@ import ErrorPage from './components/error_page'
 import Welcome from './components/welcome'
 import LandingPage from './components/landing_page'
 import Level from './components/level'
+import VisualProofPage from './visual/VisualProofPage'
 import './i18n';
 
 
@@ -56,6 +57,10 @@ const router = createHashRouter([
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId",
         element: <Level />,
+      },
+      {
+        path: "/g/:owner/:repo/world/:worldId/level/:levelId/visual",
+        element: <VisualProofPage />,
       },
     ],
   },

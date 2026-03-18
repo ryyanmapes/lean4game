@@ -8,11 +8,41 @@ import type { ContextInfo, FVarId, CodeWithInfos, MVarId } from '@leanprover/inf
 import { InteractiveDiagnostic, TermInfo } from '@leanprover/infoview/*';
 import type { Diagnostic } from 'vscode-languageserver-protocol';
 
+/** Mirrors `GameServer.ExprTree` from Structures.lean. */
+export type ExprTree =
+  | { tag: 'lit';   n: number }
+  | { tag: 'fvar';  name: string }
+  | { tag: 'const'; name: string }
+  | { tag: 'app';   func: ExprTree; arg: ExprTree }
+  | { tag: 'other'; pp: string }
+
+/** Mirrors `GameServer.EqualityTree` from Structures.lean.
+ *  `isRefl` is true when lhs and rhs are definitionally equal (provable by rfl). */
+export interface EqualityTree {
+  lhs: ExprTree;
+  rhs: ExprTree;
+  isRefl: boolean;
+}
+
+export interface ClickActionOption {
+  label: string;
+  playTactic: string;
+  previewText?: string;
+}
+
+export interface ClickAction {
+  playTactic?: string;
+  tooltip?: string;
+  streamSplit?: boolean;
+  options: ClickActionOption[];
+}
+
 export interface InteractiveHypothesisBundle {
   /** The pretty names of the variables in the bundle. Anonymous names are rendered
    * as `"[anonymous]"` whereas inaccessible ones have a `✝` appended at the end.
    * Use `InteractiveHypothesisBundle_nonAnonymousNames` to filter anonymouse ones out. */
   names: string[];
+  playName?: string;
   fvarIds?: FVarId[];
   type: CodeWithInfos;
   val?: CodeWithInfos;
@@ -21,6 +51,12 @@ export interface InteractiveHypothesisBundle {
   isInserted?: boolean;
   isRemoved?: boolean;
   isAssumption?: boolean;
+  /** If the hyp type is `lhs = rhs`, the parsed equality tree (else absent). */
+  equalityTree?: EqualityTree;
+  /** Backend-rendered forms obtained only from reducible unfolding. */
+  reductionForms?: string[];
+  /** Backend-driven click behavior for this hypothesis card, if any. */
+  clickAction?: ClickAction;
 }
 
 export interface InteractiveGoalCore {
@@ -35,6 +71,10 @@ export interface InteractiveGoal extends InteractiveGoalCore {
   mvarId?: MVarId;
   isInserted?: boolean;
   isRemoved?: boolean;
+  /** Backend-rendered forms obtained only from reducible unfolding. */
+  reductionForms?: string[];
+  /** Backend-driven click behavior for this goal card, if any. */
+  clickAction?: ClickAction;
 }
 
 export interface InteractiveGoals extends InteractiveGoalCore {
@@ -56,12 +96,23 @@ export interface GameHint {
 export interface InteractiveGoalWithHints {
   goal: InteractiveGoal;
   hints: GameHint[];
+  /** If the goal type is `lhs = rhs`, the parsed equality tree (else absent). */
+  equalityTree?: EqualityTree;
+  /** Backend-rendered forms obtained only from reducible unfolding. */
+  reductionForms?: string[];
+}
+
+export interface StepAnnotation {
+  playTactic: string;    // e.g. "drag_to h h2"
+  leanTactic?: string;   // e.g. "specialize h2 h" — resolved by Lean (currently always absent)
 }
 
 export interface InteractiveGoalsWithHints {
   goals: InteractiveGoalWithHints[];
+  focusedGoals?: InteractiveGoalWithHints[];
   command: string;
   diags: InteractiveDiagnostic[];
+  annotation?: StepAnnotation;  // present for drag_* steps, absent for hand-typed tactics
 }
 
 /**

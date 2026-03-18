@@ -51,6 +51,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # VisualTest must be a sibling of lean4game so the relay can find it.
+      # The relay resolves local/{repo} as ../lean4game/../{repo} at runtime.
+      # VisualTest's lakefile.toml and lean-toolchain both reference ../lean4game/server
+      # via relative paths, which also resolve correctly with this layout.
+      - name: Checkout VisualTest
+        uses: actions/checkout@v4
+        with:
+          repository: ryyanmapes/VisualTest
+          path: ../VisualTest
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -73,6 +83,10 @@ jobs:
           npm install
           npm run build
           npm run build:test
+
+      - name: Build VisualTest game
+        working-directory: ../VisualTest
+        run: lake build
 
       - name: Run Cypress tests (Development mode)
         run: npm run test

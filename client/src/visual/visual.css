@@ -1,0 +1,1052 @@
+/* Visual Proof Page — mirrors the EqTransformer combining-mode aesthetic exactly.
+   All styles are self-contained; no lean4game classes are overridden. */
+
+/* ── CSS variables (scoped so they don't bleed into lean4game) ── */
+.visual-page {
+  --bg-gradient-start: #0f172a;
+  --bg-gradient-end: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-color: #8b5cf6;
+  --accent-glow: rgba(139, 92, 246, 0.5);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Loading / error state ── */
+.visual-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #a78bfa;
+  font-size: 1.1rem;
+  letter-spacing: 0.03em;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+/* ── Canvas: free-form absolute-position workspace ── */
+.visual-page .combining-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Hypothesis cards ── */
+.visual-page .statement-card {
+  padding: 1rem 1.5rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 0.2s, background 0.2s;
+  z-index: 10;
+  white-space: nowrap;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.visual-page .statement-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.visual-page .statement-card.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.visual-page .statement-card.theorem-copy-card,
+.visual-page .statement-card.theorem-tray-card {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+  max-width: min(640px, calc(100vw - 6rem));
+  white-space: normal;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.visual-page .statement-card.theorem-copy-card:hover,
+.visual-page .statement-card.theorem-tray-card:hover {
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.visual-page .statement-card.tactic-tray-card {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.11);
+  max-width: min(320px, calc(100vw - 6rem));
+  white-space: normal;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.visual-page .statement-card.tactic-tray-card:hover {
+  background: rgba(248, 113, 113, 0.18);
+}
+
+.visual-page .statement-card.fly-in {
+  transition: left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              top 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s,
+              background 0.2s;
+}
+
+/* ── Goal card: fixed on the right, yellow glow ── */
+.visual-page .goals-container {
+  position: fixed;
+  right: 3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  z-index: 15;
+}
+
+.visual-page .statement-card.goal {
+  cursor: default;
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
+  border-color: #eab308;
+}
+
+.visual-page .stream-navigator {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  z-index: 32;
+}
+
+.visual-page .stream-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.visual-page .stream-nav-btn {
+  padding: 0.25rem 0.75rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.visual-page .stream-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.visual-page .stream-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.visual-page .stream-indicator {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.visual-page .stream-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.visual-page .proof-tree-diagram {
+  position: fixed;
+  top: 1rem;
+  right: 1.5rem;
+  z-index: 31;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 0.25rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+}
+
+.visual-page .proof-tree-diagram svg {
+  display: block;
+}
+
+.visual-page .proof-tree-diagram svg circle {
+  transition: all 0.2s ease;
+}
+
+.visual-page .proof-tree-diagram svg g:hover circle {
+  filter: brightness(1.3);
+}
+
+.visual-page .theorem-tray {
+  position: fixed;
+  left: 2rem;
+  right: 2rem;
+  bottom: 1.5rem;
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+}
+
+.visual-page .theorem-tray-tabs {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.visual-page .theorem-tray-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.45rem 0.95rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-family: var(--font-family), system-ui, sans-serif;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+.visual-page .theorem-tray-tab:hover {
+  transform: translateY(-1px);
+}
+
+.visual-page .theorem-tray-tab.theorems {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.06);
+}
+
+.visual-page .theorem-tray-tab.theorems.active {
+  border-color: rgba(52, 211, 153, 0.44);
+  background: rgba(52, 211, 153, 0.16);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.16);
+}
+
+.visual-page .theorem-tray-tab.tactics {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.visual-page .theorem-tray-tab.tactics.active {
+  border-color: rgba(248, 113, 113, 0.44);
+  background: rgba(248, 113, 113, 0.16);
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.16);
+}
+
+.visual-page .theorem-tray-list {
+  display: flex;
+  gap: 0.85rem;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.visual-page .theorem-tray-card,
+.visual-page .tactic-tray-card {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.visual-page .theorem-tray-card.dragging,
+.visual-page .tactic-tray-card.dragging {
+  opacity: 0;
+}
+
+.visual-page .theorem-overlay-card,
+.visual-page .tactic-overlay-card {
+  cursor: grabbing;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.visual-page .tactic-label {
+  color: #fecaca;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+/* ── Proposition text ── */
+.visual-page .proposition {
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.visual-page .hyp-name {
+  color: #c4b5fd;
+  font-weight: 600;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.25rem;
+}
+
+.visual-page .hyp-colon {
+  color: var(--text-secondary);
+  margin: 0 0.3rem;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.25rem;
+}
+
+.visual-page .goal-prefix {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(234, 179, 8, 0.7);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+/* ── Completed state ── */
+.visual-page .visual-completed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.visual-page .win-card {
+  padding: 3rem 4rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(96, 165, 250, 0.2));
+  border: 1px solid var(--accent-color);
+  border-radius: 24px;
+  text-align: center;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  animation: scaleIn 0.4s ease-out;
+}
+
+.visual-page .win-title {
+  font-size: 3rem;
+  font-weight: 700;
+  background: linear-gradient(to right, #a78bfa, #60a5fa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin: 0 0 0.5rem 0;
+}
+
+.visual-page .win-subtitle {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Transformable goal hint ── */
+.visual-page .statement-card.goal.transformable {
+  cursor: pointer;
+}
+.visual-page .statement-card.goal.transformable:hover {
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.7), 0 0 60px rgba(234, 179, 8, 0.4);
+}
+
+/* ── Clickable goal: cursor hint only, no colour change ── */
+.visual-page .statement-card.goal.clickable {
+  cursor: pointer;
+}
+.visual-page .statement-card.goal.clickable:hover {
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.7), 0 0 60px rgba(234, 179, 8, 0.4);
+}
+
+.visual-page .statement-card.clickable:not(.goal) {
+  cursor: pointer;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+.visual-page .statement-card.clickable:not(.goal):hover:not(.dragging) {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.visual-page .or-tooltip-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+}
+
+.visual-page .or-tooltip {
+  position: fixed;
+  transform: translate(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+  animation: tooltipIn 0.12s ease-out;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(40rem, calc(100vw - 1.5rem));
+}
+
+@keyframes tooltipIn {
+  from { opacity: 0; transform: translate(-50%) translateY(-4px); }
+  to   { opacity: 1; transform: translate(-50%) translateY(0); }
+}
+
+.visual-page .or-tooltip-divider {
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.visual-page .or-tooltip-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 0.9rem;
+  text-align: left;
+  min-width: 11rem;
+  max-width: 16rem;
+}
+
+.visual-page .or-tooltip-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+}
+
+.visual-page .or-tooltip-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8b5cf6;
+}
+
+.visual-page .or-tooltip-btn .proposition {
+  display: block;
+  width: 100%;
+  line-height: 1.32;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .visual-page .or-tooltip {
+    flex-direction: column;
+    width: min(22rem, calc(100vw - 1.5rem));
+  }
+
+  .visual-page .or-tooltip-btn {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .visual-page .or-tooltip-divider {
+    text-align: center;
+  }
+}
+
+.visual-page .defeq-tooltip {
+  position: fixed;
+  transform: translate(-50%);
+  z-index: 48;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 220px;
+  max-width: min(520px, calc(100vw - 3rem));
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: tooltipIn 0.12s ease-out;
+}
+
+.visual-page .defeq-tooltip.closing {
+  animation: tooltipOut 0.14s ease-in forwards;
+}
+
+.visual-page .defeq-tooltip-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #93c5fd;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.visual-page .defeq-tooltip-item {
+  line-height: 1.35;
+}
+
+@keyframes tooltipOut {
+  from { opacity: 1; transform: translate(-50%) translateY(0); }
+  to   { opacity: 0; transform: translate(-50%) translateY(-4px); }
+}
+
+/* ── Solved goal: green glow after rfl accepted ── */
+.visual-page .statement-card.goal.solved {
+  border-color: #22c55e;
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.7), 0 0 60px rgba(34, 197, 94, 0.4);
+  animation: goal-solved-pulse 0.6s ease-out;
+}
+
+@keyframes goal-solved-pulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
+  40%  { transform: scale(1.06); box-shadow: 0 0 50px rgba(34, 197, 94, 0.9); }
+  100% { transform: scale(1);    box-shadow: 0 0 30px rgba(34, 197, 94, 0.7); }
+}
+
+/* ── Completion banner: slides up from bottom ── */
+.completion-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.12), rgba(74, 222, 128, 0.18), rgba(34, 197, 94, 0.12));
+  border-top: 1px solid rgba(34, 197, 94, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: slideUpBanner 0.4s ease-out;
+}
+
+@keyframes slideUpBanner {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.completion-banner-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4ade80;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.completion-banner-sub {
+  font-size: 0.9rem;
+  color: rgba(74, 222, 128, 0.7);
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.completion-banner-btn {
+  margin-left: 1rem;
+  padding: 0.45rem 1.1rem;
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  border-radius: 8px;
+  color: #4ade80;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-family), system-ui, sans-serif;
+  transition: background 0.2s, border-color 0.2s;
+}
+.completion-banner-btn:hover {
+  background: rgba(34, 197, 94, 0.35);
+  border-color: rgba(34, 197, 94, 0.8);
+}
+
+/* ── Decomposable hyp (∧): pointer cursor hint ── */
+.visual-page .statement-card.decomposable {
+  cursor: pointer;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+.visual-page .statement-card.decomposable:hover:not(.dragging) {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+/* ============================================
+   Transformation Overlay
+   ============================================ */
+
+.visual-page.tr-overlay {
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+}
+
+/* Back button — top-left */
+.visual-page .tr-back-btn {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.visual-page .tr-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Main expression area */
+.visual-page .tr-main-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* Static "lhs =" label on the left */
+.visual-page .tr-static-label {
+  position: absolute;
+  left: 3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: top 0.2s ease, left 0.2s ease, transform 0.2s ease;
+}
+
+.visual-page .tr-static-label.compact {
+  left: 1.5rem;
+  font-size: 1.75rem;
+}
+
+/* Working expression — scaled up like prototype */
+.visual-page .tr-expr-wrapper {
+  transform: scale(1.5);
+}
+
+/* Undo / Reset controls — bottom-left */
+.visual-page .tr-controls {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  display: flex;
+  gap: 1rem;
+}
+
+/* Swap / Reverse — bottom-right */
+.visual-page .tr-side-controls {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  gap: 1rem;
+}
+
+.visual-page .tr-ctrl-btn {
+  width: 2.8rem;
+  height: 2.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.visual-page .tr-ctrl-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+.visual-page .tr-ctrl-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.visual-page .tr-ctrl-btn.active-undo { color: #facc15; background: rgba(250, 204, 21, 0.1); }
+.visual-page .tr-ctrl-btn.active-reverse { color: #a78bfa; background: rgba(167, 139, 250, 0.15); }
+.visual-page .tr-ctrl-btn.reset { color: #f87171; }
+
+/* ── Rule dock ── */
+.visual-page .tr-rule-dock {
+  width: 100%;
+  flex-shrink: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: row;
+  gap: 1.5rem;
+  overflow-x: auto;
+  z-index: 20;
+}
+
+.visual-page .tr-rule-section {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  padding-right: 1.5rem;
+}
+.visual-page .tr-rule-section:last-child {
+  border-right: none;
+}
+
+.visual-page .tr-section-label {
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* ── Rule cards ── */
+.visual-page .tr-rule-card {
+  min-width: 9rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: grab;
+  user-select: none;
+  transition: background 0.2s, box-shadow 0.2s;
+  flex-shrink: 0;
+}
+.visual-page .tr-rule-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.visual-page .tr-rule-card.dragging {
+  opacity: 0.5;
+  box-shadow: 0 0 0 2px #8b5cf6;
+}
+.visual-page .tr-rule-card h3 {
+  color: #d8b4fe;
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin: 0 0 0.25rem 0;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+.visual-page .tr-symbol {
+  font-family: 'Cambria Math', 'Latin Modern Math', monospace;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+/* Equality hyp cards — blue tint */
+.visual-page .tr-eq-card {
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(96, 165, 250, 0.06);
+}
+.visual-page .tr-eq-card h3 { color: #93c5fd; }
+
+/* Theorem cards — green tint */
+.visual-page .tr-theorem-card {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.06);
+}
+.visual-page .tr-theorem-card h3 { color: #6ee7b7; }
+.visual-page .tr-theorem-card.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Expression nodes ── */
+.visual-page .tr-expression-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.visual-page .tr-expression-node.binary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+.visual-page .tr-expression-node.potential-target {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.1);
+}
+.visual-page .tr-expression-node.droppable-hover {
+  box-shadow: 0 0 0 2px #8b5cf6, 0 0 20px rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.15);
+}
+.visual-page .tr-expression-node.droppable-invalid {
+  box-shadow: 0 0 0 2px #64748b;
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.visual-page .tr-child { display: flex; align-items: center; }
+
+.visual-page .tr-op {
+  color: #a78bfa;
+  font-weight: bold;
+  font-size: 1.25rem;
+  margin: 0 0.25rem;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+}
+
+.visual-page .tr-node-content {
+  font-size: 1.125rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.25rem;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  color: var(--text-primary);
+}
+
+/* ── Connection arrow SVG overlay ── */
+.visual-page .tr-connection-arrow {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* ── Failure feedback: shake + red flash ── */
+@keyframes drag-fail-shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+
+.drag-fail {
+  animation: drag-fail-shake 0.5s ease;
+  border-color: #f87171 !important;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.4) !important;
+}
+
+/* ── Drop target highlight ── */
+.visual-page .drop-target-active {
+  box-shadow: 0 0 0 2px #8b5cf6, 0 0 20px rgba(139, 92, 246, 0.4) !important;
+  border-color: #8b5cf6 !important;
+}
+
+/* ── Toolbar ── */
+.visual-toolbar {
+  position: absolute;
+  top: 1rem;
+  left: 1.5rem;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.visual-toolbar-btn {
+  padding: 0.4rem 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+.visual-toolbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+.visual-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.visual-processing-label {
+  font-size: 0.8rem;
+  color: #a78bfa;
+  font-style: italic;
+  padding: 0 0.25rem;
+}
+
+/* ── TransformationView processing overlay ── */
+.tr-processing {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  cursor: wait;
+}
+
+/* ── View Lean Proof panel ── */
+.proof-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.proof-panel {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  min-width: 36rem;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.proof-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.proof-panel-title {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.proof-panel-copy,
+.proof-panel-close {
+  padding: 0.3rem 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.proof-panel-copy:hover,
+.proof-panel-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+.proof-panel-body {
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.proof-steps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 0.95rem;
+}
+
+.proof-steps-table th {
+  text-align: left;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.proof-steps-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+.play-tactic { color: #93c5fd; }
+.arrow-cell  { color: #475569; text-align: center; width: 2rem; }
+.lean-tactic { color: #6ee7b7; }
+.lean-tactic.unknown { color: #475569; font-style: italic; }

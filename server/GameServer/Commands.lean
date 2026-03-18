@@ -14,6 +14,19 @@ namespace GameServer
 
 set_option autoImplicit false
 
+def getTheoremKind (name : Name) : CommandElabM TheoremKind := do
+  runTermElabM fun _ => do
+    let constExpr ← mkConstWithFreshMVarLevels name
+    let constType ← inferType constExpr
+    let (args, _, body) ← forallMetaTelescopeReducing constType
+    for arg in args do
+      if ← isProp (← inferType arg) then
+        return .proposition
+    if (← matchEq? body).isSome then
+      pure .equality
+    else
+      pure .proposition
+
 /-! # Game metadata -/
 
 /-- Switch to the specified `Game` (and create it if non-existent). Example: `Game "NNG"` -/
@@ -576,11 +589,14 @@ elab "MakeGame" : command => do
 
     match item.type with
     | .Theorem =>
-      modifyEnv (inventoryExt.addEntry · { item with
+      let theoremKind ← getTheoremKind name
+      let entry : InventoryItem := { item with
         content := content
         -- Add the lemma statement to the doc
         statement := (← getStatementString name)
-      })
+        theoremKind? := some theoremKind
+      }
+      modifyEnv (inventoryExt.addEntry · entry)
     | _ =>
       modifyEnv (inventoryExt.addEntry · { item with
         content := content

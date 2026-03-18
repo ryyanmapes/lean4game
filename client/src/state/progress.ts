@@ -27,7 +27,8 @@ export interface GameProgressState {
   difficulty: number,
   readIntro: boolean,
   data: WorldProgressState,
-  typewriterMode?: boolean
+  typewriterMode?: boolean,
+  unlockLevels?: boolean
 }
 
 /**
@@ -54,7 +55,13 @@ const initalLevelProgressState: LevelProgressState = {code: "", completed: false
 /** Add an empty skeleton with progress for the current game */
 function addGameProgress (state: ProgressState, action: PayloadAction<{game: string}>) {
   if (!state.games[action.payload.game.toLowerCase()]) {
-    state.games[action.payload.game.toLowerCase()] = {inventory: [], readIntro: false, data: {}, difficulty: DEFAULT_DIFFICULTY}
+    state.games[action.payload.game.toLowerCase()] = {
+      inventory: [],
+      readIntro: false,
+      data: {},
+      difficulty: DEFAULT_DIFFICULTY,
+      unlockLevels: false
+    }
   }
   if (!state.games[action.payload.game.toLowerCase()].data) {
     state.games[action.payload.game.toLowerCase()].data = {}
@@ -105,7 +112,13 @@ export const progressSlice = createSlice({
     },
     /** delete all progress for this game */
     deleteProgress(state: ProgressState, action: PayloadAction<{game: string}>) {
-      state.games[action.payload.game.toLowerCase()] = {inventory: [], data: {}, readIntro: false, difficulty: DEFAULT_DIFFICULTY}
+      state.games[action.payload.game.toLowerCase()] = {
+        inventory: [],
+        data: {},
+        readIntro: false,
+        difficulty: DEFAULT_DIFFICULTY,
+        unlockLevels: false
+      }
     },
     /** delete progress for this world */
     deleteWorldProgress(state: ProgressState, action: PayloadAction<{game: string, world: string}>) {
@@ -120,7 +133,7 @@ export const progressSlice = createSlice({
     /** load progress, e.g. from external import */
     loadProgress(state: ProgressState, action: PayloadAction<{game: string, data:GameProgressState}>) {
       console.debug(`setting data to:\n ${action.payload.data}`)
-      state.games[action.payload.game.toLowerCase()] = action.payload.data
+      state.games[action.payload.game.toLowerCase()] = {unlockLevels: false, ...action.payload.data}
     },
     /** set the current inventory */
     changedInventory(state: ProgressState, action: PayloadAction<{game: string, inventory: string[]}>) {
@@ -145,6 +158,11 @@ export const progressSlice = createSlice({
     changeTypewriterMode(state: ProgressState, action: PayloadAction<{game: string, typewriterMode: boolean}>) {
       addGameProgress(state, action)
       state.games[action.payload.game.toLowerCase()].typewriterMode = action.payload.typewriterMode
+    },
+    /** toggle whether all levels should be treated as unlocked for this game */
+    changeUnlockLevels(state: ProgressState, action: PayloadAction<{game: string, unlockLevels: boolean}>) {
+      addGameProgress(state, action)
+      state.games[action.payload.game.toLowerCase()].unlockLevels = action.payload.unlockLevels
     }
   }
 })
@@ -191,6 +209,9 @@ export function selectSelections(game: string, world: string, level: number) {
 /** return whether the current level is clompleted */
 export function selectCompleted(game: string, world: string, level: number) {
   return (state) => {
+    if (selectUnlockLevels(game?.toLowerCase())(state)) {
+      return true
+    }
     return selectLevel(game?.toLowerCase(), world, level)(state).completed
   }
 }
@@ -206,6 +227,13 @@ export function selectProgress(game: string) {
 export function selectDifficulty(game: string) {
   return (state) => {
     return state.progress.games[game?.toLowerCase()]?.difficulty ?? DEFAULT_DIFFICULTY
+  }
+}
+
+/** return whether all levels should be treated as unlocked for the current game */
+export function selectUnlockLevels(game: string) {
+  return (state) => {
+    return state.progress.games[game?.toLowerCase()]?.unlockLevels ?? false
   }
 }
 
@@ -229,4 +257,4 @@ export function selectTypewriterMode(game: string) {
 /** Export actions to modify the progress */
 export const { changedSelection, codeEdited, levelCompleted, deleteProgress,
   deleteLevelProgress, deleteWorldProgress, loadProgress, helpEdited, changedInventory, changedReadIntro,
-  changedDifficulty, changeTypewriterMode} = progressSlice.actions
+  changedDifficulty, changeTypewriterMode, changeUnlockLevels} = progressSlice.actions

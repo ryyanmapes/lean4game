@@ -1,0 +1,13 @@
+diff --git a/node_modules/vscode/vscode/src/vs/base/common/resources.js b/node_modules/vscode/vscode/src/vs/base/common/resources.js
+index ef1b61a..55009d0 100644
+--- a/node_modules/vscode/vscode/src/vs/base/common/resources.js
++++ b/node_modules/vscode/vscode/src/vs/base/common/resources.js
+@@ -65,7 +65,7 @@ class ExtUri {
+         }
+         let dirname;
+         if (resource.scheme === Schemas.file) {
+-            dirname = URI.file(dirname$1(originalFSPath(resource))).path;
++            dirname = posix.dirname(resource.path);
+         }
+         else {
+             dirname = posix.dirname(resource.path);

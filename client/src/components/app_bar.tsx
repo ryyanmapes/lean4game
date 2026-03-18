@@ -5,11 +5,13 @@ import * as React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faDownload, faUpload, faEraser, faBook, faBookOpen, faGlobe, faHome,
   faArrowRight, faArrowLeft, faXmark, faBars, faCode,
-  faCircleInfo, faTerminal, faGear } from '@fortawesome/free-solid-svg-icons'
+  faCircleInfo, faTerminal, faGear, faLock, faLockOpen } from '@fortawesome/free-solid-svg-icons'
 import { GameIdContext } from "../app"
 import { InputModeContext, PreferencesContext, WorldLevelIdContext } from "./infoview/context"
 import { GameInfo, useGetGameInfoQuery } from '../state/api'
-import { changedReadIntro, selectCompleted, selectDifficulty, selectProgress } from '../state/progress'
+import { changeUnlockLevels, changedReadIntro, selectCompleted, selectDifficulty, selectProgress, selectUnlockLevels } from '../state/progress'
+import { saveState } from '../state/local_storage'
+import { store } from '../state/store'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { Button } from './button'
 import { downloadProgress } from './popup/erase'
@@ -162,6 +164,31 @@ export function PreferencesButton() {
   </Button>
 }
 
+function UnlockLevelsButton() {
+  const { t } = useTranslation()
+  const gameId = React.useContext(GameIdContext)
+  const dispatch = useAppDispatch()
+  const unlockLevels = useAppSelector(selectUnlockLevels(gameId))
+
+  function toggleUnlockLevels() {
+    dispatch(changeUnlockLevels({game: gameId, unlockLevels: !unlockLevels}))
+    saveState(store.getState().progress)
+    window.location.reload()
+  }
+
+  return <button
+    type="button"
+    className={`btn btn-inverted unlock-levels-btn${unlockLevels ? ' active' : ''}`}
+    title={unlockLevels ? t("Turn off unlock levels") : t("Unlock all levels")}
+    aria-pressed={unlockLevels}
+    onClick={toggleUnlockLevels}>
+    <span className="unlock-levels-label">
+      <FontAwesomeIcon icon={unlockLevels ? faLockOpen : faLock} />&nbsp;{t("Unlock levels")}
+    </span>
+    <span className="unlock-levels-state">{unlockLevels ? t("On") : t("Off")}</span>
+  </button>
+}
+
 function GameInfoButton() {
   const [, closeNav] = useAtom(closeNavAtom)
   const [, setPopup] = useAtom(popupAtom)
@@ -259,6 +286,7 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
       <EraseButton />
       <DownloadButton gameId={gameId} gameProgress={gameProgress}/>
       <UploadButton />
+      <UnlockLevelsButton />
       <ImpressumButton isDropdown={true} />
       <PrivacyButton isDropdown={true} />
       <EraseButton />

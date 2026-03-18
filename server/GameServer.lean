@@ -14,4 +14,5 @@ import GameServer.Runner
 import GameServer.SaveData
 import GameServer.Structures
 import GameServer.Tactic.LetIntros
+import GameServer.Tactic.Visual
 import GameServer.Utils

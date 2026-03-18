@@ -75,6 +75,7 @@ interface Doc {
   displayName: string,
   content: string,
   statement: string,
+  theoremKind?: "equality" | "proposition",
   type: string, // TODO: can I remove these?
   category: string,
 }
