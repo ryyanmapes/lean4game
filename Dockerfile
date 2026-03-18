@@ -42,6 +42,9 @@ RUN lake build
 # resolves to /lean4game/server/lean-toolchain already copied above.
 # VisualTest has no mathlib dependency so no cache step needed.
 COPY VisualTest /VisualTest
+# lean-toolchain is a symlink → ../lean4game/server/lean-toolchain; replace it
+# with the real file since Docker cannot follow cross-directory symlinks.
+RUN cp /lean4game/server/lean-toolchain /VisualTest/lean-toolchain
 WORKDIR /VisualTest
 RUN lake build
 
