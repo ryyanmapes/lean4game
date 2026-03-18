@@ -10,9 +10,11 @@
 # ── Stage 1: Build Lean games and GameServer ───────────────────────────────
 FROM ubuntu:22.04 AS lean-builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       git curl libatomic1 ca-certificates tzdata \
     && ln -sf /usr/share/zoneinfo/UTC /etc/localtime \
+    && echo "UTC" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Install elan. The concrete Lean version is determined per-game by lean-toolchain.
