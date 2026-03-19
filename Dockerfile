@@ -34,7 +34,6 @@ WORKDIR /NNG4
 # Fetch the toolchain, then download pre-compiled mathlib .olean cache.
 # lake exe cache get saves hours of compilation.
 RUN elan toolchain install "$(cat lean-toolchain)"
-RUN lake update -Klean4game.local
 RUN lake exe cache get
 RUN lake build
 
