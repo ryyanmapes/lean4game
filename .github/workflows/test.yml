@@ -83,7 +83,9 @@ jobs:
 
       - name: Build VisualTest game
         working-directory: ../VisualTest
-        run: lake build
+        run: |
+          lake update
+          lake build
 
       - name: Run Cypress tests (Development mode)
         run: npm run test

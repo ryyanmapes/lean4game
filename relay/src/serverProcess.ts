@@ -52,18 +52,25 @@ export class GameManager {
     const game = `${resolvedGame.owner}/${resolvedGame.repo}`
     const customLeanServer = this.getCustomLeanServer(resolvedGame.gameDir)
 
-    if (!this.queue[tag] || this.queue[tag].length == 0) {
-      ps = this.createGameProcess(resolvedGame, customLeanServer);
-      if (ps == null) {
-        console.error(`[${new Date()}] server process is undefined/null`);
-        return null;
+    const targetQueueLength = this.queueLength[tag] ?? 0
+    if (targetQueueLength > 0) {
+      if (!this.queue[tag]) {
+        this.queue[tag] = []
       }
-      // TODO (Matvey): extract further information from `req`, for example browser language.
-      console.log(`[${new Date()}] Socket opened by ${ip} on ${game}`);
+
+      if (this.queue[tag].length === 0) {
+        this.fillQueue(resolvedGame)
+      }
+
+      if (this.queue[tag].length > 0) {
+        console.info('Got process from the queue');
+        ps = this.queue[tag].shift(); // Pick the first Lean process; it's likely to be ready immediately
+        this.fillQueue(resolvedGame);
+      } else {
+        ps = this.createGameProcess(resolvedGame, customLeanServer);
+      }
     } else {
-      console.info('Got process from the queue');
-      ps = this.queue[tag].shift(); // Pick the first Lean process; it's likely to be ready immediately
-      this.fillQueue(resolvedGame);
+      ps = this.createGameProcess(resolvedGame, customLeanServer);
     }
 
     if (ps == null) {
@@ -71,6 +78,8 @@ export class GameManager {
       return null;
     }
 
+    // TODO (Matvey): extract further information from `req`, for example browser language.
+    console.log(`[${new Date()}] Socket opened by ${ip} on ${game}`);
     return {process: ps, game: game, gameDir: resolvedGame.gameDir, usesCustomLeanServer: customLeanServer !== null }
   }
 
@@ -198,6 +207,7 @@ export class GameManager {
     let levelId: string
 
     let semanticTokenRequestIds = new Set<number>()
+    let clientUri: string | null = null
 
     const PROOF_START_LINE = 2
 
@@ -228,9 +238,10 @@ export class GameManager {
       }
 
       if (message.method === "textDocument/didOpen") {
-        console.info(`[${new Date()}] didOpen: ${message.params?.textDocument?.uri}`)
+        clientUri = message.params?.textDocument?.uri ?? null
+        console.info(`[${new Date()}] didOpen: ${clientUri}`)
         // Parse the URI to get world and level
-        const uri = new URL(message.params.textDocument.uri)
+        const uri = new URL(clientUri)
         const pathParts = path.parse(uri.pathname)
         worldId = path.basename(pathParts.dir)
         levelId = pathParts.name
@@ -283,7 +294,7 @@ export class GameManager {
       if (usesCustomLeanServer) return message
 
       shiftLines(message, -PROOF_START_LINE);
-      replaceUri(message, `file:///${worldId}/${levelId}.lean`) // as defined in `level.tsx`
+      replaceUri(message, clientUri ?? `file:///${worldId}/${levelId}.lean`)
 
       // Disable range semantic tokens because they are difficult to shift
       if ((message as any)?.result?.capabilities?.semanticTokensProvider?.range) {

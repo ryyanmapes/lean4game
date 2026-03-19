@@ -15,11 +15,19 @@ export class LeanRpcClient {
   constructor(gameId: string, worldId: string, levelId: number) {
     this.worldId = worldId
     this.levelId = levelId
-    this.uri = `file:///${worldId}/${levelId}.lean`
+    const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    this.uri = `file:///${worldId}/${levelId}.lean?session=${encodeURIComponent(sessionId)}`
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/websocket/${gameId}`
     this.ws = new WebSocket(wsUrl)
     this.ws.onmessage = (e) => this.onMessage(JSON.parse(e.data))
+    this.ws.onclose = () => {
+      this.closed = true
+      this.rejectPending(new Error('WebSocket closed'))
+    }
+    this.ws.onerror = () => {
+      this.rejectPending(new Error('WebSocket connection failed'))
+    }
   }
 
   /** Full sequence: connect → open doc → wait for Lean → get proof state.
@@ -28,15 +36,12 @@ export class LeanRpcClient {
     await this.waitForOpen()
     await this.initialize()
     this.sendNotification('initialized', {})
+    const readyPromise = this.waitForFileReady()
     this.sendNotification('textDocument/didOpen', {
       textDocument: { uri: this.uri, languageId: 'lean4', version: this.version, text: '' }
     })
-    await this.waitForFileReady()
-    const { sessionId } = await this.request('$/lean/rpc/connect', {
-      uri: this.uri,
-      position: { line: 0, character: 0 }
-    })
-    this.sessionId = sessionId
+    await readyPromise
+    this.sessionId = await this.connectRpcSession()
     return await this.rpcCallProofState()
   }
 
@@ -62,11 +67,7 @@ export class LeanRpcClient {
       })
       await readyPromise
       // Re-connect: Lean invalidates the RPC session after every didChange.
-      const { sessionId } = await this.request('$/lean/rpc/connect', {
-        uri: this.uri,
-        position: { line: 0, character: 0 }
-      })
-      this.sessionId = sessionId
+      this.sessionId = await this.connectRpcSession()
       const proof = await this.rpcCallProofState()
       // Diagnostics with leanTags (e.g. "unsolved goals") are expected intermediate
       // state — not real errors. Only diagnostics WITHOUT leanTags indicate tactic failures.
@@ -84,6 +85,21 @@ export class LeanRpcClient {
   close() {
     this.closed = true
     this.ws.close()
+  }
+
+  private async connectRpcSession(): Promise<string> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const result = await this.request('$/lean/rpc/connect', {
+        uri: this.uri,
+        position: { line: 0, character: 0 }
+      })
+      const sessionId = result?.sessionId
+      if (typeof sessionId === 'string' && sessionId.length > 0) {
+        return sessionId
+      }
+      await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)))
+    }
+    throw new Error('Lean RPC session did not initialize')
   }
 
   private async rpcCallProofState(): Promise<ProofState> {
@@ -152,6 +168,13 @@ export class LeanRpcClient {
 
   private send(msg: object) {
     this.ws.send(JSON.stringify(msg))
+  }
+
+  private rejectPending(error: Error) {
+    for (const { reject } of this.pending.values()) {
+      reject(error)
+    }
+    this.pending.clear()
   }
 
   private onMessage(msg: any) {
