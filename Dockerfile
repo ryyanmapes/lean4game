@@ -68,7 +68,7 @@ FROM ubuntu:22.04
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      curl libatomic1 ca-certificates bubblewrap tzdata \
+      curl libatomic1 ca-certificates bubblewrap tzdata git python3 \
     && ln -sf /usr/share/zoneinfo/UTC /etc/localtime \
     && echo "UTC" > /etc/timezone \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -89,7 +89,7 @@ COPY --from=node-builder /app/client/dist   ./client/dist
 COPY --from=node-builder /app/node_modules  ./node_modules
 COPY --from=node-builder /app/package.json  ./package.json
 RUN chmod +x ./relay/scripts/*.sh && \
-    printf '#!/bin/bash\n# No-sandbox launcher for Docker — bwrap not needed; Docker provides isolation.\nulimit -t 3600\nGAME_DIR="$1"\nUSE_CUSTOM="$2"\necho "[bubblewrap] GAME_DIR=$GAME_DIR USE_CUSTOM=$USE_CUSTOM" >&2\nif [ "$USE_CUSTOM" = "true" ]; then\n    BINARY="$GAME_DIR/.lake/packages/GameServer/server/.lake/build/bin/gameserver"\n    echo "[bubblewrap] running custom server: $BINARY" >&2\n    cd "$(dirname "$BINARY")" || exit 1\n    exec ./gameserver --server "$GAME_DIR"\nelse\n    cd "$GAME_DIR" || exit 1\n    echo "[bubblewrap] running: lake env lean --server" >&2\n    exec lake env lean --server\nfi\n' > ./relay/scripts/bubblewrap.sh
+    printf '#!/bin/bash\n# No-sandbox launcher for Docker — bwrap not needed; Docker provides isolation.\nulimit -t 3600\nGAME_DIR="$1"\nUSE_CUSTOM="$2"\necho "[bubblewrap] GAME_DIR=$GAME_DIR USE_CUSTOM=$USE_CUSTOM" >&2\nif [ "$USE_CUSTOM" = "true" ]; then\n    BINARY="$GAME_DIR/.lake/packages/GameServer/server/.lake/build/bin/gameserver"\n    echo "[bubblewrap] running custom server: $BINARY" >&2\n    cd "$(dirname "$BINARY")" || exit 1\n    exec ./gameserver --server "$GAME_DIR"\nelse\n    cd "$GAME_DIR" || exit 1\n    echo "[bubblewrap] manifest mathlib url: $(python3 -c \"import json; d=json.load(open(\\\"lake-manifest.json\\\")); [print(p[\\\"url\\\"]) for p in d[\\\"packages\\\"] if p.get(\\\"name\\\")==\\\"mathlib\\\"]\" 2>&1)" >&2\n    echo "[bubblewrap] git remote mathlib url: $(git -C .lake/packages/mathlib remote get-url origin 2>&1)" >&2\n    echo "[bubblewrap] running: lake env lean --server" >&2\n    exec lake env lean --server\nfi\n' > ./relay/scripts/bubblewrap.sh
 
 # Games: relay maps URL /g/{owner}/{repo} → games/{owner}/{repo} on disk.
 # Docker follows symlinks in COPY so .lake/packages/* are inlined as real dirs.
