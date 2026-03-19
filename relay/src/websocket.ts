@@ -76,7 +76,12 @@ export class GameSessionsObserver {
    */
   startObservedGame(ws: WebSocket, req: IncomingMessage) {
     const ip = anonymize(req.headers['x-forwarded-for'] as string || req.socket.remoteAddress);
-    let gameSession: GameSession = this.gameManager.startGame(req, ip)
+    let gameSession: GameSession | null = this.gameManager.startGame(req, ip)
+    if (gameSession == null) {
+      ws.close(1011, 'Game unavailable')
+      return
+    }
+
     let ps = gameSession.process
     let game = gameSession.game
     let gameDir = gameSession.gameDir
@@ -125,7 +130,9 @@ export class GameSessionsObserver {
       const player = this.players.get(ws)
       this.players.delete(ws)
       //this.socketCounter--
-      console.log(`[${new Date()}] Socket closed by ${ip} on ${player.currentGame}`)
+      if (player) {
+        console.log(`[${new Date()}] Socket closed by ${ip} on ${player.currentGame}`)
+      }
     })
   }
 

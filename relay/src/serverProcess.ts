@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 
 type Tag = { owner: string; repo: string; };
+type ResolvedGame = Tag & { gameDir: string };
 export type GameSession = {
   process: ChildProcess,
   game: string,
@@ -37,38 +38,43 @@ export class GameManager {
     this.dir = directory
   }
 
-  startGame(req: IncomingMessage, ip: string): GameSession{
+  startGame(req: IncomingMessage, ip: string): GameSession | null {
     let ps: ChildProcess
     const reRes = this.urlRegEx.exec(req.url);
 
     if (!reRes) { console.error(`Connection refused because of invalid URL: ${req.url}`); return; }
-    const reResTag: Tag = { owner: reRes[1], repo: reRes[2] };
-    const tag = this.getTagString(reResTag);
-    const game = `${reResTag.owner}/${reResTag.repo}`
-    const customLeanServer = this.getCustomLeanServer(reResTag.owner, reResTag.repo)
+    const resolvedGame = this.resolveGame(reRes[1], reRes[2]);
+    if (!resolvedGame) {
+      return null;
+    }
+
+    const tag = this.getTagString(resolvedGame);
+    const game = `${resolvedGame.owner}/${resolvedGame.repo}`
+    const customLeanServer = this.getCustomLeanServer(resolvedGame.gameDir)
 
     if (!this.queue[tag] || this.queue[tag].length == 0) {
-      ps = this.createGameProcess(reResTag.owner, reResTag.repo, customLeanServer);
+      ps = this.createGameProcess(resolvedGame, customLeanServer);
+      if (ps == null) {
+        console.error(`[${new Date()}] server process is undefined/null`);
+        return null;
+      }
       // TODO (Matvey): extract further information from `req`, for example browser language.
       console.log(`[${new Date()}] Socket opened by ${ip} on ${game}`);
     } else {
       console.info('Got process from the queue');
       ps = this.queue[tag].shift(); // Pick the first Lean process; it's likely to be ready immediately
-      this.fillQueue(reResTag);
+      this.fillQueue(resolvedGame);
     }
 
     if (ps == null) {
-      console.error(`[${new Date()}]server process is undefined/null`);
-      return;
+      console.error(`[${new Date()}] server process is undefined/null`);
+      return null;
     }
 
-    const gameDir = this.getGameDir(reResTag.owner, reResTag.repo)
-
-    return {process: ps, game: game, gameDir: gameDir, usesCustomLeanServer: customLeanServer !== null }
+    return {process: ps, game: game, gameDir: resolvedGame.gameDir, usesCustomLeanServer: customLeanServer !== null }
   }
 
-  getCustomLeanServer(owner, repo) : string | null {
-    let gameDir = this.getGameDir(owner, repo);
+  getCustomLeanServer(gameDir: string) : string | null {
     let binary = path.join(gameDir, ".lake", "packages", "GameServer", "server", ".lake", "build", "bin", "gameserver");
     if (fs.existsSync(binary)) {
       return binary
@@ -77,9 +83,8 @@ export class GameManager {
     }
   }
 
-  createGameProcess(owner: string, repo: string, customLeanServer: string | null) {
-    let game_dir = this.getGameDir(owner, repo);
-    if (!game_dir) return;
+  createGameProcess(game: ResolvedGame, customLeanServer: string | null) {
+    let game_dir = game.gameDir;
 
     let serverProcess: cp.ChildProcessWithoutNullStreams;
     if (isDevelopment) {
@@ -97,7 +102,7 @@ export class GameManager {
     } else {
       let cmd = "../../scripts/bubblewrap.sh"
       let options = [game_dir, customLeanServer ? "true" : "false"]
-      if (owner == "test") {
+      if (game.owner == "test") {
         // TestGame doesn't have its own copy of the server and needs lean4game as a local dependency
         const lean4GameFolder = path.join(this.dir, '..', '..', '..', 'server')
         options.push(`--bind ${lean4GameFolder} /server`)
@@ -119,12 +124,27 @@ export class GameManager {
    * start Lean Server processes to refill the queue
    */
   fillQueue(tag: { owner: string; repo: string; }) {
-    const tagString = this.getTagString(tag);
-    while (this.queue[tagString].length < this.queueLength[tagString]) {
+    const resolvedGame = this.resolveGame(tag.owner, tag.repo);
+    if (!resolvedGame) {
+      console.error(`[${new Date()}] Unable to resolve queued game ${tag.owner}/${tag.repo}`);
+      return;
+    }
+
+    const tagString = this.getTagString(resolvedGame);
+    const targetQueueLength = this.queueLength[tagString];
+    if (!targetQueueLength) {
+      return;
+    }
+
+    if (!this.queue[tagString]) {
+      this.queue[tagString] = [];
+    }
+
+    while (this.queue[tagString].length < targetQueueLength) {
       let serverProcess: cp.ChildProcessWithoutNullStreams;
       serverProcess = this.createGameProcess(
-        tag.owner, tag.repo,
-        this.getCustomLeanServer(tag.owner, tag.repo)
+        resolvedGame,
+        this.getCustomLeanServer(resolvedGame.gameDir)
       );
       if (serverProcess == null) {
         console.error(`[${new Date()}] serverProcess was undefined/null`);
@@ -295,11 +315,78 @@ export class GameManager {
     });
   }
 
-  getGameDir(owner: string, repo: string) {
+  private isReadyGameDir(game_dir: string) {
+    return fs.existsSync(game_dir) &&
+      fs.existsSync(path.join(game_dir, ".lake", "gamedata", "game.json"));
+  }
+
+  private resolveInstalledGame(owner: string, repo: string): ResolvedGame | null {
+    const gamesPath = path.join(this.dir, '..', '..', '..', 'games');
+    if (!fs.existsSync(gamesPath)) {
+      console.error(`[${new Date()}] Did not find the following folder: ${gamesPath}`);
+      console.error(`[${new Date()}] Did you already import any games?`);
+      return null;
+    }
+
+    const exactDir = path.join(gamesPath, owner, repo);
+    if (this.isReadyGameDir(exactDir)) {
+      return { owner, repo, gameDir: exactDir };
+    }
+
+    const repoMatches: ResolvedGame[] = [];
+    for (const ownerEntry of fs.readdirSync(gamesPath, { withFileTypes: true })) {
+      if (!ownerEntry.isDirectory()) continue;
+
+      const ownerName = ownerEntry.name;
+      const ownerDir = path.join(gamesPath, ownerName);
+      for (const repoEntry of fs.readdirSync(ownerDir, { withFileTypes: true })) {
+        if (!repoEntry.isDirectory()) continue;
+        if (repoEntry.name.toLowerCase() !== repo) continue;
+
+        const candidateDir = path.join(ownerDir, repoEntry.name);
+        if (!this.isReadyGameDir(candidateDir)) continue;
+
+        repoMatches.push({
+          owner: ownerName.toLowerCase(),
+          repo: repoEntry.name.toLowerCase(),
+          gameDir: candidateDir
+        });
+      }
+    }
+
+    if (repoMatches.length === 1) {
+      const resolvedGame = repoMatches[0];
+      console.warn(
+        `[${new Date()}] Falling back from ${owner}/${repo} to installed game ` +
+        `${resolvedGame.owner}/${resolvedGame.repo}`
+      );
+      return resolvedGame;
+    }
+
+    if (repoMatches.length > 1) {
+      console.error(
+        `[${new Date()}] Ambiguous game lookup for ${owner}/${repo}; matching repos: ` +
+        `${repoMatches.map(match => `${match.owner}/${match.repo}`).join(', ')}`
+      );
+      return null;
+    }
+
+    if (fs.existsSync(exactDir)) {
+      console.error(`[${new Date()}] game.json file does not exist for ${owner}/${repo}!`);
+      return null;
+    }
+
+    console.error(`[${new Date()}] Game '${exactDir}' does not exist!`);
+    return null;
+  }
+
+  private resolveGame(owner: string, repo: string): ResolvedGame | null {
     owner = owner.toLowerCase();
+    repo = repo.toLowerCase();
+
     if (owner == 'local' && !isDevelopment) {
       console.error(`[${new Date()}] No local games in production mode.`);
-      return "";
+      return null;
     }
 
     let game_dir: string
@@ -309,28 +396,26 @@ export class GameManager {
       game_dir = path.join(this.dir, '..', '..', '..', 'cypress', repo)
       console.debug(game_dir)
     } else {
-      const gamesPath = path.join(this.dir, '..', '..', '..', 'games');
-      if (!fs.existsSync(gamesPath)) {
-        console.error(`[${new Date()}] Did not find the following folder: ${gamesPath}`);
-        console.error(`[${new Date()}] Did you already import any games?`);
-        return "";
-      }
-      game_dir = path.join(gamesPath, `${owner}`, `${repo.toLowerCase()}`);
+      return this.resolveInstalledGame(owner, repo);
     }
 
     if (!fs.existsSync(game_dir)) {
       console.error(`[${new Date()}] Game '${game_dir}' does not exist!`);
-      return "";
+      return null;
     }
 
     let game_json: string = path.join(game_dir, ".lake", "gamedata", "game.json")
 
     if (!fs.existsSync(game_json)) {
       console.error(`[${new Date()}] game.json file does not exist for ${owner}/${repo}!`);
-      return "";
+      return null;
     }
 
-    return game_dir;
+    return { owner, repo, gameDir: game_dir };
+  }
+
+  getGameDir(owner: string, repo: string) {
+    return this.resolveGame(owner, repo)?.gameDir ?? "";
   }
 
   getTagString(tag: Tag) {

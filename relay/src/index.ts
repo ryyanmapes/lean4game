@@ -53,15 +53,27 @@ const server = app
 
     const filename = req.params[0];
     req.url = filename;
-    express.static(path.join(gameManager.getGameDir(owner,repo),".i18n",lang))(req, res, next);
+    const gameDir = gameManager.getGameDir(owner, repo)
+    if (!gameDir) {
+      res.status(404).send(`Game '${owner}/${repo}' does not exist.`)
+      return
+    }
+
+    express.static(path.join(gameDir, ".i18n", lang))(req, res, next);
   })
   .use('/data/g/:owner/:repo/*', (req, res, next) => {
     const owner = req.params.owner;
     const repo = req.params.repo
     const filename = req.params[0];
     req.url = filename;
-    console.debug(gameManager.getGameDir(owner,repo))
-    express.static(path.join(gameManager.getGameDir(owner,repo),".lake","gamedata"))(req, res, next);
+    const gameDir = gameManager.getGameDir(owner, repo)
+    if (!gameDir) {
+      res.status(404).send(`Game '${owner}/${repo}' does not exist.`)
+      return
+    }
+
+    console.debug(gameDir)
+    express.static(path.join(gameDir, ".lake", "gamedata"))(req, res, next);
   })
   .use('/data/stats', (req, res, next) => {
     // TODO: this throws on Windows
