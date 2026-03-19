@@ -82,6 +82,10 @@ ENV PATH="${PATH}:/root/.elan/bin"
 
 WORKDIR /app
 
+# Bundle the local GameServer package so games that still depend on
+# "../lean4game/server" can resolve that path at runtime.
+COPY --from=lean-builder /lean4game/server ./lean4game/server
+
 # Node relay and compiled client
 COPY --from=node-builder /app/relay/dist    ./relay/dist
 COPY --from=node-builder /app/relay/scripts ./relay/scripts
@@ -95,6 +99,13 @@ RUN cp ./relay/scripts/docker-bubblewrap.sh ./relay/scripts/bubblewrap.sh && \
 # Docker follows symlinks in COPY so .lake/packages/* are inlined as real dirs.
 COPY --from=lean-builder /NNG4       ./games/leanprover-community/nng4
 COPY --from=lean-builder /VisualTest ./games/ryyanmapes/visualtest
+RUN find ./games -mindepth 2 -maxdepth 2 -type d | while read -r game_dir; do \
+      owner_dir="$(dirname "$game_dir")"; \
+      mkdir -p "$owner_dir/lean4game"; \
+      if [ ! -d "$owner_dir/lean4game/server" ] && [ ! -L "$owner_dir/lean4game/server" ]; then \
+        ln -s /app/lean4game/server "$owner_dir/lean4game/server"; \
+      fi; \
+    done
 
 EXPOSE 8080
 
