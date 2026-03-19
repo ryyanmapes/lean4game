@@ -90,7 +90,7 @@ COPY --from=node-builder /app/client/dist   ./client/dist
 COPY --from=node-builder /app/node_modules  ./node_modules
 COPY --from=node-builder /app/package.json  ./package.json
 RUN chmod +x ./relay/scripts/*.sh && \
-    printf '#!/bin/bash\n# No-sandbox launcher for Docker — bwrap not needed; Docker provides isolation.\nulimit -t 3600\nGAME_DIR="$1"\nUSE_CUSTOM="$2"\nif [ "$USE_CUSTOM" = "true" ]; then\n    BINARY="$GAME_DIR/.lake/packages/GameServer/server/.lake/build/bin/gameserver"\n    cd "$(dirname "$BINARY")" || exit 1\n    exec ./gameserver --server "$GAME_DIR"\nelse\n    cd "$GAME_DIR" || exit 1\n    exec lake serve --\nfi\n' > ./relay/scripts/bubblewrap.sh
+    printf '#!/bin/bash\n# No-sandbox launcher for Docker — bwrap not needed; Docker provides isolation.\nulimit -t 3600\nGAME_DIR="$1"\nUSE_CUSTOM="$2"\nif [ "$USE_CUSTOM" = "true" ]; then\n    BINARY="$GAME_DIR/.lake/packages/GameServer/server/.lake/build/bin/gameserver"\n    cd "$(dirname "$BINARY")" || exit 1\n    exec ./gameserver --server "$GAME_DIR"\nelse\n    cd "$GAME_DIR" || exit 1\n    exec lake serve --no-build --\nfi\n' > ./relay/scripts/bubblewrap.sh
 
 # Games: relay maps URL /g/{owner}/{repo} → games/{owner}/{repo} on disk.
 # Docker follows symlinks in COPY so .lake/packages/* are inlined as real dirs.
