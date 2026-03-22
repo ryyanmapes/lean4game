@@ -52,6 +52,7 @@
   border-radius: 12px;
   cursor: grab;
   user-select: none;
+  touch-action: none;
   transition: box-shadow 0.2s, background 0.2s;
   z-index: 10;
   white-space: nowrap;
@@ -663,23 +664,49 @@
   overflow: hidden;
 }
 
-/* Static "lhs =" label on the left */
-.visual-page .tr-static-label {
+/* Static side label + swap button: absolutely pinned to left or right, no animation */
+.visual-page .tr-static-group {
   position: absolute;
   left: 3rem;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.visual-page .tr-static-group.static-right {
+  left: auto;
+  right: 3rem;
+}
+
+.visual-page .tr-static-label {
   font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
   font-size: 2rem;
   color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
   pointer-events: none;
-  transition: top 0.2s ease, left 0.2s ease, transform 0.2s ease;
 }
 
-.visual-page .tr-static-label.compact {
-  left: 1.5rem;
-  font-size: 1.75rem;
+/* Swap-side button: ← arrow beneath the static label, matches its width */
+.visual-page .tr-swap-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 1.1rem;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, color 0.15s;
+}
+.visual-page .tr-swap-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
+.visual-page .tr-swap-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 /* Working expression — scaled up like prototype */
@@ -740,43 +767,81 @@
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 1rem 1.5rem;
+  padding: 1rem 0.75rem;
   display: flex;
   flex-direction: row;
-  gap: 1.5rem;
-  overflow-x: auto;
+  align-items: center;
+  gap: 0.75rem;
   z-index: 20;
 }
 
-.visual-page .tr-rule-section {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 0.75rem;
+.visual-page .tr-nav-btn {
   flex-shrink: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
-  padding-right: 1.5rem;
+  width: 3.5rem;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, color 0.15s;
 }
-.visual-page .tr-rule-section:last-child {
-  border-right: none;
+.visual-page .tr-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
+.visual-page .tr-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
-.visual-page .tr-section-label {
-  writing-mode: vertical-lr;
-  transform: rotate(180deg);
+.visual-page .tr-rule-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.visual-page .tr-rule-page-cards {
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: nowrap;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Cards in paginated context size to content */
+.visual-page .tr-rule-page-cards .tr-rule-card {
+  width: auto;
+  min-width: 0;
+}
+
+.visual-page .tr-page-indicator {
   font-size: 0.65rem;
-  font-weight: 600;
   color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  align-self: center;
-  flex-shrink: 0;
+}
+
+.visual-page .tr-no-rules {
+  font-size: 0.8rem;
+  color: #475569;
+  font-style: italic;
 }
 
 /* ── Rule cards ── */
 .visual-page .tr-rule-card {
-  min-width: 9rem;
+  min-width: 6rem;
   padding: 0.75rem 1rem;
+  text-align: center;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -784,6 +849,7 @@
   border-radius: 12px;
   cursor: grab;
   user-select: none;
+  touch-action: none;
   transition: background 0.2s, box-shadow 0.2s;
   flex-shrink: 0;
 }
@@ -800,6 +866,7 @@
   font-size: 0.8rem;
   margin: 0 0 0.25rem 0;
   font-family: var(--font-family), system-ui, sans-serif;
+  white-space: nowrap;
 }
 .visual-page .tr-symbol {
   font-family: 'Cambria Math', 'Latin Modern Math', monospace;

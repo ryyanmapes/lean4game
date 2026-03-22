@@ -13,6 +13,55 @@ import type { ProofState } from '../components/infoview/rpc_api'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm'])
+const INITIAL_PROOF_MAX_ATTEMPTS = 2
+const INITIAL_PROOF_RETRY_DELAY_MS = 2000
+const INITIAL_PROOF_ATTEMPT_TIMEOUT_MS = 45000
+const LEVEL_DATA_MAX_ATTEMPTS = 5
+const LEVEL_DATA_RETRY_DELAY_MS = 1000
+
+function delay(ms: number) {
+  return new Promise<void>(resolve => window.setTimeout(resolve, ms))
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message))
+    }, timeoutMs)
+
+    promise.then(
+      value => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      },
+      error => {
+        window.clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
+}
+
+async function fetchJsonWithRetry<T>(
+  url: string,
+  attempts = LEVEL_DATA_MAX_ATTEMPTS,
+  retryDelayMs = LEVEL_DATA_RETRY_DELAY_MS,
+): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetch(url)
+      if (response.ok) return await response.json() as T
+    } catch {
+      // Keep retrying below.
+    }
+
+    if (attempt < attempts - 1) {
+      await delay(retryDelayMs * (attempt + 1))
+    }
+  }
+
+  return null
+}
 
 function extractTheoremStatementBody(statement: string): string {
   let body = statement
@@ -167,14 +216,46 @@ export function VisualProofPage() {
     setError(null)
     if (!worldId || !levelId) return
     let active = true
-    const client = new LeanRpcClient(gameId, worldId, levelId)
-    clientRef.current = client
-    client.getProofState()
-      .then(proof => { if (active) setCanvasState(proofStateToCanvas(proof)) })
-      .catch(err => { if (active) setError(err instanceof Error ? err.message : 'Connection failed') })
+    clientRef.current?.close()
+    clientRef.current = null
+
+    void (async () => {
+      let lastError: unknown = null
+
+      for (let attempt = 0; attempt < INITIAL_PROOF_MAX_ATTEMPTS && active; attempt++) {
+        const client = new LeanRpcClient(gameId, worldId, levelId)
+
+        try {
+          const proof = await withTimeout(
+            client.getProofState(),
+            INITIAL_PROOF_ATTEMPT_TIMEOUT_MS,
+            'Initial proof request timed out',
+          )
+          if (!active) {
+            client.close()
+            return
+          }
+          clientRef.current = client
+          setCanvasState(proofStateToCanvas(proof))
+          return
+        } catch (err) {
+          lastError = err
+          client.close()
+
+          if (attempt < INITIAL_PROOF_MAX_ATTEMPTS - 1 && active) {
+            await delay(INITIAL_PROOF_RETRY_DELAY_MS * (attempt + 1))
+          }
+        }
+      }
+
+      if (active) {
+        setError(lastError instanceof Error ? lastError.message : 'Connection failed')
+      }
+    })()
+
     return () => {
       active = false
-      client.close()
+      clientRef.current?.close()
       clientRef.current = null
     }
   }, [gameId, worldId, levelId])
@@ -195,8 +276,10 @@ export function VisualProofPage() {
     let active = true
     const baseUrl = window.location.origin + '/data'
 
-    fetch(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`)
-      .then(r => r.ok ? r.json() : null)
+    fetchJsonWithRetry<{
+      lemmas?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
+      tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
+    }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`)
       .then(async (levelData) => {
         if (!active || !levelData) return
         const lemmas: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
@@ -216,8 +299,10 @@ export function VisualProofPage() {
 
         const results = await Promise.allSettled(
           available.map(thm =>
-            fetch(`${baseUrl}/${gameId}/doc__Theorem__${thm.name}.json`)
-              .then(r => r.ok ? r.json() : null)
+            fetchJsonWithRetry<{
+              statement?: string
+              theoremKind?: 'equality' | 'proposition'
+            }>(`${baseUrl}/${gameId}/doc__Theorem__${thm.name}.json`)
               .then(doc => ({
                 thm,
                 statement: doc?.statement as string | undefined,

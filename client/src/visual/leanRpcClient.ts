@@ -1,5 +1,9 @@
 import type { ProofState } from '../components/infoview/rpc_api'
 
+const OPEN_TIMEOUT_MS = 15000
+const REQUEST_TIMEOUT_MS = 30000
+const FILE_READY_TIMEOUT_MS = 45000
+
 export class LeanRpcClient {
   private ws: WebSocket
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
@@ -120,8 +124,29 @@ export class LeanRpcClient {
   private waitForOpen(): Promise<void> {
     if (this.ws.readyState === WebSocket.OPEN) return Promise.resolve()
     return new Promise((resolve, reject) => {
-      this.ws.addEventListener('open', () => resolve(), { once: true })
-      this.ws.addEventListener('error', () => reject(new Error('WebSocket connection failed')), { once: true })
+      const cleanup = () => {
+        window.clearTimeout(timeoutId)
+        this.ws.removeEventListener('open', handleOpen)
+        this.ws.removeEventListener('error', handleError)
+      }
+
+      const handleOpen = () => {
+        cleanup()
+        resolve()
+      }
+
+      const handleError = () => {
+        cleanup()
+        reject(new Error('WebSocket connection failed'))
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        cleanup()
+        reject(new Error('WebSocket connection timed out'))
+      }, OPEN_TIMEOUT_MS)
+
+      this.ws.addEventListener('open', handleOpen, { once: true })
+      this.ws.addEventListener('error', handleError, { once: true })
     })
   }
 
@@ -138,18 +163,29 @@ export class LeanRpcClient {
   }
 
   private waitForFileReady(): Promise<void> {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        window.clearTimeout(timeoutId)
+        const idx = this.notificationHandlers.indexOf(handler)
+        if (idx !== -1) this.notificationHandlers.splice(idx, 1)
+      }
+
       const handler = (msg: any) => {
         if (
           msg.method === '$/lean/fileProgress' &&
           msg.params?.textDocument?.uri === this.uri &&
           msg.params?.processing?.length === 0
         ) {
-          const idx = this.notificationHandlers.indexOf(handler)
-          if (idx !== -1) this.notificationHandlers.splice(idx, 1)
+          cleanup()
           resolve()
         }
       }
+
+      const timeoutId = window.setTimeout(() => {
+        cleanup()
+        reject(new Error('Lean file progress timed out'))
+      }, FILE_READY_TIMEOUT_MS)
+
       this.notificationHandlers.push(handler)
     })
   }
@@ -157,7 +193,21 @@ export class LeanRpcClient {
   private request(method: string, params: any): Promise<any> {
     const id = this.nextId++
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      const timeoutId = window.setTimeout(() => {
+        this.pending.delete(id)
+        reject(new Error(`${method} timed out`))
+      }, REQUEST_TIMEOUT_MS)
+
+      this.pending.set(id, {
+        resolve: value => {
+          window.clearTimeout(timeoutId)
+          resolve(value)
+        },
+        reject: error => {
+          window.clearTimeout(timeoutId)
+          reject(error)
+        }
+      })
       this.send({ jsonrpc: '2.0', id, method, params })
     })
   }

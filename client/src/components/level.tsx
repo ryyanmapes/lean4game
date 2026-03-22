@@ -43,6 +43,7 @@ import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { useGameTranslation } from '../utils/translation'
 import { InventoryPanel } from './inventory/inventory_panel'
+import { useRetryUntilData } from '../hooks/useRetryUntilData'
 
 
 let sharedLeanMonaco: LeanMonaco | null = null
@@ -94,6 +95,7 @@ function Level() {
   })
 
   const gameInfo = useGetGameInfoQuery({game: gameId})
+  useRetryUntilData(gameInfo)
 
   if (levelId == 0) return <Introduction />
   return <PlayableLevel key={`${worldId}/${levelId}`} />
@@ -244,6 +246,11 @@ function PlayableLevel() {
 
   const gameInfo = useGetGameInfoQuery({game: gameId})
   const level = useLoadLevelQuery({game: gameId, world: worldId, level: levelId})
+  const inventory = useLoadInventoryOverviewQuery({game: gameId})
+  useRetryUntilData(gameInfo)
+  useRetryUntilData(level)
+  useRetryUntilData(inventory)
+  const isLevelDataReady = Boolean(gameInfo.data && level.data)
 
   // The state variables for the `ProofContext`
   const [proof, setProof] = useState<ProofState>({steps: [], diagnostics: [], completed: false, completedWithWarnings: false})
@@ -567,7 +574,7 @@ function PlayableLevel() {
   }, [leanMonacoEditor, leanMonacoEditor?.editor, typewriterMode, lockEditorMode])
 
   return <>
-    <div style={level.isLoading ? null : {display: "none"}} className="app-content loading"><CircularProgress /></div>
+    <div style={!isLevelDataReady ? null : {display: "none"}} className="app-content loading"><CircularProgress /></div>
     <DeletedChatContext.Provider value={{deletedChat, setDeletedChat, showHelp, setShowHelp}}>
       <SelectionContext.Provider value={{selectedStep, setSelectedStep}}>
         <InputModeContext.Provider value={{typewriterMode, setTypewriterMode, typewriterInput, setTypewriterInput, lockEditorMode, setLockEditorMode}}>
@@ -576,14 +583,14 @@ function PlayableLevel() {
               <MonacoEditorContext.Provider value={leanMonacoEditor?.editor}>
                 <LevelAppBar
                   pageNumber={pageNumber} setPageNumber={setPageNumber}
-                  isLoading={level.isLoading}
+                  isLoading={!isLevelDataReady}
                   levelTitle={(mobile ? "" : t("Level")) + ` ${levelId} / ${gameInfo.data?.worldSize[worldId]}` +
                     (level?.data?.title && ` : ${gT(level?.data?.title ?? "")}`)}
                   />
                 {mobile?
                   // TODO: This is copied from the `Split` component below...
                   <>
-                    <div className={`app-content level-mobile ${level.isLoading ? 'hidden' : ''}`}>
+                    <div className={`app-content level-mobile ${!isLevelDataReady ? 'hidden' : ''}`}>
                       <ExercisePanel
                         codeviewRef={codeviewRef}
                         infoviewRef={infoviewRef}
@@ -592,7 +599,7 @@ function PlayableLevel() {
                     </div>
                   </>
                 :
-                  <Split minSize={0} snapOffset={200} sizes={[25, 50, 25]} className={`app-content level ${level.isLoading ? 'hidden' : ''}`}>
+                  <Split minSize={0} snapOffset={200} sizes={[25, 50, 25]} className={`app-content level ${!isLevelDataReady ? 'hidden' : ''}`}>
                     <ChatPanel lastLevel={lastLevel}/>
                     <ExercisePanel
                       codeviewRef={codeviewRef}
@@ -655,14 +662,17 @@ function Introduction() {
   const inventory = useLoadInventoryOverviewQuery({game: gameId})
 
   const gameInfo = useGetGameInfoQuery({game: gameId})
+  useRetryUntilData(gameInfo)
+  useRetryUntilData(inventory)
 
   const {worldId} = useContext(WorldLevelIdContext)
 
   let image: string = gameInfo.data?.worlds.nodes[worldId].image
+  const isIntroductionReady = Boolean(gameInfo.data)
 
   return <>
-    <LevelAppBar isLoading={gameInfo.isLoading} levelTitle={t("Introduction")} />
-    {gameInfo.isLoading ?
+    <LevelAppBar isLoading={!isIntroductionReady} levelTitle={t("Introduction")} />
+    {!isIntroductionReady ?
       <div className="app-content loading"><CircularProgress /></div>
     : mobile ?
         <IntroductionPanel gameInfo={gameInfo} />

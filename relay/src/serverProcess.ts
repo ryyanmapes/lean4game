@@ -31,11 +31,18 @@ export class GameManager {
     this.queueLength = {
       "g/leanprover-community/nng4": 2,
       "g/ryyanmapes/visualtest": 2,
+      "g/test/testgame": 1,
+      "g/local/visualtest": 1,
     };
     /** We keep queues of started Lean Server processes to be ready when a user arrives */
     this.queue = {};
     this.urlRegEx = /^\/websocket\/g\/([\w.-]+)\/([\w.-]+)$/;
     this.dir = directory
+
+    if (isDevelopment) {
+      this.fillQueue({ owner: 'test', repo: 'testgame' })
+      this.fillQueue({ owner: 'local', repo: 'visualtest' })
+    }
   }
 
   startGame(req: IncomingMessage, ip: string): GameSession | null {
@@ -400,18 +407,24 @@ export class GameManager {
       return null;
     }
 
-    let game_dir: string
+    let game_dir: string | null = null
     if(owner == 'local') {
-      game_dir = path.join(this.dir, '..', '..', '..', '..', repo)
+      game_dir = this.resolveCaseInsensitiveDir(
+        path.join(this.dir, '..', '..', '..', '..'),
+        repo
+      )
     } else if (owner == 'test') {
-      game_dir = path.join(this.dir, '..', '..', '..', 'cypress', repo)
+      game_dir = this.resolveCaseInsensitiveDir(
+        path.join(this.dir, '..', '..', '..', 'cypress'),
+        repo
+      )
       console.debug(game_dir)
     } else {
       return this.resolveInstalledGame(owner, repo);
     }
 
-    if (!fs.existsSync(game_dir)) {
-      console.error(`[${new Date()}] Game '${game_dir}' does not exist!`);
+    if (!game_dir || !fs.existsSync(game_dir)) {
+      console.error(`[${new Date()}] Game for ${owner}/${repo} does not exist!`);
       return null;
     }
 
@@ -431,5 +444,21 @@ export class GameManager {
 
   getTagString(tag: Tag) {
     return `g/${tag.owner.toLowerCase()}/${tag.repo.toLowerCase()}`;
+  }
+
+  private resolveCaseInsensitiveDir(baseDir: string, repo: string): string | null {
+    if (!fs.existsSync(baseDir)) {
+      return null
+    }
+
+    const exactDir = path.join(baseDir, repo)
+    if (fs.existsSync(exactDir)) {
+      return exactDir
+    }
+
+    const match = fs.readdirSync(baseDir, { withFileTypes: true })
+      .find(entry => entry.isDirectory() && entry.name.toLowerCase() === repo)
+
+    return match ? path.join(baseDir, match.name) : null
   }
 }

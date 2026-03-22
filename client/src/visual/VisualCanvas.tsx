@@ -283,12 +283,123 @@ function isVisualOnlyPlayTactic(playTactic: string): boolean {
   return playTactic.startsWith('click_') || playTactic.startsWith('drag_')
 }
 
+function normalizeFormulaText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function stripOuterParens(text: string): string {
+  let current = normalizeFormulaText(text)
+  while (current.startsWith('(') && current.endsWith(')')) {
+    let depth = 0
+    let wrapsWhole = true
+    for (let i = 0; i < current.length; i++) {
+      if (current[i] === '(') depth++
+      else if (current[i] === ')') {
+        depth--
+        if (depth === 0 && i < current.length - 1) {
+          wrapsWhole = false
+          break
+        }
+      }
+    }
+    if (!wrapsWhole) break
+    current = normalizeFormulaText(current.slice(1, -1))
+  }
+  return current
+}
+
+function formulasMatch(left: string, right: string): boolean {
+  return stripOuterParens(left) === stripOuterParens(right)
+}
+
+function isConjunctionText(text: string): boolean {
+  const normalized = stripOuterParens(text)
+  return normalized.includes('∧') || normalized.startsWith('And ') || normalized.includes(' And ')
+}
+
+function isDisjunctionText(text: string): boolean {
+  const normalized = stripOuterParens(text)
+  return normalized.includes('∨') || normalized.startsWith('Or ') || normalized.includes(' Or ')
+}
+
+function extractImplicationTarget(text: string): string | null {
+  const normalized = stripOuterParens(text)
+  let depth = 0
+  let lastArrowIndex = -1
+  let lastArrowWidth = 0
+
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (depth === 0) {
+      if (normalized.startsWith('→', i)) {
+        lastArrowIndex = i
+        lastArrowWidth = 1
+      } else if (normalized.startsWith('->', i) || normalized.startsWith('=>', i)) {
+        lastArrowIndex = i
+        lastArrowWidth = 2
+      }
+    }
+  }
+
+  if (lastArrowIndex === -1) return null
+  return stripOuterParens(normalized.slice(lastArrowIndex + lastArrowWidth))
+}
+
+function findHypCardByName(stream: GoalStream | null, hypName: string): HypCardType | null {
+  if (!stream) return null
+  return stream.hyps.find(card => card.hyp.names[0] === hypName) ?? null
+}
+
+function inferLeanTacticFromVisualInteraction(
+  playTactic: string,
+  stream: GoalStream | null,
+): string | null {
+  if (playTactic === 'click_goal_left') return 'left'
+  if (playTactic === 'click_goal_right') return 'right'
+
+  if (playTactic.startsWith('click_prop ')) {
+    const hypName = playTactic.slice('click_prop '.length).trim()
+    const hypCard = findHypCardByName(stream, hypName)
+    if (!hypCard) return null
+    const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
+    if (isConjunctionText(hypType)) {
+      return `have left := And.left ${hypName}; have right := And.right ${hypName}; clear ${hypName}`
+    }
+    if (isDisjunctionText(hypType)) {
+      return `cases ${hypName}`
+    }
+    return null
+  }
+
+  if (playTactic.startsWith('drag_goal ')) {
+    const hypName = playTactic.slice('drag_goal '.length).trim()
+    const hypCard = findHypCardByName(stream, hypName)
+    if (!hypCard || !stream) return null
+    const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
+    const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
+    if (formulasMatch(hypType, goalType)) {
+      return `exact ${hypName}`
+    }
+    const implicationTarget = extractImplicationTarget(hypType)
+    if (implicationTarget && formulasMatch(implicationTarget, goalType)) {
+      return `apply ${hypName}`
+    }
+  }
+
+  return null
+}
+
 function resolveLeanTactic(
   annotationLeanTactic: string | null | undefined,
   command: string,
   playTactic: string,
+  stream: GoalStream | null,
 ): string | null {
   if (annotationLeanTactic) return annotationLeanTactic
+  const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream)
+  if (inferredLeanTactic) return inferredLeanTactic
   if (command !== playTactic && !isVisualOnlyPlayTactic(playTactic)) return command
   return null
 }
@@ -673,11 +784,16 @@ export function VisualCanvas({
 
     setIsProcessing(false)
 
+    const lastStep = result?.steps.at(-1)
+    const leanTactic = result
+      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream)
+      : null
+
     // Log the attempt regardless of outcome
     appendPlayLog(logKey, {
       timestamp: Date.now(),
       playTactic,
-      leanTactic: result?.steps.at(-1)?.annotation?.leanTactic ?? null,
+      leanTactic,
       succeeded: result !== null,
     })
 
@@ -691,9 +807,7 @@ export function VisualCanvas({
       return
     }
 
-    const lastStep = result.steps.at(-1)
     const annotation = lastStep?.annotation
-    const leanTactic = resolveLeanTactic(annotation?.leanTactic, command, playTactic)
     const leanCanvas = proofStateToCanvas(result)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
@@ -1122,11 +1236,13 @@ export function VisualCanvas({
 
     const lastStep = result?.steps.at(-1)
     const annotationLeanTactic = lastStep?.annotation?.leanTactic ?? null
-    const leanTactic = resolveLeanTactic(annotationLeanTactic, command, playTactic)
+    const leanTactic = result
+      ? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream)
+      : null
     appendPlayLog(logKey, {
       timestamp: Date.now(),
       playTactic,
-      leanTactic: annotationLeanTactic,
+      leanTactic,
       succeeded: result !== null,
     })
 

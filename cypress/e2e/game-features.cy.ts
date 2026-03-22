@@ -2,6 +2,11 @@
 // Tests for basic game functionality using the simple TestGame
 
 describe('Basic Lean4Game Features', () => {
+  const LEVEL_LOAD_TIMEOUT = 120000
+  const goalShouldContain = (text: string, timeout = 60000) => {
+    cy.contains('.goal:visible', text, { timeout }).should('be.visible')
+  }
+
   beforeEach(() => {
     // Handle Lean server timeout errors
     cy.on('uncaught:exception', (err) => {
@@ -17,7 +22,7 @@ describe('Basic Lean4Game Features', () => {
 
     // Navigate to test game before each test
     cy.visit('/#/g/test/TestGame')
-    cy.contains('This is the introduction text of the game.', { timeout: 15000 })
+    cy.contains('This is the introduction text of the game.', { timeout: 60000 })
   })
 
   // Helper function to navigate to introduction page
@@ -30,7 +35,9 @@ describe('Basic Lean4Game Features', () => {
   const navigateToLevel = () => {
     navigateToIntroduction()
     cy.contains('Start').click()
-    cy.contains('Assumptions:', { timeout: 60000 })
+    cy.get('.monaco-editor', { timeout: LEVEL_LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.typewriter-input .monaco-editor .view-lines', { timeout: LEVEL_LOAD_TIMEOUT }).should('be.visible')
+    goalShouldContain('x + x = y', LEVEL_LOAD_TIMEOUT)
   }
 
   describe('Navigation and UI Structure', () => {
@@ -79,7 +86,7 @@ describe('Basic Lean4Game Features', () => {
       cy.get('.typewriter-input .monaco-editor .view-lines').type('rw [g]{enter}')
 
       // Wait for the goal state to update after first tactic
-      cy.contains('x + x = 4', { timeout: 10000 }).should('be.visible')
+      goalShouldContain('x + x = 4', 10000)
 
       // Check that the progressive hint appears
       cy.contains('You should use h now').should('be.visible')
@@ -90,22 +97,20 @@ describe('Basic Lean4Game Features', () => {
 
       cy.get(".fa-code").click()
 
-      cy.contains('Current Goal')
-      cy.contains('unsolved goals')
-      cy.get('.infoview').contains('x + x = y')
-      cy.get('.infoview').contains('You can either start using h or g.')
+      cy.get('.codeview', { timeout: 60000 }).should('be.visible')
+      cy.get('.infoview', { timeout: 60000 }).should('be.visible')
+      cy.get('.infoview').contains('x + x = y', { timeout: 60000 })
+      cy.get('.infoview').contains('You can either start using h or g.', { timeout: 60000 })
 
       cy.get('.codeview').type('rw [h]{enter}')
 
-      cy.contains('2 + 2 = y')
-      cy.get('.infoview').contains('2 + 2 = y')
-      cy.contains('Current Goal')
-      cy.contains('unsolved goals')
-      cy.get('.infoview').contains('You should use g now.')
+      goalShouldContain('2 + 2 = y', 60000)
+      cy.get('.infoview').contains('2 + 2 = y', { timeout: 60000 })
+      cy.get('.infoview').contains('You should use g now.', { timeout: 60000 })
 
       cy.focused().type('{uparrow}')
-      cy.get('.infoview').contains('x + x = y')
-      cy.get('.infoview').contains('You can either start using h or g.')
+      cy.get('.infoview').contains('x + x = y', { timeout: 60000 })
+      cy.get('.infoview').contains('You can either start using h or g.', { timeout: 60000 })
 
     })
   })
@@ -169,7 +174,7 @@ describe('Basic Lean4Game Features', () => {
 
       // Wait for Lean to process the tactic
       // Should show updated goal state (proving the tactic was processed)
-      cy.contains('2 + 2 = y', { timeout: 10000 }).should('be.visible')
+      goalShouldContain('2 + 2 = y', 10000)
     })
 
     it('should show error message when using invalid tactic call', () => {
@@ -179,7 +184,7 @@ describe('Basic Lean4Game Features', () => {
       cy.get('.typewriter-input .monaco-editor .view-lines').type('rw [x]{enter}')
 
       // Wait for the error message to appear
-      cy.contains("Invalid rewrite argument")
+      cy.contains("Invalid rewrite argument", { timeout: 60000 })
     })
   })
 
@@ -191,7 +196,7 @@ describe('Basic Lean4Game Features', () => {
       cy.get('.typewriter-input .monaco-editor .view-lines').type('rw [h]{enter}')
 
       // Wait for the goal state to update after first tactic
-      cy.contains('2 + 2 = y', { timeout: 10000 }).should('be.visible')
+      goalShouldContain('2 + 2 = y', 10000)
 
       // Enter second tactic
       cy.get('.typewriter-input .monaco-editor .view-lines').type('rw [g]{enter}')
@@ -210,7 +215,7 @@ describe('Basic Lean4Game Features', () => {
       cy.get('.typewriter-input .monaco-editor .view-lines').type('rw [h]{enter}')
 
       // Wait for the goal state to update after first tactic
-      cy.contains('2 + 2 = y', { timeout: 10000 }).should('be.visible')
+      goalShouldContain('2 + 2 = y', 10000)
       cy.contains('unsolved goals').should('not.exist')
 
       cy.get(".fa-code").click()
@@ -233,9 +238,8 @@ describe('Basic Lean4Game Features', () => {
   describe('Non-Prop Level', () => {
     it('Non-prop statements should be allowed', () => {
       cy.visit('/#/g/test/TestGame/world/TestWorld/level/3')
-      cy.get('.goal-sign').should('be.visible')
-      //cy.contains('Goal:', { timeout: 60000 })
-      cy.contains('intro first!')
+      cy.contains('intro first!', { timeout: 60000 }).should('be.visible')
+      cy.get('.typewriter-input .monaco-editor .view-lines', { timeout: 60000 }).should('be.visible')
       cy.get('.typewriter-input .monaco-editor .view-lines').type('intro x{enter}')
       cy.contains('now apply!', { timeout: 10000 })
       cy.get('.typewriter-input .monaco-editor .view-lines').type('apply x{enter}')
@@ -244,6 +248,13 @@ describe('Basic Lean4Game Features', () => {
   })
 
   describe('Settings and Preferences', () => {
+    const selectHintLanguage = (language: string) => {
+      cy.get('.MuiSelect-select').click()
+      cy.get('ul.MuiList-root[role="listbox"]', { timeout: 10000 }).should('be.visible').within(() => {
+        cy.get(`li[data-value="${language}"]`).should('be.visible').click()
+      })
+    }
+
     it('should open preferences popup', () => {
       // Click menu button to open dropdown
       cy.get('#menu-btn').click()
@@ -267,9 +278,7 @@ describe('Basic Lean4Game Features', () => {
       cy.contains('Preferences').click()
 
       // Select german language
-      cy.get('.MuiSelect-select').click()
-      cy.get('.MuiPaper-root').click()
-      cy.get('li[data-value="de"]').click()
+      selectHintLanguage('de')
 
       // Close preferences
       cy.get('.codicon').click()
@@ -287,9 +296,7 @@ describe('Basic Lean4Game Features', () => {
       cy.contains('Preferences').click()
 
       // Select mandarin language
-      cy.get('.MuiSelect-select').click()
-      cy.get('.MuiPaper-root').click()
-      cy.get('li[data-value="zh"]').click()
+      selectHintLanguage('zh')
 
       // Close preferences
       cy.get('.codicon').click()

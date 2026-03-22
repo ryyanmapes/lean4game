@@ -2,6 +2,7 @@
  * @fileOverview Define API of the server-client communication
 */
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { retry } from '@reduxjs/toolkit/query'
 import { InventoryTab } from '../store/inventory-atoms'
 
 
@@ -80,10 +81,16 @@ interface Doc {
   category: string,
 }
 
+const baseQuery = retry(
+  fetchBaseQuery({ baseUrl: window.location.origin + "/data" }),
+  { maxRetries: 5 },
+)
+
 // Define a service using a base URL and expected endpoints
 export const apiSlice = createApi({
   reducerPath: 'gameApi',
-  baseQuery: fetchBaseQuery({ baseUrl: window.location.origin + "/data" }),
+  // The relay can still be warming up when CI hits the first page load.
+  baseQuery,
   endpoints: (builder) => ({
     getGameInfo: builder.query<GameInfo, {game: string}>({
       query: ({game}) => `${game}/game.json`,

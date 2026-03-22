@@ -1,4 +1,5 @@
 const VISUALTEST_LEVEL2 = '/#/g/local/VisualTest/world/Prototype/level/2/visual'
+const VISUALTEST_LOAD_TIMEOUT = 120000
 
 interface VisualTestHarness {
   dragHypToGoal(hypName: string): Promise<void>
@@ -17,8 +18,8 @@ type VisualHarnessWindow = Cypress.AUTWindow & {
 
 function visitVisualTestLevel2() {
   cy.visit(VISUALTEST_LEVEL2)
-  cy.get('[data-testid="visual-proof-page"]', { timeout: 60000 }).should('be.visible')
-  cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should('be.visible')
+  cy.get('[data-testid="visual-proof-page"]', { timeout: VISUALTEST_LOAD_TIMEOUT }).should('be.visible')
+  cy.get('[data-testid="goal-card"]', { timeout: VISUALTEST_LOAD_TIMEOUT }).should('be.visible')
 }
 
 function goalCard() {

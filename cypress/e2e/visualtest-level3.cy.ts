@@ -371,7 +371,8 @@ describe('VisualTest Level 3', () => {
         'exact right',
       ])
     })
-    cy.get('.proof-panel-body').should('not.contain.text', 'click_prop')
-    cy.get('.proof-panel-body').should('not.contain.text', 'drag_goal')
+    cy.get('.proof-steps-table tbody td.lean-tactic')
+      .should('not.contain.text', 'click_prop')
+      .and('not.contain.text', 'drag_goal')
   })
 })

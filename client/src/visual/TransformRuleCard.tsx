@@ -30,7 +30,7 @@ export function EqualityHypCard({ dragId, label, lhsStr, rhsStr, isReverse, isFa
       onMouseLeave={onMouseLeave}
       className={`tr-rule-card tr-eq-card${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}`}
     >
-      <h3>Rewrite ({label})</h3>
+      <h3>{label}</h3>
       <div className="tr-symbol">{symbol}</div>
     </div>
   )

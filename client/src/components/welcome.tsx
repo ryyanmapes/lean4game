@@ -20,6 +20,7 @@ import i18next from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useGameTranslation } from '../utils/translation'
 import { InventoryPanel } from './inventory/inventory_panel'
+import { useRetryUntilData } from '../hooks/useRetryUntilData'
 
 
 /** the panel showing the game's introduction text */
@@ -73,6 +74,8 @@ function Welcome() {
 
   const gameInfo = useGetGameInfoQuery({game: gameId})
   const inventory = useLoadInventoryOverviewQuery({game: gameId})
+  useRetryUntilData(gameInfo)
+  useRetryUntilData(inventory)
 
   // For mobile only
   const readIntro = useAppSelector(selectReadIntro(gameId, null))
@@ -85,7 +88,7 @@ function Welcome() {
     }
   }, [gameInfo.data?.title])
 
-  return gameInfo.isLoading ?
+  return !gameInfo.data ?
     <Box display="flex" alignItems="center" justifyContent="center" sx={{ height: "calc(100vh - 64px)" }}>
       <CircularProgress />
     </Box>

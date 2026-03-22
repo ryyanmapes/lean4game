@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } from 'react'
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
@@ -80,10 +80,6 @@ export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange
 }: Props) {
-  const backButtonRef = useRef<HTMLButtonElement | null>(null)
-  const mainAreaRef = useRef<HTMLDivElement | null>(null)
-  const staticLabelRef = useRef<HTMLSpanElement | null>(null)
-  const exprWrapperRef = useRef<HTMLDivElement | null>(null)
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
     try { return parse(goalLhsStr) } catch { return { type: 'variable' as const, name: goalLhsStr, id: 'lhs-root' } }
@@ -102,9 +98,43 @@ export function TransformationView({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
-  const [dockStaticLabel, setDockStaticLabel] = useState(false)
-  const [dockedStaticLabelTop, setDockedStaticLabelTop] = useState<number>(88)
+  const [pageIndex, setPageIndex] = useState(0)
+  const [pageWidth, setPageWidth] = useState(0)
+  const pageRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => setPageWidth(entries[0].contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // Flat ordered list: hypotheses first (backend order), then theorems (backend order)
+  const allRules = useMemo(() => [
+    ...equalityHyps.map(h => ({ ...h, dragId: `hyp_${h.id}` })),
+    ...theoremEqualityHyps.map(t => ({ ...t, dragId: `thm_${t.id}` })),
+  ], [equalityHyps, theoremEqualityHyps])
+
+  // avgCardPx: measured after each commit from actual rendered card widths.
+  // Defaults to 0 (unknown) so we show all cards until the first measurement.
+  const [avgCardPx, setAvgCardPx] = useState(0)
+  useLayoutEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
+    if (!cards.length) return
+    const avg = cards.reduce((s, c) => s + c.offsetWidth, 0) / cards.length
+    setAvgCardPx(prev => Math.abs(avg - prev) > 0.5 ? avg : prev)
+  })
+
+  const GAP_PX = 12
+  const itemsPerPage = (pageWidth > 0 && avgCardPx > 0)
+    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (avgCardPx + GAP_PX)))
+    : allRules.length  // show all until measured
+  const totalPages = Math.max(1, Math.ceil(allRules.length / itemsPerPage))
+  const clampedPage = Math.min(pageIndex, totalPages - 1)
+  const pageItems = allRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const staticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
 
@@ -165,48 +195,6 @@ export function TransformationView({
   }, [isValidDropTarget])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-
-  const updateStaticLabelLayout = useCallback(() => {
-    const mainArea = mainAreaRef.current
-    const staticLabel = staticLabelRef.current
-    const exprWrapper = exprWrapperRef.current
-    if (!mainArea || !staticLabel || !exprWrapper) return
-
-    const labelRect = staticLabel.getBoundingClientRect()
-    const exprRect = exprWrapper.getBoundingClientRect()
-    const shouldDock = labelRect.right + 32 > exprRect.left
-    setDockStaticLabel(prev => (prev === shouldDock ? prev : shouldDock))
-
-    if (!shouldDock) return
-
-    const mainRect = mainArea.getBoundingClientRect()
-    const backRect = backButtonRef.current?.getBoundingClientRect()
-    const nextTop = backRect ? Math.round(backRect.bottom - mainRect.top + 16) : 88
-    setDockedStaticLabelTop(prev => (prev === nextTop ? prev : nextTop))
-  }, [])
-
-  useLayoutEffect(() => {
-    updateStaticLabelLayout()
-  }, [updateStaticLabelLayout, staticStr, lhs, rhs, workingSide])
-
-  useEffect(() => {
-    const mainArea = mainAreaRef.current
-    const staticLabel = staticLabelRef.current
-    const exprWrapper = exprWrapperRef.current
-    if (!mainArea || !staticLabel || !exprWrapper || typeof ResizeObserver === 'undefined') return
-
-    const observer = new ResizeObserver(() => updateStaticLabelLayout())
-    observer.observe(mainArea)
-    observer.observe(staticLabel)
-    observer.observe(exprWrapper)
-    if (backButtonRef.current) observer.observe(backButtonRef.current)
-
-    window.addEventListener('resize', updateStaticLabelLayout)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', updateStaticLabelLayout)
-    }
-  }, [updateStaticLabelLayout])
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string
@@ -308,7 +296,7 @@ export function TransformationView({
         onDragEnd={handleDragEnd}
       >
         {/* Back button */}
-        <button ref={backButtonRef} className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
+        <button className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
           ← Back
         </button>
 
@@ -316,15 +304,21 @@ export function TransformationView({
         {isProcessing && <div className="tr-processing" />}
 
         {/* Main expression area */}
-        <div ref={mainAreaRef} className="tr-main-area">
-          <span
-            ref={staticLabelRef}
-            className={`tr-static-label${dockStaticLabel ? ' compact' : ''}`}
-            style={dockStaticLabel ? { top: dockedStaticLabelTop, transform: 'none' } : undefined}
-          >
-            {staticStr} =
-          </span>
-          <div ref={exprWrapperRef} className="tr-expr-wrapper">
+        <div className="tr-main-area">
+          {/* Static side label + swap button */}
+          <div className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}`}>
+            <span className="tr-static-label">
+              {workingSide === 'left' ? `= ${staticStr}` : `${staticStr} =`}
+            </span>
+            <button
+              className="tr-swap-btn"
+              onClick={handleSwap}
+              disabled={isProcessing}
+              title="Edit this side instead"
+            >{workingSide === 'left' ? '→' : '←'}</button>
+          </div>
+
+          <div className="tr-expr-wrapper">
             <ExprRenderer
               node={workingExpr}
               isActive={!!activeId && !isProcessing}
@@ -348,9 +342,8 @@ export function TransformationView({
             >↺</button>
           </div>
 
-          {/* Swap / Reverse */}
+          {/* Reverse */}
           <div className="tr-side-controls">
-            <button onClick={handleSwap} disabled={isProcessing} className="tr-ctrl-btn" title="Swap working side">⇄</button>
             <button
               onClick={() => onIsReverseChange(!isReverse)}
               disabled={isProcessing}
@@ -362,45 +355,46 @@ export function TransformationView({
 
         {/* Rule dock */}
         <div className="tr-rule-dock" onContextMenu={e => { e.preventDefault(); onIsReverseChange(!isReverse) }}>
-          {/* Equality hypothesis cards */}
-          {equalityHyps.length > 0 && (
-            <div className="tr-rule-section">
-              <span className="tr-section-label">Hypotheses</span>
-              {equalityHyps.map(hyp => (
-                <EqualityHypCard
-                  key={hyp.id}
-                  dragId={`hyp_${hyp.id}`}
-                  label={hyp.label}
-                  lhsStr={hyp.lhsStr}
-                  rhsStr={hyp.rhsStr}
-                  isReverse={isReverse}
-                  isFailing={failingCardId === `hyp_${hyp.id}`}
-                  onMouseEnter={() => setHoveredId(`hyp_${hyp.id}`)}
-                  onMouseLeave={() => setHoveredId(null)}
-                />
-              ))}
-            </div>
-          )}
+          <button
+            className="tr-nav-btn"
+            onClick={() => { setPageIndex(p => Math.max(0, p - 1)); setHoveredId(null) }}
+            disabled={clampedPage === 0 || allRules.length === 0 || isProcessing}
+            aria-label="Previous rule"
+          >‹</button>
 
-          {/* Unlocked theorem equality cards */}
-          {theoremEqualityHyps.length > 0 && (
-            <div className="tr-rule-section">
-              <span className="tr-section-label">Theorems</span>
-              {theoremEqualityHyps.map(thm => (
-                <EqualityHypCard
-                  key={thm.id}
-                  dragId={`thm_${thm.id}`}
-                  label={thm.label}
-                  lhsStr={thm.lhsStr}
-                  rhsStr={thm.rhsStr}
-                  isReverse={isReverse}
-                  isFailing={failingCardId === `thm_${thm.id}`}
-                  onMouseEnter={() => setHoveredId(`thm_${thm.id}`)}
-                  onMouseLeave={() => setHoveredId(null)}
-                />
-              ))}
-            </div>
-          )}
+          <div className="tr-rule-page" ref={pageRef}>
+            {allRules.length > 0 ? (
+              <>
+                <div className="tr-rule-page-cards">
+                  {pageItems.map(rule => (
+                    <EqualityHypCard
+                      key={rule.dragId}
+                      dragId={rule.dragId}
+                      label={rule.label}
+                      lhsStr={rule.lhsStr}
+                      rhsStr={rule.rhsStr}
+                      isReverse={isReverse}
+                      isFailing={failingCardId === rule.dragId}
+                      onMouseEnter={() => setHoveredId(rule.dragId)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
+                )}
+              </>
+            ) : (
+              <span className="tr-no-rules">No rules available</span>
+            )}
+          </div>
+
+          <button
+            className="tr-nav-btn"
+            onClick={() => { setPageIndex(p => Math.min(totalPages - 1, p + 1)); setHoveredId(null) }}
+            disabled={clampedPage >= totalPages - 1 || allRules.length === 0 || isProcessing}
+            aria-label="Next rule"
+          >›</button>
         </div>
 
         {/* Connection arrow */}
