@@ -763,7 +763,7 @@
 .visual-page .tr-ctrl-btn.active-reverse { color: #a78bfa; background: rgba(167, 139, 250, 0.15); }
 .visual-page .tr-ctrl-btn.reset { color: #f87171; }
 
-/* ── Rule dock ── */
+/* ── Rule dock (double-decker: cards on top, tabs on bottom) ── */
 .visual-page .tr-rule-dock {
   width: 100%;
   flex-shrink: 0;
@@ -771,12 +771,59 @@
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.visual-page .tr-dock-cards {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 0.75rem;
-  z-index: 20;
+  padding: 1rem 0.75rem 0.6rem;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 6.5rem;
+}
+
+.visual-page .tr-dock-tabs {
+  display: flex;
+  flex-direction: row;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.visual-page .tr-tab-btn {
+  flex: 1;
+  padding: 1rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  border-top: 2px solid transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: var(--font-family), system-ui, sans-serif;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.visual-page .tr-tab-btn:last-child {
+  border-right: none;
+}
+.visual-page .tr-tab-btn:hover:not(:disabled) {
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.08);
+}
+.visual-page .tr-tab-btn.active {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.12);
+  border-top-color: #8b5cf6;
+}
+.visual-page .tr-tab-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .visual-page .tr-nav-btn {

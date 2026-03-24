@@ -189,7 +189,7 @@ private def mkConvRwScript (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path
   let rwTerm := if symm then s!"← {hName}" else s!"{hName}"
   let sideLine := if sideIsRhs then "rhs" else "lhs"
   let argSteps := path.map (fun k => s!"arg {k}")
-  let steps := sideLine :: (argSteps ++ [s!"rw [{rwTerm}]"])
+  let steps := sideLine :: (argSteps ++ [s!"rewrite [{rwTerm}]"])
   "conv => { " ++ String.intercalate "; " steps ++ " }"
 
 private def mkAppPrefix (fn : Expr) (args : Array Expr) (upto : Nat) : Expr :=
@@ -241,10 +241,8 @@ private structure EqualitySideRewriteResult where
 
 private def replaceGoalPreservingTarget (mvarId : MVarId) (targetNew eqProof : Expr)
     (extraGoals : List MVarId) : TacticM Unit := do
-  let decl ← mvarId.getDecl
-  let goalNew ← mkFreshExprMVarAt decl.lctx decl.localInstances targetNew
-  mvarId.assign (← mkAppM ``Eq.mpr #[eqProof, goalNew])
-  replaceMainGoal (goalNew.mvarId! :: extraGoals)
+  let goalNew ← mvarId.replaceTargetEq targetNew eqProof
+  replaceMainGoal (goalNew :: extraGoals)
 
 private def replaceHypPreservingTarget (mvarId : MVarId) (fvarId : FVarId)
     (targetNew eqProof : Expr) (extraGoals : List MVarId) : TacticM Unit := do
@@ -577,6 +575,10 @@ example (P Q : Prop) (h : P) : P ∨ Q := by
 example (P Q : Prop) (h : Q) : P ∨ Q := by
   click_goal_right
   exact h
+
+example : 0 + 0 = 0 := by
+  drag_rw_lhs [Nat.add_zero]
+  click_goal
 
 example : 0 ≠ 1 := by
   click_goal

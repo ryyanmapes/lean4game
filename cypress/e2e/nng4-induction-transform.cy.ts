@@ -2,7 +2,9 @@ const NNG4_ADDITION_LEVEL1 = '/#/g/local/NNG4/world/Addition/level/1/visual'
 const LOAD_TIMEOUT = 120000
 
 interface VisualTestHarness {
+  dragHypToGoal(hypName: string): Promise<void>
   dragTacticToHyp(tacticName: string, hypName: string): Promise<void>
+  clickGoal(playTactic?: string): Promise<void>
   openGoalTransform(): void
   rewriteGoalInTransform(theoremName: string, workingSide?: 'left' | 'right', path?: number[]): Promise<void>
   closeTransform(): void
@@ -129,7 +131,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
   })
 
-  it('keeps transform mode open after add_zero until the player backs out', () => {
+  it('keeps the base-case goal available until the player backs out and clicks rfl', () => {
     visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
 
     cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
@@ -139,33 +141,41 @@ describe('NNG4 Addition 1 induction transform mode', () => {
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
 
-    let originalTransformStreamId = ''
     visualHarness().then(harness => harness.getTransformStatus()).then(status => {
-      originalTransformStreamId = status.targetStreamId ?? ''
-      expect(originalTransformStreamId).to.not.equal('')
+      expect(status.targetStreamId).to.not.equal(null)
     })
 
     visualHarness().then(harness => harness.rewriteGoalInTransform('add_zero'))
 
     visualHarness().then(harness => harness.getLastTransformRewriteDebug()).then(debug => {
       expect(debug, 'rewrite debug should be captured').to.not.equal(null)
-      expect(debug?.deferredCompletion, JSON.stringify(debug)).to.equal(true)
-      expect(debug?.nextStreamId, JSON.stringify(debug)).to.equal(null)
-      throw new Error(JSON.stringify(debug))
+      expect(debug?.deferredCompletion, JSON.stringify(debug)).to.equal(false)
+      expect(debug?.nextStreamId, JSON.stringify(debug)).to.not.equal(null)
+      expect(debug?.nextGoalType, JSON.stringify(debug)).to.contain('0 = 0')
     })
 
     visualHarness().then(harness => harness.getTransformStatus()).then(status => {
       expect(status.isOpen).to.equal(true)
       expect(status.targetKind).to.equal('goal')
-      expect(status.targetStreamId).to.equal(originalTransformStreamId)
+      expect(status.targetStreamId).to.not.equal(null)
     })
 
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
-      expect(snapshot.displayStreamId ?? snapshot.streamId).to.equal(originalTransformStreamId)
+      expect(snapshot.displayGoalType ?? snapshot.goalType).to.contain('0 = 0')
     })
 
     cy.get('[data-testid="stream-nav-label"]').should('contain.text', 'Stream 1 of 2')
     cy.get('.tr-back-btn').click()
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 }).should('contain.text', 'Stream 1 of 2')
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.goalType).to.contain('0 = 0')
+      expect(snapshot.goalPlayTactic).to.equal('click_goal')
+      expect(snapshot.currentStreamIsCompleted).to.equal(false)
+      expect(snapshot.streamInteractionsEnabled).to.equal(true)
+    })
+
+    visualHarness().then(harness => harness.clickGoal())
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 }).should('contain.text', 'Stream 2 of 2')
   })
 
@@ -188,5 +198,60 @@ describe('NNG4 Addition 1 induction transform mode', () => {
 
     cy.get('.tr-back-btn').should('be.visible')
     cy.get('[data-testid="stream-nav-label"]').should('contain.text', 'Stream 2 of 2')
+  })
+
+  it('keeps the base-case reflexive goal live even after the successor stream was solved first', () => {
+    visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
+
+    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
+      .should('contain.text', 'Stream 2 of 2')
+
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
+      expect($goal.attr('data-goal-text')).to.contain('succ')
+      expect($goal).to.have.class('transformable')
+    }).dblclick()
+
+    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
+    visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.displayGoalType ?? snapshot.goalType).to.contain('succ')
+      expect(snapshot.displayGoalType ?? snapshot.goalType).to.match(/=\s*succ/)
+    })
+
+    cy.get('.tr-back-btn').click()
+    visualHarness().then(harness => harness.dragHypToGoal('n_ih'))
+
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
+      .should('contain.text', 'Stream 1 of 2')
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.goalType).to.contain('0 + 0 = 0')
+      expect(snapshot.currentStreamIsCompleted).to.equal(false)
+      expect(snapshot.streamInteractionsEnabled).to.equal(true)
+    })
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
+      expect($goal.attr('data-goal-text')).to.contain('0 + 0 = 0')
+    }).dblclick()
+
+    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
+    visualHarness().then(harness => harness.rewriteGoalInTransform('add_zero'))
+
+    visualHarness().then(harness => harness.getLastTransformRewriteDebug()).then(debug => {
+      expect(debug, 'rewrite debug should be captured').to.not.equal(null)
+      expect(debug?.deferredCompletion, JSON.stringify(debug)).to.equal(false)
+      expect(debug?.nextStreamId, JSON.stringify(debug)).to.not.equal(null)
+      expect(debug?.nextGoalType, JSON.stringify(debug)).to.contain('0 = 0')
+    })
+
+    cy.get('.tr-back-btn').click()
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.goalType).to.contain('0 = 0')
+      expect(snapshot.goalPlayTactic).to.equal('click_goal')
+      expect(snapshot.currentStreamIsCompleted).to.equal(false)
+      expect(snapshot.streamInteractionsEnabled).to.equal(true)
+    })
   })
 })

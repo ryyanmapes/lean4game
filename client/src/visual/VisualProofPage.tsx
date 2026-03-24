@@ -366,7 +366,7 @@ export function VisualProofPage() {
           }
           if (theoremKind !== 'equality') continue
           const parsed = parseTheoremStatement(statement, thm.displayName || thm.name, thm.name)
-          if (parsed) hyps.push(parsed)
+          if (parsed) hyps.push({ ...parsed, category: thm.category })
         }
         setTheoremEqualityHyps(hyps)
         setPropositionTheorems(propositionHyps)

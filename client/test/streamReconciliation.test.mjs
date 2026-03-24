@@ -372,6 +372,101 @@ test('empty focused goals after click_prop on the C stream still synthesize the 
   assert.equal(findLeafForStream(result.nextTree, streamC.id)?.completed, false)
 })
 
+test('reflexive click_goal ignores a stale 0 = 0 continuation and advances to the sibling stream', () => {
+  const zeroStream = stream('refl-zero', '0 = 0', 'zero', [])
+  const succStream = stream('refl-succ', 'succ n = succ n', 'succ', [
+    hyp('refl-ih', 'ih', 'n = n'),
+  ])
+  const staleZero = stream('refl-zero-stale', '0 = 0', 'zero', [])
+  const refreshedSucc = stream('refl-succ', 'succ n = succ n', 'succ', [
+    hyp('refl-ih', 'ih', 'n = n'),
+  ])
+
+  const beforeTree = {
+    id: 'refl-root',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      {
+        id: 'refl-zero-leaf',
+        streamId: zeroStream.id,
+        label: zeroStream.goal.userName,
+        completed: false,
+        children: [],
+      },
+      {
+        id: 'refl-succ-leaf',
+        streamId: succStream.id,
+        label: succStream.goal.userName,
+        completed: false,
+        children: [],
+      },
+    ],
+  }
+  const beforeCanvas = {
+    streams: [zeroStream, succStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [staleZero, refreshedSucc],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    zeroStream,
+    'click_goal',
+    false,
+    zeroStream.id,
+    [staleZero],
+  )
+
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [succStream.id])
+  assert.equal(result.nextActiveId, succStream.id)
+  assert.equal(findLeafForStream(result.nextTree, zeroStream.id)?.completed, true)
+  assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [refreshedSucc.id])
+})
+
+test('reflexive click_goal still completes the final proof when Lean reports a stale 0 = 0 stream', () => {
+  const zeroStream = stream('refl-final-zero', '0 = 0', 'zero', [])
+  const staleZero = stream('refl-final-zero-stale', '0 = 0', 'zero', [])
+  const beforeTree = {
+    id: 'refl-final-root',
+    streamId: zeroStream.id,
+    label: zeroStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [zeroStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [staleZero],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    zeroStream,
+    'click_goal',
+    false,
+    zeroStream.id,
+    [staleZero],
+  )
+
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [])
+  assert.equal(result.nextActiveId, null)
+  assert.equal(findLeafForStream(result.nextTree, zeroStream.id)?.completed, true)
+  assert.equal(result.nextCanvas.completed, true)
+  assert.deepEqual(result.nextCanvas.streams, [])
+})
+
 test('the full nested conjunction proof can reconcile from A through final C completion', () => {
   const splitHypType = 'And B (A -> B -> C)'
   const splitRightType = 'A -> B -> C'

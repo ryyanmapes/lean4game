@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } fr
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
-import { parse, printExpression, applyEqualityRule, expressionsEqual, deepCloneWithNewIds, matchesPattern, findNodeById, findPath } from './expr-engine'
+import { parse, printExpression, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findNodeById, findPath } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
@@ -16,11 +16,18 @@ export interface EqualityHyp {
   rhsStr: string
   lhs: ExpressionNode
   rhs: ExpressionNode
+  /** NNG4 inventory category (e.g. "+", "*", "^", "≤", "012", "Peano"). Absent for hyp cards. */
+  category?: string
 }
 
 interface RewriteOutcome {
   success: boolean
   completed: boolean
+}
+
+interface ExpectedRewriteGoal {
+  lhsStr: string
+  rhsStr: string
 }
 
 /** Parse a goal equality string "lhs = rhs" into parts. Returns null if unparseable. */
@@ -64,7 +71,13 @@ interface Props {
   /** Called when the player performs a rewrite drag.
    *  `hypLabel` is the Lean hypothesis/theorem name.
    *  Returns whether Lean accepted the rewrite, and whether it completed the proof. */
-  onRewrite: (hypLabel: string, isReverse: boolean, workingSide: 'left' | 'right', path?: number[]) => Promise<RewriteOutcome>
+  onRewrite: (
+    hypLabel: string,
+    isReverse: boolean,
+    workingSide: 'left' | 'right',
+    path?: number[],
+    expectedGoal?: ExpectedRewriteGoal,
+  ) => Promise<RewriteOutcome>
   /** Called for each undo step (removes one proof step from the proof script). */
   onUndo: () => Promise<boolean>
   onClose: () => void
@@ -99,6 +112,7 @@ export function TransformationView({
   const [isProcessing, setIsProcessing] = useState(false)
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
+  const [selectedTab, setSelectedTab] = useState<string>('all')
   const [pageWidth, setPageWidth] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
@@ -134,6 +148,42 @@ export function TransformationView({
     ...theoremEqualityHyps.map(t => ({ ...t, dragId: `thm_${t.id}` })),
   ], [equalityHyps, theoremEqualityHyps])
 
+  // Build tab list: "Hypotheses" always first, then one tab per unique category in
+  // the theorem rules, in the order they first appear (matching NNG4 inventory order).
+  const tabs = useMemo(() => {
+    const catOrder: string[] = []
+    const seen = new Set<string>()
+    let hasUncategorized = false
+    allRules.forEach(r => {
+      if (!r.dragId.startsWith('thm_')) return
+      if (r.category) {
+        if (!seen.has(r.category)) { seen.add(r.category); catOrder.push(r.category) }
+      } else {
+        hasUncategorized = true
+      }
+    })
+    const result: { id: string; label: string }[] = [{ id: 'all', label: 'Everything' }, { id: 'hyps', label: 'Hypotheses' }]
+    catOrder.forEach(cat => result.push({ id: cat, label: cat }))
+    if (hasUncategorized) result.push({ id: 'other', label: 'Other' })
+    return result
+  }, [allRules])
+
+  // Clamp selectedTab to a valid tab when tabs change
+  useEffect(() => {
+    if (!tabs.find(t => t.id === selectedTab)) {
+      setSelectedTab(tabs[0]?.id ?? 'hyps')
+      setPageIndex(0)
+    }
+  }, [tabs, selectedTab])
+
+  // Filter rules by the selected tab
+  const tabRules = useMemo(() => {
+    if (selectedTab === 'all') return allRules
+    if (selectedTab === 'hyps') return allRules.filter(r => r.dragId.startsWith('hyp_'))
+    if (selectedTab === 'other') return allRules.filter(r => r.dragId.startsWith('thm_') && !r.category)
+    return allRules.filter(r => r.dragId.startsWith('thm_') && r.category === selectedTab)
+  }, [allRules, selectedTab])
+
   // avgCardPx: measured after each commit from actual rendered card widths.
   // Defaults to 0 (unknown) so we show all cards until the first measurement.
   const [avgCardPx, setAvgCardPx] = useState(0)
@@ -144,15 +194,15 @@ export function TransformationView({
     if (!cards.length) return
     const avg = cards.reduce((s, c) => s + c.offsetWidth, 0) / cards.length
     setAvgCardPx(prev => Math.abs(avg - prev) > 0.5 ? avg : prev)
-  }, [allRules])
+  }, [tabRules])
 
   const GAP_PX = 12
   const itemsPerPage = (pageWidth > 0 && avgCardPx > 0)
     ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (avgCardPx + GAP_PX)))
-    : allRules.length  // show all until measured
-  const totalPages = Math.max(1, Math.ceil(allRules.length / itemsPerPage))
+    : tabRules.length  // show all until measured
+  const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
   const clampedPage = Math.min(pageIndex, totalPages - 1)
-  const pageItems = allRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const staticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
 
@@ -255,8 +305,13 @@ export function TransformationView({
     // Send to Lean — it is the final arbiter. Visual update comes from remount
     // with the fresh Lean state (TransformationView key changes on each rewrite).
     setIsProcessing(true)
-    const rewrittenExpr = applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
-    const outcome = await onRewrite(hyp.label, isReverse, workingSide, path)
+    const rewrittenExpr = isThm
+      ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
+      : applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
+    const expectedGoal = workingSide === 'right'
+      ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr) }
+      : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr }
+    const outcome = await onRewrite(hyp.label, isReverse, workingSide, path, expectedGoal)
     setIsProcessing(false)
 
     if (!outcome.success) {
@@ -373,46 +428,65 @@ export function TransformationView({
 
         {/* Rule dock */}
         <div className="tr-rule-dock" onContextMenu={e => { e.preventDefault(); onIsReverseChange(!isReverse) }}>
-          <button
-            className="tr-nav-btn"
-            onClick={() => { setPageIndex(p => Math.max(0, p - 1)); setHoveredId(null) }}
-            disabled={clampedPage === 0 || allRules.length === 0 || isProcessing}
-            aria-label="Previous rule"
-          >‹</button>
+          {/* Cards row */}
+          <div className="tr-dock-cards">
+            <button
+              className="tr-nav-btn"
+              onClick={() => { setPageIndex(p => Math.max(0, p - 1)); setHoveredId(null) }}
+              disabled={clampedPage === 0 || tabRules.length === 0 || isProcessing}
+              aria-label="Previous rule"
+            >‹</button>
 
-          <div className="tr-rule-page" ref={pageRef}>
-            {allRules.length > 0 ? (
-              <>
-                <div className="tr-rule-page-cards">
-                  {pageItems.map(rule => (
-                    <EqualityHypCard
-                      key={rule.dragId}
-                      dragId={rule.dragId}
-                      label={rule.label}
-                      lhsStr={rule.lhsStr}
-                      rhsStr={rule.rhsStr}
-                      isReverse={isReverse}
-                      isFailing={failingCardId === rule.dragId}
-                      onMouseEnter={() => setHoveredId(rule.dragId)}
-                      onMouseLeave={() => setHoveredId(null)}
-                    />
-                  ))}
-                </div>
-                {totalPages > 1 && (
-                  <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
-                )}
-              </>
-            ) : (
-              <span className="tr-no-rules">No rules available</span>
-            )}
+            <div className="tr-rule-page" ref={pageRef}>
+              {tabRules.length > 0 ? (
+                <>
+                  <div className="tr-rule-page-cards">
+                    {pageItems.map(rule => (
+                      <EqualityHypCard
+                        key={rule.dragId}
+                        dragId={rule.dragId}
+                        label={rule.label}
+                        lhsStr={rule.lhsStr}
+                        rhsStr={rule.rhsStr}
+                        isReverse={isReverse}
+                        isFailing={failingCardId === rule.dragId}
+                        onMouseEnter={() => setHoveredId(rule.dragId)}
+                        onMouseLeave={() => setHoveredId(null)}
+                      />
+                    ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
+                  )}
+                </>
+              ) : (
+                <span className="tr-no-rules">No rules available</span>
+              )}
+            </div>
+
+            <button
+              className="tr-nav-btn"
+              onClick={() => { setPageIndex(p => Math.min(totalPages - 1, p + 1)); setHoveredId(null) }}
+              disabled={clampedPage >= totalPages - 1 || tabRules.length === 0 || isProcessing}
+              aria-label="Next rule"
+            >›</button>
           </div>
 
-          <button
-            className="tr-nav-btn"
-            onClick={() => { setPageIndex(p => Math.min(totalPages - 1, p + 1)); setHoveredId(null) }}
-            disabled={clampedPage >= totalPages - 1 || allRules.length === 0 || isProcessing}
-            aria-label="Next rule"
-          >›</button>
+          {/* Tab bar */}
+          {tabs.length > 1 && (
+            <div className="tr-dock-tabs">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
+                  onClick={() => { setSelectedTab(tab.id); setPageIndex(0); setHoveredId(null) }}
+                  disabled={isProcessing}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Connection arrow */}

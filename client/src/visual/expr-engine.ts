@@ -282,3 +282,99 @@ function applyEqualityRuleAt(
   }
   return root
 }
+
+// --- Pattern-based theorem rewrite (variables in pattern are wildcards) ---
+
+/**
+ * Match `expr` against `pattern`, capturing variable bindings.
+ * Variables in `pattern` are wildcards that match any subexpression.
+ * Returns null if the pattern does not structurally match `expr`.
+ */
+function matchAndCapture(
+  expr: ExpressionNode,
+  pattern: ExpressionNode,
+): Record<string, ExpressionNode> | null {
+  if (pattern.type === 'variable') return { [pattern.name]: expr }
+  if (pattern.type === 'constant') {
+    return (expr.type === 'constant' && expr.value === pattern.value) ? {} : null
+  }
+  if (pattern.type === 'app') {
+    if (expr.type !== 'app' || expr.func !== pattern.func) return null
+    return matchAndCapture(expr.arg, pattern.arg)
+  }
+  if (pattern.type === 'binary') {
+    if (expr.type !== 'binary' || expr.op !== pattern.op) return null
+    const left = matchAndCapture(expr.left, pattern.left)
+    if (left === null) return null
+    const right = matchAndCapture(expr.right, pattern.right)
+    if (right === null) return null
+    return { ...left, ...right }
+  }
+  return null
+}
+
+/** Replace all variable nodes in `node` with their bound values, assigning fresh IDs. */
+function substituteVariables(
+  node: ExpressionNode,
+  bindings: Record<string, ExpressionNode>,
+): ExpressionNode {
+  if (node.type === 'variable') {
+    const bound = bindings[node.name]
+    return bound ? deepCloneWithNewIds(bound) : { ...node, id: uuidv4() }
+  }
+  if (node.type === 'constant') return { ...node, id: uuidv4() }
+  if (node.type === 'binary') {
+    return {
+      ...node,
+      left: substituteVariables(node.left, bindings),
+      right: substituteVariables(node.right, bindings),
+      id: uuidv4(),
+    }
+  }
+  if (node.type === 'app') {
+    return { ...node, arg: substituteVariables(node.arg, bindings), id: uuidv4() }
+  }
+  return { ...node, id: uuidv4() }
+}
+
+/**
+ * Apply a theorem rewrite rule at the node with `targetId`.
+ * Uses pattern matching so variables in `lhsPattern`/`rhsPattern` act as wildcards.
+ * Use this for theorem cards; use `applyEqualityRule` for hypothesis cards.
+ */
+export function applyTheoremRewrite(
+  root: ExpressionNode,
+  targetId: string,
+  lhsPattern: ExpressionNode,
+  rhsPattern: ExpressionNode,
+  isReverse: boolean,
+): ExpressionNode {
+  const fromPattern = isReverse ? rhsPattern : lhsPattern
+  const toTemplate = isReverse ? lhsPattern : rhsPattern
+  return applyTheoremRewriteAt(root, targetId, fromPattern, toTemplate)
+}
+
+function applyTheoremRewriteAt(
+  root: ExpressionNode,
+  targetId: string,
+  fromPattern: ExpressionNode,
+  toTemplate: ExpressionNode,
+): ExpressionNode {
+  if (root.id === targetId) {
+    const bindings = matchAndCapture(root, fromPattern)
+    if (bindings !== null) return substituteVariables(toTemplate, bindings)
+    return root
+  }
+  if (root.type === 'binary') {
+    const newLeft = applyTheoremRewriteAt(root.left, targetId, fromPattern, toTemplate)
+    const newRight = applyTheoremRewriteAt(root.right, targetId, fromPattern, toTemplate)
+    if (newLeft === root.left && newRight === root.right) return root
+    return { ...root, left: newLeft, right: newRight }
+  }
+  if (root.type === 'app') {
+    const newArg = applyTheoremRewriteAt(root.arg, targetId, fromPattern, toTemplate)
+    if (newArg === root.arg) return root
+    return { ...root, arg: newArg }
+  }
+  return root
+}

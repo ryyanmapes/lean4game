@@ -672,13 +672,23 @@ private def annotateFromSourceSimple (source : String) : Option StepAnnotation :
   else
     none
 
-private partial def parseFocusedPlayTactic? (source : String) : Option (List String × String) :=
-  let rec loop (src : String) (focusedCasesRev : List String) : Option (List String × String) :=
+private partial def parseFocusedPlayTactic? (source : String) :
+    Option (List (String × String) × String) :=
+  let rec loop (src : String) (focusedCasesRev : List (String × String)) :
+      Option (List (String × String) × String) :=
     let src := src.trimAscii.toString
-    if !src.startsWith "case " then
+    let prefix? :=
+      if src.startsWith "case' " then
+        some ("case'", 6)
+      else if src.startsWith "case " then
+        some ("case", 5)
+      else
+        none
+    if prefix?.isNone then
       if src.isEmpty then none else some (focusedCasesRev.reverse, src)
     else
-      let rest := (src.drop 5).toString
+      let (keyword, prefixLen) := prefix?.get!
+      let rest := (src.drop prefixLen).toString
       let parts := rest.splitOn "=>"
       match parts with
       | [] => none
@@ -691,17 +701,21 @@ private partial def parseFocusedPlayTactic? (source : String) : Option (List Str
             if caseName.isEmpty || inner.isEmpty then
               none
             else
-              loop inner (caseName :: focusedCasesRev)
+              loop inner ((keyword, caseName) :: focusedCasesRev)
   loop source []
 
 private def rewrapFocusedAnnotation
-    (originalSource : String) (focusedCases : List String) (annotation? : Option StepAnnotation) :
+    (originalSource : String) (focusedCases : List (String × String))
+    (annotation? : Option StepAnnotation) :
     Option StepAnnotation :=
   annotation?.map fun annotation =>
     let leanTactic? :=
       match annotation.leanTactic with
       | some leanTactic =>
-          some <| focusedCases.foldr (fun caseName inner => s!"case {caseName} => {inner}") leanTactic
+          some <|
+            focusedCases.foldr
+              (fun (wrapper, caseName) inner => s!"{wrapper} {caseName} => {inner}")
+              leanTactic
       | none => none
     { annotation with playTactic := originalSource, leanTactic := leanTactic? }
 
@@ -1067,6 +1081,32 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
           | panic! "No snap found"
         let goalsAtEndResult := snap.infoTree.goalsAt? doc.meta.text goalPos
         let goalsAtStartResult := snap.infoTree.goalsAt? doc.meta.text lineInfo.startPos
+        let endResultsAfter := goalsAtEndResult.filter (fun result => result.useAfter)
+        let startResultsAfter := goalsAtStartResult.filter (fun result => result.useAfter)
+        let sourceTrimmed := source.trimAscii.toString
+        let prefersStartAfterFallback :=
+          sourceTrimmed.startsWith "drag_rw" || sourceTrimmed.startsWith "drag_rw_hyp"
+        let goalsAtPreferredResult :=
+          if prefersStartAfterFallback then
+            match endResultsAfter with
+            | _ :: _ => endResultsAfter
+            | [] =>
+                match startResultsAfter with
+                | _ :: _ => startResultsAfter
+                | [] =>
+                    match goalsAtEndResult with
+                    | _ :: _ => goalsAtEndResult
+                    | [] => goalsAtStartResult
+          else
+            match endResultsAfter with
+            | _ :: _ => endResultsAfter
+            | [] =>
+                match goalsAtEndResult with
+                | _ :: _ => goalsAtEndResult
+                | [] =>
+                    match startResultsAfter with
+                    | _ :: _ => startResultsAfter
+                    | [] => goalsAtStartResult
         let annotateUsingResult := fun goalsAtResult => do
           match goalsAtResult.getLast? with
           | some { ctxInfo := ci, tacticInfo := tacticInfo, .. } =>
@@ -1090,7 +1130,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
               some fallback
           | none, none =>
               annotateFromSourceSimple source
-        if let goalsAtResult@(_ :: _) := goalsAtEndResult then
+        if let goalsAtResult@(_ :: _) := goalsAtPreferredResult then
           let goalsAtPos' : List <| List InteractiveGoalWithHints ← goalsAtResult.mapM
             fun { ctxInfo := ci, tacticInfo := tacticInfo, useAfter := useAfter, .. } => do
               -- TODO: What does this function body do?
@@ -1107,7 +1147,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
                 interactiveGoalsWithHintsForMVars levelId goalMvars
           let goalsAtPos : Array InteractiveGoalWithHints := ⟨goalsAtPos'.foldl (· ++ ·) []⟩
           let focusedGoals ←
-            match goalsAtResult.head? with
+            match goalsAtResult.getLast? with
             | some { ctxInfo := ci, tacticInfo := tacticInfo, useAfter := useAfter, .. } =>
                 let ci := if useAfter then
                     { ci with mctx := tacticInfo.mctxAfter }

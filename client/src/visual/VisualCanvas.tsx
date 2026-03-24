@@ -12,7 +12,8 @@ import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, Proposition
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
 import { parseEqualityHyp, parseGoalEquality, TransformationView } from './TransformationView'
 import type { EqualityHyp } from './TransformationView'
-import { exprTreeToNode, printExpression } from './expr-engine'
+import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExpression } from './expr-engine'
+import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
 import { ProofPanel } from './ProofPanel'
@@ -25,6 +26,7 @@ import {
   createInitialProofTree,
   findLeafForStream,
   leafCount,
+  replaceLeafStream,
   type ProofStreamTreeNode,
 } from './proofTree'
 import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
@@ -208,10 +210,16 @@ interface RewriteOutcome {
   completed: boolean
 }
 
+interface ExpectedRewriteGoal {
+  lhsStr: string
+  rhsStr: string
+}
+
 interface PendingTransformSync {
   nextTree: ProofStreamTreeNode
   nextActiveId: string | null
   nextCanvas: CanvasState
+  celebrationCanvas?: CanvasState
   finalDisplayCanvas?: CanvasState
   solvedGoalId?: string | null
   finalCompletion?: boolean
@@ -319,8 +327,17 @@ function parseFocusedCommand(command: string): FocusedCommand {
   const casePath: string[] = []
   let rest = command.trim()
 
-  while (rest.startsWith('case ')) {
-    const inner = rest.slice(5)
+  while (
+    rest.startsWith('focus_case ') ||
+    rest.startsWith('case ') ||
+    rest.startsWith("case' ")
+  ) {
+    const prefixLength = rest.startsWith('focus_case ')
+      ? 11
+      : rest.startsWith("case' ")
+        ? 6
+        : 5
+    const inner = rest.slice(prefixLength)
     const separator = inner.indexOf('=>')
     if (separator === -1) break
     const label = inner.slice(0, separator).trim()
@@ -342,7 +359,14 @@ function parsedHypEquality(card: HypCardType) {
   return parseEqualityHyp(TaggedText_stripTags(card.hyp.type).trim(), hypName, card.id)
 }
 
+function goalIsReflexiveEquality(stream: GoalStream): boolean {
+  if (stream.equalityTree?.isRefl) return true
+  const parsedGoal = parsedGoalEquality(stream)
+  return parsedGoal ? formulasMatch(parsedGoal.lhsStr, parsedGoal.rhsStr) : false
+}
+
 function goalIsTransformable(stream: GoalStream): boolean {
+  if (goalIsReflexiveEquality(stream)) return false
   return stream.equalityTree !== undefined || parsedGoalEquality(stream) !== null
 }
 
@@ -381,6 +405,124 @@ function stripOuterParens(text: string): string {
 
 function formulasMatch(left: string, right: string): boolean {
   return stripOuterParens(left) === stripOuterParens(right)
+}
+
+function cloneHypCards(cards: HypCardType[]): HypCardType[] {
+  return cards.map(card => ({
+    ...card,
+    position: { ...card.position },
+  }))
+}
+
+function synthesizeGoalRewriteContinuation(
+  focusedStream: GoalStream,
+  expectedGoal: ExpectedRewriteGoal,
+): GoalStream {
+  const nextGoalType = `${expectedGoal.lhsStr} = ${expectedGoal.rhsStr}`
+  const isDirectlyClickable = formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+  const clickAction: ClickAction | undefined = isDirectlyClickable
+    ? {
+        playTactic: 'click_goal',
+        tooltip: 'Click to complete',
+        options: [],
+      }
+    : undefined
+
+  return {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      type: { text: nextGoalType },
+      clickAction,
+      reductionForms: [],
+    },
+    hyps: cloneHypCards(focusedStream.hyps),
+    reductionForms: [],
+    equalityTree: undefined,
+  }
+}
+
+function findExpressionNodeAtPath(root: ExpressionNode, path?: number[]): ExpressionNode | null {
+  let current: ExpressionNode | null = root
+  for (const step of path ?? []) {
+    if (!current) return null
+    if (current.type === 'binary') {
+      current = step === 1
+        ? current.left
+        : step === 2
+        ? current.right
+        : null
+      continue
+    }
+    if (current.type === 'app') {
+      current = step === 1 ? current.arg : null
+      continue
+    }
+    return null
+  }
+  return current
+}
+
+function expectedGoalForRewrite(
+  goalLhsStr: string,
+  goalRhsStr: string,
+  goalLhsNode: ExpressionNode | undefined,
+  goalRhsNode: ExpressionNode | undefined,
+  equalityHyps: EqualityHyp[],
+  theoremEqualityHyps: EqualityHyp[],
+  hypLabel: string,
+  isReverse: boolean,
+  workingSide: 'left' | 'right',
+  path?: number[],
+): ExpectedRewriteGoal | undefined {
+  const theoremHyp = theoremEqualityHyps.find(hyp => hyp.label === hypLabel)
+  const equalityHyp = theoremHyp ? undefined : equalityHyps.find(hyp => hyp.label === hypLabel)
+  const hyp = theoremHyp ?? equalityHyp
+  if (!hyp) return undefined
+
+  const workingExpr = workingSide === 'right'
+    ? (goalRhsNode ?? parse(goalRhsStr))
+    : (goalLhsNode ?? parse(goalLhsStr))
+  const targetNode = findExpressionNodeAtPath(workingExpr, path)
+  if (!targetNode) return undefined
+
+  const rewrittenExpr = theoremHyp
+    ? applyTheoremRewrite(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
+    : applyEqualityRule(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
+
+  return workingSide === 'right'
+    ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr) }
+    : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr }
+}
+
+function replaceFocusedStreamInCanvas(
+  beforeCanvas: CanvasState,
+  nextCanvas: CanvasState,
+  focusedStreamId: string,
+  replacement: GoalStream,
+): CanvasState {
+  const replacementIds = new Set<string>([replacement.id])
+  const streams = beforeCanvas.streams.map(stream => {
+    if (stream.id === focusedStreamId) return replacement
+    const matched = nextCanvas.streams.find(candidate => candidate.id === stream.id)
+    if (matched) replacementIds.add(matched.id)
+    return matched ?? stream
+  })
+
+  for (const stream of nextCanvas.streams) {
+    if (!replacementIds.has(stream.id)) {
+      streams.push(stream)
+      replacementIds.add(stream.id)
+    }
+  }
+
+  return {
+    ...nextCanvas,
+    streams,
+    completed: false,
+  }
 }
 
 function isConjunctionText(text: string): boolean {
@@ -518,6 +660,28 @@ function serializeProofCommands(commands: string[]): string {
   }
 
   return render(root, 0).join('\n')
+}
+
+function stripCasePrefixes(tactic: string | null): string | null {
+  if (!tactic) return null
+  let s = tactic.trim()
+  while (s.startsWith('case ') || s.startsWith('focus_case ') || s.startsWith("case' ")) {
+    const prefixLen = s.startsWith('focus_case ') ? 11 : s.startsWith("case' ") ? 6 : 5
+    const inner = s.slice(prefixLen)
+    const sep = inner.indexOf('=>')
+    if (sep === -1) break
+    s = inner.slice(sep + 2).trim()
+  }
+  return s || null
+}
+
+function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
+  const leanCommands = steps.map(step => {
+    const { casePath } = parseFocusedCommand(step.command)
+    const leaf = stripCasePrefixes(step.leanTactic) ?? `-- ? (${step.playTactic})`
+    return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf)
+  })
+  return serializeProofCommands(leanCommands)
 }
 
 type TransformTarget =
@@ -856,11 +1020,18 @@ export function VisualCanvas({
 
     const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
     const result = await onInteraction(newScript)
+    const handledBySyntheticReflexiveClick =
+      result === null &&
+      playTactic === 'click_goal' &&
+      goalIsReflexiveEquality(focusedStream) &&
+      !focusedStream.goal.mvarId
 
     setIsProcessing(false)
 
     const lastStep = result?.steps.at(-1)
-    const leanTactic = result
+    const leanTactic = handledBySyntheticReflexiveClick
+      ? 'rfl'
+      : result
       ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream)
       : null
 
@@ -869,8 +1040,34 @@ export function VisualCanvas({
       timestamp: Date.now(),
       playTactic,
       leanTactic,
-      succeeded: result !== null,
+      succeeded: result !== null || handledBySyntheticReflexiveClick,
     })
+
+    if (handledBySyntheticReflexiveClick) {
+      const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
+        proofTree,
+        canvasState,
+        canvasState,
+        focusedStream,
+        playTactic,
+        Boolean(options?.streamSplit),
+        activeStreamId,
+      )
+
+      setProofTree(nextTree)
+      setActiveStreamId(nextActiveId)
+
+      if (nextCanvas.completed && options?.solvedGoalId) {
+        setSolvedGoalId(options.solvedGoalId)
+        window.setTimeout(() => {
+          setCanvasState(nextCanvas)
+        }, 700)
+        return
+      }
+
+      setCanvasState(nextCanvas)
+      return
+    }
 
     if (result === null) {
       if (options?.placementHint) {
@@ -1263,6 +1460,7 @@ export function VisualCanvas({
     if (!stream || !card) return
     if (!hypIsTransformable(card)) return
     closeReductionTooltip()
+    setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformWorkingSide('right')
@@ -1282,6 +1480,7 @@ export function VisualCanvas({
     const stream = canvasState.streams.find(s => s.id === streamId)
     if (!stream || !goalIsTransformable(stream)) return
     closeReductionTooltip()
+    setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformWorkingSide('right')
@@ -1294,6 +1493,7 @@ export function VisualCanvas({
     setPendingTransformSync(null)
 
     if (!pendingSync) {
+      setSolvedGoalId(null)
       setTransformTarget(null)
       return
     }
@@ -1303,9 +1503,11 @@ export function VisualCanvas({
       setTransformTarget(null)
       setProofTree(pendingSync.nextTree)
       setActiveStreamId(pendingSync.nextActiveId)
-      setCanvasState(prev => ({ ...prev, completed: true }))
+      // Use celebrationCanvas (shows post-rewrite goal e.g. "0 = 0") if available,
+      // so the display is correct during the 700ms celebration window.
+      setCanvasState(pendingSync.celebrationCanvas ?? { ...pendingSync.nextCanvas, completed: true })
       window.setTimeout(() => {
-        setCanvasState(pendingSync.nextCanvas)
+        setCanvasState({ ...pendingSync.nextCanvas, completed: true })
         if (pendingSync.finalDisplayCanvas) {
           setDisplayCanvasState(pendingSync.finalDisplayCanvas)
         }
@@ -1316,6 +1518,7 @@ export function VisualCanvas({
     setProofTree(pendingSync.nextTree)
     setActiveStreamId(pendingSync.nextActiveId)
     setCanvasState(pendingSync.nextCanvas)
+    setSolvedGoalId(null)
     setTransformTarget(null)
   }
 
@@ -1325,7 +1528,8 @@ export function VisualCanvas({
     hypLabel: string,
     isReverse: boolean,
     workingSide: 'left' | 'right',
-    path?: number[]
+    path?: number[],
+    expectedGoal?: ExpectedRewriteGoal,
   ): Promise<RewriteOutcome> => {
     const playTactic = interactionToPlayTactic({
       type: 'drag_rw',
@@ -1369,7 +1573,7 @@ export function VisualCanvas({
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
       : undefined
-    const { nextTree, nextActiveId, focusedStreams, nextCanvas } = focusedStream
+    let { nextTree, nextActiveId, focusedStreams, nextCanvas } = focusedStream
       ? reconcileProofTreeAfterInteraction(
           proofTree,
           canvasState,
@@ -1383,10 +1587,42 @@ export function VisualCanvas({
       : {
           nextTree: proofTree,
           nextActiveId: activeStreamId,
-          focusedStreams: [] as GoalStream[],
-          nextCanvas: mergedCanvas,
-        }
-    const nextStream = focusedStreams[0] ?? null
+        focusedStreams: [] as GoalStream[],
+        nextCanvas: mergedCanvas,
+      }
+    let nextStream = focusedStreams[0] ?? null
+    if (
+      transformTarget?.kind === 'goal' &&
+      nextStream === null &&
+      !leanCanvas.completed &&
+      focusedStream &&
+      expectedGoal
+    ) {
+      const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
+      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      nextActiveId = syntheticStream.id
+      focusedStreams = [syntheticStream]
+      nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
+      nextStream = syntheticStream
+    }
+    const shouldKeepReflexiveGoalUntilClick =
+      transformTarget?.kind === 'goal' &&
+      nextStream === null &&
+      leanCanvas.completed &&
+      focusedStream !== null &&
+      expectedGoal !== undefined &&
+      formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+    if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
+      const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
+      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      nextActiveId = syntheticStream.id
+      focusedStreams = [syntheticStream]
+      nextCanvas = {
+        ...replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream),
+        completed: false,
+      }
+      nextStream = syntheticStream
+    }
     const shouldDeferGoalCompletionUntilClose =
       transformTarget?.kind === 'goal' && nextStream === null
 
@@ -1425,10 +1661,33 @@ export function VisualCanvas({
     }])
 
     if (shouldDeferGoalCompletionUntilClose) {
+      // When the rewrite auto-completes the proof (e.g. rw [add_zero] closes "0 = 0" via rfl),
+      // build a celebration canvas that shows the post-rewrite goal so the display is correct
+      // during the 700ms celebration window instead of showing the pre-rewrite goal.
+      const celebrationCanvas: CanvasState | undefined =
+        leanCanvas.completed && focusedStream && expectedGoal
+          ? {
+              ...canvasState,
+              completed: true,
+              streams: canvasState.streams.map(stream =>
+                stream.id === focusedStream.id
+                  ? {
+                      ...stream,
+                      goal: {
+                        ...stream.goal,
+                        type: { text: `${expectedGoal.lhsStr} = ${expectedGoal.rhsStr}` },
+                        clickAction: undefined,
+                      },
+                    }
+                  : stream
+              ),
+            }
+          : undefined
       setPendingTransformSync({
         nextTree,
         nextActiveId,
         nextCanvas,
+        celebrationCanvas,
         finalDisplayCanvas: leanCanvas.completed ? leanCanvas : undefined,
         solvedGoalId: leanCanvas.completed ? transformTarget.streamId : null,
         finalCompletion: leanCanvas.completed,
@@ -1439,7 +1698,7 @@ export function VisualCanvas({
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
 
-    if (leanCanvas.completed) {
+    if (leanCanvas.completed && !shouldKeepReflexiveGoalUntilClick) {
       if (transformTarget?.kind === 'goal') setSolvedGoalId(transformTarget.streamId)
       setCanvasState(prev => ({ ...prev, completed: true }))
       window.setTimeout(() => {
@@ -1738,7 +1997,21 @@ export function VisualCanvas({
     if (transformTarget?.kind !== 'goal') {
       throw new Error('No goal transformation session is open')
     }
-    const outcome = await handleRewrite(theoremName, false, workingSide, path)
+    const expectedGoal = transformProps
+      ? expectedGoalForRewrite(
+          transformProps.goalLhsStr,
+          transformProps.goalRhsStr,
+          transformProps.goalLhsNode,
+          transformProps.goalRhsNode,
+          transformProps.equalityHyps,
+          transformProps.theoremEqualityHyps,
+          theoremName,
+          false,
+          workingSide,
+          path,
+        )
+      : undefined
+    const outcome = await handleRewrite(theoremName, false, workingSide, path, expectedGoal)
     if (!outcome.success) {
       throw new Error(`Rewrite with "${theoremName}" was rejected`)
     }
@@ -1973,9 +2246,13 @@ export function VisualCanvas({
             <div className="goals-container" data-testid="goals-container">
               {displayStream && (() => {
                 const stream = displayStream
-                const clickAction = stream.goal.clickAction
+                const liveGoalStream =
+                  currentStream && currentStream.id === stream.id
+                    ? currentStream
+                    : stream
+                const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
                 const isClickable = hasClickAction(clickAction)
-                const isTransformable = goalIsTransformable(stream)
+                const isTransformable = goalIsTransformable(liveGoalStream)
                 return (
                   <GoalCard
                     key={stream.id}
@@ -1986,8 +2263,8 @@ export function VisualCanvas({
                     isClickable={streamInteractionsEnabled && isClickable}
                     clickTooltip={clickAction?.tooltip}
                     isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
-                    onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(stream.id, clickAction) : undefined}
-                    onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleGoalDoubleClick(stream.id) : undefined}
+                    onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
+                    onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
                     onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms)}
                     onMouseLeave={() => handleReductionMouseLeave(stream.id)}
                   />
@@ -2089,9 +2366,11 @@ export function VisualCanvas({
       {showProofPanel && (
         <ProofPanel
           proofSteps={proofSteps.map(step => ({
+            command: step.command,
             playTactic: step.playTactic,
             leanTactic: step.leanTactic,
           }))}
+          leanProofScript={buildStructuredLeanProof(proofSteps)}
           onClose={() => setShowProofPanel(false)}
         />
       )}

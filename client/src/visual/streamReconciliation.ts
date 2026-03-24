@@ -38,6 +38,13 @@ function goalTypeText(stream: GoalStream): string {
   return normalizePropositionText(stripTaggedText(stream.goal.type).trim())
 }
 
+function isReflexiveEqualityGoal(stream: GoalStream): boolean {
+  const equalityTarget = splitEqualityTarget(goalTypeText(stream))
+  if (!equalityTarget) return false
+  const [lhs, rhs] = equalityTarget
+  return normalizePropositionText(lhs) === normalizePropositionText(rhs)
+}
+
 function likelyFocusedContinuation(
   focusedStream: GoalStream,
   candidate: GoalStream,
@@ -203,6 +210,11 @@ function splitImplicationTargetForRuntime(text: string): [string, string] | null
   return splitImplicationTarget(text)
     ?? splitTopLevelInfix(text, ` ${implication} `)
     ?? splitTopLevelInfix(text, implication)
+}
+
+function splitEqualityTarget(text: string): [string, string] | null {
+  return splitTopLevelInfix(text, ' = ')
+    ?? splitTopLevelInfix(text, '=')
 }
 
 function normalizePropositionText(text: string): string {
@@ -448,6 +460,18 @@ function synthesizedCardPosition(cardIndex: number): { x: number; y: number } {
 
 function buildGoalClickAction(typeText: string) {
   const normalized = normalizePropositionText(typeText)
+  const equalityTarget = splitEqualityTarget(normalized)
+  if (equalityTarget) {
+    const [lhs, rhs] = equalityTarget
+    if (normalizePropositionText(lhs) === normalizePropositionText(rhs)) {
+      return {
+        playTactic: 'click_goal',
+        tooltip: 'Click to complete',
+        options: [],
+      }
+    }
+  }
+
   const implicationTarget = splitImplicationTargetForRuntime(normalized)
   if (implicationTarget) {
     return {
@@ -814,6 +838,8 @@ export function reconcileProofTreeAfterInteraction(
 ): ReconciledTreeState {
   let nextTree = beforeTree
   let nextActiveId = currentActiveId
+  const solvesFocusedByReflexiveClick =
+    playTactic === 'click_goal' && isReflexiveEqualityGoal(focusedStream)
 
   const matchedAfterIds = new Set<string>()
   const siblingStreamsByBeforeId = new Map<string, GoalStream>()
@@ -829,9 +855,26 @@ export function reconcileProofTreeAfterInteraction(
     siblingStreamsByBeforeId.set(stream.id, stream)
   }
 
-  const remainingFromCanvas = afterCanvas.streams.filter(stream => !matchedAfterIds.has(stream.id))
+  const staleSolvedContinuationIds = solvesFocusedByReflexiveClick
+    ? new Set(
+        afterCanvas.streams
+          .filter(stream =>
+            !matchedAfterIds.has(stream.id) && likelyFocusedContinuation(focusedStream, stream, playTactic)
+          )
+          .map(stream => stream.id),
+      )
+    : new Set<string>()
+  const effectiveAfterCanvas = staleSolvedContinuationIds.size > 0
+    ? {
+        ...afterCanvas,
+        streams: afterCanvas.streams.filter(stream => !staleSolvedContinuationIds.has(stream.id)),
+      }
+    : afterCanvas
+  const remainingFromCanvas = effectiveAfterCanvas.streams.filter(stream => !matchedAfterIds.has(stream.id))
   const unmatchedExactFocusedStreams = Array.isArray(exactFocusedStreams)
-    ? exactFocusedStreams.filter(stream => !matchedAfterIds.has(stream.id))
+    ? exactFocusedStreams.filter(stream =>
+        !matchedAfterIds.has(stream.id) && !staleSolvedContinuationIds.has(stream.id)
+      )
     : exactFocusedStreams
   const trustedFocusedStreams = (() => {
     if (unmatchedExactFocusedStreams === undefined) return undefined
@@ -851,7 +894,8 @@ export function reconcileProofTreeAfterInteraction(
     streamSplit ||
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
-  const solvesFocusedGoal = playTactic?.startsWith('drag_goal ') ?? false
+  const solvesFocusedGoal =
+    (playTactic?.startsWith('drag_goal ') ?? false) || solvesFocusedByReflexiveClick
   const hasSiblingBranches = siblingStreamsByBeforeId.size > 0
   const canPromoteSingleRemainingStream =
     !interactionRequiresFollowUp &&
@@ -861,8 +905,11 @@ export function reconcileProofTreeAfterInteraction(
       (Array.isArray(exactFocusedStreams) || hasSiblingBranches)
     )
   const globallyCompleted =
-    afterCanvas.completed &&
-    afterCanvas.streams.length === 0 &&
+    (
+      effectiveAfterCanvas.completed ||
+      solvesFocusedByReflexiveClick
+    ) &&
+    effectiveAfterCanvas.streams.length === 0 &&
     siblingStreamsByBeforeId.size === 0 &&
     !interactionRequiresFollowUp
   const shouldTreatAsSplit = streamSplit || remaining.length >= 2
@@ -876,7 +923,7 @@ export function reconcileProofTreeAfterInteraction(
         nextTree,
         buildReconciledCanvasState(
           beforeCanvas,
-          afterCanvas,
+          effectiveAfterCanvas,
           focusedStream,
           siblingStreamsByBeforeId,
           nextFocusedStreams,
