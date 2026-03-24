@@ -100,6 +100,30 @@ export const inventorySubtabAtom = atom(
   }
 )
 
+/** World edges from game.json, used to compute topological ordering of worlds */
+export const worldEdgesAtom = atom([] as string[][])
+
+/** Map from world name → topological rank (lower = introduced earlier).
+ * Computed from worldEdgesAtom via Kahn's algorithm with alphabetical tiebreaking.
+ */
+export const worldRankAtom = atom(get => {
+  const edges = get(worldEdgesAtom)
+  const nodes = new Set(edges.flatMap(([a, b]) => [a, b]))
+  const inDegree: Record<string, number> = {}
+  const adj: Record<string, string[]> = {}
+  nodes.forEach(n => { inDegree[n] = 0; adj[n] = [] })
+  edges.forEach(([a, b]) => { adj[a].push(b); inDegree[b]++ })
+  const queue = [...nodes].filter(n => inDegree[n] === 0).sort()
+  const rank: Record<string, number> = {}
+  let r = 0
+  while (queue.length) {
+    const n = queue.shift()!
+    rank[n] = r++
+    adj[n].sort().forEach(m => { if (--inDegree[m] === 0) queue.push(m) })
+  }
+  return rank
+})
+
 /** The currently visible inventory tiles */
 export const currentInventoryTilesAtom = atom(get => {
   const tab = get(inventoryTabAtom)

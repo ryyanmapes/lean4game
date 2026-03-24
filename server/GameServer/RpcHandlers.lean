@@ -982,6 +982,16 @@ private structure ProofLineSource where
   source : String
   deriving Inhabited
 
+private def proofLineGoalPos (text : Lean.FileMap) (lineInfo : ProofLineSource) : String.Pos.Raw := Id.run do
+  let mut pos := lineInfo.startPos
+  let mut lastNonWhitespace := lineInfo.startPos
+  while pos < lineInfo.endPos do
+    let nextPos := pos.next text.source
+    if !(pos.get text.source).isWhitespace then
+      lastNonWhitespace := nextPos
+    pos := nextPos
+  return lastNonWhitespace
+
 /-- Request that returns the goals at the end of each line of the tactic proof
 plus the diagnostics (i.e. warnings/errors) for the proof.
  -/
@@ -1032,6 +1042,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
       for (lineInfo, i) in positionsWithSource.zipIdx do
         -- iterate over all steps in the proof and get the goals and hints at each position
         let pos := lineInfo.endPos
+        let goalPos := proofLineGoalPos text lineInfo
         let source := lineInfo.source
 
         -- diags are labeled in Lsp-positions, which differ from the lean-internal
@@ -1052,9 +1063,9 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
         let diagsAtPos := filterUnsolvedGoal diagsAtPos
 
 
-        let some snap := snaps.find? (fun snap => snap.endPos >= pos)
+        let some snap := snaps.find? (fun snap => snap.endPos >= goalPos)
           | panic! "No snap found"
-        let goalsAtEndResult := snap.infoTree.goalsAt? doc.meta.text pos
+        let goalsAtEndResult := snap.infoTree.goalsAt? doc.meta.text goalPos
         let goalsAtStartResult := snap.infoTree.goalsAt? doc.meta.text lineInfo.startPos
         let annotateUsingResult := fun goalsAtResult => do
           match goalsAtResult.getLast? with

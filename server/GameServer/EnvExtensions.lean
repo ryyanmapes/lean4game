@@ -105,6 +105,8 @@ structure InventoryTile where
   world : Option Name := none
   /-- The level which introduced this item. -/
   level : Option Nat := none
+  /-- Declaration order within the introducing level (for stable tiebreaking). -/
+  declIndex : Option Nat := none
   /-- Set to `true` if there exists an exercise in the game proving this statement. -/
   proven := false
   /-- If `true` then the item only gets unlocked in a later level. -/

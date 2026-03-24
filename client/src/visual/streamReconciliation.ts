@@ -45,10 +45,15 @@ function likelyFocusedContinuation(
 ): boolean {
   if (focusedStream.id === candidate.id) return true
 
+  const isGoalRewrite =
+    (playTactic?.startsWith('drag_rw_') ?? false) &&
+    !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
   const requiresStableGoalType =
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
+  const allowsGoalTypeChangeWithinSameBranch = isGoalRewrite
   const goalTypeMatches = goalTypeText(focusedStream) === goalTypeText(candidate)
+  const hypContextMatches = hypContextShape(focusedStream) === hypContextShape(candidate)
 
   if (requiresStableGoalType && !goalTypeMatches) return false
   if (streamShape(candidate) === streamShape(focusedStream)) return true
@@ -56,8 +61,12 @@ function likelyFocusedContinuation(
   const focusedName = focusedStream.goal.userName
   const candidateName = candidate.goal.userName
   if (focusedName && candidateName) {
-    return focusedName === candidateName && goalTypeMatches
+    if (focusedName !== candidateName) return false
+    if (goalTypeMatches) return true
+    return allowsGoalTypeChangeWithinSameBranch && hypContextMatches
   }
+
+  if (allowsGoalTypeChangeWithinSameBranch && hypContextMatches) return true
 
   return requiresStableGoalType ? goalTypeMatches : false
 }
@@ -67,6 +76,10 @@ function hypShape(card: HypCardType): string {
   const type = stripTaggedText(card.hyp.type).trim()
   const value = card.hyp.val ? ` := ${stripTaggedText(card.hyp.val).trim()}` : ''
   return `${name}: ${type}${value}`
+}
+
+function hypContextShape(stream: GoalStream): string {
+  return JSON.stringify(stream.hyps.map(hypShape))
 }
 
 function streamShape(stream: GoalStream): string {
@@ -611,6 +624,56 @@ function synthesizeContinuationStream(
   return null
 }
 
+function synthesizeInductionStreams(
+  focusedStream: GoalStream,
+  hypName: string,
+): GoalStream[] {
+  const targetCard = focusedStream.hyps.find(card => card.hyp.names[0] === hypName)
+  if (!targetCard) return []
+
+  const hypsWithoutTarget = focusedStream.hyps.filter(card => card.hyp.names[0] !== hypName)
+
+  // Base case: variable is 0, remove the induction target from context
+  const zeroStream: GoalStream = {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      userName: 'zero',
+      reductionForms: [],
+    },
+    hyps: cloneHypCards(hypsWithoutTarget),
+    reductionForms: [],
+  }
+
+  // Inductive step: keep the variable, add the induction hypothesis
+  const ihName = nextFreshHypName(focusedStream.hyps, `${hypName}_ih`)
+  const ihCard: HypCardType = {
+    id: uuidv4(),
+    hyp: {
+      names: [ihName],
+      type: { text: '…' },
+      reductionForms: [],
+    },
+    position: synthesizedCardPosition(focusedStream.hyps.length),
+  }
+  const succStream: GoalStream = {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      userName: 'succ',
+      reductionForms: [],
+    },
+    hyps: [...cloneHypCards(focusedStream.hyps), ihCard],
+    reductionForms: [],
+  }
+
+  return [zeroStream, succStream]
+}
+
 function synthesizeSplitStreamsForInteraction(
   focusedStream: GoalStream,
   playTactic?: string,
@@ -618,6 +681,11 @@ function synthesizeSplitStreamsForInteraction(
   if (playTactic?.startsWith('click_prop ')) {
     const hypName = playTactic.slice('click_prop '.length).trim()
     return synthesizeHypCaseSplitStreams(focusedStream, hypName)
+  }
+
+  if (playTactic?.startsWith('induction ')) {
+    const hypName = playTactic.slice('induction '.length).trim()
+    return synthesizeInductionStreams(focusedStream, hypName)
   }
 
   return synthesizeSplitStreams(focusedStream)
@@ -784,6 +852,14 @@ export function reconcileProofTreeAfterInteraction(
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
   const solvesFocusedGoal = playTactic?.startsWith('drag_goal ') ?? false
+  const hasSiblingBranches = siblingStreamsByBeforeId.size > 0
+  const canPromoteSingleRemainingStream =
+    !interactionRequiresFollowUp &&
+    !solvesFocusedGoal &&
+    !(
+      (playTactic?.startsWith('drag_rw') ?? false) &&
+      (Array.isArray(exactFocusedStreams) || hasSiblingBranches)
+    )
   const globallyCompleted =
     afterCanvas.completed &&
     afterCanvas.streams.length === 0 &&
@@ -851,7 +927,7 @@ export function reconcileProofTreeAfterInteraction(
 
   const continuation = remaining.find(stream =>
     likelyFocusedContinuation(focusedStream, stream, playTactic)
-  ) ?? (!interactionRequiresFollowUp && !solvesFocusedGoal && remaining.length === 1 ? remaining[0] : null)
+  ) ?? (canPromoteSingleRemainingStream && remaining.length === 1 ? remaining[0] : null)
   if (continuation) {
     nextTree = replaceLeafStream(nextTree, focusedStream.id, continuation)
     nextActiveId = continuation.id
@@ -877,7 +953,7 @@ export function reconcileProofTreeAfterInteraction(
     }
   }
 
-  if (remaining.length > 0 && !solvesFocusedGoal) {
+  if (remaining.length > 0 && canPromoteSingleRemainingStream) {
     nextTree = replaceLeafStream(nextTree, focusedStream.id, remaining[0])
     nextActiveId = remaining[0].id
     return {

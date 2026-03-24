@@ -108,7 +108,7 @@
     "start:client": "cross-env NODE_ENV=development vite --host",
     "build": "node scripts/run-sequential.cjs build:server build:relay build:client build:test",
     "preview": "vite preview",
-    "build:server": "node scripts/run-in-dir.cjs server lake build",
+    "build:server": "node scripts/run-in-dir.cjs server lake -R build",
     "build:client": "cross-env NODE_ENV=production vite build",
     "build:relay": "tsc -b ./relay",
     "build:test": "node scripts/run-in-dir.cjs cypress/TestGame lake build",

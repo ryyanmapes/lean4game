@@ -31,6 +31,7 @@ export function GoalCard({
   isSolved,
 }: GoalCardProps) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isInteractive })
+  const clickTimeoutRef = React.useRef<number | null>(null)
   const goalText = TaggedText_stripTags(goal.type)
 
   const classes = [
@@ -42,11 +43,46 @@ export function GoalCard({
     isSolved ? 'solved' : '',
   ].filter(Boolean).join(' ')
 
-  const title = isClickable
+  const title = isClickable && isTransformable
     ? clickTooltip
-    : isTransformable
-      ? 'Double-click to open transformation view'
-      : undefined
+      ? `${clickTooltip}. Double-click to open transformation view`
+      : 'Double-click to open transformation view'
+    : isClickable
+      ? clickTooltip
+      : isTransformable
+        ? 'Double-click to open transformation view'
+        : undefined
+
+  React.useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  function handleClick() {
+    if (!onClick) return
+    if (onDoubleClick) {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current)
+      }
+      clickTimeoutRef.current = window.setTimeout(() => {
+        clickTimeoutRef.current = null
+        onClick()
+      }, 220)
+      return
+    }
+    onClick()
+  }
+
+  function handleDoubleClick() {
+    if (clickTimeoutRef.current !== null) {
+      window.clearTimeout(clickTimeoutRef.current)
+      clickTimeoutRef.current = null
+    }
+    onDoubleClick?.()
+  }
 
   return (
     <div
@@ -56,8 +92,8 @@ export function GoalCard({
       data-stream-id={id}
       data-goal-text={goalText}
       className={classes}
-      onClick={isInteractive ? onClick : undefined}
-      onDoubleClick={isInteractive ? onDoubleClick : undefined}
+      onClick={isInteractive ? handleClick : undefined}
+      onDoubleClick={isInteractive ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
       title={title}

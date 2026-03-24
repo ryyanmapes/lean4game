@@ -12,7 +12,7 @@ import { parseEqualityHyp } from './TransformationView'
 import type { ProofState } from '../components/infoview/rpc_api'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction'])
 const INITIAL_PROOF_MAX_ATTEMPTS = 2
 const INITIAL_PROOF_RETRY_DELAY_MS = 2000
 const INITIAL_PROOF_ATTEMPT_TIMEOUT_MS = 45000
@@ -276,17 +276,52 @@ export function VisualProofPage() {
     let active = true
     const baseUrl = window.location.origin + '/data'
 
-    fetchJsonWithRetry<{
-      lemmas?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
-      tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
-    }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`)
-      .then(async (levelData) => {
+    Promise.all([
+      fetchJsonWithRetry<{
+        lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
+        tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
+      }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
+      fetchJsonWithRetry<{ worlds?: { edges?: string[][] } }>(`${baseUrl}/${gameId}/game.json`),
+    ]).then(async ([levelData, gameData]) => {
         if (!active || !levelData) return
-        const lemmas: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
+        const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
           levelData.lemmas ?? []
         const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
           levelData.tactics ?? []
-        const available = lemmas.filter(t => !t.locked && !t.hidden)
+
+        // Compute topological world rank from game graph edges (Kahn's BFS).
+        const edges = gameData?.worlds?.edges ?? []
+        const nodes = new Set(edges.flatMap(([a, b]: string[]) => [a, b]))
+        const inDegree: Record<string, number> = {}
+        const adj: Record<string, string[]> = {}
+        nodes.forEach((n: string) => { inDegree[n] = 0; adj[n] = [] })
+        edges.forEach(([a, b]: string[]) => { adj[a].push(b); inDegree[b]++ })
+        const queue = [...nodes].filter((n: string) => inDegree[n] === 0).sort()
+        const worldRank: Record<string, number> = {}
+        let r = 0
+        while (queue.length) {
+          const n = queue.shift()!
+          worldRank[n] = r++
+          adj[n].sort().forEach((m: string) => { if (--inDegree[m] === 0) queue.push(m) })
+        }
+
+        // Category order matches the NNG4 inventory tab order: first occurrence of each
+        // category in the alphabetically-sorted lemma list (same logic as inventorySubtabOptionsAtom).
+        const categoryOrder: Record<string, number> = {}
+        lemmas.forEach(t => {
+          if (t.category !== undefined && !(t.category in categoryOrder))
+            categoryOrder[t.category] = Object.keys(categoryOrder).length
+        })
+
+        const available = lemmas
+          .filter(t => !t.locked && !t.hidden)
+          .sort((x, y) =>
+            (categoryOrder[x.category ?? ''] ?? Infinity) - (categoryOrder[y.category ?? ''] ?? Infinity)
+            || (worldRank[x.world ?? ''] ?? Infinity) - (worldRank[y.world ?? ''] ?? Infinity)
+            || (x.level ?? Infinity) - (y.level ?? Infinity)
+            || (x.declIndex ?? Infinity) - (y.declIndex ?? Infinity)
+            || x.displayName.localeCompare(y.displayName)
+          )
         const availableTactics = tactics
           .filter(t => !t.locked && !t.hidden && SUPPORTED_VISUAL_TACTICS.has(t.name))
           .map(tactic => ({

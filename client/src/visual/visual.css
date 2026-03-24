@@ -679,6 +679,10 @@
   left: auto;
   right: 3rem;
 }
+.visual-page .tr-static-group.pinned-top {
+  top: 4.5rem;
+  transform: none;
+}
 
 .visual-page .tr-static-label {
   font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;

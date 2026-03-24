@@ -35,6 +35,7 @@ export function HypCard({
   onContextMenu,
   onMouseLeave,
 }: HypCardProps) {
+  const clickTimeoutRef = React.useRef<number | null>(null)
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
     id: card.id,
     disabled: !isInteractive,
@@ -77,6 +78,37 @@ export function HypCard({
   const hypName = card.hyp.names[0] ?? ''
   const hypType = TaggedText_stripTags(card.hyp.type)
 
+  React.useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  function handleClick() {
+    if (!onClickAction) return
+    if (onDoubleClick) {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current)
+      }
+      clickTimeoutRef.current = window.setTimeout(() => {
+        clickTimeoutRef.current = null
+        onClickAction()
+      }, 220)
+      return
+    }
+    onClickAction()
+  }
+
+  function handleDoubleClick() {
+    if (clickTimeoutRef.current !== null) {
+      window.clearTimeout(clickTimeoutRef.current)
+      clickTimeoutRef.current = null
+    }
+    onDoubleClick?.()
+  }
+
   return (
     <div
       id={card.id}
@@ -88,8 +120,8 @@ export function HypCard({
       data-hyp-type={hypType}
       style={style}
       className={classes}
-      onClick={isInteractive && isClickable && !isDragging ? onClickAction : undefined}
-      onDoubleClick={isInteractive && isTransformable && !isDragging ? onDoubleClick : undefined}
+      onClick={isInteractive && isClickable && !isDragging ? handleClick : undefined}
+      onDoubleClick={isInteractive && isTransformable && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
       title={title}

@@ -6,10 +6,10 @@ import { v4 as uuidv4 } from 'uuid'
 
 class Parser {
   private tokens: string[]
-  private current: number = 0
+  private current = 0
 
   constructor(input: string) {
-    this.tokens = input.match(/([a-zA-Zα-ωΑ-Ω₀-₉]+|\d+|[+\-*/()\[\]]|\S)/g) || []
+    this.tokens = input.match(/([\p{L}\p{N}_]+|[+\-*/()\[\]]|\S)/gu) || []
   }
 
   private peek(): string | null {
@@ -20,7 +20,17 @@ class Parser {
     return this.tokens[this.current++]
   }
 
-  private parsePrimary(): ExpressionNode {
+  private isIdentifier(token: string | null): token is string {
+    return token !== null && /^[\p{L}][\p{L}\p{N}_]*$/u.test(token)
+  }
+
+  private isPrimaryStart(token: string | null): boolean {
+    return token === '('
+      || this.isIdentifier(token)
+      || (token !== null && /^\d+$/.test(token))
+  }
+
+  private parseAtom(): ExpressionNode {
     const token = this.peek()
 
     if (token === '(') {
@@ -30,11 +40,11 @@ class Parser {
       return expr
     }
 
-    if (token && /^[a-zA-Zα-ωΑ-Ω][a-zA-Zα-ωΑ-Ω₀-₉_]*$/.test(token)) {
+    if (this.isIdentifier(token)) {
       this.consume()
-      // Support function application syntax: name(arg)
+      // Support both `name(arg)` and simple Lean-style unary application `name arg`.
       if (this.peek() === '(') {
-        this.consume() // '('
+        this.consume()
         const arg = this.parseExpression()
         if (this.peek() === ')') this.consume()
         return { type: 'app', func: token, arg, id: uuidv4() }
@@ -48,6 +58,16 @@ class Parser {
     }
 
     throw new Error(`Unexpected token: ${token}`)
+  }
+
+  private parsePrimary(): ExpressionNode {
+    let expr = this.parseAtom()
+    while (this.isPrimaryStart(this.peek())) {
+      if (expr.type !== 'variable') break
+      const arg = this.parseAtom()
+      expr = { type: 'app', func: expr.name, arg, id: uuidv4() }
+    }
+    return expr
   }
 
   private parseTerm(): ExpressionNode {
@@ -84,22 +104,18 @@ export function parse(input: string): ExpressionNode {
   return expr
 }
 
-// --- ExprTree → ExpressionNode converter ---
+// --- ExprTree -> ExpressionNode converter ---
 
-/** Strip namespace prefix: "Nat.succ" → "succ", "HAdd.hAdd" → "hAdd" */
 function shortConstName(name: string): string {
   const parts = name.split('.')
   return parts[parts.length - 1]
 }
 
-/** Lean represents `a + b` as a 6-arg application of HAdd.hAdd (4 type/instance args + lhs + rhs).
- *  Flatten an app chain and return [head, arg0, arg1, ...]. */
 function flattenApp(tree: ExprTree): ExprTree[] {
   if (tree.tag !== 'app') return [tree]
   return [...flattenApp(tree.func), tree.arg]
 }
 
-/** Map from fully-qualified Lean operator constants to arithmetic operators. */
 const OP_CONSTS: Record<string, Op> = {
   'HAdd.hAdd': '+',
   'HMul.hMul': '*',
@@ -107,10 +123,6 @@ const OP_CONSTS: Record<string, Op> = {
   'HDiv.hDiv': '/',
 }
 
-/** Collapse a succ(succ(...(n))) chain into a numeric constant.
- *  Works bottom-up: inner nodes are already converted, so the innermost value
- *  may be constant(0) or constant(k) if a previous layer already folded.
- *  Using `n + curr.value` handles both cases correctly. */
 function tryNatLit(node: ExpressionNode): ExpressionNode {
   let n = 0
   let curr: ExpressionNode = node
@@ -119,11 +131,6 @@ function tryNatLit(node: ExpressionNode): ExpressionNode {
   return node
 }
 
-/** Convert a Lean `ExprTree` (as received from the server) to an `ExpressionNode`.
- *  - lit   → constant
- *  - fvar / const → variable (short name) or, for known binary ops, binary node
- *  - app   → try binary-op flattening first; fall back to `app` node
- *  - other → try string `parse()`; fall back to variable with raw pp string */
 export function exprTreeToNode(tree: ExprTree): ExpressionNode {
   if (tree.tag === 'lit') {
     return { type: 'constant', value: tree.n, id: uuidv4() }
@@ -132,7 +139,6 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
     return { type: 'variable', name: tree.name, id: uuidv4() }
   }
   if (tree.tag === 'const') {
-    // Nat.zero → constant 0
     if (tree.name === 'Nat.zero' || tree.name === 'MyNat.zero') {
       return { type: 'constant', value: 0, id: uuidv4() }
     }
@@ -141,27 +147,23 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
   if (tree.tag === 'other') {
     try { return parse(tree.pp) } catch { return { type: 'variable', name: tree.pp, id: uuidv4() } }
   }
-  // tag === 'app'
+
   const flat = flattenApp(tree)
   const head = flat[0]
   if (head.tag === 'const') {
     const op = OP_CONSTS[head.name]
-    // Binary ops have 4 type/instance args + lhs + rhs = 7 total (including head)
     if (op && flat.length === 7) {
       return { type: 'binary', op, left: exprTreeToNode(flat[5]), right: exprTreeToNode(flat[6]), id: uuidv4() }
     }
-    // Unary function application (e.g. Nat.succ n) — keep as app node so succ chains
-    // display structurally (e.g. succ(succ(0))) rather than being folded to a numeral.
-    // tryNatLit is available but not called here: folding would hide the expression
-    // structure that the player needs to see and rewrite.
+    // Keep unary applications structural so rewrite targets stay visible.
     if (flat.length === 2) {
       return { type: 'app', func: shortConstName(head.name), arg: exprTreeToNode(flat[1]), id: uuidv4() }
     }
   }
-  // Generic fallback: use outermost func name + last arg
+
   const funcName = head.tag === 'const' ? shortConstName(head.name)
-                 : head.tag === 'fvar'  ? head.name
-                 : 'fn'
+    : head.tag === 'fvar' ? head.name
+      : 'fn'
   return { type: 'app', func: funcName, arg: exprTreeToNode(tree.arg), id: uuidv4() }
 }
 
@@ -201,17 +203,15 @@ export function expressionsEqual(n1: ExpressionNode, n2: ExpressionNode): boolea
   if (n1.type !== n2.type) return false
   if (n1.type === 'constant' && n2.type === 'constant') return n1.value === n2.value
   if (n1.type === 'variable' && n2.type === 'variable') return n1.name === n2.name
-  if (n1.type === 'app'      && n2.type === 'app')      return n1.func === n2.func && expressionsEqual(n1.arg, n2.arg)
-  if (n1.type === 'binary'   && n2.type === 'binary') {
+  if (n1.type === 'app' && n2.type === 'app') return n1.func === n2.func && expressionsEqual(n1.arg, n2.arg)
+  if (n1.type === 'binary' && n2.type === 'binary') {
     return n1.op === n2.op && expressionsEqual(n1.left, n2.left) && expressionsEqual(n1.right, n2.right)
   }
   return false
 }
 
-/** Pattern match: variables in `pattern` are wildcards that match anything.
- *  Used for theorem rewrite rules whose lhs/rhs use generic variable names. */
 export function matchesPattern(expr: ExpressionNode, pattern: ExpressionNode): boolean {
-  if (pattern.type === 'variable') return true  // wildcard
+  if (pattern.type === 'variable') return true
   if (pattern.type === 'constant') return expr.type === 'constant' && expr.value === pattern.value
   if (pattern.type === 'app') {
     return expr.type === 'app' && expr.func === pattern.func && matchesPattern(expr.arg, pattern.arg)
@@ -223,7 +223,6 @@ export function matchesPattern(expr: ExpressionNode, pattern: ExpressionNode): b
   return false
 }
 
-/** Find the node with the given id in an expression tree. */
 export function findNodeById(root: ExpressionNode, id: string): ExpressionNode | null {
   if (root.id === id) return root
   if (root.type === 'binary') return findNodeById(root.left, id) ?? findNodeById(root.right, id)
@@ -231,11 +230,6 @@ export function findNodeById(root: ExpressionNode, id: string): ExpressionNode |
   return null
 }
 
-/** Find the path from root to the node with `targetId`.
- *  Path entries are 1-indexed positions among visible children:
- *  - binary: 1 = left, 2 = right
- *  - app:    1 = arg (only child)
- *  Returns null if targetId is not found. */
 export function findPath(root: ExpressionNode, targetId: string): number[] | null {
   if (root.id === targetId) return []
   if (root.type === 'binary') {

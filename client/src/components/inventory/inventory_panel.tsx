@@ -1,9 +1,9 @@
 import React, { useContext, useEffect } from "react"
 import { GameIdContext } from "../../app"
 import "../../css/inventory.css"
-import { InventoryTab, inventoryTabAtom, inventoryTilesAtoms, selectedDocTileAtom, theoremSubtabAtom, userInventoryAtom } from "../../store/inventory-atoms"
+import { InventoryTab, inventoryTabAtom, inventoryTilesAtoms, selectedDocTileAtom, theoremSubtabAtom, userInventoryAtom, worldEdgesAtom } from "../../store/inventory-atoms"
 import { useAtom } from "jotai"
-import { InventoryOverview, InventoryTile, LevelInfo } from "../../state/api"
+import { InventoryOverview, InventoryTile, LevelInfo, useGetGameInfoQuery } from "../../state/api"
 import { selectDifficulty, selectInventory } from "../../state/progress"
 import { store } from "../../state/store"
 import { WorldLevelIdContext } from "../infoview/context"
@@ -29,6 +29,8 @@ export function InventoryPanel({levelInfo, visible = true} : {
   const [, setTacticInventory] = useAtom(inventoryTilesAtoms[InventoryTab.tactic])
   const [, setDefinitionInventory] = useAtom(inventoryTilesAtoms[InventoryTab.definition])
   const [, setUserInventory] = useAtom(userInventoryAtom)
+  const [, setWorldEdges] = useAtom(worldEdgesAtom)
+  const gameInfo = useGetGameInfoQuery({game: gameId})
 
   const difficulty = useSelector(selectDifficulty(gameId))
 
@@ -38,6 +40,10 @@ export function InventoryPanel({levelInfo, visible = true} : {
     setTacticInventory(levelInfo?.tactics ?? [])
     setDefinitionInventory(levelInfo?.definitions ?? [])
   }, [levelInfo])
+
+  useEffect(() => {
+    setWorldEdges(gameInfo.data?.worlds?.edges ?? [])
+  }, [gameInfo.data])
 
   // Some glue as the user inventory isn't fully in jotai yet
   useEffect(() => {

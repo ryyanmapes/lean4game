@@ -5,7 +5,7 @@ import { GameIdContext } from "../../app"
 import { WorldLevelIdContext } from "../infoview/context"
 import { store } from "../../state/store"
 import { InventoryItem } from "./inventory_item"
-import { currentInventoryTilesAtom, InventoryTab, inventoryTabAtom } from "../../store/inventory-atoms"
+import { currentInventoryTilesAtom, InventoryTab, inventoryTabAtom, worldRankAtom } from "../../store/inventory-atoms"
 import { useAtom } from "jotai"
 import { useSelector } from "react-redux"
 
@@ -15,6 +15,7 @@ export function InventoryList({tiles, docType, enableAll=false} : {
   enableAll?: boolean,
 }) {
   const [currentTiles] = useAtom(currentInventoryTilesAtom)
+  const [worldRank] = useAtom(worldRankAtom)
   const gameId = React.useContext(GameIdContext)
   const {worldId, levelId} = React.useContext(WorldLevelIdContext)
 
@@ -32,9 +33,14 @@ export function InventoryList({tiles, docType, enableAll=false} : {
     <div className="inventory-list">
 
       {currentTiles.sort(
-          // For theorems, sort entries `available > disabled > locked`
-          // otherwise alphabetically
-          (x, y) => +(docType === InventoryTab.theorem) * (+x.locked - +y.locked || +x.disabled - +y.disabled) || x.displayName.localeCompare(y.displayName)
+          // For theorems, sort entries `available > disabled > locked`, then by
+          // world/level introduction order (topological world rank, then level number).
+          // Items with no origin (null world/level) sort to the end, then alphabetically.
+          (x, y) => +(docType === InventoryTab.theorem) * (+x.locked - +y.locked || +x.disabled - +y.disabled)
+            || (worldRank[x.world] ?? Infinity) - (worldRank[y.world] ?? Infinity)
+            || (x.level ?? Infinity) - (y.level ?? Infinity)
+            || (x.declIndex ?? Infinity) - (y.declIndex ?? Infinity)
+            || x.displayName.localeCompare(y.displayName)
         ).map((tile, i) => {
             return <InventoryItem key={`${tile.category}-${tile.name}`}
               tile={tile}

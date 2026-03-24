@@ -10,7 +10,7 @@ import { HypCard } from './HypCard'
 import { GoalCard } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
-import { TransformationView } from './TransformationView'
+import { parseEqualityHyp, parseGoalEquality, TransformationView } from './TransformationView'
 import type { EqualityHyp } from './TransformationView'
 import { exprTreeToNode, printExpression } from './expr-engine'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
@@ -208,6 +208,40 @@ interface RewriteOutcome {
   completed: boolean
 }
 
+interface PendingTransformSync {
+  nextTree: ProofStreamTreeNode
+  nextActiveId: string | null
+  nextCanvas: CanvasState
+  finalDisplayCanvas?: CanvasState
+  solvedGoalId?: string | null
+  finalCompletion?: boolean
+}
+
+interface TransformRewriteDebug {
+  playTactic: string
+  focusedStreamId: string | null
+  focusedGoalType: string | null
+  focusedGoalUserName: string | null
+  leanCanvasStreamIds: string[]
+  leanCanvasGoalTypes: string[]
+  leanCanvasUserNames: Array<string | null>
+  leanCanvasGoalPlayTactics: Array<string | null>
+  mergedCanvasStreamIds: string[]
+  mergedCanvasGoalTypes: string[]
+  mergedCanvasUserNames: Array<string | null>
+  exactFocusedStreamIds: string[]
+  exactFocusedGoalTypes: string[]
+  exactFocusedUserNames: Array<string | null>
+  reconciledFocusedStreamIds: string[]
+  reconciledFocusedGoalTypes: string[]
+  reconciledFocusedUserNames: Array<string | null>
+  nextStreamId: string | null
+  nextGoalType: string | null
+  nextGoalUserName: string | null
+  nextActiveId: string | null
+  deferredCompletion: boolean
+}
+
 interface FocusedCommand {
   casePath: string[]
   tactic: string
@@ -216,13 +250,33 @@ interface FocusedCommand {
 interface VisualCanvasTestHarness {
   dragHypToGoal: (hypName: string) => Promise<void>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
+  dragTacticToHyp: (tacticName: string, hypName: string) => Promise<void>
   clickHyp: (hypName: string) => Promise<void>
   clickGoal: (playTactic?: string) => Promise<void>
+  openGoalTransform: () => void
+  rewriteGoalInTransform: (theoremName: string, workingSide?: 'left' | 'right', path?: number[]) => Promise<void>
+  closeTransform: () => void
+  getTransformStatus: () => {
+    isOpen: boolean
+    pendingSync: boolean
+    targetKind: 'goal' | 'hyp' | null
+    targetStreamId: string | null
+  }
+  getLastTransformRewriteDebug: () => TransformRewriteDebug | null
   getCurrentStreamSnapshot: () => {
     streamId: string
+    displayStreamId: string | null
     goalType: string
+    displayGoalType: string | null
     goalPlayTactic: string | null
     goalOptionTactics: string[]
+    goalHasEqualityTree: boolean
+    displayGoalHasEqualityTree: boolean | null
+    currentStreamIsLive: boolean
+    currentStreamIsCompleted: boolean
+    streamInteractionsEnabled: boolean
+    canvasStreamIds: string[]
+    renderStreamIds: string[]
     hypTypes: Record<string, string>
     hypPlayTactics: Record<string, string | null>
     hypOptionTactics: Record<string, string[]>
@@ -277,6 +331,23 @@ function parseFocusedCommand(command: string): FocusedCommand {
   }
 
   return { casePath, tactic: rest }
+}
+
+function parsedGoalEquality(stream: GoalStream) {
+  return parseGoalEquality(TaggedText_stripTags(stream.goal.type).trim())
+}
+
+function parsedHypEquality(card: HypCardType) {
+  const hypName = card.hyp.names[0] ?? '?'
+  return parseEqualityHyp(TaggedText_stripTags(card.hyp.type).trim(), hypName, card.id)
+}
+
+function goalIsTransformable(stream: GoalStream): boolean {
+  return stream.equalityTree !== undefined || parsedGoalEquality(stream) !== null
+}
+
+function hypIsTransformable(card: HypCardType): boolean {
+  return card.hyp.equalityTree !== undefined || parsedHypEquality(card) !== null
 }
 
 function isVisualOnlyPlayTactic(playTactic: string): boolean {
@@ -372,6 +443,8 @@ function inferLeanTacticFromVisualInteraction(
     }
     return null
   }
+
+  if (playTactic.startsWith('induction ')) return playTactic
 
   if (playTactic.startsWith('drag_goal ')) {
     const hypName = playTactic.slice('drag_goal '.length).trim()
@@ -555,6 +628,7 @@ export function VisualCanvas({
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
   const [transformWorkingSide, setTransformWorkingSide] = useState<'left' | 'right'>('right')
+  const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>([])
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [failingTheoremCopyId, setFailingTheoremCopyId] = useState<string | null>(null)
@@ -583,6 +657,7 @@ export function VisualCanvas({
     currentStreamIsCompleted: false,
     canvasCompleted: initialState.completed,
   })
+  const lastTransformRewriteDebugRef = useRef<TransformRewriteDebug | null>(null)
   const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<void>) | null>(null)
 
   // Stable game key for play log
@@ -875,6 +950,7 @@ export function VisualCanvas({
     if (proofSteps.length === 0 || isProcessing) return false
     setGoalChoiceMenu(null)
     closeReductionTooltip()
+    setPendingTransformSync(null)
     setIsProcessing(true)
 
     const newSteps = proofSteps.slice(0, -1)
@@ -942,6 +1018,11 @@ export function VisualCanvas({
       const targetCard = targetStream?.hyps.find(h => h.id === overId)
       const targetName = interactionHypName(targetCard)
       if (targetCard && targetStream && targetName) {
+        if (tacticTemplate.name === 'induction') {
+          const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetName })
+          applyInteraction(playTactic, activeId, { streamSplit: true })
+          return
+        }
         const placementHint: PlacementHint = {
           hypId: targetCard.id,
           streamId: targetStream.id,
@@ -1180,8 +1261,9 @@ export function VisualCanvas({
     const stream = canvasState.streams.find(s => s.hyps.some(h => h.id === cardId))
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
-    if (!card.hyp.equalityTree) return
+    if (!hypIsTransformable(card)) return
     closeReductionTooltip()
+    setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformWorkingSide('right')
     setTransformationVersion(0)
@@ -1198,12 +1280,43 @@ export function VisualCanvas({
   function handleGoalDoubleClick(streamId: string) {
     if (isProcessing || canvasState.completed) return
     const stream = canvasState.streams.find(s => s.id === streamId)
-    if (!stream?.equalityTree) return
+    if (!stream || !goalIsTransformable(stream)) return
     closeReductionTooltip()
+    setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformWorkingSide('right')
     setTransformationVersion(0)
     setTransformTarget({ kind: 'goal', streamId })
+  }
+
+  function closeTransformationView() {
+    const pendingSync = pendingTransformSync
+    setPendingTransformSync(null)
+
+    if (!pendingSync) {
+      setTransformTarget(null)
+      return
+    }
+
+    if (pendingSync.finalCompletion) {
+      if (pendingSync.solvedGoalId) setSolvedGoalId(pendingSync.solvedGoalId)
+      setTransformTarget(null)
+      setProofTree(pendingSync.nextTree)
+      setActiveStreamId(pendingSync.nextActiveId)
+      setCanvasState(prev => ({ ...prev, completed: true }))
+      window.setTimeout(() => {
+        setCanvasState(pendingSync.nextCanvas)
+        if (pendingSync.finalDisplayCanvas) {
+          setDisplayCanvasState(pendingSync.finalDisplayCanvas)
+        }
+      }, 700)
+      return
+    }
+
+    setProofTree(pendingSync.nextTree)
+    setActiveStreamId(pendingSync.nextActiveId)
+    setCanvasState(pendingSync.nextCanvas)
+    setTransformTarget(null)
   }
 
   /** Called by TransformationView when a rewrite drag succeeds visually.
@@ -1262,7 +1375,7 @@ export function VisualCanvas({
           canvasState,
           mergedCanvas,
           focusedStream,
-          undefined,
+          playTactic,
           false,
           activeStreamId,
           exactFocusedStreams,
@@ -1274,9 +1387,34 @@ export function VisualCanvas({
           nextCanvas: mergedCanvas,
         }
     const nextStream = focusedStreams[0] ?? null
+    const shouldDeferGoalCompletionUntilClose =
+      transformTarget?.kind === 'goal' && nextStream === null
 
-    setProofTree(nextTree)
-    setActiveStreamId(nextActiveId)
+    lastTransformRewriteDebugRef.current = {
+      playTactic,
+      focusedStreamId: focusedStream?.id ?? null,
+      focusedGoalType: focusedStream ? TaggedText_stripTags(focusedStream.goal.type).trim() : null,
+      focusedGoalUserName: focusedStream?.goal.userName ?? null,
+      leanCanvasStreamIds: leanCanvas.streams.map(stream => stream.id),
+      leanCanvasGoalTypes: leanCanvas.streams.map(stream => TaggedText_stripTags(stream.goal.type).trim()),
+      leanCanvasUserNames: leanCanvas.streams.map(stream => stream.goal.userName ?? null),
+      leanCanvasGoalPlayTactics: leanCanvas.streams.map(stream => stream.goal.clickAction?.playTactic ?? null),
+      mergedCanvasStreamIds: mergedCanvas.streams.map(stream => stream.id),
+      mergedCanvasGoalTypes: mergedCanvas.streams.map(stream => TaggedText_stripTags(stream.goal.type).trim()),
+      mergedCanvasUserNames: mergedCanvas.streams.map(stream => stream.goal.userName ?? null),
+      exactFocusedStreamIds: exactFocusedStreams?.map(stream => stream.id) ?? [],
+      exactFocusedGoalTypes: exactFocusedStreams?.map(stream => TaggedText_stripTags(stream.goal.type).trim()) ?? [],
+      exactFocusedUserNames: exactFocusedStreams?.map(stream => stream.goal.userName ?? null) ?? [],
+      reconciledFocusedStreamIds: focusedStreams.map(stream => stream.id),
+      reconciledFocusedGoalTypes: focusedStreams.map(stream => TaggedText_stripTags(stream.goal.type).trim()),
+      reconciledFocusedUserNames: focusedStreams.map(stream => stream.goal.userName ?? null),
+      nextStreamId: nextStream?.id ?? null,
+      nextGoalType: nextStream ? TaggedText_stripTags(nextStream.goal.type).trim() : null,
+      nextGoalUserName: nextStream?.goal.userName ?? null,
+      nextActiveId,
+      deferredCompletion: shouldDeferGoalCompletionUntilClose,
+    }
+
     setProofSteps(prev => [...prev, {
       command,
       playTactic,
@@ -1285,6 +1423,21 @@ export function VisualCanvas({
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
     }])
+
+    if (shouldDeferGoalCompletionUntilClose) {
+      setPendingTransformSync({
+        nextTree,
+        nextActiveId,
+        nextCanvas,
+        finalDisplayCanvas: leanCanvas.completed ? leanCanvas : undefined,
+        solvedGoalId: leanCanvas.completed ? transformTarget.streamId : null,
+        finalCompletion: leanCanvas.completed,
+      })
+      return { success: true, completed: leanCanvas.completed }
+    }
+
+    setProofTree(nextTree)
+    setActiveStreamId(nextActiveId)
 
     if (leanCanvas.completed) {
       if (transformTarget?.kind === 'goal') setSolvedGoalId(transformTarget.streamId)
@@ -1339,41 +1492,53 @@ export function VisualCanvas({
     let goalRhsNode: ReturnType<typeof exprTreeToNode> | undefined
 
     if (transformTarget?.kind === 'goal') {
-      if (!transformingStream.equalityTree) return null
-      goalLhsNode = exprTreeToNode(transformingStream.equalityTree.lhs)
-      goalRhsNode = exprTreeToNode(transformingStream.equalityTree.rhs)
       const goalTypeStr = TaggedText_stripTags(transformingStream.goal.type)
-      const eqIdx = goalTypeStr.indexOf(' = ')
-      if (eqIdx !== -1) {
-        goalLhsStr = goalTypeStr.slice(0, eqIdx).trim()
-        goalRhsStr = goalTypeStr.slice(eqIdx + 3).trim()
+      if (transformingStream.equalityTree) {
+        goalLhsNode = exprTreeToNode(transformingStream.equalityTree.lhs)
+        goalRhsNode = exprTreeToNode(transformingStream.equalityTree.rhs)
+      }
+      const parsedGoal = parseGoalEquality(goalTypeStr)
+      if (parsedGoal) {
+        goalLhsStr = parsedGoal.lhsStr
+        goalRhsStr = parsedGoal.rhsStr
+      } else if (transformingStream.equalityTree) {
+        goalLhsStr = printExpression(goalLhsNode!)
+        goalRhsStr = printExpression(goalRhsNode!)
       } else {
-        goalLhsStr = printExpression(goalLhsNode)
-        goalRhsStr = printExpression(goalRhsNode)
+        return null
       }
     } else {
       const targetCard = transformingStream.hyps.find(card => card.id === transformTarget?.hypId)
-      if (!targetCard?.hyp.equalityTree) return null
-      goalLhsNode = exprTreeToNode(targetCard.hyp.equalityTree.lhs)
-      goalRhsNode = exprTreeToNode(targetCard.hyp.equalityTree.rhs)
+      if (!targetCard) return null
       const typeStr = TaggedText_stripTags(targetCard.hyp.type)
-      const eqIdx = typeStr.indexOf(' = ')
-      if (eqIdx !== -1) {
-        goalLhsStr = typeStr.slice(0, eqIdx).trim()
-        goalRhsStr = typeStr.slice(eqIdx + 3).trim()
+      if (targetCard.hyp.equalityTree) {
+        goalLhsNode = exprTreeToNode(targetCard.hyp.equalityTree.lhs)
+        goalRhsNode = exprTreeToNode(targetCard.hyp.equalityTree.rhs)
+      }
+      const parsedHyp = parsedHypEquality(targetCard)
+      if (parsedHyp) {
+        goalLhsStr = parsedHyp.lhsStr
+        goalRhsStr = parsedHyp.rhsStr
+      } else if (targetCard.hyp.equalityTree) {
+        goalLhsStr = printExpression(goalLhsNode!)
+        goalRhsStr = printExpression(goalRhsNode!)
       } else {
-        goalLhsStr = printExpression(goalLhsNode)
-        goalRhsStr = printExpression(goalRhsNode)
+        return null
       }
     }
 
     const equalityHyps: EqualityHyp[] = transformingStream.hyps.flatMap(card => {
       if (transformTarget?.kind === 'hyp' && card.id === transformTarget.hypId) return []
       const name = card.hyp.names[0] ?? '?'
-      if (!card.hyp.equalityTree) return []
-      const lhs = exprTreeToNode(card.hyp.equalityTree.lhs)
-      const rhs = exprTreeToNode(card.hyp.equalityTree.rhs)
-      return [{ id: card.id, label: name, lhsStr: printExpression(lhs), rhsStr: printExpression(rhs), lhs, rhs }]
+      if (card.hyp.equalityTree) {
+        const lhs = exprTreeToNode(card.hyp.equalityTree.lhs)
+        const rhs = exprTreeToNode(card.hyp.equalityTree.rhs)
+        return [{ id: card.id, label: name, lhsStr: printExpression(lhs), rhsStr: printExpression(rhs), lhs, rhs }]
+      }
+      const parsedHyp = parsedHypEquality(card)
+      return parsedHyp
+        ? [{ ...parsedHyp, label: name }]
+        : []
     })
 
     return {
@@ -1391,12 +1556,17 @@ export function VisualCanvas({
   const renderCanvasState = canvasState.streams.length > 0
     ? canvasState
     : displayCanvasState
+  const pinnedStreamId =
+    pendingTransformSync && transformTarget?.kind === 'goal'
+      ? transformTarget.streamId
+      : null
+  const selectedStreamId = pinnedStreamId ?? activeStreamId
   const defaultStreamId = liveStreamIds.find(streamId =>
     canvasState.streams.some(stream => stream.id === streamId) || streamSnapshots[streamId] !== undefined
   ) ?? activeStreamIds[0] ?? null
-  const currentStream = (activeStreamId
-    ? canvasState.streams.find(stream => stream.id === activeStreamId)
-      ?? streamSnapshots[activeStreamId]
+  const currentStream = (selectedStreamId
+    ? canvasState.streams.find(stream => stream.id === selectedStreamId)
+      ?? streamSnapshots[selectedStreamId]
       ?? null
     : null)
     ?? (defaultStreamId
@@ -1486,6 +1656,32 @@ export function VisualCanvas({
     await latestApplyInteraction(playTactic, sourceCard.id)
   }
 
+  async function applyTestDragTacticToHyp(tacticName: string, hypName: string) {
+    const stream = requireInteractiveCurrentStream()
+    const targetCard = requireHypCard(stream, hypName)
+    const targetPlayName = interactionHypName(targetCard) ?? hypName
+    const latestApplyInteraction = applyInteractionRef.current
+    if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
+
+    if (tacticName === 'induction') {
+      const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetPlayName })
+      await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
+        streamSplit: true,
+        targetStreamId: stream.id,
+      })
+      return
+    }
+
+    const playTactic = interactionToPlayTactic({
+      type: 'drag_tactic',
+      tacticName,
+      targetHypName: targetPlayName,
+    })
+    await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
+      targetStreamId: stream.id,
+    })
+  }
+
   async function applyTestClickHyp(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, hypName)
@@ -1529,13 +1725,59 @@ export function VisualCanvas({
     })
   }
 
+  function openTestGoalTransform() {
+    const stream = requireInteractiveCurrentStream()
+    handleGoalDoubleClick(stream.id)
+  }
+
+  async function applyTestRewriteGoalInTransform(
+    theoremName: string,
+    workingSide: 'left' | 'right' = 'left',
+    path?: number[],
+  ) {
+    if (transformTarget?.kind !== 'goal') {
+      throw new Error('No goal transformation session is open')
+    }
+    const outcome = await handleRewrite(theoremName, false, workingSide, path)
+    if (!outcome.success) {
+      throw new Error(`Rewrite with "${theoremName}" was rejected`)
+    }
+  }
+
+  function closeTestTransform() {
+    closeTransformationView()
+  }
+
+  function getTransformStatus() {
+    return {
+      isOpen: transformTarget !== null,
+      pendingSync: pendingTransformSync !== null,
+      targetKind: transformTarget?.kind ?? null,
+      targetStreamId: transformTarget?.streamId ?? null,
+    }
+  }
+
+  function getLastTransformRewriteDebug() {
+    return lastTransformRewriteDebugRef.current
+  }
+
   function getCurrentStreamSnapshot() {
     const stream = requireInteractiveCurrentStream()
+    const displaySnapshot = displayStream ?? null
     return {
       streamId: stream.id,
+      displayStreamId: displaySnapshot?.id ?? null,
       goalType: TaggedText_stripTags(stream.goal.type).trim(),
+      displayGoalType: displaySnapshot ? TaggedText_stripTags(displaySnapshot.goal.type).trim() : null,
       goalPlayTactic: stream.goal.clickAction?.playTactic ?? null,
       goalOptionTactics: Array.from(stream.goal.clickAction?.options ?? []).map(option => option.playTactic),
+      goalHasEqualityTree: stream.equalityTree !== undefined,
+      displayGoalHasEqualityTree: displaySnapshot ? displaySnapshot.equalityTree !== undefined : null,
+      currentStreamIsLive,
+      currentStreamIsCompleted,
+      streamInteractionsEnabled,
+      canvasStreamIds: canvasState.streams.map(candidate => candidate.id),
+      renderStreamIds: renderCanvasState.streams.map(candidate => candidate.id),
       hypTypes: Object.fromEntries(
         stream.hyps
           .map(card => {
@@ -1575,8 +1817,14 @@ export function VisualCanvas({
     const harness: VisualCanvasTestHarness = {
       dragHypToGoal: applyTestDragHypToGoal,
       dragHypToHyp: applyTestDragHypToHyp,
+      dragTacticToHyp: applyTestDragTacticToHyp,
       clickHyp: applyTestClickHyp,
       clickGoal: applyTestClickGoal,
+      openGoalTransform: openTestGoalTransform,
+      rewriteGoalInTransform: applyTestRewriteGoalInTransform,
+      closeTransform: closeTestTransform,
+      getTransformStatus,
+      getLastTransformRewriteDebug,
       getCurrentStreamSnapshot,
     }
     window.__visualTestHarness = harness
@@ -1586,12 +1834,13 @@ export function VisualCanvas({
         delete window.__visualTestHarness
       }
     }
-  }, [])
+  })
 
   function navigateToStream(streamId: string) {
     if (streamId === currentStream?.id) return
     setGoalChoiceMenu(null)
     closeReductionTooltip()
+    setPendingTransformSync(null)
     setTransformTarget(null)
     setActiveStreamId(streamId)
   }
@@ -1692,7 +1941,7 @@ export function VisualCanvas({
             {visibleHyps.map(card => {
               const clickAction = card.hyp.clickAction
               const isClickable = hasClickAction(clickAction)
-              const isTransformable = card.hyp.equalityTree !== undefined
+              const isTransformable = hypIsTransformable(card)
               return (
                 <HypCard
                   key={card.id}
@@ -1726,7 +1975,7 @@ export function VisualCanvas({
                 const stream = displayStream
                 const clickAction = stream.goal.clickAction
                 const isClickable = hasClickAction(clickAction)
-                const isTransformable = stream.equalityTree !== undefined && !isClickable
+                const isTransformable = goalIsTransformable(stream)
                 return (
                   <GoalCard
                     key={stream.id}
@@ -1815,7 +2064,7 @@ export function VisualCanvas({
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
-          onClose={() => setTransformTarget(null)}
+          onClose={closeTransformationView}
           isReverse={isTransformReverse}
           onIsReverseChange={setIsTransformReverse}
           workingSide={transformWorkingSide}

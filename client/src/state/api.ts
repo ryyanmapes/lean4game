@@ -43,6 +43,7 @@ export interface InventoryTile {
   altTitle: string,
   world : string|null,
   level : number|null,
+  declIndex : number|null,
   proven : boolean
 }
 

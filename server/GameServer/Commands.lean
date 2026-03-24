@@ -753,12 +753,20 @@ elab "MakeGame" : command => do
     -- TODO: I believe `newItemsInWorld` has way to many elements in it which we iterate over
     -- e.g. we iterate over `ring` for `Lemma`s as well, but so far that seems to cause no problems
     let mut allItems : HashSet Name := {}
+    -- Map: item → (worldId, levelId, declIndex) recording where each item was introduced.
+    -- Built inline here so no extra pass is needed. Used when unlocking predecessor items.
+    let mut itemOrigin : HashMap Name (Name × Nat × Nat) := {}
     for (worldId, world) in game.worlds.nodes.toArray do
       let mut newItems : HashSet Name := {}
       for (levelId, level) in world.levels.toArray do
         let newLemmas := (level.getInventory inventoryType).new
         newItems := newItems.insertMany newLemmas
         allItems := allItems.insertMany newLemmas
+        -- Record introduction origin for each new item, preserving declaration order.
+        let mut declIdx := 0
+        for item in newLemmas do
+          itemOrigin := itemOrigin.insert item (worldId, levelId, declIdx)
+          declIdx := declIdx + 1
         if inventoryType == .Theorem then
           -- For levels `2, 3, …` we check if the previous level was named
           -- in which case we add it as available lemma.
@@ -776,6 +784,7 @@ elab "MakeGame" : command => do
               newItems := newItems.insert name
               allItems := allItems.insert name
               lemmaStatements := lemmaStatements.insert (worldId, levelId) name
+              itemOrigin := itemOrigin.insert name (worldId, i₀, 0)
       if inventoryType == .Theorem then
         -- if named, add the lemma from the last level of the world to the inventory
         let i₀ := world.levels.size
@@ -790,6 +799,7 @@ elab "MakeGame" : command => do
             let name := Name.str pre s
             newItems := newItems.insert name
             allItems := allItems.insert name
+            itemOrigin := itemOrigin.insert name (worldId, i₀, 0)
       newItemsInWorld := newItemsInWorld.insert worldId newItems
 
     -- Basic inventory item availability: all locked.
@@ -823,10 +833,14 @@ elab "MakeGame" : command => do
       for predWorldId in predecessors do
         for item in newItemsInWorld.getD predWorldId {} do
           let data := (← getInventoryItem? item inventoryType).get!
+          let (w, l, di) := itemOrigin.getD item (predWorldId, 0, 0)
           items := items.insert item {
             name := item
             displayName := data.displayName
             category := data.category
+            world := w
+            level := l
+            declIndex := some di
             locked := false
             altTitle := data.statement
             hidden := hiddenItems.contains item }
@@ -841,15 +855,20 @@ elab "MakeGame" : command => do
         let levelInfo := level.getInventory inventoryType
 
         -- unlock items that are unlocked in this level
+        let mut newItemIdx := 0
         for item in levelInfo.new do
           let data := (← getInventoryItem? item inventoryType).get!
           items := items.insert item {
             name := item
             displayName := data.displayName
             category := data.category
+            world := worldId
+            level := levelId
+            declIndex := some newItemIdx
             locked := false
             altTitle := data.statement
             hidden := hiddenItems.contains item }
+          newItemIdx := newItemIdx + 1
 
         -- add the exercise statement from the previous level
         -- if it was named

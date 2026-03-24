@@ -61,17 +61,17 @@ export default defineConfig({
     port: Number(clientPort),
     proxy: {
       '/websocket': {
-        target: `ws://localhost:${backendPort}`,
+        target: `ws://127.0.0.1:${backendPort}`,
         ws: true
       },
       '/import': {
-        target: `http://localhost:${backendPort}`,
+        target: `http://127.0.0.1:${backendPort}`,
       },
       '/data': {
-        target: `http://localhost:${backendPort}`,
+        target: `http://127.0.0.1:${backendPort}`,
       },
       '/i18n': {
-        target: `http://localhost:${backendPort}`,
+        target: `http://127.0.0.1:${backendPort}`,
       },
     }
   },

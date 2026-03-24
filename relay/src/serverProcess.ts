@@ -113,7 +113,7 @@ export class GameManager {
           { cwd: path.dirname(customLeanServer) }
         );
       } else {
-        serverProcess = cp.spawn("lake", ["serve", "--"], { cwd: game_dir });
+        serverProcess = cp.spawn("lake", ["-R", "serve", "--"], { cwd: game_dir });
       }
     } else {
       let cmd = "../../scripts/bubblewrap.sh"

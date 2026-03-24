@@ -101,6 +101,10 @@ export function TransformationView({
   const [pageIndex, setPageIndex] = useState(0)
   const [pageWidth, setPageWidth] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
+  const mainAreaRef = useRef<HTMLDivElement>(null)
+  const exprWrapperRef = useRef<HTMLDivElement>(null)
+  const staticGroupRef = useRef<HTMLDivElement>(null)
+  const [isExprOverflowing, setIsExprOverflowing] = useState(false)
 
   useEffect(() => {
     const el = pageRef.current
@@ -109,6 +113,20 @@ export function TransformationView({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    const main = mainAreaRef.current
+    const expr = exprWrapperRef.current
+    const sg = staticGroupRef.current
+    if (!main || !expr || !sg) return
+    const exprVisualW = expr.getBoundingClientRect().width
+    const mainW = main.getBoundingClientRect().width
+    const sgW = sg.getBoundingClientRect().width
+    const sideMargin = (mainW - exprVisualW) / 2
+    // Trigger when label doesn't fit: sideMargin < sgW + right:3rem(48px) + 16px breathing room
+    const next = mainW > 0 && sideMargin < sgW + 64
+    setIsExprOverflowing(prev => prev === next ? prev : next)
+  })
 
   // Flat ordered list: hypotheses first (backend order), then theorems (backend order)
   const allRules = useMemo(() => [
@@ -126,7 +144,7 @@ export function TransformationView({
     if (!cards.length) return
     const avg = cards.reduce((s, c) => s + c.offsetWidth, 0) / cards.length
     setAvgCardPx(prev => Math.abs(avg - prev) > 0.5 ? avg : prev)
-  })
+  }, [allRules])
 
   const GAP_PX = 12
   const itemsPerPage = (pageWidth > 0 && avgCardPx > 0)
@@ -304,9 +322,9 @@ export function TransformationView({
         {isProcessing && <div className="tr-processing" />}
 
         {/* Main expression area */}
-        <div className="tr-main-area">
+        <div className="tr-main-area" ref={mainAreaRef}>
           {/* Static side label + swap button */}
-          <div className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}`}>
+          <div ref={staticGroupRef} className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}${isExprOverflowing ? ' pinned-top' : ''}`}>
             <span className="tr-static-label">
               {workingSide === 'left' ? `= ${staticStr}` : `${staticStr} =`}
             </span>
@@ -318,7 +336,7 @@ export function TransformationView({
             >{workingSide === 'left' ? '→' : '←'}</button>
           </div>
 
-          <div className="tr-expr-wrapper">
+          <div className="tr-expr-wrapper" ref={exprWrapperRef}>
             <ExprRenderer
               node={workingExpr}
               isActive={!!activeId && !isProcessing}
