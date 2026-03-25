@@ -480,7 +480,6 @@ export function TransformationView({
                   key={tab.id}
                   className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
                   onClick={() => { setSelectedTab(tab.id); setPageIndex(0); setHoveredId(null) }}
-                  disabled={isProcessing}
                 >
                   {tab.label}
                 </button>

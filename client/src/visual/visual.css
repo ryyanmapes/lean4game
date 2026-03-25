@@ -812,14 +812,14 @@
 .visual-page .tr-tab-btn:last-child {
   border-right: none;
 }
-.visual-page .tr-tab-btn:hover:not(:disabled) {
+.visual-page .tr-tab-btn:hover:not(:disabled):not(.active) {
   color: #cbd5e1;
   background: rgba(255, 255, 255, 0.08);
 }
 .visual-page .tr-tab-btn.active {
-  color: #c4b5fd;
-  background: rgba(139, 92, 246, 0.12);
-  border-top-color: #8b5cf6;
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.1);
+  border-top-color: transparent;
 }
 .visual-page .tr-tab-btn:disabled {
   cursor: default;
