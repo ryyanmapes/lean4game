@@ -1174,6 +1174,70 @@ export function VisualCanvas({
     return true
   }
 
+  /** Like undoLastStep but stays inside TransformationView instead of closing it. */
+  async function undoInTransformationMode(): Promise<boolean> {
+    if (proofSteps.length === 0 || isProcessing) return false
+
+    const currentStreamIndex = transformTarget
+      ? canvasState.streams.findIndex(s => s.id === transformTarget.streamId)
+      : -1
+
+    setGoalChoiceMenu(null)
+    closeReductionTooltip()
+    setPendingTransformSync(null)
+    setIsProcessing(true)
+
+    const newSteps = proofSteps.slice(0, -1)
+    const newScript = serializeProofCommands(newSteps.map(step => step.command))
+    const result = await onInteraction(newScript)
+
+    setIsProcessing(false)
+    if (result === null) return false
+
+    const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
+    const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
+      ?? collectActiveStreamIds(nextTree)[0]
+      ?? null
+    const nextCanvas = newSteps.at(-1)?.canvasSnapshot
+      ?? (newSteps.length === 0
+        ? cloneCanvasState(initialState)
+        : mergeCanvasState(proofStateToCanvas(result), canvasState))
+
+    setProofSteps(newSteps)
+    setProofTree(cloneProofTree(nextTree))
+    setSolvedGoalId(null)
+    setCanvasState(cloneCanvasState(nextCanvas))
+
+    // Stay in transformation mode by finding the stream at the same index
+    if (transformTarget !== null && currentStreamIndex >= 0) {
+      const streams = nextCanvas.streams
+      const nextStream = streams[currentStreamIndex] ?? streams[0] ?? null
+      if (nextStream) {
+        // Keep active stream on the one being transformed, not the step-snapshot value
+        setActiveStreamId(nextStream.id)
+        if (transformTarget.kind === 'goal') {
+          setTransformTarget({ kind: 'goal', streamId: nextStream.id })
+        } else {
+          const nextHyp = nextStream.hyps.find(h => h.hyp.names[0] === transformTarget.hypName)
+          if (nextHyp) {
+            setTransformTarget({ kind: 'hyp', streamId: nextStream.id, hypId: nextHyp.id, hypName: transformTarget.hypName })
+          } else {
+            setTransformTarget(null)
+          }
+        }
+        setTransformationVersion(v => Math.max(0, v - 1))
+      } else {
+        setActiveStreamId(nextActiveId)
+        setTransformTarget(null)
+      }
+    } else {
+      setActiveStreamId(nextActiveId)
+      setTransformTarget(null)
+    }
+
+    return true
+  }
+
   // ── Drag handlers ───────────────────────────────────────────────────────────
 
   function handleDragStart(event: DragStartEvent) {
@@ -2340,8 +2404,9 @@ export function VisualCanvas({
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           onRewrite={handleRewrite}
-          onUndo={undoLastStep}
+          onUndo={undoInTransformationMode}
           onClose={closeTransformationView}
+          rewriteStepCount={transformationVersion}
           isReverse={isTransformReverse}
           onIsReverseChange={setIsTransformReverse}
           workingSide={transformWorkingSide}

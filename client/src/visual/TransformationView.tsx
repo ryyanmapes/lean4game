@@ -81,6 +81,8 @@ interface Props {
   /** Called for each undo step (removes one proof step from the proof script). */
   onUndo: () => Promise<boolean>
   onClose: () => void
+  /** Number of rewrite steps applied in this transformation session (incremented by parent on each rewrite). */
+  rewriteStepCount: number
   /** Controlled reverse mode — lifted to parent so it survives remounts between rewrites. */
   isReverse: boolean
   onIsReverseChange: (v: boolean) => void
@@ -91,7 +93,7 @@ interface Props {
 
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
-  onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange
+  onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange, rewriteStepCount
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -326,32 +328,15 @@ export function TransformationView({
   }
 
   const handleUndo = async () => {
-    if (history.length === 0) return
     setIsProcessing(true)
     const success = await onUndo()
     setIsProcessing(false)
     if (!success) return
-    const prev = history[history.length - 1]
-    setLhs(prev.lhs)
-    setRhs(prev.rhs)
-    setHistory(h => h.slice(0, -1))
-  }
-
-  const handleReset = async () => {
-    if (history.length === 0) return
-    setIsProcessing(true)
-    // Undo all history steps one by one
-    let remaining = history.length
-    for (let i = 0; i < history.length; i++) {
-      const success = await onUndo()
-      if (!success) break
-      remaining--
-    }
-    setIsProcessing(false)
-    if (remaining === 0) {
-      setLhs(initialLhs())
-      setRhs(initialRhs())
-      setHistory([])
+    if (history.length > 0) {
+      const prev = history[history.length - 1]
+      setLhs(prev.lhs)
+      setRhs(prev.rhs)
+      setHistory(h => h.slice(0, -1))
     }
   }
 
@@ -399,20 +384,14 @@ export function TransformationView({
             />
           </div>
 
-          {/* Undo / Reset */}
+          {/* Undo */}
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={history.length === 0 || isProcessing}
-              className={`tr-ctrl-btn${history.length > 0 ? ' active-undo' : ''}`}
+              disabled={rewriteStepCount === 0 || isProcessing}
+              className={`tr-ctrl-btn${rewriteStepCount > 0 ? ' active-undo' : ''}`}
               title="Undo"
             >↩</button>
-            <button
-              onClick={handleReset}
-              disabled={history.length === 0 || isProcessing}
-              className="tr-ctrl-btn reset"
-              title="Reset"
-            >↺</button>
           </div>
 
           {/* Reverse */}
