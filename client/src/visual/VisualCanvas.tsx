@@ -792,6 +792,7 @@ export function VisualCanvas({
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
   const [transformWorkingSide, setTransformWorkingSide] = useState<'left' | 'right'>('right')
+  const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>([])
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
@@ -2411,6 +2412,8 @@ export function VisualCanvas({
           onIsReverseChange={setIsTransformReverse}
           workingSide={transformWorkingSide}
           onWorkingSideChange={setTransformWorkingSide}
+          selectedTab={transformSelectedTab}
+          onSelectedTabChange={setTransformSelectedTab}
         />
       )}
 

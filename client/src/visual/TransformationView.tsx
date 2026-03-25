@@ -89,11 +89,15 @@ interface Props {
   /** Controlled working side — lifted to parent so it survives remounts between rewrites. */
   workingSide: 'left' | 'right'
   onWorkingSideChange: (v: 'left' | 'right') => void
+  /** Controlled selected tab — lifted to parent so it survives remounts between rewrites. */
+  selectedTab: string
+  onSelectedTabChange: (v: string) => void
 }
 
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
-  onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange, rewriteStepCount
+  onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
+  selectedTab, onSelectedTabChange, rewriteStepCount
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -114,7 +118,6 @@ export function TransformationView({
   const [isProcessing, setIsProcessing] = useState(false)
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [pageIndex, setPageIndex] = useState(0)
-  const [selectedTab, setSelectedTab] = useState<string>('all')
   const [pageWidth, setPageWidth] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
@@ -173,7 +176,7 @@ export function TransformationView({
   // Clamp selectedTab to a valid tab when tabs change
   useEffect(() => {
     if (!tabs.find(t => t.id === selectedTab)) {
-      setSelectedTab(tabs[0]?.id ?? 'hyps')
+      onSelectedTabChange(tabs[0]?.id ?? 'hyps')
       setPageIndex(0)
     }
   }, [tabs, selectedTab])
@@ -458,7 +461,7 @@ export function TransformationView({
                 <button
                   key={tab.id}
                   className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
-                  onClick={() => { setSelectedTab(tab.id); setPageIndex(0); setHoveredId(null) }}
+                  onClick={() => { onSelectedTabChange(tab.id); setPageIndex(0); setHoveredId(null) }}
                 >
                   {tab.label}
                 </button>
