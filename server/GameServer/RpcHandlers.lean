@@ -784,6 +784,9 @@ private def natLitFromSuccChain? : Expr → Option Nat
   | .lit (.natVal n)              => some n
   | .const ``Nat.zero _           => some 0
   | .app (.const ``Nat.succ _) a  => natLitFromSuccChain? a >>= (some ∘ (· + 1))
+  -- Also fold OfNat.ofNat when it appears inside a succ-chain (e.g. succ(OfNat.ofNat _ 3 _))
+  -- in case withReducible whnf didn't unfold it and the up-front check below was bypassed.
+  | .app (.app (.app (.const ``OfNat.ofNat _) _) (.lit (.natVal n))) _ => some n
   | _                             => none
 
 private def prettyExprString (e : Expr) : MetaM String := do
@@ -849,6 +852,11 @@ private def reductionFormsForExpr (e : Expr) : MetaM (Array String) := do
       expression that was already a `succ`-chain in the source (e.g. the rhs of
       `two_eq_succ_succ`) is folded back to a numeric literal. -/
 partial def exprToTree (e : Expr) : MetaM ExprTree := do
+  -- Strip metadata wrappers first so that all subsequent pattern matches see the
+  -- bare expression.  Sub-expressions can carry MData (e.g. source positions or
+  -- display hints) that would otherwise prevent the OfNat.ofNat check below from
+  -- firing when `exprToTree` is called recursively on an argument.
+  let e := e.consumeMData
   -- Recognise `@OfNat.ofNat _ n _` before any reduction so that numeric literals
   -- (e.g. `2 : MyNat`) are serialised as `.lit n` without being unfolded.
   if let .app (.app (.app (.const ``OfNat.ofNat _) _) (.lit (.natVal n))) _ := e then

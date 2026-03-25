@@ -128,6 +128,12 @@ syntax (name := drag_goal) "drag_goal" ident : tactic
       if ← tryRewrite h.raw false then return
       if ← tryRewrite h.raw true then return
 
+    -- Fallback: try `apply h` directly. This handles theorems whose type has
+    -- universal quantifiers (e.g. `∀ P, P → P`) where the `body` check above
+    -- fails because `P` is a bound variable (de Bruijn #0), not a metavariable.
+    -- Lean's `apply` uses full unification so it handles this correctly.
+    if ← tryTactic (← `(tactic| apply $h)) then return
+
     throwError "drag_goal: '{h.getId}' cannot be used here.\n\
       {h.getId} : {hTypeRaw}\n  goal : {← getMainTarget}"
 

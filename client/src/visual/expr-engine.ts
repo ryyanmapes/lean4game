@@ -155,6 +155,12 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
     if (op && flat.length === 7) {
       return { type: 'binary', op, left: exprTreeToNode(flat[5]), right: exprTreeToNode(flat[6]), id: uuidv4() }
     }
+    // `@OfNat.ofNat α n inst` — the numeric literal `n` is at flat[2].
+    // Normally caught by the Lean-side up-front check, but MData wrappers on
+    // sub-expressions can prevent that, so we handle it defensively here too.
+    if (head.name === 'OfNat.ofNat' && flat.length >= 3 && flat[2].tag === 'lit') {
+      return { type: 'constant', value: flat[2].n, id: uuidv4() }
+    }
     // Keep unary applications structural so rewrite targets stay visible.
     if (flat.length === 2) {
       return { type: 'app', func: shortConstName(head.name), arg: exprTreeToNode(flat[1]), id: uuidv4() }

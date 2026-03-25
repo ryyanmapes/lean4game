@@ -55,6 +55,7 @@ function likelyFocusedContinuation(
   const isGoalRewrite =
     (playTactic?.startsWith('drag_rw_') ?? false) &&
     !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
+  const isHypRewrite = playTactic?.startsWith('drag_rw_hyp_') ?? false
   const requiresStableGoalType =
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
@@ -74,6 +75,12 @@ function likelyFocusedContinuation(
   }
 
   if (allowsGoalTypeChangeWithinSameBranch && hypContextMatches) return true
+
+  // For hyp rewrites (drag_rw_hyp_*), the goal type is stable — only a hypothesis
+  // changes. When goal types match, the stream is almost certainly the continuation.
+  // Without this, likelyFocusedContinuation returns false when userName is absent,
+  // causing the reconciler to return focusedStreams:[] and closing transformation mode.
+  if (isHypRewrite && goalTypeMatches) return true
 
   return requiresStableGoalType ? goalTypeMatches : false
 }
