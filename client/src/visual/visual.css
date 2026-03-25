@@ -871,10 +871,11 @@
   overflow: hidden;
 }
 
-/* Cards in paginated context size to content */
+/* Cards in paginated context size to content; flex-shrink: 0 keeps them at natural width
+   so offsetWidth measurements are accurate. Overflow is clipped by tr-rule-page-cards. */
 .visual-page .tr-rule-page-cards .tr-rule-card {
   width: auto;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .visual-page .tr-page-indicator {

@@ -211,16 +211,7 @@ export function expressionsEqual(n1: ExpressionNode, n2: ExpressionNode): boolea
 }
 
 export function matchesPattern(expr: ExpressionNode, pattern: ExpressionNode): boolean {
-  if (pattern.type === 'variable') return true
-  if (pattern.type === 'constant') return expr.type === 'constant' && expr.value === pattern.value
-  if (pattern.type === 'app') {
-    return expr.type === 'app' && expr.func === pattern.func && matchesPattern(expr.arg, pattern.arg)
-  }
-  if (pattern.type === 'binary') {
-    return expr.type === 'binary' && expr.op === pattern.op &&
-      matchesPattern(expr.left, pattern.left) && matchesPattern(expr.right, pattern.right)
-  }
-  return false
+  return matchAndCapture(expr, pattern) !== null
 }
 
 export function findNodeById(root: ExpressionNode, id: string): ExpressionNode | null {
@@ -293,22 +284,28 @@ function applyEqualityRuleAt(
 function matchAndCapture(
   expr: ExpressionNode,
   pattern: ExpressionNode,
+  bindings: Record<string, ExpressionNode> = {},
 ): Record<string, ExpressionNode> | null {
-  if (pattern.type === 'variable') return { [pattern.name]: expr }
+  if (pattern.type === 'variable') {
+    const existing = bindings[pattern.name]
+    if (existing !== undefined) {
+      // Same variable seen again — must bind to the same expression.
+      return expressionsEqual(existing, expr) ? bindings : null
+    }
+    return { ...bindings, [pattern.name]: expr }
+  }
   if (pattern.type === 'constant') {
-    return (expr.type === 'constant' && expr.value === pattern.value) ? {} : null
+    return (expr.type === 'constant' && expr.value === pattern.value) ? bindings : null
   }
   if (pattern.type === 'app') {
     if (expr.type !== 'app' || expr.func !== pattern.func) return null
-    return matchAndCapture(expr.arg, pattern.arg)
+    return matchAndCapture(expr.arg, pattern.arg, bindings)
   }
   if (pattern.type === 'binary') {
     if (expr.type !== 'binary' || expr.op !== pattern.op) return null
-    const left = matchAndCapture(expr.left, pattern.left)
-    if (left === null) return null
-    const right = matchAndCapture(expr.right, pattern.right)
-    if (right === null) return null
-    return { ...left, ...right }
+    const leftBindings = matchAndCapture(expr.left, pattern.left, bindings)
+    if (leftBindings === null) return null
+    return matchAndCapture(expr.right, pattern.right, leftBindings)
   }
   return null
 }
