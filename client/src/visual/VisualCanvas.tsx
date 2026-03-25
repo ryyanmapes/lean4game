@@ -18,6 +18,7 @@ import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
 import { ProofPanel } from './ProofPanel'
 import { ProofStreamGraph } from './ProofStreamGraph'
+import { VisualHeader } from './VisualHeader'
 import {
   casePathForStream,
   cloneProofTree,
@@ -697,6 +698,11 @@ interface VisualCanvasProps {
   levelId: number
   onInteraction: (proofBody: string) => Promise<ProofState | null>
   onNextLevel?: () => void
+  onPreviousLevel?: () => void
+  onWorldMap?: () => void
+  levelTitle?: string | null
+  worldSize?: number | null
+  previouslyCompleted?: boolean
 }
 
 function TheoremTray({
@@ -758,7 +764,8 @@ function TheoremTray({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VisualCanvas({
-  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, worldId, levelId, onInteraction, onNextLevel
+  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, worldId, levelId,
+  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldSize, previouslyCompleted
 }: VisualCanvasProps) {
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
@@ -2213,44 +2220,54 @@ export function VisualCanvas({
           data-world-id={worldId}
           data-level-id={String(levelId)}
         >
-          {activeStreamIds.length > 0 && currentStream && (
-            <div className="stream-navigator" data-testid="stream-navigator">
-              <div className="stream-nav-controls">
-                <button
-                  className="stream-nav-btn"
-                  data-testid="stream-nav-prev"
-                  onClick={goLeft}
-                  disabled={currentStreamIndex <= 0}
-                >
-                  &lt;
-                </button>
-                <span className="stream-indicator">🟧</span>
-                <button
-                  className="stream-nav-btn"
-                  data-testid="stream-nav-next"
-                  onClick={goRight}
-                  disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
-                >
-                  &gt;
-                </button>
-              </div>
-              <div
-                className="stream-label"
-                data-testid="stream-nav-label"
-                data-current-stream-index={String(currentStreamIndex + 1)}
-                data-total-streams={String(activeStreamIds.length)}
-                data-current-stream-id={currentStream.id}
-              >
-                Stream {currentStreamIndex + 1} of {activeStreamIds.length}
-              </div>
-            </div>
-          )}
+          <VisualHeader
+            levelId={levelId}
+            levelTitle={levelTitle}
+            hasPrev={levelId > 1}
+            hasNext={worldSize == null || levelId < worldSize}
+            isCompleted={canvasState.completed}
+            previouslyCompleted={previouslyCompleted ?? false}
+            onPrev={onPreviousLevel ?? (() => {})}
+            onNext={onNextLevel ?? (() => {})}
+            onWorldMap={onWorldMap ?? (() => {})}
+          />
           {totalLeafCount > 1 && (
-            <ProofStreamGraph
-              tree={proofTree}
-              currentStreamId={currentStream?.id ?? null}
-              onNavigate={navigateToStream}
-            />
+            <div className="proof-tree-panel">
+              <ProofStreamGraph
+                tree={proofTree}
+                currentStreamId={currentStream?.id ?? null}
+                onNavigate={navigateToStream}
+              />
+              {currentStream && (
+                <div className="stream-navigator" data-testid="stream-navigator">
+                  <button
+                    className="stream-nav-btn"
+                    data-testid="stream-nav-prev"
+                    onClick={goLeft}
+                    disabled={currentStreamIndex <= 0}
+                  >
+                    &lt;
+                  </button>
+                  <div
+                    className="stream-label"
+                    data-testid="stream-nav-label"
+                    data-current-stream-index={String(currentStreamIndex + 1)}
+                    data-total-streams={String(activeStreamIds.length)}
+                    data-current-stream-id={currentStream.id}
+                  >
+                    Stream {currentStreamIndex + 1} of {activeStreamIds.length}
+                  </div>
+                  <button
+                    className="stream-nav-btn"
+                    data-testid="stream-nav-next"
+                    onClick={goRight}
+                    disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
+                  >
+                    &gt;
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Header toolbar */}
@@ -2414,20 +2431,20 @@ export function VisualCanvas({
           onWorkingSideChange={setTransformWorkingSide}
           selectedTab={transformSelectedTab}
           onSelectedTabChange={setTransformSelectedTab}
+          headerSlot={
+            <VisualHeader
+              levelId={levelId}
+              levelTitle={levelTitle}
+              hasPrev={levelId > 1}
+              hasNext={worldSize == null || levelId < worldSize}
+              isCompleted={canvasState.completed}
+              previouslyCompleted={previouslyCompleted ?? false}
+              onPrev={onPreviousLevel ?? (() => {})}
+              onNext={onNextLevel ?? (() => {})}
+              onWorldMap={onWorldMap ?? (() => {})}
+            />
+          }
         />
-      )}
-
-      {/* Completion banner — slides up from the bottom when proof is done */}
-      {canvasState.completed && (
-        <div className="completion-banner">
-          <span className="completion-banner-title">Proof complete!</span>
-          <span className="completion-banner-sub">All goals have been solved.</span>
-          {onNextLevel && (
-            <button className="completion-banner-btn" onClick={onNextLevel}>
-              Next level →
-            </button>
-          )}
-        </div>
       )}
 
       {/* View Lean Proof panel */}

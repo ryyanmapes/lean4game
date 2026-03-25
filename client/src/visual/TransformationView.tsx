@@ -92,12 +92,14 @@ interface Props {
   /** Controlled selected tab — lifted to parent so it survives remounts between rewrites. */
   selectedTab: string
   onSelectedTabChange: (v: string) => void
+  /** Optional header bar rendered at the top of the overlay. */
+  headerSlot?: React.ReactNode
 }
 
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
-  selectedTab, onSelectedTabChange, rewriteStepCount
+  selectedTab, onSelectedTabChange, rewriteStepCount, headerSlot
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -350,6 +352,7 @@ export function TransformationView({
 
   return (
     <div className="visual-page tr-overlay">
+      {headerSlot}
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}

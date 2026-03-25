@@ -24,14 +24,177 @@
 
 /* ── Loading / error state ── */
 .visual-loading {
+  position: fixed;
+  inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #a78bfa;
+  gap: 2.25rem;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Animation stage */
+.visual-loading-anim {
+  position: relative;
+  width: 260px;
+  height: 52px;   /* ~12px above dot line for the hop arc */
+}
+
+/* Dot track — scrolls leftward, masked at edges */
+.hop-mask {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 10px;          /* dot centerline sits 14px from bottom */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(0,0,0,0.6) 12%,
+    black 28%,
+    black 72%,
+    rgba(0,0,0,0.6) 88%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(0,0,0,0.6) 12%,
+    black 28%,
+    black 72%,
+    rgba(0,0,0,0.6) 88%,
+    transparent 100%
+  );
+}
+
+.hop-dots {
+  width: 100%;
+  height: 8px;
+  flex-shrink: 0;
+  background-image: radial-gradient(circle, #475569 4px, transparent 4px);
+  background-size: 24px 8px;
+  background-repeat: repeat-x;
+  background-position-y: 0;
+  animation-name: hop-scroll;
+  animation-duration: 1.6s;
+  animation-timing-function: linear;
+  animation-delay: 1.35s;       /* waits for ball to land (intro: 0.5s delay + 0.85s = 1.35s) */
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards; /* holds 0% (static) during the delay */
+}
+
+/* Scroll one dot-width while airborne (0–36%), stop on impact, hold through pause.
+   Dot centers sit at (background-position-x + 12 + k*24). Container center = 130px.
+   130 = 22 + 12 + 4*24, so background-position-x:22px puts a dot exactly at 130px.
+   End: 22 - 24 = -2px → dot still at 130px (repeating period = 24px). */
+@keyframes hop-scroll {
+  0%        { background-position-x: 22px; }
+  36%, 100% { background-position-x: -2px; }
+}
+
+/* Wrapper: handles centering + one-shot drop-in. Hop animation lives on the child.
+   Static transform keeps centering even before/after the intro animation. */
+.hop-ball-wrapper {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;        /* dot center = padding(10) + radius(4) = 14px; ball center = bottom(8) + radius(6) = 14px ✓ */
+  transform: translateX(-50%);
+  z-index: 2;
+  animation: hop-intro 0.85s 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hop-intro {
+  from {
+    transform: translateX(-50%) translateY(-56px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Purple hopping ball */
+.hop-ball {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #c4b5fd 0%, #8b5cf6 60%);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.9), 0 0 22px rgba(139, 92, 246, 0.45);
+  animation-name: hop-jump;
+  animation-duration: 1.6s;
+  animation-timing-function: linear;
+  animation-delay: 1.35s;       /* starts hopping once ball has landed */
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards; /* holds 0% (resting) during the delay */
+}
+
+/* Arc: 0–36% (≈ 0.58s). Mild squash on impact: 36–43%. Rest as circle: 43–100%. */
+@keyframes hop-jump {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    animation-timing-function: cubic-bezier(0.22, 0, 0.5, 0);
+  }
+  20% {
+    transform: translateY(-30px) scale(1);
+    animation-timing-function: cubic-bezier(0.5, 1, 0.78, 1);
+  }
+  36% {
+    transform: translateY(0) scaleX(1.2) scaleY(0.82);
+    animation-timing-function: ease-out;
+  }
+  43%, 100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Opaque sliding cover: hides unrevealed dots. Slides left one dot-width per hop,
+   then continues to 0 so the mask's symmetric left gradient handles the fade. */
+.hop-left-cover {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 50%;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  background-attachment: fixed;
+  animation: hop-cover-slide 9.6s 1.35s linear 1 both;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes hop-cover-slide {
+  /* 6 cycles × 1.6s = 9.6s. Each slide = 36% of cycle = 6% of animation; hold = 10.67%. */
+  /* Hop 1 */
+  0%     { width: 46.15%; animation-timing-function: linear; }  /* 120px */
+  6%     { width: 39.23%; }   /* 102px */
+  16.67% { width: 39.23%; animation-timing-function: linear; }
+  /* Hop 2 */
+  22.67% { width: 30%; }      /* 78px */
+  33.33% { width: 30%; animation-timing-function: linear; }
+  /* Hop 3 */
+  39.33% { width: 20.77%; }   /* 54px */
+  50%    { width: 20.77%; animation-timing-function: linear; }
+  /* Hop 4 */
+  56%    { width: 11.54%; }   /* 30px */
+  66.67% { width: 11.54%; animation-timing-function: linear; }
+  /* Hop 5 */
+  72.67% { width: 2.31%; }    /* 6px — well within mask transparent zone */
+  83.33% { width: 2.31%; animation-timing-function: linear; }
+  /* Hop 6: clear to 0, mask gradient takes over */
+  89.33% { width: 0%; }
+  100%   { width: 0%; }
+}
+
+.visual-loading-text {
+  color: #e2e8f0;
   font-size: 1.1rem;
-  letter-spacing: 0.03em;
-  font-family: var(--font-family), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin: 0;
 }
 
 /* ── Canvas: free-form absolute-position workspace ── */
@@ -122,35 +285,23 @@
 }
 
 .visual-page .stream-navigator {
-  position: fixed;
-  top: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-  z-index: 32;
-}
-
-.visual-page .stream-nav-controls {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.4rem;
 }
 
 .visual-page .stream-nav-btn {
-  padding: 0.25rem 0.75rem;
+  padding: 0.15rem 0.5rem;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--text-primary);
   cursor: pointer;
   transition: background 0.2s;
   font-family: var(--font-family), system-ui, sans-serif;
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
@@ -163,23 +314,26 @@
   cursor: default;
 }
 
-.visual-page .stream-indicator {
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
 .visual-page .stream-label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-secondary);
   text-align: center;
   font-family: var(--font-family), system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.visual-page .proof-tree-panel {
+  position: fixed;
+  top: calc(52px + 1rem);
+  right: 1.5rem;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .visual-page .proof-tree-diagram {
-  position: fixed;
-  top: 1rem;
-  right: 1.5rem;
-  z-index: 31;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -553,6 +707,127 @@
   100% { transform: scale(1);    box-shadow: 0 0 30px rgba(34, 197, 94, 0.7); }
 }
 
+/* ── Level navigation header bar ── */
+.visual-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  background: rgba(15, 23, 42, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.4s ease, border-color 0.4s ease;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.visual-header.completed {
+  background: rgba(6, 48, 22, 0.94);
+  border-bottom-color: rgba(52, 211, 153, 0.45);
+  animation: headerComplete 0.5s ease-out;
+}
+
+@keyframes headerComplete {
+  from { background: rgba(15, 23, 42, 0.88); border-bottom-color: rgba(255, 255, 255, 0.08); }
+  to   { background: rgba(6, 48, 22, 0.94);  border-bottom-color: rgba(52, 211, 153, 0.45); }
+}
+
+.visual-header-side {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.visual-header-side.right {
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.visual-header-center {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.visual-header-check {
+  color: #34d399;
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.visual-header-level {
+  color: #a78bfa;
+  font-size: 0.9rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.visual-header-title {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.visual-header-nav-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  color: #94a3b8;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  font-family: var(--font-family), system-ui, sans-serif;
+}
+
+.visual-header-nav-btn:hover {
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.visual-header-nav-btn.emphasized {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #34d399;
+  font-weight: 700;
+  padding: 0.3rem 1rem;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.2);
+  animation: nextLevelPulse 2s ease-in-out infinite;
+}
+
+.visual-header-nav-btn.emphasized:hover {
+  background: rgba(52, 211, 153, 0.3);
+  border-color: rgba(52, 211, 153, 0.8);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+}
+
+@keyframes nextLevelPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(52, 211, 153, 0.2); }
+  50%       { box-shadow: 0 0 22px rgba(52, 211, 153, 0.5); }
+}
+
+/* In transformation overlay, raise header above the processing blocker */
+.visual-page.tr-overlay .visual-header {
+  z-index: 65;
+}
+
 /* ── Completion banner: slides up from bottom ── */
 .completion-banner {
   position: fixed;
@@ -628,10 +903,10 @@
   z-index: 50;
 }
 
-/* Back button — top-left */
+/* Back button — top-left, below header */
 .visual-page .tr-back-btn {
   position: absolute;
-  top: 1.5rem;
+  top: calc(52px + 1rem);
   left: 1.5rem;
   z-index: 60;
   display: flex;
@@ -1027,7 +1302,7 @@
 /* ── Toolbar ── */
 .visual-toolbar {
   position: absolute;
-  top: 1rem;
+  top: calc(52px + 1rem);
   left: 1.5rem;
   z-index: 30;
   display: flex;
@@ -1169,3 +1444,160 @@
 .arrow-cell  { color: #475569; text-align: center; width: 2rem; }
 .lean-tactic { color: #6ee7b7; }
 .lean-tactic.unknown { color: #475569; font-style: italic; }
+
+/* ── Visual World Map ─────────────────────────────────────────────────────── */
+
+.visual-map-page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* App bar */
+.visual-map-appbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.visual-map-back-btn,
+.visual-map-menu-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #f8fafc;
+  cursor: pointer;
+  font-size: 1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.visual-map-back-btn:hover,
+.visual-map-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.visual-map-title {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* Dropdown menu */
+.visual-map-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0.75rem;
+  flex-direction: column;
+  min-width: 13rem;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.4rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+
+.visual-map-dropdown.open {
+  display: flex;
+}
+
+.visual-map-dropdown button {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  text-align: left;
+  transition: background 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.visual-map-dropdown button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.visual-map-dropdown button.active {
+  color: #a78bfa;
+}
+
+/* Map scroll area */
+.visual-map-scroll {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.visual-map-svg {
+  /* inherited from .world-selection in world_tree.css */
+}
+
+/* Level / world link colour overrides for dark theme */
+.visual-map-page .level .level-title {
+  color: #f8fafc;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.visual-map-page .world-label {
+  border-radius: 4px;
+  padding: 1px 4px;
+  text-align: center;
+}
+
+.visual-map-page .world-title {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+/* Dark scrollbars for the map scroll area */
+.visual-map-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.visual-map-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+
+.visual-map-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.4);
+  border-radius: 3px;
+}
+
+.visual-map-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.65);
+}
+
+.visual-map-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

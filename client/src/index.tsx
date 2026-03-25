@@ -10,6 +10,7 @@ import Welcome from './components/welcome'
 import LandingPage from './components/landing_page'
 import Level from './components/level'
 import VisualProofPage from './visual/VisualProofPage'
+import VisualWorldMap from './visual/VisualWorldMap'
 import './i18n';
 
 
@@ -57,6 +58,10 @@ const router = createHashRouter([
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId",
         element: <Level />,
+      },
+      {
+        path: "/g/:owner/:repo/visual",
+        element: <VisualWorldMap />,
       },
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId/visual",

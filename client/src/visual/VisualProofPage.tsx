@@ -3,6 +3,8 @@ import { useEffect, useState, useRef, useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
+import { useAppSelector } from '../hooks'
+import { selectCompleted } from '../state/progress'
 import { LeanRpcClient } from './leanRpcClient'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
@@ -201,8 +203,17 @@ export function VisualProofPage() {
   const handleNextLevel = useCallback(() => {
     navigate(`/${gameId}/world/${worldId}/level/${levelId + 1}/visual`)
   }, [navigate, gameId, worldId, levelId])
+  const handlePreviousLevel = useCallback(() => {
+    navigate(`/${gameId}/world/${worldId}/level/${levelId - 1}/visual`)
+  }, [navigate, gameId, worldId, levelId])
+  const handleWorldMap = useCallback(() => {
+    navigate(`/${gameId}/visual`)
+  }, [navigate, gameId])
+  const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [levelTitle, setLevelTitle] = useState<string | null>(null)
+  const [worldSize, setWorldSize] = useState<number | null>(null)
   const [theoremEqualityHyps, setTheoremEqualityHyps] = useState<EqualityHyp[]>([])
   const [propositionTheorems, setPropositionTheorems] = useState<PropositionTheorem[]>([])
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
@@ -272,18 +283,23 @@ export function VisualProofPage() {
     setTheoremEqualityHyps([])
     setPropositionTheorems([])
     setVisualTactics([])
+    setLevelTitle(null)
+    setWorldSize(null)
     if (!worldId || !levelId) return
     let active = true
     const baseUrl = window.location.origin + '/data'
 
     Promise.all([
       fetchJsonWithRetry<{
+        title?: string | null
         lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
         tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
-      fetchJsonWithRetry<{ worlds?: { edges?: string[][] } }>(`${baseUrl}/${gameId}/game.json`),
+      fetchJsonWithRetry<{ worlds?: { edges?: string[][] }; worldSize?: { [key: string]: number } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
         if (!active || !levelData) return
+        if (levelData.title) setLevelTitle(levelData.title)
+        if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
           levelData.lemmas ?? []
         const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
@@ -381,7 +397,20 @@ export function VisualProofPage() {
   }
 
   if (!canvasState) {
-    return <div className="visual-loading">Connecting to Lean…</div>
+    return (
+      <div className="visual-loading">
+        <div className="visual-loading-anim">
+          <div className="hop-mask">
+            <div className="hop-dots" />
+          </div>
+          <div className="hop-left-cover" />
+          <div className="hop-ball-wrapper">
+            <div className="hop-ball" />
+          </div>
+        </div>
+        <p className="visual-loading-text">Connecting to Lean…</p>
+      </div>
+    )
   }
 
   return (
@@ -394,6 +423,11 @@ export function VisualProofPage() {
       levelId={levelId}
       onInteraction={handleInteraction}
       onNextLevel={handleNextLevel}
+      onPreviousLevel={levelId > 1 ? handlePreviousLevel : undefined}
+      onWorldMap={handleWorldMap}
+      levelTitle={levelTitle}
+      worldSize={worldSize}
+      previouslyCompleted={previouslyCompleted}
     />
   )
 }
