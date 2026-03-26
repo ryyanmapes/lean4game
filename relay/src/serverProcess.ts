@@ -294,8 +294,10 @@ export class GameManager {
         console.error(`[${new Date()}] SERVER->CLIENT error payload: ${JSON.stringify((message as any).error)}`)
       }
 
-      // Print the message as the server sends it
-      if (isDevelopment) { console.log(`SERVER: ${JSON.stringify(message)}`); }
+      // Print the message as the server sends it (suppress noisy publishDiagnostics)
+      if (isDevelopment && (message as any)?.method !== 'textDocument/publishDiagnostics') {
+        console.log(`SERVER: ${JSON.stringify(message)}`);
+      }
 
       // backwards compatibility for versions ≤ v4.7.0
       if (usesCustomLeanServer) return message

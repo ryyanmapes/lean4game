@@ -8,6 +8,7 @@ import { selectCompleted } from '../state/progress'
 import { LeanRpcClient } from './leanRpcClient'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
+import { VisualHeader } from './VisualHeader'
 import type { CanvasState, PropositionTheorem, VisualTactic } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
@@ -399,6 +400,18 @@ export function VisualProofPage() {
   if (!canvasState) {
     return (
       <div className="visual-loading">
+        <VisualHeader
+          worldId={worldId}
+          levelId={levelId}
+          levelTitle={levelTitle}
+          hasPrev={levelId > 1}
+          hasNext={worldSize == null || levelId < worldSize}
+          isCompleted={false}
+          previouslyCompleted={previouslyCompleted ?? false}
+          onPrev={levelId > 1 ? handlePreviousLevel : () => {}}
+          onNext={handleNextLevel}
+          onWorldMap={handleWorldMap}
+        />
         <div className="visual-loading-anim">
           <div className="hop-mask">
             <div className="hop-dots" />

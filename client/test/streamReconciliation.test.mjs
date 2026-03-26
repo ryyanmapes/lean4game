@@ -467,6 +467,66 @@ test('reflexive click_goal still completes the final proof when Lean reports a s
   assert.deepEqual(result.nextCanvas.streams, [])
 })
 
+test('drag_goal applying an induction hypothesis keeps the successor branch live', () => {
+  const completedBaseStream = stream('induction-base', '0 = 0', 'zero', [])
+  const successorStream = stream('induction-succ', 'a = b', 'succ', [
+    hyp('induction-h', 'h', 'succ (a + d) = succ (b + d)'),
+    hyp('induction-ih', 'n_ih', 'a + d = b + d -> a = b'),
+  ])
+  const successorPremiseStream = stream('induction-succ-next', 'a + d = b + d', 'succ', [
+    hyp('induction-h', 'h', 'succ (a + d) = succ (b + d)'),
+    hyp('induction-ih', 'n_ih', 'a + d = b + d -> a = b'),
+  ])
+
+  const beforeTree = {
+    id: 'induction-root',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      {
+        id: 'induction-base-leaf',
+        streamId: completedBaseStream.id,
+        label: completedBaseStream.goal.userName,
+        completed: true,
+        children: [],
+      },
+      {
+        id: 'induction-succ-leaf',
+        streamId: successorStream.id,
+        label: successorStream.goal.userName,
+        completed: false,
+        children: [],
+      },
+    ],
+  }
+  const beforeCanvas = {
+    streams: [successorStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [successorPremiseStream],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    successorStream,
+    'drag_goal n_ih',
+    false,
+    successorStream.id,
+    [successorPremiseStream],
+  )
+
+  assert.deepEqual(collectActiveStreamIds(result.nextTree), [completedBaseStream.id, successorPremiseStream.id])
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [successorPremiseStream.id])
+  assert.equal(result.nextActiveId, successorPremiseStream.id)
+  assert.equal(findLeafForStream(result.nextTree, successorPremiseStream.id)?.completed, false)
+  assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [successorPremiseStream.id])
+})
+
 test('the full nested conjunction proof can reconcile from A through final C completion', () => {
   const splitHypType = 'And B (A -> B -> C)'
   const splitRightType = 'A -> B -> C'

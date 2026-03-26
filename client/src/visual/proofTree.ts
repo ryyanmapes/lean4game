@@ -120,21 +120,31 @@ export function collectLiveStreamIds(tree: ProofStreamTreeNode): string[] {
 }
 
 export function casePathForStream(tree: ProofStreamTreeNode, streamId: string): string[] | null {
-  function visit(node: ProofStreamTreeNode, path: string[]): string[] | null {
-    const nextPath = node.label ? [...path, node.label] : path
+  function isLive(node: ProofStreamTreeNode): boolean {
+    if (node.children.length === 0) return !node.completed && node.streamId !== null
+    return node.children.some(isLive)
+  }
+
+  // liveBeforeCount: number of live sibling subtrees that appear before this node.
+  // A `case X =>` label is only needed when there is at least one live goal
+  // that precedes this one — otherwise this stream is already the focused goal.
+  function visit(node: ProofStreamTreeNode, path: string[], liveBeforeCount: number): string[] | null {
+    const nextPath = (node.label && liveBeforeCount > 0) ? [...path, node.label] : path
     if (node.children.length === 0) {
       return node.streamId === streamId ? nextPath : null
     }
 
+    let liveBefore = 0
     for (const child of node.children) {
-      const result = visit(child, nextPath)
+      const result = visit(child, nextPath, liveBefore)
       if (result) return result
+      if (isLive(child)) liveBefore++
     }
 
     return null
   }
 
-  return visit(tree, [])
+  return visit(tree, [], 0)
 }
 
 export function findLeafForStream(tree: ProofStreamTreeNode, streamId: string): ProofStreamTreeNode | null {

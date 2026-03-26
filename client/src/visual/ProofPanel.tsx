@@ -44,12 +44,17 @@ function getCasePath(command: string): string[] {
   return path
 }
 
+/** Strip capitalized namespace prefixes from Lean identifiers (e.g. MyNat.zero_ne_succ → zero_ne_succ). */
+function shortenQualifiedNames(s: string): string {
+  return s.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
+}
+
 /** Return the lean tactic with its case path prepended, e.g. "case succ => rw [add_succ]". */
 function leanTacticDisplay(step: ProofStep): string | null {
   const leaf = stripCasePrefixes(step.leanTactic)
   if (!leaf) return null
   const casePath = getCasePath(step.command)
-  return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf)
+  return shortenQualifiedNames(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
 }
 
 export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelProps) {

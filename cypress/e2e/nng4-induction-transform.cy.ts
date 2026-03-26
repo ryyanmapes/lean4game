@@ -6,7 +6,9 @@ interface VisualTestHarness {
   dragTacticToHyp(tacticName: string, hypName: string): Promise<void>
   clickGoal(playTactic?: string): Promise<void>
   openGoalTransform(): void
+  openHypTransform(hypName: string): void
   rewriteGoalInTransform(theoremName: string, workingSide?: 'left' | 'right', path?: number[]): Promise<void>
+  rewriteHypInTransform(theoremName: string, workingSide?: 'left' | 'right', path?: number[]): Promise<void>
   closeTransform(): void
   getTransformStatus(): {
     isOpen: boolean
@@ -250,6 +252,56 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       expect(snapshot.goalType).to.contain('0 = 0')
       expect(snapshot.goalPlayTactic).to.equal('click_goal')
+      expect(snapshot.currentStreamIsCompleted).to.equal(false)
+      expect(snapshot.streamInteractionsEnabled).to.equal(true)
+    })
+  })
+
+  it('can still rewrite a hypothesis after applying n_ih to switch the successor goal', () => {
+    let initialHypType = ''
+
+    visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
+    visualHarness().then(harness => harness.openGoalTransform())
+    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
+    visualHarness().then(harness => harness.rewriteGoalInTransform('add_zero'))
+    cy.get('.tr-back-btn').click()
+    visualHarness().then(harness => harness.clickGoal())
+
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
+      .should('contain.text', 'Stream 2 of 2')
+
+    visualHarness().then(harness => harness.clickGoal())
+    visualHarness().then(harness => harness.dragHypToGoal('n_ih'))
+
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
+      .should('contain.text', 'Stream 2 of 2')
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.goalType).to.contain('=')
+      expect(snapshot.goalType).to.not.contain('→')
+      initialHypType = snapshot.hypTypes.h ?? ''
+      expect(initialHypType).to.contain('succ')
+      expect(snapshot.currentStreamIsCompleted).to.equal(false)
+      expect(snapshot.streamInteractionsEnabled).to.equal(true)
+    })
+
+    visualHarness().then(harness => harness.openHypTransform('h'))
+    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
+    visualHarness().then(harness => harness.getTransformStatus()).then(status => {
+      expect(status.isOpen).to.equal(true)
+      expect(status.targetKind).to.equal('hyp')
+    })
+
+    visualHarness().then(harness => harness.rewriteHypInTransform('add_succ'))
+    visualHarness().then(harness => harness.getTransformStatus()).then(status => {
+      expect(status.isOpen).to.equal(true)
+      expect(status.targetKind).to.equal('hyp')
+    })
+
+    cy.get('.tr-back-btn').click()
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.hypTypes.h).to.not.equal(initialHypType)
       expect(snapshot.currentStreamIsCompleted).to.equal(false)
       expect(snapshot.streamInteractionsEnabled).to.equal(true)
     })

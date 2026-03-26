@@ -115,6 +115,11 @@ syntax (name := drag_goal) "drag_goal" ident : tactic
     let hType ← whnf hTypeRaw
     let goal ← whnf (← getMainTarget)
 
+    -- False hypothesis closes any goal via exfalso
+    if hType == .const ``False [] then
+      evalTactic (← `(tactic| exact False.elim $h))
+      return
+
     if ← isDefEq hType goal then
       evalTactic (← `(tactic| exact $h))
       return
@@ -589,6 +594,12 @@ example : 0 + 0 = 0 := by
 example : 0 ≠ 1 := by
   click_goal
   cases h
+
+example (P Q : Prop) (h : False) : P ∧ Q := by
+  drag_goal h
+
+example (n : Nat) (h : False) : n = 42 := by
+  drag_goal h
 
 end Regression
 

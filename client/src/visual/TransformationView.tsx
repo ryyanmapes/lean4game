@@ -94,12 +94,14 @@ interface Props {
   onSelectedTabChange: (v: string) => void
   /** Optional header bar rendered at the top of the overlay. */
   headerSlot?: React.ReactNode
+  /** Applied to the overlay root div (e.g. for sidebar-offset positioning). */
+  style?: React.CSSProperties
 }
 
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
-  selectedTab, onSelectedTabChange, rewriteStepCount, headerSlot
+  selectedTab, onSelectedTabChange, rewriteStepCount, headerSlot, style
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -351,7 +353,7 @@ export function TransformationView({
   }
 
   return (
-    <div className="visual-page tr-overlay">
+    <div className="visual-page tr-overlay" style={style}>
       {headerSlot}
       <DndContext
         sensors={sensors}

@@ -16,7 +16,6 @@ import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExp
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
-import { ProofPanel } from './ProofPanel'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import {
@@ -263,7 +262,9 @@ interface VisualCanvasTestHarness {
   clickHyp: (hypName: string) => Promise<void>
   clickGoal: (playTactic?: string) => Promise<void>
   openGoalTransform: () => void
+  openHypTransform: (hypName: string) => void
   rewriteGoalInTransform: (theoremName: string, workingSide?: 'left' | 'right', path?: number[]) => Promise<void>
+  rewriteHypInTransform: (theoremName: string, workingSide?: 'left' | 'right', path?: number[]) => Promise<void>
   closeTransform: () => void
   getTransformStatus: () => {
     isOpen: boolean
@@ -594,6 +595,9 @@ function inferLeanTacticFromVisualInteraction(
     const hypCard = findHypCardByName(stream, hypName)
     if (!hypCard || !stream) return null
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
+    if (hypType === 'False') {
+      return `exfalso\nexact ${hypName}`
+    }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
     if (formulasMatch(hypType, goalType)) {
       return `exact ${hypName}`
@@ -607,6 +611,11 @@ function inferLeanTacticFromVisualInteraction(
   return null
 }
 
+/** Strip capitalized namespace prefixes from Lean identifiers for display (e.g. MyNat.zero_ne_succ → zero_ne_succ). */
+function shortenQualifiedNames(tactic: string): string {
+  return tactic.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
+}
+
 function resolveLeanTactic(
   annotationLeanTactic: string | null | undefined,
   command: string,
@@ -615,8 +624,8 @@ function resolveLeanTactic(
 ): string | null {
   if (annotationLeanTactic) return annotationLeanTactic
   const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream)
-  if (inferredLeanTactic) return inferredLeanTactic
-  if (command !== playTactic && !isVisualOnlyPlayTactic(playTactic)) return command
+  if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
+  if (command !== playTactic && !isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
   return null
 }
 
@@ -710,53 +719,139 @@ function TheoremTray({
   tactics,
   activeTab,
   onTabChange,
+  onUndo,
+  canUndo,
+  isProcessing,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
   activeTab: TrayTab
   onTabChange: (tab: TrayTab) => void
+  onUndo?: (() => Promise<boolean>) | null
+  canUndo?: boolean
+  isProcessing?: boolean
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
+  // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
   if (tactics.length > 0) availableTabs.push('tactics')
   if (theorems.length > 0) availableTabs.push('theorems')
-
-  if (availableTabs.length === 0) return null
-
-  const visibleTab =
+  const hasTray = availableTabs.length > 0
+  const hasUndo = onUndo != null && canUndo != null
+  const visibleTab: TrayTab | undefined =
     activeTab === 'tactics' && tactics.length > 0
       ? 'tactics'
       : activeTab === 'theorems' && theorems.length > 0
         ? 'theorems'
         : availableTabs[0]
+  const items: (PropositionTheorem | VisualTactic)[] =
+    visibleTab === 'tactics' ? tactics : visibleTab === 'theorems' ? theorems : []
+
+  const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
+  const [pageIndex, setPageIndex] = useState(0)
+  const [pageWidth, setPageWidth] = useState(0)
+  const [maxCardPx, setMaxCardPx] = useState(0)
+  const dockCardsRef = useRef<HTMLDivElement>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
+
+  // Observe the outer dock-cards container and subtract the nav button space
+  // so pageWidth is exactly the room available for cards.
+  useEffect(() => {
+    const el = dockCardsRef.current
+    if (!el) return
+    const measure = () => {
+      const btns = Array.from(el.querySelectorAll<HTMLElement>(':scope > .tr-nav-btn'))
+      const btnSpace = btns.reduce((s, b) => s + b.offsetWidth, 0)
+      const cs = getComputedStyle(el)
+      const pL = parseFloat(cs.paddingLeft) || 0
+      const pR = parseFloat(cs.paddingRight) || 0
+      const gap = parseFloat(cs.columnGap || cs.gap) || 0
+      setPageWidth(el.clientWidth - pL - pR - btnSpace - btns.length * gap)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasTray])
+
+  // Use max card width (not average) so no card ever overflows the page.
+  useLayoutEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('.statement-card'))
+    if (!cards.length) return
+    const max = cards.reduce((m, c) => Math.max(m, c.offsetWidth), 0)
+    setMaxCardPx(prev => Math.abs(max - prev) > 0.5 ? max : prev)
+  }, [items])
+
+  if (!hasTray && !hasUndo) return null
+
+  const GAP_PX = 12
+  const itemsPerPage = pageWidth > 0 && maxCardPx > 0
+    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
+    : items.length
+  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage))
+  const clampedPage = Math.min(pageIndex, totalPages - 1)
+  const pageItems = items.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
 
   return (
     <div
       id={THEOREM_TRAY_ID}
       ref={setNodeRef}
-      className={`theorem-tray${isOver ? ' drop-target-active' : ''}`}
+      className={`theorem-tray-panel${isOver ? ' drop-target-active' : ''}`}
     >
-      <div className="theorem-tray-tabs">
-        {availableTabs.map(tab => (
+      {hasTray && (
+        <div className="tr-dock-cards" ref={dockCardsRef}>
           <button
-            key={tab}
-            type="button"
-            className={`theorem-tray-tab ${tab}${visibleTab === tab ? ' active' : ''}`}
-            onClick={() => onTabChange(tab)}
-          >
-            {tab === 'tactics' ? 'Tactics' : 'Theorems'}
-          </button>
-        ))}
-      </div>
-      <div className="theorem-tray-list">
-        {visibleTab === 'tactics'
-          ? tactics.map(tactic => (
-              <VisualTacticTemplateCard key={tactic.id} tactic={tactic} />
-            ))
-          : theorems.map(theorem => (
-              <PropositionTheoremTemplateCard key={theorem.id} theorem={theorem} />
-            ))}
-      </div>
+            className="tr-nav-btn"
+            onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+            disabled={clampedPage === 0 || items.length === 0}
+            aria-label="Previous"
+          >‹</button>
+
+          <div className="tr-rule-page" ref={pageRef}>
+            <div className="tr-rule-page-cards">
+              {pageItems.map(item =>
+                visibleTab === 'tactics'
+                  ? <VisualTacticTemplateCard key={(item as VisualTactic).id} tactic={item as VisualTactic} />
+                  : <PropositionTheoremTemplateCard key={(item as PropositionTheorem).id} theorem={item as PropositionTheorem} />
+              )}
+            </div>
+            {totalPages > 1 && (
+              <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
+            )}
+          </div>
+
+          <button
+            className="tr-nav-btn"
+            onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}
+            disabled={clampedPage >= totalPages - 1 || items.length === 0}
+            aria-label="Next"
+          >›</button>
+        </div>
+      )}
+
+      {(availableTabs.length > 1 || hasUndo) && (
+        <div className="tr-dock-tabs">
+          {availableTabs.map(tab => (
+            <button
+              key={tab}
+              type="button"
+              className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}`}
+              onClick={() => { onTabChange(tab); setPageIndex(0) }}
+            >
+              {tab === 'tactics' ? 'Tactics' : 'Theorems'}
+            </button>
+          ))}
+          {hasUndo && (
+            <button
+              className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
+              style={{ marginLeft: 'auto' }}
+              onClick={onUndo ?? undefined}
+              disabled={!canUndo || isProcessing}
+              title="Undo last step"
+            >↩</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -812,7 +907,12 @@ export function VisualCanvas({
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>('theorems')
   const [isProcessing, setIsProcessing] = useState(false)
-  const [showProofPanel, setShowProofPanel] = useState(false)
+  const [showProofSidebar, setShowProofSidebar] = useState<boolean>(() => {
+    try { return localStorage.getItem('visual-proof-sidebar-open') === 'true' } catch { return false }
+  })
+  const [sideViewMode, setSideViewMode] = useState<'lean' | 'play'>(() => {
+    try { return (localStorage.getItem('visual-proof-view-mode') as 'lean' | 'play') || 'lean' } catch { return 'lean' }
+  })
   const [goalChoiceMenu, setGoalChoiceMenu] = useState<GoalChoiceMenu | null>(null)
   const [reductionTooltip, setReductionTooltip] = useState<ReductionTooltip | null>(null)
   const reductionTooltipCloseTimerRef = useRef<number | null>(null)
@@ -2061,13 +2161,19 @@ export function VisualCanvas({
     handleGoalDoubleClick(stream.id)
   }
 
-  async function applyTestRewriteGoalInTransform(
+  function openTestHypTransform(hypName: string) {
+    const stream = requireInteractiveCurrentStream()
+    const card = requireHypCard(stream, hypName)
+    handleHypDoubleClick(card.id)
+  }
+
+  async function applyTestRewriteInTransform(
     theoremName: string,
     workingSide: 'left' | 'right' = 'left',
     path?: number[],
   ) {
-    if (transformTarget?.kind !== 'goal') {
-      throw new Error('No goal transformation session is open')
+    if (transformTarget === null) {
+      throw new Error('No transformation session is open')
     }
     const expectedGoal = transformProps
       ? expectedGoalForRewrite(
@@ -2087,6 +2193,28 @@ export function VisualCanvas({
     if (!outcome.success) {
       throw new Error(`Rewrite with "${theoremName}" was rejected`)
     }
+  }
+
+  async function applyTestRewriteGoalInTransform(
+    theoremName: string,
+    workingSide: 'left' | 'right' = 'left',
+    path?: number[],
+  ) {
+    if (transformTarget?.kind !== 'goal') {
+      throw new Error('No goal transformation session is open')
+    }
+    await applyTestRewriteInTransform(theoremName, workingSide, path)
+  }
+
+  async function applyTestRewriteHypInTransform(
+    theoremName: string,
+    workingSide: 'left' | 'right' = 'left',
+    path?: number[],
+  ) {
+    if (transformTarget?.kind !== 'hyp') {
+      throw new Error('No hypothesis transformation session is open')
+    }
+    await applyTestRewriteInTransform(theoremName, workingSide, path)
   }
 
   function closeTestTransform() {
@@ -2166,7 +2294,9 @@ export function VisualCanvas({
       clickHyp: applyTestClickHyp,
       clickGoal: applyTestClickGoal,
       openGoalTransform: openTestGoalTransform,
+      openHypTransform: openTestHypTransform,
       rewriteGoalInTransform: applyTestRewriteGoalInTransform,
+      rewriteHypInTransform: applyTestRewriteHypInTransform,
       closeTransform: closeTestTransform,
       getTransformStatus,
       getLastTransformRewriteDebug,
@@ -2219,8 +2349,10 @@ export function VisualCanvas({
           data-testid="visual-proof-page"
           data-world-id={worldId}
           data-level-id={String(levelId)}
+          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
         >
           <VisualHeader
+            worldId={worldId}
             levelId={levelId}
             levelTitle={levelTitle}
             hasPrev={levelId > 1}
@@ -2231,6 +2363,12 @@ export function VisualCanvas({
             onNext={onNextLevel ?? (() => {})}
             onWorldMap={onWorldMap ?? (() => {})}
           />
+
+          {/* Thinking label — below header, centered */}
+          {isProcessing && (
+            <div className="visual-thinking-label">Thinking…</div>
+          )}
+
           {totalLeafCount > 1 && (
             <div className="proof-tree-panel">
               <ProofStreamGraph
@@ -2270,27 +2408,7 @@ export function VisualCanvas({
             </div>
           )}
 
-          {/* Header toolbar */}
-          <div className="visual-toolbar">
-            <button
-              className="visual-toolbar-btn"
-              onClick={() => setShowProofPanel(true)}
-              title="View Lean proof"
-            >
-              View Proof
-            </button>
-            {proofSteps.length > 0 && (
-              <button
-                className="visual-toolbar-btn"
-                onClick={undoLastStep}
-                disabled={isProcessing}
-                title="Undo last step"
-              >
-                ↩ Undo
-              </button>
-            )}
-            {isProcessing && <span className="visual-processing-label">Thinking…</span>}
-          </div>
+
 
           <div className="combining-canvas" data-testid="combining-canvas">
             {visibleHyps.map(card => {
@@ -2392,14 +2510,15 @@ export function VisualCanvas({
                 </div>
               </>
             )}
-            {streamInteractionsEnabled && (
-              <TheoremTray
-                theorems={propositionTheorems}
-                tactics={visualTactics}
-                activeTab={activeTrayTab}
-                onTabChange={setActiveTrayTab}
-              />
-            )}
+            <TheoremTray
+              theorems={propositionTheorems}
+              tactics={visualTactics}
+              activeTab={activeTrayTab}
+              onTabChange={setActiveTrayTab}
+              onUndo={undoLastStep}
+              canUndo={proofSteps.length > 0}
+              isProcessing={isProcessing}
+            />
           </div>
           <DragOverlay dropAnimation={null}>
             {activeDraggedTheorem
@@ -2411,10 +2530,79 @@ export function VisualCanvas({
         </div>
       </DndContext>
 
+      {/* Proof sidebar — outside DndContext so it stays above the transformation overlay */}
+      <div className={`proof-sidebar${showProofSidebar ? ' open' : ''}`}>
+        <button
+          className="proof-sidebar-tab"
+          onClick={() => {
+            const next = !showProofSidebar
+            setShowProofSidebar(next)
+            try { localStorage.setItem('visual-proof-sidebar-open', String(next)) } catch {}
+          }}
+          title={showProofSidebar ? 'Close proof view' : 'Open proof view'}
+        >
+          <span>Proof</span>
+        </button>
+        <div className="proof-sidebar-inner">
+          <div className="proof-sidebar-header">
+            <button
+              className={`proof-sidebar-mode-btn${sideViewMode === 'lean' ? ' active' : ''}`}
+              onClick={() => {
+                setSideViewMode('lean')
+                try { localStorage.setItem('visual-proof-view-mode', 'lean') } catch {}
+              }}
+            >Core</button>
+            <button
+              className={`proof-sidebar-mode-btn${sideViewMode === 'play' ? ' active' : ''}`}
+              onClick={() => {
+                setSideViewMode('play')
+                try { localStorage.setItem('visual-proof-view-mode', 'play') } catch {}
+              }}
+            >Interactive</button>
+            <button
+              className="proof-sidebar-copy-btn"
+              onClick={() => {
+                const text = sideViewMode === 'lean'
+                  ? buildStructuredLeanProof(proofSteps)
+                  : proofSteps.map(s => s.playTactic).join('\n')
+                navigator.clipboard.writeText(text).catch(() => {})
+              }}
+              title="Copy to clipboard"
+            >Copy</button>
+          </div>
+          <div className="proof-sidebar-steps">
+            {proofSteps.length === 0
+              ? <div className="proof-sidebar-empty">No proof steps yet.</div>
+              : proofSteps.map((step, i) => {
+                  const display = sideViewMode === 'lean'
+                    ? (() => {
+                        const { casePath } = parseFocusedCommand(step.command)
+                        const leaf = stripCasePrefixes(step.leanTactic)
+                        if (!leaf) return `? (${step.playTactic})`
+                        return shortenQualifiedNames(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
+                      })()
+                    : (() => {
+                        const { casePath } = parseFocusedCommand(step.command)
+                        return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic)
+                      })()
+                  const isUnknown = sideViewMode === 'lean' && !step.leanTactic
+                  return (
+                    <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
+                      <span className="proof-sidebar-step-num">{i + 1}</span>
+                      <span className="proof-sidebar-step-text">{display}</span>
+                    </div>
+                  )
+                })
+            }
+          </div>
+        </div>
+      </div>
+
       {/* Transformation overlay — outside the canvas DndContext to avoid nesting */}
       {transformProps && (
         <TransformationView
           key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}-${transformationVersion}`}
+          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
           goalLhsStr={transformProps.goalLhsStr}
           goalRhsStr={transformProps.goalRhsStr}
           goalLhsNode={transformProps.goalLhsNode}
@@ -2433,6 +2621,7 @@ export function VisualCanvas({
           onSelectedTabChange={setTransformSelectedTab}
           headerSlot={
             <VisualHeader
+              worldId={worldId}
               levelId={levelId}
               levelTitle={levelTitle}
               hasPrev={levelId > 1}
@@ -2442,23 +2631,12 @@ export function VisualCanvas({
               onPrev={onPreviousLevel ?? (() => {})}
               onNext={onNextLevel ?? (() => {})}
               onWorldMap={onWorldMap ?? (() => {})}
+              hideNav
             />
           }
         />
       )}
 
-      {/* View Lean Proof panel */}
-      {showProofPanel && (
-        <ProofPanel
-          proofSteps={proofSteps.map(step => ({
-            command: step.command,
-            playTactic: step.playTactic,
-            leanTactic: step.leanTactic,
-          }))}
-          leanProofScript={buildStructuredLeanProof(proofSteps)}
-          onClose={() => setShowProofPanel(false)}
-        />
-      )}
     </>
   )
 }

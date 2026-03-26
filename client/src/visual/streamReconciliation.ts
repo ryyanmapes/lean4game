@@ -38,6 +38,34 @@ function goalTypeText(stream: GoalStream): string {
   return normalizePropositionText(stripTaggedText(stream.goal.type).trim())
 }
 
+function findHypCardByInteractionName(stream: GoalStream, hypName: string): HypCardType | null {
+  return stream.hyps.find(card =>
+    card.hyp.playName === hypName || card.hyp.names[0] === hypName
+  ) ?? null
+}
+
+function dragGoalApplyNextGoalType(
+  focusedStream: GoalStream,
+  playTactic?: string,
+): string | null {
+  if (!(playTactic?.startsWith('drag_goal ') ?? false)) return null
+
+  const hypName = playTactic.slice('drag_goal '.length).trim()
+  if (!hypName) return null
+
+  const hypCard = findHypCardByInteractionName(focusedStream, hypName)
+  if (!hypCard) return null
+
+  const hypType = normalizePropositionText(stripTaggedText(hypCard.hyp.type).trim())
+  const implication = splitImplicationTargetForRuntime(hypType)
+  if (!implication) return null
+
+  const [nextGoalType, currentGoalType] = implication
+  return normalizePropositionText(currentGoalType) === goalTypeText(focusedStream)
+    ? normalizePropositionText(nextGoalType)
+    : null
+}
+
 function isReflexiveEqualityGoal(stream: GoalStream): boolean {
   const equalityTarget = splitEqualityTarget(goalTypeText(stream))
   if (!equalityTarget) return false
@@ -56,11 +84,15 @@ function likelyFocusedContinuation(
     (playTactic?.startsWith('drag_rw_') ?? false) &&
     !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
   const isHypRewrite = playTactic?.startsWith('drag_rw_hyp_') ?? false
+  const dragGoalApplyGoalType = dragGoalApplyNextGoalType(focusedStream, playTactic)
   const requiresStableGoalType =
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
-  const allowsGoalTypeChangeWithinSameBranch = isGoalRewrite
-  const goalTypeMatches = goalTypeText(focusedStream) === goalTypeText(candidate)
+  const candidateGoalType = goalTypeText(candidate)
+  const allowsGoalTypeChangeWithinSameBranch =
+    isGoalRewrite ||
+    (dragGoalApplyGoalType !== null && dragGoalApplyGoalType === candidateGoalType)
+  const goalTypeMatches = goalTypeText(focusedStream) === candidateGoalType
   const hypContextMatches = hypContextShape(focusedStream) === hypContextShape(candidate)
 
   if (requiresStableGoalType && !goalTypeMatches) return false
@@ -607,6 +639,27 @@ function synthesizeGoalIntroStream(focusedStream: GoalStream): GoalStream | null
   }
 }
 
+function synthesizeDragGoalApplyStream(
+  focusedStream: GoalStream,
+  playTactic: string,
+): GoalStream | null {
+  const nextGoalType = dragGoalApplyNextGoalType(focusedStream, playTactic)
+  if (!nextGoalType) return null
+
+  return {
+    ...focusedStream,
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      type: { text: nextGoalType },
+      clickAction: buildGoalClickAction(nextGoalType),
+      reductionForms: [],
+    },
+    hyps: cloneHypCards(focusedStream.hyps),
+    reductionForms: [],
+  }
+}
+
 function synthesizeGoalBranchStream(
   focusedStream: GoalStream,
   playTactic: 'click_goal_left' | 'click_goal_right',
@@ -648,6 +701,9 @@ function synthesizeContinuationStream(
     const [, sourceName, targetName] = playTactic.trim().split(/\s+/)
     if (!sourceName || !targetName) return null
     return synthesizeDragToStream(focusedStream, sourceName, targetName)
+  }
+  if (playTactic.startsWith('drag_goal ')) {
+    return synthesizeDragGoalApplyStream(focusedStream, playTactic)
   }
   if (playTactic === 'click_goal') {
     return synthesizeGoalIntroStream(focusedStream)

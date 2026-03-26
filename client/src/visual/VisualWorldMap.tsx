@@ -83,7 +83,7 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
     : s * position.y - Math.cos(level * betaSpiral(level)) * (R + 2 * r * (level - 1) / (NSPIRAL + 1))
 
   const fill = completed ? completedLevel : unlocked ? unlockedLevel : lockedLevel
-  const to = `/${gameId}/world/${world}/level/${level == 1 ? 0 : level}/visual`
+  const to = `/${gameId}/world/${world}/level/${level}/visual`
 
   return (
     <Link to={to} className="level">
@@ -118,7 +118,7 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize }:
   const unlocked = completedLevels[0]
   const completed = completedLevels.slice(1).every(Boolean)
   let nextLevel: number = completedLevels.findIndex(c => !c)
-  if (nextLevel <= 1) nextLevel = 0
+  if (nextLevel <= 1) nextLevel = 1
 
   const fill = completed ? completedWorld : unlocked ? unlockedWorld : lockedWorld
   const labelBg = completed ? completedLabel : unlocked ? unlockedLabel : lockedLabel
