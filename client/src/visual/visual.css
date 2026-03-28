@@ -80,20 +80,20 @@
   background-repeat: repeat-x;
   background-position-y: 0;
   animation-name: hop-scroll;
-  animation-duration: 1.6s;
+  animation-duration: 2.6s;
   animation-timing-function: linear;
   animation-delay: 1.35s;       /* waits for ball to land (intro: 0.5s delay + 0.85s = 1.35s) */
   animation-iteration-count: infinite;
   animation-fill-mode: backwards; /* holds 0% (static) during the delay */
 }
 
-/* Scroll one dot-width while airborne (0–36%), stop on impact, hold through pause.
+/* Scroll one dot-width while airborne (0–22%), stop on impact, hold through pause.
    Dot centers sit at (background-position-x + 12 + k*24). Container center = 130px.
    130 = 22 + 12 + 4*24, so background-position-x:22px puts a dot exactly at 130px.
    End: 22 - 24 = -2px → dot still at 130px (repeating period = 24px). */
 @keyframes hop-scroll {
   0%        { background-position-x: 22px; }
-  36%, 100% { background-position-x: -2px; }
+  22%, 100% { background-position-x: -2px; }
 }
 
 /* Wrapper: handles centering + one-shot drop-in. Hop animation lives on the child.
@@ -127,28 +127,28 @@
   background: radial-gradient(circle at 35% 30%, #c4b5fd 0%, #8b5cf6 60%);
   box-shadow: 0 0 10px rgba(139, 92, 246, 0.9), 0 0 22px rgba(139, 92, 246, 0.45);
   animation-name: hop-jump;
-  animation-duration: 1.6s;
+  animation-duration: 2.6s;
   animation-timing-function: linear;
   animation-delay: 1.35s;       /* starts hopping once ball has landed */
   animation-iteration-count: infinite;
   animation-fill-mode: backwards; /* holds 0% (resting) during the delay */
 }
 
-/* Arc: 0–36% (≈ 0.58s). Mild squash on impact: 36–43%. Rest as circle: 43–100%. */
+/* Arc: 0–22% (≈ 0.58s). Mild squash on impact: 22–26%. Rest as circle: 26–100%. */
 @keyframes hop-jump {
   0%, 100% {
     transform: translateY(0) scale(1);
     animation-timing-function: cubic-bezier(0.22, 0, 0.5, 0);
   }
-  20% {
+  12% {
     transform: translateY(-30px) scale(1);
     animation-timing-function: cubic-bezier(0.5, 1, 0.78, 1);
   }
-  36% {
+  22% {
     transform: translateY(0) scaleX(1.2) scaleY(0.82);
     animation-timing-function: ease-out;
   }
-  43%, 100% {
+  26%, 100% {
     transform: translateY(0) scale(1);
   }
 }
@@ -161,31 +161,31 @@
   width: 50%;
   background: linear-gradient(135deg, #0f172a, #1e293b);
   background-attachment: fixed;
-  animation: hop-cover-slide 9.6s 1.35s linear 1 both;
+  animation: hop-cover-slide 15.6s 1.35s linear 1 both;
   pointer-events: none;
   z-index: 1;
 }
 
 @keyframes hop-cover-slide {
-  /* 6 cycles × 1.6s = 9.6s. Each slide = 36% of cycle = 6% of animation; hold = 10.67%. */
+  /* 6 cycles × 2.6s = 15.6s. Each slide = 22% of cycle = 3.67% of animation; hold = 13%. */
   /* Hop 1 */
   0%     { width: 46.15%; animation-timing-function: linear; }  /* 120px */
-  6%     { width: 39.23%; }   /* 102px */
+  3.67%  { width: 39.23%; }   /* 102px */
   16.67% { width: 39.23%; animation-timing-function: linear; }
   /* Hop 2 */
-  22.67% { width: 30%; }      /* 78px */
+  20.33% { width: 30%; }      /* 78px */
   33.33% { width: 30%; animation-timing-function: linear; }
   /* Hop 3 */
-  39.33% { width: 20.77%; }   /* 54px */
+  37%    { width: 20.77%; }   /* 54px */
   50%    { width: 20.77%; animation-timing-function: linear; }
   /* Hop 4 */
-  56%    { width: 11.54%; }   /* 30px */
+  53.67% { width: 11.54%; }   /* 30px */
   66.67% { width: 11.54%; animation-timing-function: linear; }
   /* Hop 5 */
-  72.67% { width: 2.31%; }    /* 6px — well within mask transparent zone */
+  70.33% { width: 2.31%; }    /* 6px — well within mask transparent zone */
   83.33% { width: 2.31%; animation-timing-function: linear; }
   /* Hop 6: clear to 0, mask gradient takes over */
-  89.33% { width: 0%; }
+  87%    { width: 0%; }
   100%   { width: 0%; }
 }
 
@@ -958,6 +958,7 @@
   left: 2rem;
   display: flex;
   gap: 1rem;
+  z-index: 25;
 }
 
 /* Swap / Reverse — bottom-right */

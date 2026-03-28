@@ -85,6 +85,8 @@ interface Props {
   ) => Promise<RewriteOutcome>
   /** Called for each undo step (removes one proof step from the proof script). */
   onUndo: () => Promise<boolean>
+  /** Whether the undo button should be enabled (parent has steps to undo). Overrides rewriteStepCount-based check when provided. */
+  canUndo?: boolean
   onClose: () => void
   /** Number of rewrite steps applied in this transformation session (incremented by parent on each rewrite). */
   rewriteStepCount: number
@@ -105,7 +107,7 @@ interface Props {
 
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
-  onRewrite, onUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
+  onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
   selectedTab, onSelectedTabChange, rewriteStepCount, headerSlot, style
 }: Props) {
   const initialLhs = useCallback(() => {
@@ -402,8 +404,8 @@ export function TransformationView({
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={rewriteStepCount === 0 || isProcessing}
-              className={`tr-ctrl-btn${rewriteStepCount > 0 ? ' active-undo' : ''}`}
+              disabled={!(canUndo ?? rewriteStepCount > 0) || isProcessing}
+              className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
               title="Undo"
             >↩</button>
           </div>

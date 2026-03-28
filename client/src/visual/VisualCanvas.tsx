@@ -169,6 +169,8 @@ interface ProofStepRecord {
   treeSnapshot: ProofStreamTreeNode
   canvasSnapshot: CanvasState
   activeStreamIdAfter: string | null
+  /** The transform target active when this step was applied (non-null = was a rewrite). Used by undo to navigate back to the right mode. */
+  transformTargetSnapshot: TransformTarget | null
 }
 
 interface PlacementHint {
@@ -731,6 +733,7 @@ interface VisualCanvasProps {
   worldTitle?: string | null
   worldSize?: number | null
   previouslyCompleted?: boolean
+  onLevelCompleted?: () => void
 }
 
 function TheoremTray({
@@ -738,24 +741,17 @@ function TheoremTray({
   tactics,
   activeTab,
   onTabChange,
-  onUndo,
-  canUndo,
-  isProcessing,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
   activeTab: TrayTab
   onTabChange: (tab: TrayTab) => void
-  onUndo?: (() => Promise<boolean>) | null
-  canUndo?: boolean
-  isProcessing?: boolean
 }) {
   // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
   if (tactics.length > 0) availableTabs.push('tactics')
   if (theorems.length > 0) availableTabs.push('theorems')
   const hasTray = availableTabs.length > 0
-  const hasUndo = onUndo != null && canUndo != null
   const visibleTab: TrayTab | undefined =
     activeTab === 'tactics' && tactics.length > 0
       ? 'tactics'
@@ -801,7 +797,7 @@ function TheoremTray({
     setMaxCardPx(prev => Math.abs(max - prev) > 0.5 ? max : prev)
   }, [items])
 
-  if (!hasTray && !hasUndo) return null
+  if (!hasTray) return null
 
   const GAP_PX = 12
   const itemsPerPage = pageWidth > 0 && maxCardPx > 0
@@ -848,7 +844,7 @@ function TheoremTray({
         </div>
       )}
 
-      {(availableTabs.length > 1 || hasUndo) && (
+      {availableTabs.length > 1 && (
         <div className="tr-dock-tabs">
           {availableTabs.map(tab => (
             <button
@@ -860,15 +856,6 @@ function TheoremTray({
               {tab === 'tactics' ? 'Tactics' : 'Theorems'}
             </button>
           ))}
-          {hasUndo && (
-            <button
-              className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
-              style={{ marginLeft: 'auto' }}
-              onClick={onUndo ?? undefined}
-              disabled={!canUndo || isProcessing}
-              title="Undo last step"
-            >↩</button>
-          )}
         </div>
       )}
     </div>
@@ -879,7 +866,8 @@ function TheoremTray({
 
 export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, worldId, levelId,
-  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, previouslyCompleted
+  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, previouslyCompleted,
+  onLevelCompleted
 }: VisualCanvasProps) {
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
@@ -953,6 +941,12 @@ export function VisualCanvas({
 
   // Stable game key for play log
   const logKey = `${worldId}/${levelId}`
+
+  useEffect(() => {
+    if (canvasState.completed) {
+      onLevelCompleted?.()
+    }
+  }, [canvasState.completed])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1241,6 +1235,7 @@ export function VisualCanvas({
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
+      transformTargetSnapshot: null,
     }])
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
@@ -1277,43 +1272,7 @@ export function VisualCanvas({
     setPendingTransformSync(null)
     setIsProcessing(true)
 
-    const newSteps = proofSteps.slice(0, -1)
-    const newScript = serializeProofCommands(newSteps.map(step => step.command))
-    const result = await onInteraction(newScript)
-
-    setIsProcessing(false)
-    if (result === null) return false
-
-    const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
-    const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
-      ?? collectActiveStreamIds(nextTree)[0]
-      ?? null
-    const nextCanvas = newSteps.at(-1)?.canvasSnapshot
-      ?? (newSteps.length === 0
-        ? cloneCanvasState(initialState)
-        : mergeCanvasState(proofStateToCanvas(result), canvasState))
-    setProofSteps(newSteps)
-    setProofTree(cloneProofTree(nextTree))
-    setActiveStreamId(nextActiveId)
-    setSolvedGoalId(null)
-    setTransformTarget(null)
-    setCanvasState(cloneCanvasState(nextCanvas))
-    return true
-  }
-
-  /** Like undoLastStep but stays inside TransformationView instead of closing it. */
-  async function undoInTransformationMode(): Promise<boolean> {
-    if (proofSteps.length === 0 || isProcessing) return false
-
-    const currentStreamIndex = transformTarget
-      ? canvasState.streams.findIndex(s => s.id === transformTarget.streamId)
-      : -1
-
-    setGoalChoiceMenu(null)
-    closeReductionTooltip()
-    setPendingTransformSync(null)
-    setIsProcessing(true)
-
+    const removedStep = proofSteps[proofSteps.length - 1]
     const newSteps = proofSteps.slice(0, -1)
     const newScript = serializeProofCommands(newSteps.map(step => step.command))
     const result = await onInteraction(newScript)
@@ -1335,20 +1294,26 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setCanvasState(cloneCanvasState(nextCanvas))
 
-    // Stay in transformation mode by finding the stream at the same index
-    if (transformTarget !== null && currentStreamIndex >= 0) {
-      const streams = nextCanvas.streams
-      const nextStream = streams[currentStreamIndex] ?? streams[0] ?? null
+    // Navigate to the mode where the undone step was taken.
+    // If it was a rewrite (non-null snapshot), restore transformation mode.
+    // If it was a combining step (null snapshot), go to combining mode.
+    const snapshot = removedStep.transformTargetSnapshot
+    if (snapshot !== null) {
+      // The undone step was a rewrite — find the same stream in the post-undo canvas
+      // (snapshot.streamId is the pre-rewrite stream ID, which is valid in nextCanvas).
+      const nextStream = nextCanvas.streams.find(s => s.id === snapshot.streamId)
+        ?? nextCanvas.streams[0]
+        ?? null
       if (nextStream) {
-        // Keep active stream on the one being transformed, not the step-snapshot value
         setActiveStreamId(nextStream.id)
-        if (transformTarget.kind === 'goal') {
+        if (snapshot.kind === 'goal') {
           setTransformTarget({ kind: 'goal', streamId: nextStream.id })
         } else {
-          const nextHyp = nextStream.hyps.find(h => h.hyp.names[0] === transformTarget.hypName)
+          const nextHyp = nextStream.hyps.find(h => h.hyp.names[0] === snapshot.hypName)
           if (nextHyp) {
-            setTransformTarget({ kind: 'hyp', streamId: nextStream.id, hypId: nextHyp.id, hypName: transformTarget.hypName })
+            setTransformTarget({ kind: 'hyp', streamId: nextStream.id, hypId: nextHyp.id, hypName: snapshot.hypName })
           } else {
+            setActiveStreamId(nextActiveId)
             setTransformTarget(null)
           }
         }
@@ -1849,6 +1814,7 @@ export function VisualCanvas({
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
+      transformTargetSnapshot: transformTarget,
     }])
 
     if (shouldDeferGoalCompletionUntilClose) {
@@ -2533,14 +2499,21 @@ export function VisualCanvas({
                 </div>
               </>
             )}
+            {proofSteps.length > 0 && (
+              <div className="tr-controls" style={{ zIndex: 25 }}>
+                <button
+                  onClick={() => void undoLastStep()}
+                  disabled={isProcessing}
+                  className="tr-ctrl-btn active-undo"
+                  title="Undo"
+                >↩</button>
+              </div>
+            )}
             <TheoremTray
               theorems={propositionTheorems}
               tactics={visualTactics}
               activeTab={activeTrayTab}
               onTabChange={setActiveTrayTab}
-              onUndo={undoLastStep}
-              canUndo={proofSteps.length > 0}
-              isProcessing={isProcessing}
             />
           </div>
           <DragOverlay dropAnimation={null}>
@@ -2633,7 +2606,8 @@ export function VisualCanvas({
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           onRewrite={handleRewrite}
-          onUndo={undoInTransformationMode}
+          onUndo={undoLastStep}
+          canUndo={proofSteps.length > 0}
           onClose={closeTransformationView}
           rewriteStepCount={transformationVersion}
           isReverse={isTransformReverse}

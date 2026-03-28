@@ -3,8 +3,8 @@ import { useEffect, useState, useRef, useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
-import { useAppSelector } from '../hooks'
-import { selectCompleted } from '../state/progress'
+import { useAppSelector, useAppDispatch } from '../hooks'
+import { selectCompleted, levelCompleted } from '../state/progress'
 import { LeanRpcClient } from './leanRpcClient'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
@@ -210,7 +210,13 @@ export function VisualProofPage() {
   const handleWorldMap = useCallback(() => {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
+  const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
+  const handleLevelCompleted = useCallback(() => {
+    if (levelId > 0) {
+      dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
+    }
+  }, [dispatch, gameId, worldId, levelId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
@@ -447,6 +453,7 @@ export function VisualProofPage() {
       worldTitle={worldTitle}
       worldSize={worldSize}
       previouslyCompleted={previouslyCompleted}
+      onLevelCompleted={handleLevelCompleted}
     />
   )
 }
