@@ -30,6 +30,11 @@ interface ExpectedRewriteGoal {
   rhsStr: string
 }
 
+function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
+  // Theorem cards show friendly aliases, but Lean rewrites need the real declaration name.
+  return draggedId.startsWith('thm_') ? hyp.id : hyp.label
+}
+
 /** Parse a goal equality string "lhs = rhs" into parts. Returns null if unparseable. */
 export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: string } | null {
   const idx = typeStr.indexOf(' = ')
@@ -213,7 +218,8 @@ export function TransformationView({
   const clampedPage = Math.min(pageIndex, totalPages - 1)
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
-  const staticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
+  const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
+  const staticStr = (() => { try { return printExpression(parse(rawStaticStr)) } catch { return rawStaticStr } })()
 
   useEffect(() => {
     if (!activeId) return
@@ -320,7 +326,7 @@ export function TransformationView({
     const expectedGoal = workingSide === 'right'
       ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr) }
       : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr }
-    const outcome = await onRewrite(hyp.label, isReverse, workingSide, path, expectedGoal)
+    const outcome = await onRewrite(rewriteReferenceForDrag(draggedId, hyp), isReverse, workingSide, path, expectedGoal)
     setIsProcessing(false)
 
     if (!outcome.success) {

@@ -214,6 +214,7 @@ export function VisualProofPage() {
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
+  const [worldTitle, setWorldTitle] = useState<string | null>(null)
   const [worldSize, setWorldSize] = useState<number | null>(null)
   const [theoremEqualityHyps, setTheoremEqualityHyps] = useState<EqualityHyp[]>([])
   const [propositionTheorems, setPropositionTheorems] = useState<PropositionTheorem[]>([])
@@ -285,6 +286,7 @@ export function VisualProofPage() {
     setPropositionTheorems([])
     setVisualTactics([])
     setLevelTitle(null)
+    setWorldTitle(null)
     setWorldSize(null)
     if (!worldId || !levelId) return
     let active = true
@@ -296,11 +298,13 @@ export function VisualProofPage() {
         lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
         tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
-      fetchJsonWithRetry<{ worlds?: { edges?: string[][] }; worldSize?: { [key: string]: number } }>(`${baseUrl}/${gameId}/game.json`),
+      fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
         if (!active || !levelData) return
         if (levelData.title) setLevelTitle(levelData.title)
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
+        const rawWorldTitle = gameData?.worlds?.nodes?.[worldId]?.title
+        if (rawWorldTitle) setWorldTitle(rawWorldTitle.replace(/\s*World\s*$/i, '').trim())
         const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
           levelData.lemmas ?? []
         const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
@@ -402,6 +406,7 @@ export function VisualProofPage() {
       <div className="visual-loading">
         <VisualHeader
           worldId={worldId}
+          worldTitle={worldTitle ?? undefined}
           levelId={levelId}
           levelTitle={levelTitle}
           hasPrev={levelId > 1}
@@ -439,6 +444,7 @@ export function VisualProofPage() {
       onPreviousLevel={levelId > 1 ? handlePreviousLevel : undefined}
       onWorldMap={handleWorldMap}
       levelTitle={levelTitle}
+      worldTitle={worldTitle}
       worldSize={worldSize}
       previouslyCompleted={previouslyCompleted}
     />

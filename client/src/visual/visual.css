@@ -438,6 +438,10 @@
   font-family: var(--font-family), system-ui, sans-serif;
 }
 
+.visual-page .statement-card.goal.solved .goal-prefix {
+  color: rgba(34, 197, 94, 0.8);
+}
+
 /* ── Completed state ── */
 .visual-page .visual-completed {
   display: flex;
@@ -889,6 +893,8 @@
   overflow: hidden;
   margin-left: var(--proof-sidebar-width, 0px);
   transition: margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Ensure vertical centering doesn't collide with the back button above */
+  padding-top: 4rem;
 }
 
 /* Static side label + swap button: absolutely pinned to left or right, no animation */
@@ -907,7 +913,7 @@
   right: 3rem;
 }
 .visual-page .tr-static-group.pinned-top {
-  top: 4.5rem;
+  top: calc(52px + 0.6rem + 3.5rem);
   transform: none;
 }
 

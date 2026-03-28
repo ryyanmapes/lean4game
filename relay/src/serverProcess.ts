@@ -4,6 +4,7 @@ import { IncomingMessage } from 'http';
 import * as jsonrpcserver from 'vscode-ws-jsonrpc/server';
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 type Tag = { owner: string; repo: string; };
 type ResolvedGame = Tag & { gameDir: string };
@@ -17,8 +18,9 @@ const environment = process.env.NODE_ENV;
 const isDevelopment = environment === 'development';
 
 export class GameManager {
-  queueLength: {}
-  queue: {}
+  queueLength: Record<string, number>
+  queue: Record<string, cp.ChildProcessWithoutNullStreams[]>
+  exclusiveProcessByTag: Record<string, cp.ChildProcessWithoutNullStreams | undefined>
   urlRegEx: RegExp
   dir: string
 
@@ -36,6 +38,7 @@ export class GameManager {
     };
     /** We keep queues of started Lean Server processes to be ready when a user arrives */
     this.queue = {};
+    this.exclusiveProcessByTag = {};
     this.urlRegEx = /^\/websocket\/g\/([\w.-]+)\/([\w.-]+)$/;
     this.dir = directory
 
@@ -45,8 +48,8 @@ export class GameManager {
     }
   }
 
-  startGame(req: IncomingMessage, ip: string): GameSession | null {
-    let ps: ChildProcess
+  async startGame(req: IncomingMessage, ip: string): Promise<GameSession | null> {
+    let ps: ChildProcess | undefined
     const reRes = this.urlRegEx.exec(req.url);
 
     if (!reRes) { console.error(`Connection refused because of invalid URL: ${req.url}`); return; }
@@ -58,20 +61,37 @@ export class GameManager {
     const tag = this.getTagString(resolvedGame);
     const game = `${resolvedGame.owner}/${resolvedGame.repo}`
     const customLeanServer = this.getCustomLeanServer(resolvedGame.gameDir)
+    const requiresExclusiveProcess = this.requiresExclusiveProcess(resolvedGame, customLeanServer)
 
-    const targetQueueLength = this.queueLength[tag] ?? 0
+    if (requiresExclusiveProcess) {
+      await this.stopExclusiveProcess(tag)
+    }
+
+    const shouldQueue = customLeanServer !== null
+    const targetQueueLength = shouldQueue ? (this.queueLength[tag] ?? 0) : 0
     if (targetQueueLength > 0) {
       if (!this.queue[tag]) {
         this.queue[tag] = []
       }
 
+      this.pruneQueue(tag)
+
       if (this.queue[tag].length === 0) {
         this.fillQueue(resolvedGame)
+        this.pruneQueue(tag)
       }
 
-      if (this.queue[tag].length > 0) {
+      while (this.queue[tag].length > 0 && !ps) {
+        const candidate = this.queue[tag].shift()
+        if (!this.isUsableProcess(candidate)) {
+          console.warn(`[${new Date()}] Dropped dead queued process for ${tag}`)
+          continue
+        }
         console.info('Got process from the queue');
-        ps = this.queue[tag].shift(); // Pick the first Lean process; it's likely to be ready immediately
+        ps = candidate
+      }
+
+      if (ps) {
         this.fillQueue(resolvedGame);
       } else {
         ps = this.createGameProcess(resolvedGame, customLeanServer);
@@ -83,6 +103,15 @@ export class GameManager {
     if (ps == null) {
       console.error(`[${new Date()}] server process is undefined/null`);
       return null;
+    }
+
+    if (requiresExclusiveProcess && this.isUsableProcess(ps)) {
+      this.exclusiveProcessByTag[tag] = ps
+      ps.once('exit', () => {
+        if (this.exclusiveProcessByTag[tag] === ps) {
+          delete this.exclusiveProcessByTag[tag]
+        }
+      })
     }
 
     // TODO (Matvey): extract further information from `req`, for example browser language.
@@ -113,7 +142,7 @@ export class GameManager {
           { cwd: path.dirname(customLeanServer) }
         );
       } else {
-        serverProcess = cp.spawn("lake", ["-R", "serve", "--"], { cwd: game_dir });
+        serverProcess = cp.spawn("lake", ["env", "lean", "--server"], { cwd: game_dir });
       }
     } else {
       let cmd = "../../scripts/bubblewrap.sh"
@@ -129,6 +158,12 @@ export class GameManager {
     }
 
     serverProcess.on('error', error => console.error(`[${new Date()}] Launching Lean Server failed: ${error}`));
+    serverProcess.on('exit', (code, signal) => {
+      console.warn(
+        `[${new Date()}] Lean Server exited for ${game.owner}/${game.repo}` +
+        ` (code=${code ?? 'null'}, signal=${signal ?? 'null'})`
+      )
+    })
     if (serverProcess.stderr !== null) {
       serverProcess.stderr.on('data', data => console.error(`[${new Date()}] Lean Server: ${data}`)
       );
@@ -152,15 +187,22 @@ export class GameManager {
       return;
     }
 
+    const customLeanServer = this.getCustomLeanServer(resolvedGame.gameDir)
+    if (!customLeanServer) {
+      return;
+    }
+
     if (!this.queue[tagString]) {
       this.queue[tagString] = [];
     }
+
+    this.pruneQueue(tagString)
 
     while (this.queue[tagString].length < targetQueueLength) {
       let serverProcess: cp.ChildProcessWithoutNullStreams;
       serverProcess = this.createGameProcess(
         resolvedGame,
-        this.getCustomLeanServer(resolvedGame.gameDir)
+        customLeanServer
       );
       if (serverProcess == null) {
         console.error(`[${new Date()}] serverProcess was undefined/null`);
@@ -168,6 +210,63 @@ export class GameManager {
       }
       this.queue[tagString].push(serverProcess);
     }
+  }
+
+  private isUsableProcess(process?: ChildProcess | null): process is cp.ChildProcessWithoutNullStreams {
+    return Boolean(
+      process &&
+      process.exitCode === null &&
+      process.signalCode === null &&
+      !process.killed &&
+      process.stdin &&
+      !process.stdin.destroyed &&
+      process.stdout &&
+      !process.stdout.destroyed
+    )
+  }
+
+  private pruneQueue(tag: string) {
+    const queue = this.queue[tag]
+    if (!queue?.length) {
+      return
+    }
+
+    const before = queue.length
+    this.queue[tag] = queue.filter(process => this.isUsableProcess(process))
+    const removed = before - this.queue[tag].length
+    if (removed > 0) {
+      console.warn(`[${new Date()}] Removed ${removed} dead queued process(es) for ${tag}`)
+    }
+  }
+
+  private requiresExclusiveProcess(game: ResolvedGame, customLeanServer: string | null) {
+    return isDevelopment && game.owner === 'local' && customLeanServer === null
+  }
+
+  private async stopExclusiveProcess(tag: string) {
+    const existing = this.exclusiveProcessByTag[tag]
+    if (!this.isUsableProcess(existing)) {
+      delete this.exclusiveProcessByTag[tag]
+      return
+    }
+
+    console.warn(`[${new Date()}] Waiting for prior local Lean server to exit before starting ${tag}`)
+    const exited = this.waitForProcessExit(existing)
+    existing.kill()
+    await exited
+    if (this.exclusiveProcessByTag[tag] === existing) {
+      delete this.exclusiveProcessByTag[tag]
+    }
+  }
+
+  private waitForProcessExit(process: ChildProcess) {
+    if (process.exitCode !== null || process.signalCode !== null || process.killed) {
+      return Promise.resolve()
+    }
+
+    return new Promise<void>(resolve => {
+      process.once('exit', () => resolve())
+    })
   }
 
   messageTranslation(
@@ -217,6 +316,7 @@ export class GameManager {
     let clientUri: string | null = null
 
     const PROOF_START_LINE = 2
+    const metadataUri = pathToFileURL(path.join(gameDir, 'Game', 'Metadata.lean')).toString()
 
     const gameDataPath = path.join(gameDir, '.lake', 'gamedata', `game.json`)
     const gameData = JSON.parse(fs.readFileSync(gameDataPath, 'utf8'))
@@ -253,7 +353,7 @@ export class GameManager {
         worldId = path.basename(pathParts.dir)
         levelId = pathParts.name
 
-        replaceUri(message, `file://${gameDir}/Game/Metadata.lean`)
+        replaceUri(message, metadataUri)
 
         // Read level data from JSON file
         const levelDataPath = path.join(gameDir, '.lake', 'gamedata', `level__${worldId}__${levelId}.json`)
@@ -276,7 +376,7 @@ export class GameManager {
           `(inventory := [${inventory.map(s => JSON.stringify(s)).join(',')}]) ` +
           `:= by\n${content}\n`
       } else {
-        replaceUri(message, `file://${gameDir}/Game/Metadata.lean`)
+        replaceUri(message, metadataUri)
       }
 
       shiftLines(message, +PROOF_START_LINE)

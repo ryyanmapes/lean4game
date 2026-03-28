@@ -74,9 +74,16 @@ export class GameSessionsObserver {
    * @param req
    * @param wss
    */
-  startObservedGame(ws: WebSocket, req: IncomingMessage) {
+  async startObservedGame(ws: WebSocket, req: IncomingMessage) {
     const ip = anonymize(req.headers['x-forwarded-for'] as string || req.socket.remoteAddress);
-    let gameSession: GameSession | null = this.gameManager.startGame(req, ip)
+    let gameSession: GameSession | null
+    try {
+      gameSession = await this.gameManager.startGame(req, ip)
+    } catch (error) {
+      console.error(`[${new Date()}] Failed to start game session: ${error}`)
+      ws.close(1011, 'Game unavailable')
+      return
+    }
     if (gameSession == null) {
       ws.close(1011, 'Game unavailable')
       return
@@ -85,6 +92,18 @@ export class GameSessionsObserver {
     let ps = gameSession.process
     let game = gameSession.game
     let gameDir = gameSession.gameDir
+
+    if (
+      ps.exitCode !== null ||
+      ps.signalCode !== null ||
+      ps.killed ||
+      !ps.stdin ||
+      ps.stdin.destroyed
+    ) {
+      console.warn(`[${new Date()}] Refusing websocket for exited game process on ${game}`)
+      ws.close(1011, 'Game process exited')
+      return
+    }
 
     const langRegex: RegExp = /^[a-zA-Z-]+(?=,)/
     let lang = "en-US"
@@ -112,6 +131,15 @@ export class GameSessionsObserver {
     });
     const serverConnection = jsonrpcserver.createProcessStreamConnection(this.players.get(ws).process);
 
+    const handleProcessExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      console.warn(
+        `[${new Date()}] Game process closed while websocket was open on ${game}` +
+        ` (code=${code ?? 'null'}, signal=${signal ?? 'null'})`
+      )
+      ws.close(1011, 'Game process exited')
+    }
+    ps.once('exit', handleProcessExit)
+
     this.gameManager.messageTranslation(
       socketConnection, serverConnection, gameDir, gameSession.usesCustomLeanServer
     )
@@ -127,6 +155,7 @@ export class GameSessionsObserver {
     //console.log(`[${new Date()}] Free RAM - ${Math.round(os.freemem() / 1024 / 1024)} / ${Math.round(os.totalmem() / 1024 / 1024)} MB`);
 
     ws.on('close', () => {
+      ps.off('exit', handleProcessExit)
       const player = this.players.get(ws)
       this.players.delete(ws)
       //this.socketCounter--

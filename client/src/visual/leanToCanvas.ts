@@ -1,31 +1,54 @@
 import type { InteractiveGoalWithHints, ProofState } from '../components/infoview/rpc_api'
 import type { CanvasState, GoalStream, HypCard } from './types'
 
-export function proofStateToCanvas(proof: ProofState): CanvasState {
-  // Take the last step — current proof state after all tactics
-  const lastStep = proof.steps[proof.steps.length - 1]
+function sanitizeHypDisplayName(name: string): string {
+  const sanitized = name.replace(/\u271d+$/giu, '')
+  return sanitized || name
+}
+
+export function proofStateToCanvas(proof: ProofState | null | undefined): CanvasState {
+  const steps = Array.isArray(proof?.steps) ? proof.steps : []
+  // Take the last step: current proof state after all tactics
+  const lastStep = steps[steps.length - 1]
 
   const streams = interactiveGoalsToStreams(lastStep?.goals ?? [])
 
   return {
     streams,
-    completed: Boolean(proof.completed) && streams.length === 0,
+    completed: Boolean(proof?.completed) && streams.length === 0,
   }
 }
 
 export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): GoalStream[] {
   return goals.map((goalWithHints, streamIndex) => {
     const goal = goalWithHints.goal
+    const usedDisplayNames = new Set<string>()
 
-    // Unbundle multi-name hypothesis bundles (e.g. "h1 h2 : ℕ" → two cards)
+    // Unbundle multi-name hypothesis bundles (e.g. "h1 h2 : Nat" -> two cards)
     let cardIndex = 0
     const hyps: HypCard[] = goal.hyps.flatMap((hyp) => {
-      const filteredNames = hyp.names.filter(name => !name.endsWith('✝') && name !== '[anonymous]')
-      const cards = filteredNames.map((name, nameIndex) => ({
-        id: hyp.fvarIds?.[nameIndex] ?? crypto.randomUUID(),
-        hyp: { ...hyp, names: [name] },  // one card per name, same type
-        position: gridPosition(streamIndex, cardIndex + nameIndex)
-      }))
+      const filteredNames = hyp.names
+        .map((name, nameIndex) => ({ name, nameIndex }))
+        .filter(({ name }) => name !== '[anonymous]')
+      const cards = filteredNames.map(({ name, nameIndex }) => {
+        const displayBase = sanitizeHypDisplayName(name)
+        let displayName = displayBase
+        if (usedDisplayNames.has(displayName)) {
+          let suffix = 2
+          while (usedDisplayNames.has(`${displayBase}${suffix}`)) suffix += 1
+          displayName = `${displayBase}${suffix}`
+        }
+        usedDisplayNames.add(displayName)
+        return {
+          id: hyp.fvarIds?.[nameIndex] ?? crypto.randomUUID(),
+          hyp: {
+            ...hyp,
+            names: [displayName],
+            ...(displayName !== name ? { playName: name } : {}),
+          },
+          position: gridPosition(streamIndex, cardIndex + nameIndex),
+        }
+      })
       cardIndex += filteredNames.length
       return cards
     })
@@ -47,16 +70,16 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
  * streamIndex offsets each subgoal's block horizontally.
  */
 function gridPosition(streamIndex: number, cardIndex: number): { x: number; y: number } {
-  const COL_W = 280            // generous column width (cards can be wide)
-  const ROW_H = 110            // generous row height
-  const START_X = 80           // left margin
-  const START_Y = 130          // top margin (clears any page chrome)
+  const COL_W = 280
+  const ROW_H = 110
+  const START_X = 80
+  const START_Y = 130
   const cols = 3
   const col = cardIndex % cols
   const row = Math.floor(cardIndex / cols)
   void streamIndex
   return {
     x: col * COL_W + START_X,
-    y: row * ROW_H + START_Y
+    y: row * ROW_H + START_Y,
   }
 }

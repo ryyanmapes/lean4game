@@ -3,6 +3,22 @@ import type { ProofState } from '../components/infoview/rpc_api'
 const OPEN_TIMEOUT_MS = 15000
 const REQUEST_TIMEOUT_MS = 30000
 const FILE_READY_TIMEOUT_MS = 45000
+const PROOF_STATE_MAX_ATTEMPTS = 5
+const PROOF_STATE_RETRY_DELAY_MS = 150
+
+function coerceProofState(value: any): ProofState | null {
+  if (!value || !Array.isArray(value.steps) || !Array.isArray(value.diagnostics)) {
+    return null
+  }
+
+  return {
+    ...value,
+    steps: value.steps,
+    diagnostics: value.diagnostics,
+    completed: Boolean(value.completed),
+    completedWithWarnings: Boolean(value.completedWithWarnings),
+  }
+}
 
 export class LeanRpcClient {
   private ws: WebSocket
@@ -107,18 +123,31 @@ export class LeanRpcClient {
   }
 
   private async rpcCallProofState(): Promise<ProofState> {
-    return await this.request('$/lean/rpc/call', {
-      sessionId: this.sessionId,
-      textDocument: { uri: this.uri },
-      position: { line: 0, character: 0 },
-      method: 'Game.getProofState',
-      params: {
+    for (let attempt = 0; attempt < PROOF_STATE_MAX_ATTEMPTS; attempt++) {
+      const result = await this.request('$/lean/rpc/call', {
+        sessionId: this.sessionId,
         textDocument: { uri: this.uri },
         position: { line: 0, character: 0 },
-        worldId: this.worldId,
-        levelId: this.levelId
+        method: 'Game.getProofState',
+        params: {
+          textDocument: { uri: this.uri },
+          position: { line: 0, character: 0 },
+          worldId: this.worldId,
+          levelId: this.levelId
+        }
+      })
+
+      const proof = coerceProofState(result)
+      if (proof) {
+        return proof
       }
-    })
+
+      if (attempt < PROOF_STATE_MAX_ATTEMPTS - 1) {
+        await new Promise(resolve => setTimeout(resolve, PROOF_STATE_RETRY_DELAY_MS * (attempt + 1)))
+      }
+    }
+
+    throw new Error('Lean proof state was not ready')
   }
 
   private waitForOpen(): Promise<void> {

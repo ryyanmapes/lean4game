@@ -1,13 +1,27 @@
 import * as React from 'react'
 
+// Always lowercase regardless of position (tactic names, etc.)
+const ALWAYS_LOWERCASE = new Set(['rfl', 'rw'])
+// Lowercase in the middle of a title, but capitalize as first word
+const SMALL_WORDS = new Set(['of', 'the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'with', 'and', 'but', 'or', 'nor'])
+
 function titleCaseLevel(title: string): string {
-  return title.split(' ').map(word =>
-    word.includes('_') ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-  ).join(' ')
+  return title.split(' ').map((word, index) => {
+    const lower = word.toLowerCase()
+    // Identifiers with underscores stay as-is
+    if (word.includes('_')) return word
+    // Strip surrounding punctuation to get the bare word for lookup
+    const alpha = lower.replace(/[^a-z]/g, '')
+    if (ALWAYS_LOWERCASE.has(alpha)) return lower
+    if (index > 0 && SMALL_WORDS.has(alpha)) return lower
+    // Capitalize first alphabetic character (handles leading punctuation like '(')
+    return lower.replace(/[a-z]/, c => c.toUpperCase())
+  }).join(' ')
 }
 
 interface VisualHeaderProps {
   worldId?: string
+  worldTitle?: string
   levelId: number
   levelTitle?: string | null
   hasPrev: boolean
@@ -23,6 +37,7 @@ interface VisualHeaderProps {
 
 export function VisualHeader({
   worldId,
+  worldTitle,
   levelId,
   levelTitle,
   hasPrev,
@@ -51,7 +66,7 @@ export function VisualHeader({
       <div className="visual-header-center">
         {previouslyCompleted && <span className="visual-header-check">✓</span>}
         <span className="visual-header-level">
-          {worldId ? `${worldId} - ${levelId}` : `Level ${levelId}`}
+          {(worldTitle ?? worldId) ? `${worldTitle ?? worldId} - ${levelId}` : `Level ${levelId}`}
         </span>
         {levelTitle && (
           <span className="visual-header-title">: {titleCaseLevel(levelTitle)}</span>

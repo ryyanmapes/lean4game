@@ -467,6 +467,25 @@ function findExpressionNodeAtPath(root: ExpressionNode, path?: number[]): Expres
   return current
 }
 
+function resolveRewriteHyp(
+  equalityHyps: EqualityHyp[],
+  theoremEqualityHyps: EqualityHyp[],
+  hypRef: string,
+): { hyp: EqualityHyp; isTheorem: boolean; rewriteRef: string } | null {
+  // The theorem tray is keyed by declaration name even when tests refer to the display label.
+  const theoremHyp = theoremEqualityHyps.find(hyp => hyp.id === hypRef || hyp.label === hypRef)
+  if (theoremHyp) {
+    return { hyp: theoremHyp, isTheorem: true, rewriteRef: theoremHyp.id }
+  }
+
+  const equalityHyp = equalityHyps.find(hyp => hyp.id === hypRef || hyp.label === hypRef)
+  if (equalityHyp) {
+    return { hyp: equalityHyp, isTheorem: false, rewriteRef: equalityHyp.label }
+  }
+
+  return null
+}
+
 function expectedGoalForRewrite(
   goalLhsStr: string,
   goalRhsStr: string,
@@ -479,10 +498,9 @@ function expectedGoalForRewrite(
   workingSide: 'left' | 'right',
   path?: number[],
 ): ExpectedRewriteGoal | undefined {
-  const theoremHyp = theoremEqualityHyps.find(hyp => hyp.label === hypLabel)
-  const equalityHyp = theoremHyp ? undefined : equalityHyps.find(hyp => hyp.label === hypLabel)
-  const hyp = theoremHyp ?? equalityHyp
-  if (!hyp) return undefined
+  const resolved = resolveRewriteHyp(equalityHyps, theoremEqualityHyps, hypLabel)
+  if (!resolved) return undefined
+  const { hyp, isTheorem } = resolved
 
   const workingExpr = workingSide === 'right'
     ? (goalRhsNode ?? parse(goalRhsStr))
@@ -490,7 +508,7 @@ function expectedGoalForRewrite(
   const targetNode = findExpressionNodeAtPath(workingExpr, path)
   if (!targetNode) return undefined
 
-  const rewrittenExpr = theoremHyp
+  const rewrittenExpr = isTheorem
     ? applyTheoremRewrite(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
     : applyEqualityRule(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
 
@@ -710,6 +728,7 @@ interface VisualCanvasProps {
   onPreviousLevel?: () => void
   onWorldMap?: () => void
   levelTitle?: string | null
+  worldTitle?: string | null
   worldSize?: number | null
   previouslyCompleted?: boolean
 }
@@ -860,7 +879,7 @@ function TheoremTray({
 
 export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, worldId, levelId,
-  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldSize, previouslyCompleted
+  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, previouslyCompleted
 }: VisualCanvasProps) {
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
@@ -2189,7 +2208,10 @@ export function VisualCanvas({
           path,
         )
       : undefined
-    const outcome = await handleRewrite(theoremName, false, workingSide, path, expectedGoal)
+    const rewriteRef = transformProps
+      ? resolveRewriteHyp(transformProps.equalityHyps, transformProps.theoremEqualityHyps, theoremName)?.rewriteRef ?? theoremName
+      : theoremName
+    const outcome = await handleRewrite(rewriteRef, false, workingSide, path, expectedGoal)
     if (!outcome.success) {
       throw new Error(`Rewrite with "${theoremName}" was rejected`)
     }
@@ -2353,6 +2375,7 @@ export function VisualCanvas({
         >
           <VisualHeader
             worldId={worldId}
+            worldTitle={worldTitle ?? undefined}
             levelId={levelId}
             levelTitle={levelTitle}
             hasPrev={levelId > 1}
@@ -2622,6 +2645,7 @@ export function VisualCanvas({
           headerSlot={
             <VisualHeader
               worldId={worldId}
+              worldTitle={worldTitle ?? undefined}
               levelId={levelId}
               levelTitle={levelTitle}
               hasPrev={levelId > 1}

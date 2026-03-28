@@ -175,6 +175,17 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
 
 // --- Printer ---
 
+function opPrecedence(op: Op): number {
+  return op === '*' || op === '/' ? 2 : 1
+}
+
+function needsParens(child: ExpressionNode, parentOp: Op): boolean {
+  if (child.type !== 'binary') return false
+  if (child.op === parentOp) return true
+  if (opPrecedence(child.op) < opPrecedence(parentOp)) return true
+  return false
+}
+
 export function printExpression(node: ExpressionNode): string {
   if (node.type === 'variable') return node.name
   if (node.type === 'constant') return node.value.toString()
@@ -182,8 +193,8 @@ export function printExpression(node: ExpressionNode): string {
   if (node.type === 'binary') {
     const leftStr = printExpression(node.left)
     const rightStr = printExpression(node.right)
-    const leftSafe = node.left.type === 'binary' ? `(${leftStr})` : leftStr
-    const rightSafe = node.right.type === 'binary' ? `(${rightStr})` : rightStr
+    const leftSafe = needsParens(node.left, node.op) ? `(${leftStr})` : leftStr
+    const rightSafe = needsParens(node.right, node.op) ? `(${rightStr})` : rightStr
     return `${leftSafe} ${node.op} ${rightSafe}`
   }
   return ''

@@ -3,6 +3,7 @@ import Lean.Elab.Tactic.Conv
 import Lean.Elab.Tactic.Rewrite
 import Lean.Meta.Tactic.Refl
 import Lean.Meta.Tactic.Assert
+import Lean.Meta.Tactic.Rename
 import Lean.Parser.Extension
 import GameServer.GoalClick
 
@@ -195,6 +196,28 @@ private def freshUserName (base : String) : TacticM Name := withMainContext do
     idx := idx + 1
     candidate := Name.mkSimple s!"{base}{idx + 1}"
   pure candidate
+
+private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
+  let mut ids : Std.HashSet FVarId := {}
+  for localDecl in lctx do
+    if !localDecl.isImplementationDetail then
+      ids := ids.insert localDecl.fvarId
+  ids
+
+private def renameNewestCaseHyp
+    (goal : MVarId) (originalFVarIds : Std.HashSet FVarId) (newName : Name) :
+    MetaM MVarId := goal.withContext do
+  let mut candidate? : Option FVarId := none
+  for localDecl in ← getLCtx do
+    if localDecl.isImplementationDetail || originalFVarIds.contains localDecl.fvarId then
+      continue
+    candidate? := some localDecl.fvarId
+  match candidate? with
+  | some fvarId =>
+      goal.rename fvarId newName
+  | none =>
+      throwTacticEx `click_prop goal
+        "failed to locate the new case hypothesis after splitting this disjunction"
 
 private def mkConvRwScript (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : String :=
   let rwTerm := if symm then s!"← {hName}" else s!"{hName}"
@@ -534,7 +557,19 @@ syntax (name := click_prop) "click_prop" ident : tactic
       evalTactic (← `(tactic| have $h2 := And.right $h))
       evalTactic (← `(tactic| clear $h))
     | .app (.app (.const ``Or _) _) _ =>
+      let originalFVarIds := visibleFVarIds (← getLCtx)
+      let h1 : Ident := mkIdent (← freshUserName "left")
+      let h2 : Ident := mkIdent (← freshUserName "right")
       evalTacticString s!"cases {h.getId}"
+      match ← getGoals with
+      | goalLeft :: goalRight :: rest =>
+          let goalLeft ← liftMetaMAtMain fun _ =>
+            renameNewestCaseHyp goalLeft originalFVarIds h1.getId
+          let goalRight ← liftMetaMAtMain fun _ =>
+            renameNewestCaseHyp goalRight originalFVarIds h2.getId
+          setGoals (goalLeft :: goalRight :: rest)
+      | _ =>
+          throwError "click_prop: expected two goals after splitting '{h.getId}'"
     | _ =>
       throwError "click_prop: '{h.getId}' cannot be decomposed\n\
         {h.getId} : {hDecl.type}"
@@ -574,10 +609,8 @@ example (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := by
 
 example (P Q R : Prop) (h : P ∨ Q) (hp : P → R) (hq : Q → R) : R := by
   click_prop h
-  · rename_i hp'
-    exact hp hp'
-  · rename_i hq'
-    exact hq hq'
+  · exact hp left
+  · exact hq right
 
 example (P Q : Prop) (h : P) : P ∨ Q := by
   click_goal_left
@@ -590,6 +623,10 @@ example (P Q : Prop) (h : Q) : P ∨ Q := by
 example : 0 + 0 = 0 := by
   drag_rw_lhs [Nat.add_zero]
   click_goal
+
+example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
+  drag_rw_lhs [Nat.mul_add]
+  rfl
 
 example : 0 ≠ 1 := by
   click_goal
