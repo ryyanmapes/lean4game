@@ -347,6 +347,7 @@ footer .link {
   display: flex;
   justify-content: center;
   gap: 2rem;
+  margin-top: auto;
   background: rgba(15, 23, 42, 0.7);
   border-top: 1px solid rgba(148, 163, 184, 0.1);
 }

@@ -44,10 +44,10 @@ function LandingPage() {
         <h2 className="lp-section-title">Visual Proof Mode</h2>
         <p className="lp-section-desc">Construct proofs by dragging hypotheses and tactics — no typing required.</p>
         <div className="lp-visual-links">
-          <Link to="/g/local/nng4/visual" className="lp-visual-btn">
+          <Link to="/g/leanprover-community/nng4/visual" className="lp-visual-btn">
             Natural Numbers Game
           </Link>
-          <Link to="/g/local/VisualTest/visual" className="lp-visual-btn">
+          <Link to="/g/leanprover-community/VisualTest/visual" className="lp-visual-btn">
             Visual Test
           </Link>
         </div>
