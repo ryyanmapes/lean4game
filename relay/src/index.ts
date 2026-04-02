@@ -14,6 +14,15 @@ import { WebSocketServer } from 'ws';
 
 const __dirname: string = url.fileURLToPath(new URL('.', import.meta.url));
 const clientDistPath: string = path.join(__dirname, '..', '..', '..', 'client', 'dist');
+
+// vscode-jsonrpc wraps stdin writes in Promises but leaves rejections unhandled.
+// When a Lean server process is killed, any in-flight write produces EPIPE or
+// ERR_STREAM_DESTROYED as an unhandled rejection which would otherwise crash the relay.
+process.on('unhandledRejection', (reason: any) => {
+  const code = reason?.code
+  if (code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED') return
+  console.error(`[${new Date()}] Unhandled rejection:`, reason)
+})
 const app = express()
 const gameManager = new GameManager(__dirname)
 const PORT = process.env.PORT || 8080

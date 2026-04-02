@@ -15,10 +15,14 @@ import { parseEqualityHyp } from './TransformationView'
 import type { ProofState } from '../components/infoview/rpc_api'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction'])
-const INITIAL_PROOF_MAX_ATTEMPTS = 2
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases'])
+// No retries: each retry opens a new WebSocket, which causes the relay to kill
+// the still-elaborating exclusive Lean process and restart from scratch.
+const INITIAL_PROOF_MAX_ATTEMPTS = 1
 const INITIAL_PROOF_RETRY_DELAY_MS = 2000
-const INITIAL_PROOF_ATTEMPT_TIMEOUT_MS = 45000
+// NNG4 with lake env lean --server can take several minutes to cold-start,
+// especially when build artifacts are on OneDrive. 10 minutes is conservative.
+const INITIAL_PROOF_ATTEMPT_TIMEOUT_MS = 600000
 const LEVEL_DATA_MAX_ATTEMPTS = 5
 const LEVEL_DATA_RETRY_DELAY_MS = 1000
 
@@ -219,6 +223,7 @@ export function VisualProofPage() {
   }, [dispatch, gameId, worldId, levelId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loadingSlow, setLoadingSlow] = useState(false)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
   const [worldTitle, setWorldTitle] = useState<string | null>(null)
   const [worldSize, setWorldSize] = useState<number | null>(null)
@@ -233,7 +238,10 @@ export function VisualProofPage() {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
     setCanvasState(null)
     setError(null)
+    setLoadingSlow(false)
     if (!worldId || !levelId) return
+
+    const slowTimer = window.setTimeout(() => setLoadingSlow(true), 30000)
     let active = true
     clientRef.current?.close()
     clientRef.current = null
@@ -274,6 +282,7 @@ export function VisualProofPage() {
 
     return () => {
       active = false
+      window.clearTimeout(slowTimer)
       clientRef.current?.close()
       clientRef.current = null
     }
@@ -433,6 +442,11 @@ export function VisualProofPage() {
           </div>
         </div>
         <p className="visual-loading-text">Connecting to Lean…</p>
+        {loadingSlow && (
+          <p className="visual-loading-slow">
+            Still loading — Lean may take a few minutes to start up for large games.
+          </p>
+        )}
       </div>
     )
   }

@@ -37,6 +37,9 @@ private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
     restoreState savedState
     return false
 
+private def tryApplyAt (fn premise : Ident) : TacticM Bool := do
+  tryTacticString s!"apply {fn.getId} at {premise.getId}"
+
 private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
   withMainContext do
     match (← getLCtx).findFromUserName? id.getId with
@@ -91,6 +94,12 @@ syntax (name := drag_to) "drag_to" ident ident : tactic
   let a : Ident := ⟨stx[1]⟩
   let b : Ident := ⟨stx[2]⟩
   withMainContext do
+    if ← tryApplyAt b a then
+      return
+
+    if ← tryApplyAt a b then
+      return
+
     let (aExpr, aTypeRaw) ← resolveNamedExprAndType a
     let (bExpr, bTypeRaw) ← resolveNamedExprAndType b
     let aType ← whnf aTypeRaw
@@ -125,19 +134,13 @@ syntax (name := drag_goal) "drag_goal" ident : tactic
       evalTactic (← `(tactic| exact $h))
       return
 
-    if let .forallE _ _ body _ := hType then
-      if ← isDefEq body goal then
-        evalTactic (← `(tactic| apply $h))
-        return
-
     if let .app (.app (.app (.const ``Eq _) _) _) _ := hType then
       if ← tryRewrite h.raw false then return
       if ← tryRewrite h.raw true then return
 
-    -- Fallback: try `apply h` directly. This handles theorems whose type has
-    -- universal quantifiers (e.g. `∀ P, P → P`) where the `body` check above
-    -- fails because `P` is a bound variable (de Bruijn #0), not a metavariable.
-    -- Lean's `apply` uses full unification so it handles this correctly.
+    -- Let Lean's own `apply` drive higher-order matching for implications and
+    -- quantified theorems. Trying to compare a raw `forall` body against the
+    -- goal here can hit unexpected bound variables (e.g. `Nat.zero_le`).
     if ← tryTactic (← `(tactic| apply $h)) then return
 
     throwError "drag_goal: '{h.getId}' cannot be used here.\n\
@@ -194,7 +197,7 @@ private def freshUserName (base : String) : TacticM Name := withMainContext do
   let mut candidate := Name.mkSimple base
   while lctx.findFromUserName? candidate |>.isSome do
     idx := idx + 1
-    candidate := Name.mkSimple s!"{base}{idx + 1}"
+    candidate := Name.mkSimple s!"{base}{idx}"
   pure candidate
 
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
@@ -570,6 +573,16 @@ syntax (name := click_prop) "click_prop" ident : tactic
           setGoals (goalLeft :: goalRight :: rest)
       | _ =>
           throwError "click_prop: expected two goals after splitting '{h.getId}'"
+    | .app (.app (.const ``Exists _) _) pred =>
+      -- Introduce the witness and condition from ∃ x, P x using `have ⟨v, hv⟩ := h; clear h`.
+      -- This is pure core Lean 4: names are fixed up-front (no inaccessible-name issues).
+      let binderName := match pred with
+        | .lam n _ _ _ => n
+        | _ => `w
+      let varIdent  : Ident := mkIdent (← freshUserName binderName.toString)
+      let condIdent : Ident := mkIdent (← freshUserName "h")
+      evalTactic (← `(tactic| have ⟨$varIdent, $condIdent⟩ := $h))
+      evalTactic (← `(tactic| clear $h))
     | _ =>
       throwError "click_prop: '{h.getId}' cannot be decomposed\n\
         {h.getId} : {hDecl.type}"
@@ -637,6 +650,26 @@ example (P Q : Prop) (h : False) : P ∧ Q := by
 
 example (n : Nat) (h : False) : n = 42 := by
   drag_goal h
+
+private theorem flipEqLocal (x y : Nat) : x = y → y = x := by
+  intro h
+  exact h.symm
+
+example (x y : Nat) (h : x = y) : y = x := by
+  drag_to flipEqLocal h
+  exact h
+
+private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
+  intro _
+  rfl
+
+example (x y : Nat) (h : x + y = x) : y = y := by
+  drag_to addEqSelfLocal h
+  exact h
+
+example (y : Nat) : 0 <= y ∨ True := by
+  click_goal_left
+  drag_goal Nat.zero_le
 
 end Regression
 

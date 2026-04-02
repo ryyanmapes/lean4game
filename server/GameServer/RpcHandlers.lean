@@ -618,7 +618,7 @@ private def freshUserName (base : String) : MetaM Name := do
   let mut candidate := Name.mkSimple base
   while lctx.findFromUserName? candidate |>.isSome do
     idx := idx + 1
-    candidate := Name.mkSimple s!"{base}{idx + 1}"
+    candidate := Name.mkSimple s!"{base}{idx}"
   pure candidate
 
 private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal.withContext do
@@ -891,6 +891,25 @@ def tryEqualityTree (e : Expr) : MetaM (Option EqualityTree) := do
       return some { lhs := lhsTree, rhs := rhsTree, isRefl }
   | _ => return none
 
+/-- If `e` is (or unfolds to) `@Exists α (fun x => body)`, return the bound variable name and
+    a pretty-printed body string.  Uses default-transparency `whnf` so that definitions like
+    `Nat.le` (which is `∃ k, n + k = m` in NNG4) are unfolded even if not `@[reducible]`. -/
+private def tryExistsInfoFromExpr (e : Expr) : MetaM (Option ExistsInfo) := do
+  match e.consumeMData with
+  | .app (.app (.const ``Exists _) _) pred =>
+      Meta.lambdaTelescope pred fun fvars body => do
+        match fvars[0]? with
+        | none => return none
+        | some fvar =>
+            let varName := (← fvar.fvarId!.getDecl).userName.toString
+            let bodyStr := (← ppExpr body).pretty
+            return some { varName, body := bodyStr }
+  | _ => return none
+
+def tryExistsInfo (e : Expr) : MetaM (Option ExistsInfo) := do
+  if let some info ← tryExistsInfoFromExpr e then return some info
+  tryExistsInfoFromExpr (← whnf e)
+
 private def directClickAction (playTactic tooltip : String) : ClickAction :=
   { playTactic? := some playTactic, tooltip? := some tooltip }
 
@@ -936,7 +955,14 @@ private def hypClickAction? (hypName : String) (fvarId : FVarId) : MetaM (Option
   | .app (.app (.const ``Or _) _) _ =>
       pure <| some (splitClickAction s!"click_prop {hypName}" "Click to split into cases")
   | _ =>
-      pure none
+      -- For existentials, also try default-transparency whnf so that non-reducible definitions
+      -- that expand to `∃ x, P x` (e.g. `MyNat.le`) are detected.
+      let hypTypeFull ← whnf (← inferType (.fvar fvarId))
+      match hypTypeFull with
+      | .app (.app (.const ``Exists _) _) _ =>
+          pure <| some (directClickAction s!"click_prop {hypName}" "Click to introduce witness and condition")
+      | _ =>
+          pure none
 
 private def interactiveGoalWithHintsForGoal (levelId : LevelId) (goal : MVarId) :
     MetaM InteractiveGoalWithHints := do
@@ -947,7 +973,7 @@ private def interactiveGoalWithHintsForGoal (levelId : LevelId) (goal : MVarId) 
   -- Populate equalityTree? for hyps and the goal itself.
   -- Both must be inside `goal.withContext` so that the MetaM local context
   -- contains the goal's fvars when `exprToTree` calls `withReducible (whnf ·)`.
-  let (interactiveGoalWithTrees, goalTree, goalReductionForms) ← goal.withContext do
+  let (interactiveGoalWithTrees, goalTree, goalExistsInfo, goalReductionForms) ← goal.withContext do
     let mut hypsWithTrees : Array InteractiveHypothesisBundle := #[]
     for hypBundle in interactiveGoal.hyps do
       let fvarIds := hypBundle.fvarIds
@@ -975,17 +1001,19 @@ private def interactiveGoalWithHintsForGoal (levelId : LevelId) (goal : MVarId) 
             clickAction? := clickAction
           }
     let goalTree ← tryEqualityTree (← goal.getType)
+    let goalExistsInfo ← tryExistsInfo (← goal.getType)
     let goalReductionForms ← reductionFormsForExpr (← goal.getType)
     let goalClickAction ← goalClickAction? goal
     return ({ interactiveGoal with
       hyps := hypsWithTrees
       reductionForms := goalReductionForms
       clickAction? := goalClickAction
-    }, goalTree, goalReductionForms)
+    }, goalTree, goalExistsInfo, goalReductionForms)
   return {
     goal := interactiveGoalWithTrees
     hints := hints
     equalityTree? := goalTree
+    existsInfo? := goalExistsInfo
     reductionForms := goalReductionForms
   }
 

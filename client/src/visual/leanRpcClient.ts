@@ -2,7 +2,7 @@ import type { ProofState } from '../components/infoview/rpc_api'
 
 const OPEN_TIMEOUT_MS = 15000
 const REQUEST_TIMEOUT_MS = 30000
-const FILE_READY_TIMEOUT_MS = 45000
+const FILE_READY_TIMEOUT_MS = 600000
 const PROOF_STATE_MAX_ATTEMPTS = 5
 const PROOF_STATE_RETRY_DELAY_MS = 150
 
@@ -268,6 +268,14 @@ export class LeanRpcClient {
       } else {
         resolve(msg.result)
       }
+      return
+    }
+
+    // Server-initiated request (has id + method, not in our pending map).
+    // LSP requires the client to send a null response; without it Lean blocks
+    // waiting for the acknowledgment and never sends the final $/lean/fileProgress.
+    if (msg.id !== undefined && msg.method !== undefined) {
+      this.send({ jsonrpc: '2.0', id: msg.id, result: null })
       return
     }
 

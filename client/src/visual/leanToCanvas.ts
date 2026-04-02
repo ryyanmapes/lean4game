@@ -58,6 +58,7 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
       goal,
       hyps,
       equalityTree: goalWithHints.equalityTree,
+      existsInfo: goalWithHints.existsInfo,
       reductionForms: goalWithHints.reductionForms ?? goal.reductionForms,
     }
   })

@@ -41,6 +41,7 @@ interface GoalCardProps {
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
   onMouseLeave?: () => void
   isTransformable?: boolean
+  isConstructable?: boolean
   isClickable?: boolean
   clickTooltip?: string
   isSolved?: boolean
@@ -55,6 +56,7 @@ export function GoalCard({
   onContextMenu,
   onMouseLeave,
   isTransformable,
+  isConstructable,
   isClickable,
   clickTooltip,
   isSolved,
@@ -67,20 +69,24 @@ export function GoalCard({
     'statement-card',
     'goal',
     isTransformable ? 'transformable' : '',
+    isConstructable ? 'constructable' : '',
     isClickable ? 'clickable' : '',
     isOver ? 'drop-target-active' : '',
     isSolved ? 'solved' : '',
   ].filter(Boolean).join(' ')
 
-  const title = isClickable && isTransformable
+  const doubleClickHint = isConstructable
+    ? 'Double-click to propose a witness'
+    : isTransformable
+      ? 'Double-click to open transformation view'
+      : undefined
+  const title = isClickable && doubleClickHint
     ? clickTooltip
-      ? `${clickTooltip}. Double-click to open transformation view`
-      : 'Double-click to open transformation view'
+      ? `${clickTooltip}. ${doubleClickHint}`
+      : doubleClickHint
     : isClickable
       ? clickTooltip
-      : isTransformable
-        ? 'Double-click to open transformation view'
-        : undefined
+      : doubleClickHint
 
   React.useEffect(() => {
     return () => {

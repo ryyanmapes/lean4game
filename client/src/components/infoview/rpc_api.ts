@@ -24,6 +24,13 @@ export interface EqualityTree {
   isRefl: boolean;
 }
 
+/** Mirrors `GameServer.ExistsInfo` from Structures.lean.
+ *  Populated when the goal type (possibly after unfolding) is `∃ x, P x`. */
+export interface ExistsInfo {
+  varName: string;
+  body: string;
+}
+
 export interface ClickActionOption {
   label: string;
   playTactic: string;
@@ -98,6 +105,8 @@ export interface InteractiveGoalWithHints {
   hints: GameHint[];
   /** If the goal type is `lhs = rhs`, the parsed equality tree (else absent). */
   equalityTree?: EqualityTree;
+  /** If the goal type is (or unfolds to) `∃ x, P x`, the bound variable and body (else absent). */
+  existsInfo?: ExistsInfo;
   /** Backend-rendered forms obtained only from reducible unfolding. */
   reductionForms?: string[];
 }

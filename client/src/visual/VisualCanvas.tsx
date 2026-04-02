@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useState, useLayoutEffect, useCallback, useEffect, useRef } from 'react'
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, pointerWithin, rectIntersection, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
+import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
@@ -12,6 +13,8 @@ import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, Proposition
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
 import { parseEqualityHyp, parseGoalEquality, TransformationView } from './TransformationView'
 import type { EqualityHyp } from './TransformationView'
+import { ConstructionView } from './ConstructionView'
+import { contextualizeExistsDisplay, contextualizeReductionForms } from './existsDisplay'
 import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
@@ -160,6 +163,11 @@ function cloneCanvasState(canvas: CanvasState): CanvasState {
   }
 }
 
+function streamHypNames(stream?: GoalStream | null): string[] {
+  if (!stream) return []
+  return stream.hyps.flatMap(card => card.hyp.names).filter((name): name is string => Boolean(name))
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ProofStepRecord {
@@ -265,8 +273,18 @@ interface VisualCanvasTestHarness {
   clickGoal: (playTactic?: string) => Promise<void>
   openGoalTransform: () => void
   openHypTransform: (hypName: string) => void
-  rewriteGoalInTransform: (theoremName: string, workingSide?: 'left' | 'right', path?: number[]) => Promise<void>
-  rewriteHypInTransform: (theoremName: string, workingSide?: 'left' | 'right', path?: number[]) => Promise<void>
+  rewriteGoalInTransform: (
+    theoremName: string,
+    workingSide?: 'left' | 'right',
+    path?: number[],
+    isReverse?: boolean,
+  ) => Promise<void>
+  rewriteHypInTransform: (
+    theoremName: string,
+    workingSide?: 'left' | 'right',
+    path?: number[],
+    isReverse?: boolean,
+  ) => Promise<void>
   closeTransform: () => void
   getTransformStatus: () => {
     isOpen: boolean
@@ -374,6 +392,10 @@ function goalIsTransformable(stream: GoalStream): boolean {
   return stream.equalityTree !== undefined || parsedGoalEquality(stream) !== null
 }
 
+function goalIsConstructable(stream: GoalStream): boolean {
+  return stream.existsInfo !== undefined
+}
+
 function hypIsTransformable(card: HypCardType): boolean {
   return card.hyp.equalityTree !== undefined || parsedHypEquality(card) !== null
 }
@@ -407,8 +429,17 @@ function stripOuterParens(text: string): string {
   return current
 }
 
+function canonicalFormula(text: string): string {
+  const normalized = stripOuterParens(text)
+  try {
+    return `expr:${printExpression(parse(normalized))}`
+  } catch {
+    return `raw:${normalized}`
+  }
+}
+
 function formulasMatch(left: string, right: string): boolean {
-  return stripOuterParens(left) === stripOuterParens(right)
+  return canonicalFormula(left) === canonicalFormula(right)
 }
 
 function cloneHypCards(cards: HypCardType[]): HypCardType[] {
@@ -552,10 +583,6 @@ function isConjunctionText(text: string): boolean {
   return normalized.includes('∧') || normalized.startsWith('And ') || normalized.includes(' And ')
 }
 
-function isDisjunctionText(text: string): boolean {
-  const normalized = stripOuterParens(text)
-  return normalized.includes('∨') || normalized.startsWith('Or ') || normalized.includes(' Or ')
-}
 
 function extractImplicationTarget(text: string): string | null {
   const normalized = stripOuterParens(text)
@@ -597,15 +624,15 @@ function inferLeanTacticFromVisualInteraction(
   if (playTactic.startsWith('click_prop ')) {
     const hypName = playTactic.slice('click_prop '.length).trim()
     const hypCard = findHypCardByName(stream, hypName)
-    if (!hypCard) return null
-    const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
-    if (isConjunctionText(hypType)) {
-      return `have left := And.left ${hypName}; have right := And.right ${hypName}; clear ${hypName}`
+    // And is the only case that doesn't use cases-style elimination.
+    // Or, Exists, and non-reducible defs like `le` all eliminate via cases.
+    if (hypCard) {
+      const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
+      if (isConjunctionText(hypType)) {
+        return `have left := And.left ${hypName}; have right := And.right ${hypName}; clear ${hypName}`
+      }
     }
-    if (isDisjunctionText(hypType)) {
-      return `cases ${hypName}`
-    }
-    return null
+    return `cases ${hypName}`
   }
 
   if (playTactic.startsWith('induction ')) return playTactic
@@ -613,7 +640,13 @@ function inferLeanTacticFromVisualInteraction(
   if (playTactic.startsWith('drag_goal ')) {
     const hypName = playTactic.slice('drag_goal '.length).trim()
     const hypCard = findHypCardByName(stream, hypName)
-    if (!hypCard || !stream) return null
+    if (!stream) return null
+    if (!hypCard) {
+      // Theorem cards dragged from the lower tray are not local hypotheses, so
+      // there is no context entry to inspect here. `drag_goal` handles these by
+      // applying the named theorem directly, which is the best Lean view fallback.
+      return `apply ${hypName}`
+    }
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
     if (hypType === 'False') {
       return `exfalso\nexact ${hypName}`
@@ -645,7 +678,7 @@ function resolveLeanTactic(
   if (annotationLeanTactic) return annotationLeanTactic
   const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream)
   if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
-  if (command !== playTactic && !isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
+  if (!isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
   return null
 }
 
@@ -708,7 +741,8 @@ function stripCasePrefixes(tactic: string | null): string | null {
 function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
   const leanCommands = steps.map(step => {
     const { casePath } = parseFocusedCommand(step.command)
-    const leaf = stripCasePrefixes(step.leanTactic) ?? `-- ? (${step.playTactic})`
+    const leaf = stripCasePrefixes(step.leanTactic)
+      ?? (isVisualOnlyPlayTactic(step.playTactic) ? `-- ? (${step.playTactic})` : step.playTactic)
     return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf)
   })
   return serializeProofCommands(leanCommands)
@@ -741,11 +775,15 @@ function TheoremTray({
   tactics,
   activeTab,
   onTabChange,
+  pageIndexByTab,
+  onPageIndexChange,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
   activeTab: TrayTab
   onTabChange: (tab: TrayTab) => void
+  pageIndexByTab: Record<TrayTab, number>
+  onPageIndexChange: (tab: TrayTab, pageIndex: number) => void
 }) {
   // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
@@ -762,9 +800,8 @@ function TheoremTray({
     visibleTab === 'tactics' ? tactics : visibleTab === 'theorems' ? theorems : []
 
   const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
-  const [pageIndex, setPageIndex] = useState(0)
   const [pageWidth, setPageWidth] = useState(0)
-  const [maxCardPx, setMaxCardPx] = useState(0)
+  const [maxCardPxByTab, setMaxCardPxByTab] = useState<Partial<Record<TrayTab, number>>>({})
   const dockCardsRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
 
@@ -790,21 +827,27 @@ function TheoremTray({
   // Use max card width (not average) so no card ever overflows the page.
   useLayoutEffect(() => {
     const el = pageRef.current
-    if (!el) return
+    if (!el || !visibleTab) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.statement-card'))
     if (!cards.length) return
     const max = cards.reduce((m, c) => Math.max(m, c.offsetWidth), 0)
-    setMaxCardPx(prev => Math.abs(max - prev) > 0.5 ? max : prev)
-  }, [items])
+    setMaxCardPxByTab(prev => {
+      const prevMax = prev[visibleTab] ?? 0
+      if (Math.abs(max - prevMax) <= 0.5) return prev
+      return { ...prev, [visibleTab]: max }
+    })
+  }, [items, visibleTab])
 
   if (!hasTray) return null
 
   const GAP_PX = 12
+  const maxCardPx = visibleTab ? (maxCardPxByTab[visibleTab] ?? 0) : 0
   const itemsPerPage = pageWidth > 0 && maxCardPx > 0
     ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
     : items.length
   const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage))
-  const clampedPage = Math.min(pageIndex, totalPages - 1)
+  const desiredPage = visibleTab ? (pageIndexByTab[visibleTab] ?? 0) : 0
+  const clampedPage = Math.min(desiredPage, totalPages - 1)
   const pageItems = items.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
 
   return (
@@ -817,7 +860,10 @@ function TheoremTray({
         <div className="tr-dock-cards" ref={dockCardsRef}>
           <button
             className="tr-nav-btn"
-            onClick={() => setPageIndex(p => Math.max(0, p - 1))}
+            onClick={() => {
+              if (!visibleTab) return
+              onPageIndexChange(visibleTab, Math.max(0, clampedPage - 1))
+            }}
             disabled={clampedPage === 0 || items.length === 0}
             aria-label="Previous"
           >‹</button>
@@ -830,14 +876,15 @@ function TheoremTray({
                   : <PropositionTheoremTemplateCard key={(item as PropositionTheorem).id} theorem={item as PropositionTheorem} />
               )}
             </div>
-            {totalPages > 1 && (
-              <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
-            )}
+            <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
           </div>
 
           <button
             className="tr-nav-btn"
-            onClick={() => setPageIndex(p => Math.min(totalPages - 1, p + 1))}
+            onClick={() => {
+              if (!visibleTab) return
+              onPageIndexChange(visibleTab, Math.min(totalPages - 1, clampedPage + 1))
+            }}
             disabled={clampedPage >= totalPages - 1 || items.length === 0}
             aria-label="Next"
           >›</button>
@@ -851,7 +898,7 @@ function TheoremTray({
               key={tab}
               type="button"
               className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}`}
-              onClick={() => { onTabChange(tab); setPageIndex(0) }}
+              onClick={() => onTabChange(tab)}
             >
               {tab === 'tactics' ? 'Tactics' : 'Theorems'}
             </button>
@@ -898,10 +945,12 @@ export function VisualCanvas({
   }, [propositionTheorems])
 
   const [transformTarget, setTransformTarget] = useState<TransformTarget | null>(null)
+  const [constructionTarget, setConstructionTarget] = useState<{ streamId: string } | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
   const [transformWorkingSide, setTransformWorkingSide] = useState<'left' | 'right'>('right')
   const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
+  const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>([])
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
@@ -913,7 +962,9 @@ export function VisualCanvas({
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>('theorems')
+  const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
   const [isProcessing, setIsProcessing] = useState(false)
+  const [trayHeight, setTrayHeight] = useState(0)
   const [showProofSidebar, setShowProofSidebar] = useState<boolean>(() => {
     try { return localStorage.getItem('visual-proof-sidebar-open') === 'true' } catch { return false }
   })
@@ -974,6 +1025,15 @@ export function VisualCanvas({
     }
   }, [activeTrayTab, propositionTheorems.length, visualTactics.length])
 
+  useEffect(() => {
+    const el = document.getElementById(THEOREM_TRAY_ID)
+    if (!el) { setTrayHeight(0); return }
+    const observer = new ResizeObserver(() => setTrayHeight(el.offsetHeight))
+    observer.observe(el)
+    setTrayHeight(el.offsetHeight)
+    return () => observer.disconnect()
+  }, [propositionTheorems.length, visualTactics.length])
+
   useLayoutEffect(() => {
     setCanvasState(prev => {
       const obstacleIds = prev.streams.map(s => s.id)
@@ -990,6 +1050,11 @@ export function VisualCanvas({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
+
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const pointerCollisions = pointerWithin(args)
+    return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
+  }, [])
 
   useEffect(() => {
     const navigableIds = collectActiveStreamIds(proofTree)
@@ -1363,7 +1428,10 @@ export function VisualCanvas({
     if (tacticTemplate) {
       if (goalIds.has(overId as string)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
-        applyInteraction(playTactic, activeId, { solvedGoalId: overId as string })
+        applyInteraction(playTactic, activeId, {
+          solvedGoalId: overId as string,
+          targetStreamId: overId as string,
+        })
         return
       }
 
@@ -1373,6 +1441,11 @@ export function VisualCanvas({
       if (targetCard && targetStream && targetName) {
         if (tacticTemplate.name === 'induction') {
           const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetName })
+          applyInteraction(playTactic, activeId, { streamSplit: true })
+          return
+        }
+        if (tacticTemplate.name === 'cases') {
+          const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
           applyInteraction(playTactic, activeId, { streamSplit: true })
           return
         }
@@ -1397,7 +1470,10 @@ export function VisualCanvas({
       if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName })
-          applyInteraction(playTactic, activeId, { solvedGoalId: overId as string })
+          applyInteraction(playTactic, activeId, {
+            solvedGoalId: overId as string,
+            targetStreamId: overId as string,
+          })
           return
         }
 
@@ -1451,6 +1527,7 @@ export function VisualCanvas({
         const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName })
         applyInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
+          targetStreamId: overId as string,
           consumedTheoremCopyIds: sourceTheoremCopy ? [sourceTheoremCopy.id] : undefined,
         })
       } else {
@@ -1556,6 +1633,7 @@ export function VisualCanvas({
     event: React.MouseEvent<HTMLDivElement>,
     anchorId: string,
     forms?: string[],
+    contextNames: string[] = [],
   ) {
     event.preventDefault()
     setGoalChoiceMenu(null)
@@ -1566,7 +1644,7 @@ export function VisualCanvas({
     showReductionTooltip({
       anchorId,
       pos: reductionTooltipPosition(event.currentTarget),
-      forms,
+      forms: contextualizeReductionForms(forms, contextNames),
     })
   }
 
@@ -1634,8 +1712,17 @@ export function VisualCanvas({
   function handleGoalDoubleClick(streamId: string) {
     if (isProcessing || canvasState.completed) return
     const stream = canvasState.streams.find(s => s.id === streamId)
-    if (!stream || !goalIsTransformable(stream)) return
+    if (!stream) return
     closeReductionTooltip()
+
+    // Existential goal → construction mode
+    if (goalIsConstructable(stream)) {
+      setSolvedGoalId(null)
+      setConstructionTarget({ streamId })
+      return
+    }
+
+    if (!goalIsTransformable(stream)) return
     setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
@@ -1676,6 +1763,84 @@ export function VisualCanvas({
     setCanvasState(pendingSync.nextCanvas)
     setSolvedGoalId(null)
     setTransformTarget(null)
+  }
+
+  function closeConstructionView() {
+    setConstructionTarget(null)
+  }
+
+  /** Called by ConstructionView when the player clicks Done ›.
+   *  Sends `use <expr>` to Lean and returns whether it was accepted. */
+  async function handleUse(exprStr: string): Promise<boolean> {
+    if (isProcessing) return false
+    const focusedStream = constructionTarget
+      ? canvasState.streams.find(s => s.id === constructionTarget.streamId) ?? null
+      : null
+    if (!focusedStream) return false
+
+    const playTactic = `use ${exprStr}`
+    const command = focusCommandForStream(playTactic, focusedStream, proofTree)
+    closeReductionTooltip()
+    setIsProcessing(true)
+
+    const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
+    const result = await onInteraction(newScript)
+    setIsProcessing(false)
+
+    const lastStep = result?.steps.at(-1)
+    const leanTactic = result
+      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream)
+      : null
+
+    appendPlayLog(logKey, {
+      timestamp: Date.now(),
+      playTactic,
+      leanTactic,
+      succeeded: result !== null,
+    })
+
+    if (result === null) return false
+
+    const leanCanvas = proofStateToCanvas(result)
+    const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
+    const exactFocusedStreams = lastStep?.focusedGoals !== undefined
+      ? interactiveGoalsToStreams(lastStep.focusedGoals)
+      : undefined
+    const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
+      proofTree,
+      canvasState,
+      mergedCanvas,
+      focusedStream,
+      playTactic,
+      false,
+      activeStreamId,
+      exactFocusedStreams,
+    )
+
+    setProofSteps(prev => [...prev, {
+      command,
+      playTactic,
+      leanTactic,
+      treeSnapshot: cloneProofTree(nextTree),
+      canvasSnapshot: cloneCanvasState(nextCanvas),
+      activeStreamIdAfter: nextActiveId,
+      transformTargetSnapshot: null,
+    }])
+
+    setProofTree(nextTree)
+    setActiveStreamId(nextActiveId)
+
+    if (leanCanvas.completed) {
+      setCanvasState(prev => ({ ...prev, completed: true }))
+      window.setTimeout(() => {
+        setCanvasState(nextCanvas)
+        setDisplayCanvasState(leanCanvas)
+      }, 700)
+    } else {
+      setCanvasState(nextCanvas)
+    }
+
+    return true
   }
 
   /** Called by TransformationView when a rewrite drag succeeds visually.
@@ -1967,6 +2132,26 @@ export function VisualCanvas({
     }
   })()
 
+  // ── Build ConstructionView props ─────────────────────────────────────────────
+
+  const constructionProps = (() => {
+    if (!constructionTarget) return null
+    const stream = canvasState.streams.find(s => s.id === constructionTarget.streamId)
+    if (!stream?.existsInfo) return null
+    const natVarNames = stream.hyps
+      .filter(card => {
+        const t = TaggedText_stripTags(card.hyp.type).trim()
+        return t === 'ℕ' || t === 'Nat'
+      })
+      .map(card => card.hyp.names[0])
+      .filter((n): n is string => !!n)
+    const existingHypNames = new Set(
+      stream.hyps.flatMap(card => card.hyp.names).filter((n): n is string => !!n)
+    )
+    const displayExistsInfo = contextualizeExistsDisplay(stream.existsInfo, existingHypNames)
+    return { varName: displayExistsInfo.varName, goalBody: displayExistsInfo.body, contextVarNames: natVarNames }
+  })()
+
   const activeStreamIds = collectActiveStreamIds(proofTree)
   const liveStreamIds = collectLiveStreamIds(proofTree)
   const renderCanvasState = canvasState.streams.length > 0
@@ -2055,7 +2240,10 @@ export function VisualCanvas({
     })
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
-    await latestApplyInteraction(playTactic, sourceCard.id, { solvedGoalId: stream.id })
+    await latestApplyInteraction(playTactic, sourceCard.id, {
+      solvedGoalId: stream.id,
+      targetStreamId: stream.id,
+    })
   }
 
   async function applyTestDragHypToHyp(sourceName: string, targetName: string) {
@@ -2081,6 +2269,15 @@ export function VisualCanvas({
 
     if (tacticName === 'induction') {
       const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetPlayName })
+      await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
+        streamSplit: true,
+        targetStreamId: stream.id,
+      })
+      return
+    }
+
+    if (tacticName === 'cases') {
+      const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetPlayName })
       await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
         streamSplit: true,
         targetStreamId: stream.id,
@@ -2156,6 +2353,7 @@ export function VisualCanvas({
     theoremName: string,
     workingSide: 'left' | 'right' = 'left',
     path?: number[],
+    isReverse = false,
   ) {
     if (transformTarget === null) {
       throw new Error('No transformation session is open')
@@ -2169,7 +2367,7 @@ export function VisualCanvas({
           transformProps.equalityHyps,
           transformProps.theoremEqualityHyps,
           theoremName,
-          false,
+          isReverse,
           workingSide,
           path,
         )
@@ -2177,7 +2375,7 @@ export function VisualCanvas({
     const rewriteRef = transformProps
       ? resolveRewriteHyp(transformProps.equalityHyps, transformProps.theoremEqualityHyps, theoremName)?.rewriteRef ?? theoremName
       : theoremName
-    const outcome = await handleRewrite(rewriteRef, false, workingSide, path, expectedGoal)
+    const outcome = await handleRewrite(rewriteRef, isReverse, workingSide, path, expectedGoal)
     if (!outcome.success) {
       throw new Error(`Rewrite with "${theoremName}" was rejected`)
     }
@@ -2187,22 +2385,24 @@ export function VisualCanvas({
     theoremName: string,
     workingSide: 'left' | 'right' = 'left',
     path?: number[],
+    isReverse = false,
   ) {
     if (transformTarget?.kind !== 'goal') {
       throw new Error('No goal transformation session is open')
     }
-    await applyTestRewriteInTransform(theoremName, workingSide, path)
+    await applyTestRewriteInTransform(theoremName, workingSide, path, isReverse)
   }
 
   async function applyTestRewriteHypInTransform(
     theoremName: string,
     workingSide: 'left' | 'right' = 'left',
     path?: number[],
+    isReverse = false,
   ) {
     if (transformTarget?.kind !== 'hyp') {
       throw new Error('No hypothesis transformation session is open')
     }
-    await applyTestRewriteInTransform(theoremName, workingSide, path)
+    await applyTestRewriteInTransform(theoremName, workingSide, path, isReverse)
   }
 
   function closeTestTransform() {
@@ -2324,6 +2524,7 @@ export function VisualCanvas({
     <>
       <DndContext
         sensors={sensors}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={() => {
@@ -2420,7 +2621,7 @@ export function VisualCanvas({
                   isTransformable={streamInteractionsEnabled && isTransformable}
                   onClickAction={streamInteractionsEnabled && isClickable && displayStream ? () => handleHypClick(displayStream.id, card.id, clickAction) : undefined}
                   onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleHypDoubleClick(card.id) : undefined}
-                  onContextMenu={(event) => handleReductionContextMenu(event, card.id, card.hyp.reductionForms)}
+                  onContextMenu={(event) => handleReductionContextMenu(event, card.id, card.hyp.reductionForms, streamHypNames(displayStream))}
                   onMouseLeave={() => handleReductionMouseLeave(card.id)}
                 />
               )
@@ -2442,6 +2643,7 @@ export function VisualCanvas({
                 const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
                 const isClickable = hasClickAction(clickAction)
                 const isTransformable = goalIsTransformable(liveGoalStream)
+                const isConstructable = goalIsConstructable(liveGoalStream)
                 return (
                   <GoalCard
                     key={stream.id}
@@ -2449,12 +2651,13 @@ export function VisualCanvas({
                     goal={stream.goal}
                     isInteractive={streamInteractionsEnabled}
                     isTransformable={streamInteractionsEnabled && isTransformable}
+                    isConstructable={streamInteractionsEnabled && isConstructable}
                     isClickable={streamInteractionsEnabled && isClickable}
                     clickTooltip={clickAction?.tooltip}
                     isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
                     onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
-                    onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
-                    onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms)}
+                    onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
+                    onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms, streamHypNames(liveGoalStream))}
                     onMouseLeave={() => handleReductionMouseLeave(stream.id)}
                   />
                 )
@@ -2499,23 +2702,36 @@ export function VisualCanvas({
                 </div>
               </>
             )}
-            {proofSteps.length > 0 && (
-              <div className="tr-controls" style={{ zIndex: 25 }}>
-                <button
-                  onClick={() => void undoLastStep()}
-                  disabled={isProcessing}
-                  className="tr-ctrl-btn active-undo"
-                  title="Undo"
-                >↩</button>
-              </div>
-            )}
             <TheoremTray
               theorems={propositionTheorems}
               tactics={visualTactics}
               activeTab={activeTrayTab}
               onTabChange={setActiveTrayTab}
+              pageIndexByTab={trayPageIndexByTab}
+              onPageIndexChange={(tab, pageIndex) => {
+                setTrayPageIndexByTab(prev =>
+                  prev[tab] === pageIndex ? prev : { ...prev, [tab]: pageIndex }
+                )
+              }}
             />
           </div>
+          {proofSteps.length > 0 && (
+            <div
+              className="tr-controls"
+              style={{
+                bottom: `calc(2rem + ${trayHeight}px)`,
+                left: 'calc(var(--proof-sidebar-width, 0px) + 2rem)',
+                zIndex: 20,
+              }}
+            >
+              <button
+                onClick={() => void undoLastStep()}
+                disabled={isProcessing}
+                className="tr-ctrl-btn active-undo"
+                title="Undo"
+              >↩</button>
+            </div>
+          )}
           <DragOverlay dropAnimation={null}>
             {activeDraggedTheorem
               ? <PropositionTheoremPreviewCard theorem={activeDraggedTheorem} />
@@ -2574,14 +2790,19 @@ export function VisualCanvas({
                     ? (() => {
                         const { casePath } = parseFocusedCommand(step.command)
                         const leaf = stripCasePrefixes(step.leanTactic)
-                        if (!leaf) return `? (${step.playTactic})`
+                        if (!leaf) {
+                          const fallback = isVisualOnlyPlayTactic(step.playTactic)
+                            ? `? (${step.playTactic})`
+                            : step.playTactic
+                          return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback)
+                        }
                         return shortenQualifiedNames(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
                       })()
                     : (() => {
                         const { casePath } = parseFocusedCommand(step.command)
                         return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic)
                       })()
-                  const isUnknown = sideViewMode === 'lean' && !step.leanTactic
+                  const isUnknown = sideViewMode === 'lean' && !step.leanTactic && isVisualOnlyPlayTactic(step.playTactic)
                   return (
                     <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
                       <span className="proof-sidebar-step-num">{i + 1}</span>
@@ -2593,6 +2814,36 @@ export function VisualCanvas({
           </div>
         </div>
       </div>
+
+      {/* Construction overlay — outside the canvas DndContext, same as transformation overlay */}
+      {constructionProps && (
+        <ConstructionView
+          key={constructionTarget?.streamId ?? ''}
+          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
+          varName={constructionProps.varName}
+          goalBody={constructionProps.goalBody}
+          contextVarNames={constructionProps.contextVarNames}
+          onApply={handleUse}
+          onClose={closeConstructionView}
+          isProcessing={isProcessing}
+          headerSlot={
+            <VisualHeader
+              worldId={worldId}
+              worldTitle={worldTitle ?? undefined}
+              levelId={levelId}
+              levelTitle={levelTitle}
+              hasPrev={levelId > 1}
+              hasNext={worldSize == null || levelId < worldSize}
+              isCompleted={canvasState.completed}
+              previouslyCompleted={previouslyCompleted ?? false}
+              onPrev={onPreviousLevel ?? (() => {})}
+              onNext={onNextLevel ?? (() => {})}
+              onWorldMap={onWorldMap ?? (() => {})}
+              hideNav
+            />
+          }
+        />
+      )}
 
       {/* Transformation overlay — outside the canvas DndContext to avoid nesting */}
       {transformProps && (
@@ -2616,6 +2867,12 @@ export function VisualCanvas({
           onWorkingSideChange={setTransformWorkingSide}
           selectedTab={transformSelectedTab}
           onSelectedTabChange={setTransformSelectedTab}
+          pageIndexByTab={transformPageIndexByTab}
+          onPageIndexChange={(tabId, pageIndex) => {
+            setTransformPageIndexByTab(prev =>
+              prev[tabId] === pageIndex ? prev : { ...prev, [tabId]: pageIndex }
+            )
+          }}
           headerSlot={
             <VisualHeader
               worldId={worldId}

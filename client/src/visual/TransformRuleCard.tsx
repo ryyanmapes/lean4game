@@ -1,24 +1,50 @@
 import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
+import { parse, printExpression } from './expr-engine'
+import type { ExpressionNode } from './expr-types'
 
 interface EqualityHypCardProps {
   dragId: string
-  label: string    // e.g. "h"
+  label: string
   lhsStr: string
   rhsStr: string
+  lhsNode?: ExpressionNode
+  rhsNode?: ExpressionNode
   isReverse: boolean
   isFailing?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
 
-export function EqualityHypCard({ dragId, label, lhsStr, rhsStr, isReverse, isFailing = false, onMouseEnter, onMouseLeave }: EqualityHypCardProps) {
+function formatRuleExpr(expr: string, node?: ExpressionNode): string {
+  if (node) return printExpression(node)
+  try {
+    return printExpression(parse(expr))
+  } catch {
+    return expr
+  }
+}
+
+export function EqualityHypCard({
+  dragId,
+  label,
+  lhsStr,
+  rhsStr,
+  lhsNode,
+  rhsNode,
+  isReverse,
+  isFailing = false,
+  onMouseEnter,
+  onMouseLeave,
+}: EqualityHypCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dragId,
     data: { equalityHyp: true },
   })
 
-  const symbol = isReverse ? `${rhsStr} → ${lhsStr}` : `${lhsStr} → ${rhsStr}`
+  const formattedLhs = formatRuleExpr(lhsStr, lhsNode)
+  const formattedRhs = formatRuleExpr(rhsStr, rhsNode)
+  const symbol = isReverse ? `${formattedRhs} \u2192 ${formattedLhs}` : `${formattedLhs} \u2192 ${formattedRhs}`
 
   return (
     <div

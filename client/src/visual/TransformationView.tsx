@@ -99,6 +99,9 @@ interface Props {
   /** Controlled selected tab — lifted to parent so it survives remounts between rewrites. */
   selectedTab: string
   onSelectedTabChange: (v: string) => void
+  /** Remembered desired page per tab — lifted to parent so rewrites/remounts preserve it. */
+  pageIndexByTab: Record<string, number>
+  onPageIndexChange: (tabId: string, pageIndex: number) => void
   /** Optional header bar rendered at the top of the overlay. */
   headerSlot?: React.ReactNode
   /** Applied to the overlay root div (e.g. for sidebar-offset positioning). */
@@ -108,7 +111,7 @@ interface Props {
 export function TransformationView({
   goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
-  selectedTab, onSelectedTabChange, rewriteStepCount, headerSlot, style
+  selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -128,12 +131,14 @@ export function TransformationView({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
-  const [pageIndex, setPageIndex] = useState(0)
   const [pageWidth, setPageWidth] = useState(0)
+  const [maxCardWidthsByTab, setMaxCardWidthsByTab] = useState<Record<string, number>>({})
+  const [ruleDockHeight, setRuleDockHeight] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const exprWrapperRef = useRef<HTMLDivElement>(null)
   const staticGroupRef = useRef<HTMLDivElement>(null)
+  const ruleDockRef = useRef<HTMLDivElement>(null)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
 
   useEffect(() => {
@@ -188,7 +193,6 @@ export function TransformationView({
   useEffect(() => {
     if (!tabs.find(t => t.id === selectedTab)) {
       onSelectedTabChange(tabs[0]?.id ?? 'hyps')
-      setPageIndex(0)
     }
   }, [tabs, selectedTab])
 
@@ -200,24 +204,48 @@ export function TransformationView({
     return allRules.filter(r => r.dragId.startsWith('thm_') && r.category === selectedTab)
   }, [allRules, selectedTab])
 
-  // avgCardPx: measured after each commit from actual rendered card widths.
-  // Defaults to 0 (unknown) so we show all cards until the first measurement.
-  const [avgCardPx, setAvgCardPx] = useState(0)
+  // Use the widest rendered card seen for the current tab so pagination stays stable
+  // when reverse-mode text is narrower than forward-mode text.
   useLayoutEffect(() => {
     const el = pageRef.current
     if (!el) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
     if (!cards.length) return
-    const avg = cards.reduce((s, c) => s + c.offsetWidth, 0) / cards.length
-    setAvgCardPx(prev => Math.abs(avg - prev) > 0.5 ? avg : prev)
-  }, [tabRules])
+    const max = cards.reduce((widest, card) => Math.max(widest, card.offsetWidth), 0)
+    setMaxCardWidthsByTab(prev => {
+      const prevMax = prev[selectedTab] ?? 0
+      const nextMax = Math.max(prevMax, max)
+      if (Math.abs(nextMax - prevMax) <= 0.5) return prev
+      return { ...prev, [selectedTab]: nextMax }
+    })
+  }, [tabRules, selectedTab, isReverse, pageWidth, pageIndexByTab])
+
+  useLayoutEffect(() => {
+    const dock = ruleDockRef.current
+    if (!dock) return
+
+    const updateHeight = () => {
+      const nextHeight = dock.offsetHeight
+      setRuleDockHeight(prev => (Math.abs(prev - nextHeight) <= 0.5 ? prev : nextHeight))
+    }
+
+    updateHeight()
+
+    if (typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(() => updateHeight())
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [selectedTab, tabRules.length, isProcessing])
 
   const GAP_PX = 12
-  const itemsPerPage = (pageWidth > 0 && avgCardPx > 0)
-    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (avgCardPx + GAP_PX)))
+  const maxCardPx = maxCardWidthsByTab[selectedTab] ?? 0
+  const itemsPerPage = (pageWidth > 0 && maxCardPx > 0)
+    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
     : tabRules.length  // show all until measured
+  const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
-  const clampedPage = Math.min(pageIndex, totalPages - 1)
+  const clampedPage = Math.min(desiredPage, totalPages - 1)
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
@@ -401,7 +429,14 @@ export function TransformationView({
           </div>
 
           {/* Undo */}
-          <div className="tr-controls">
+          <div
+            className="tr-controls"
+            style={{
+              position: 'fixed',
+              left: '2rem',
+              bottom: `calc(2rem + ${ruleDockHeight}px)`,
+            }}
+          >
             <button
               onClick={handleUndo}
               disabled={!(canUndo ?? rewriteStepCount > 0) || isProcessing}
@@ -422,12 +457,16 @@ export function TransformationView({
         </div>
 
         {/* Rule dock */}
-        <div className="tr-rule-dock" onContextMenu={e => { e.preventDefault(); onIsReverseChange(!isReverse) }}>
+        <div
+          className="tr-rule-dock"
+          ref={ruleDockRef}
+          onContextMenu={e => { e.preventDefault(); onIsReverseChange(!isReverse) }}
+        >
           {/* Cards row */}
           <div className="tr-dock-cards">
             <button
               className="tr-nav-btn"
-              onClick={() => { setPageIndex(p => Math.max(0, p - 1)); setHoveredId(null) }}
+              onClick={() => { onPageIndexChange(selectedTab, Math.max(0, clampedPage - 1)); setHoveredId(null) }}
               disabled={clampedPage === 0 || tabRules.length === 0 || isProcessing}
               aria-label="Previous rule"
             >‹</button>
@@ -443,6 +482,8 @@ export function TransformationView({
                         label={rule.label}
                         lhsStr={rule.lhsStr}
                         rhsStr={rule.rhsStr}
+                        lhsNode={rule.lhs}
+                        rhsNode={rule.rhs}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         onMouseEnter={() => setHoveredId(rule.dragId)}
@@ -450,18 +491,19 @@ export function TransformationView({
                       />
                     ))}
                   </div>
-                  {totalPages > 1 && (
-                    <span className="tr-page-indicator">{clampedPage + 1} / {totalPages}</span>
-                  )}
+                  <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
                 </>
               ) : (
-                <span className="tr-no-rules">No rules available</span>
+                <>
+                  <span className="tr-no-rules">No rules available</span>
+                  <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
+                </>
               )}
             </div>
 
             <button
               className="tr-nav-btn"
-              onClick={() => { setPageIndex(p => Math.min(totalPages - 1, p + 1)); setHoveredId(null) }}
+              onClick={() => { onPageIndexChange(selectedTab, Math.min(totalPages - 1, clampedPage + 1)); setHoveredId(null) }}
               disabled={clampedPage >= totalPages - 1 || tabRules.length === 0 || isProcessing}
               aria-label="Next rule"
             >›</button>
@@ -474,7 +516,7 @@ export function TransformationView({
                 <button
                   key={tab.id}
                   className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
-                  onClick={() => { onSelectedTabChange(tab.id); setPageIndex(0); setHoveredId(null) }}
+                  onClick={() => { onSelectedTabChange(tab.id); setHoveredId(null) }}
                 >
                   {tab.label}
                 </button>

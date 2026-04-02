@@ -235,3 +235,146 @@ footer .link {
 .info .languages span + span {
   margin-left: .5em;
 }
+
+/* ── Dark landing page ─────────────────────────────────────────────────────── */
+
+.landing-page-dark {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.landing-page-dark .lp-header {
+  padding: 0;
+  background: transparent;
+}
+
+.landing-page-dark .landing-page-nav {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.landing-page-dark .lp-title-area {
+  padding: 3rem 2rem 2.5rem;
+  text-align: center;
+}
+
+.landing-page-dark .lp-title {
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.landing-page-dark .lp-subtitle {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.landing-page-dark .lp-subtitle a {
+  color: #a78bfa;
+  text-decoration: underline dotted;
+}
+
+.landing-page-dark .lp-subtitle a:hover {
+  color: #c4b5fd;
+}
+
+/* Visual mode section */
+.landing-page-dark .lp-visual-section {
+  padding: 2rem 2rem 3rem;
+  text-align: center;
+  background: rgba(139, 92, 246, 0.06);
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.landing-page-dark .lp-section-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 0 0 0.5rem;
+}
+
+.landing-page-dark .lp-section-desc {
+  color: #94a3b8;
+  font-size: 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.landing-page-dark .lp-visual-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.landing-page-dark .lp-visual-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.landing-page-dark .lp-visual-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+
+.landing-page-dark .lp-visual-btn {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  border: 1px solid #8b5cf6;
+}
+
+/* Footer */
+.landing-page-dark .lp-footer {
+  padding: 2rem 2rem;
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  background: rgba(15, 23, 42, 0.7);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.landing-page-dark .lp-footer .link {
+  color: #64748b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.landing-page-dark .lp-footer .link:hover {
+  color: #94a3b8;
+}
+
+/* Override inherited stripe backgrounds and header nav for dark landing */
+.landing-page-dark header nav {
+  background-color: transparent;
+}
+
+.landing-page-dark > section,
+.landing-page-dark > section:nth-of-type(odd),
+.landing-page-dark > section:nth-of-type(even) {
+  background: transparent;
+  font-size: inherit;
+  padding: 0;
+}
+
+.landing-page-dark > section.lp-visual-section {
+  padding: 2rem 2rem 3rem;
+}

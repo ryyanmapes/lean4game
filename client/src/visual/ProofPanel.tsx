@@ -12,6 +12,10 @@ interface ProofPanelProps {
   onClose: () => void
 }
 
+function isVisualOnlyPlayTactic(playTactic: string): boolean {
+  return playTactic.startsWith('click_') || playTactic.startsWith('drag_')
+}
+
 /** Strip all `case X =>` prefixes from a lean tactic string. */
 function stripCasePrefixes(tactic: string | null): string | null {
   if (!tactic) return tactic
@@ -59,7 +63,9 @@ function leanTacticDisplay(step: ProofStep): string | null {
 
 export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelProps) {
   const leanProof = leanProofScript
-    ?? proofSteps.map(s => s.leanTactic ?? `-- ? (${s.playTactic})`).join('\n')
+    ?? proofSteps
+      .map(s => s.leanTactic ?? (isVisualOnlyPlayTactic(s.playTactic) ? `-- ? (${s.playTactic})` : s.playTactic))
+      .join('\n')
 
   function handleCopy() {
     navigator.clipboard.writeText(leanProof).catch(() => {})
@@ -88,12 +94,13 @@ export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelP
             <tbody>
               {proofSteps.map((step, i) => {
                 const display = leanTacticDisplay(step)
+                const isUnknown = !display && isVisualOnlyPlayTactic(step.playTactic)
                 return (
                   <tr key={i}>
                     <td className="play-tactic">{step.playTactic}</td>
                     <td className="arrow-cell">→</td>
-                    <td className={`lean-tactic${!display ? ' unknown' : ''}`}>
-                      {display ?? `? (${step.playTactic})`}
+                    <td className={`lean-tactic${isUnknown ? ' unknown' : ''}`}>
+                      {display ?? (isUnknown ? `? (${step.playTactic})` : step.playTactic)}
                     </td>
                   </tr>
                 )

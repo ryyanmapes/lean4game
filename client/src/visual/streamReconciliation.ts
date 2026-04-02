@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { CanvasState, GoalStream, HypCard as HypCardType } from './types'
+import { parse, printExpression } from './expr-engine'
 import {
   branchLeafStream,
   collectActiveStreamIds,
@@ -257,7 +258,12 @@ function splitEqualityTarget(text: string): [string, string] | null {
 }
 
 function normalizePropositionText(text: string): string {
-  return stripOuterParens(text).replace(/\s+/g, ' ').trim()
+  const normalized = stripOuterParens(text).replace(/\s+/g, ' ').trim()
+  try {
+    return printExpression(parse(normalized))
+  } catch {
+    return normalized
+  }
 }
 
 function hasUsableClickAction(
@@ -761,6 +767,56 @@ function synthesizeInductionStreams(
   return [zeroStream, succStream]
 }
 
+function synthesizeCasesStreams(
+  focusedStream: GoalStream,
+  hypName: string,
+): GoalStream[] {
+  const targetCard = focusedStream.hyps.find(card => card.hyp.names[0] === hypName)
+  if (!targetCard) return []
+
+  const hypsWithoutTarget = focusedStream.hyps.filter(card => card.hyp.names[0] !== hypName)
+
+  // Zero case: the variable is 0, remove it from context
+  const zeroStream: GoalStream = {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      userName: 'zero',
+      reductionForms: [],
+    },
+    hyps: cloneHypCards(hypsWithoutTarget),
+    reductionForms: [],
+  }
+
+  // Successor case: introduce a predecessor variable with the same name
+  const predName = nextFreshHypName(hypsWithoutTarget, hypName)
+  const predCard: HypCardType = {
+    id: uuidv4(),
+    hyp: {
+      names: [predName],
+      type: { text: 'ℕ' },
+      reductionForms: [],
+    },
+    position: synthesizedCardPosition(hypsWithoutTarget.length),
+  }
+  const succStream: GoalStream = {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: {
+      ...focusedStream.goal,
+      mvarId: undefined,
+      userName: 'succ',
+      reductionForms: [],
+    },
+    hyps: [...cloneHypCards(hypsWithoutTarget), predCard],
+    reductionForms: [],
+  }
+
+  return [zeroStream, succStream]
+}
+
 function synthesizeSplitStreamsForInteraction(
   focusedStream: GoalStream,
   playTactic?: string,
@@ -773,6 +829,11 @@ function synthesizeSplitStreamsForInteraction(
   if (playTactic?.startsWith('induction ')) {
     const hypName = playTactic.slice('induction '.length).trim()
     return synthesizeInductionStreams(focusedStream, hypName)
+  }
+
+  if (playTactic?.startsWith('cases ')) {
+    const hypName = playTactic.slice('cases '.length).trim()
+    return synthesizeCasesStreams(focusedStream, hypName)
   }
 
   return synthesizeSplitStreams(focusedStream)

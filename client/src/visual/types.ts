@@ -1,4 +1,4 @@
-import type { InteractiveHypothesisBundle, InteractiveGoal, EqualityTree } from '../components/infoview/rpc_api'
+import type { InteractiveHypothesisBundle, InteractiveGoal, EqualityTree, ExistsInfo } from '../components/infoview/rpc_api'
 
 /** A single draggable hypothesis card on the canvas. */
 export interface HypCard {
@@ -14,6 +14,8 @@ export interface GoalStream {
   hyps: HypCard[]
   /** Parsed equality tree for the goal type, if the goal is `lhs = rhs`. */
   equalityTree?: EqualityTree
+  /** Bound variable and body if the goal is (or unfolds to) `∃ x, P x`. */
+  existsInfo?: ExistsInfo
   /** Backend-rendered forms obtained only from reducible unfolding. */
   reductionForms?: string[]
 }

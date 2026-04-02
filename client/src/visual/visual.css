@@ -197,6 +197,12 @@
   margin: 0;
 }
 
+.visual-loading-slow {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
 /* ── Canvas: free-form absolute-position workspace ── */
 .visual-page .combining-canvas {
   position: relative;
@@ -489,6 +495,14 @@
 }
 .visual-page .statement-card.goal.transformable:hover {
   box-shadow: 0 0 30px rgba(234, 179, 8, 0.7), 0 0 60px rgba(234, 179, 8, 0.4);
+}
+
+/* ── Constructable goal hint (∃ goals) ── */
+.visual-page .statement-card.goal.constructable {
+  cursor: pointer;
+}
+.visual-page .statement-card.goal.constructable:hover {
+  box-shadow: 0 0 30px rgba(167, 139, 250, 0.6), 0 0 60px rgba(167, 139, 250, 0.35);
 }
 
 /* ── Clickable goal: cursor hint only, no colour change ── */
@@ -959,6 +973,7 @@
   display: flex;
   gap: 1rem;
   z-index: 25;
+  transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Swap / Reverse — bottom-right */
@@ -1115,8 +1130,11 @@
 }
 
 .visual-page .tr-page-indicator {
+  text-align: center;
   font-size: 0.65rem;
   color: #475569;
+  line-height: 1rem;
+  min-height: 1rem;
 }
 
 .visual-page .tr-no-rules {
@@ -1719,4 +1737,196 @@
 
 .visual-map-scroll::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* ============================================
+   Construction Mode Overlay
+   ============================================ */
+
+/* Override main-area to column layout for the propose header + term display */
+.visual-page .tr-main-area.cn-main-area {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+}
+
+/* "Propose x such that P x" header */
+.visual-page .cn-propose-label {
+  text-align: center;
+  line-height: 1.6;
+}
+
+.visual-page .cn-propose-keyword {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.visual-page .cn-propose-var {
+  color: #c4b5fd;
+  font-weight: 700;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.visual-page .cn-propose-body {
+  color: #fbbf24;
+}
+
+/* Term display — scaled up like .tr-expr-wrapper */
+.visual-page .cn-term-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(1.5);
+  min-height: 3rem;
+}
+
+/* Empty slot — dashed purple box */
+.visual-page .cn-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8rem;
+  min-height: 1.8rem;
+  padding: 0.15rem 0.55rem;
+  border: 2px dashed rgba(167, 139, 250, 0.55);
+  border-radius: 6px;
+  background: rgba(167, 139, 250, 0.07);
+  color: #a78bfa;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+.visual-page .cn-slot:hover {
+  border-color: rgba(167, 139, 250, 0.85);
+  background: rgba(167, 139, 250, 0.14);
+}
+.visual-page .cn-slot.selected {
+  border-color: #a78bfa;
+  border-style: solid;
+  background: rgba(167, 139, 250, 0.22);
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.45);
+}
+
+/* Filled atoms */
+.visual-page .cn-atom {
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+  color: #f8fafc;
+}
+.visual-page .cn-var { color: #c4b5fd; }
+.visual-page .cn-num { color: #fbbf24; }
+
+/* Expression containers */
+.visual-page .cn-expr {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.visual-page .cn-func-name {
+  color: #60a5fa;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+}
+
+.visual-page .cn-op {
+  color: #94a3b8;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+  padding: 0 0.05rem;
+}
+
+.visual-page .cn-paren {
+  color: #64748b;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+}
+
+/* Brick dock: override tr-dock-cards to wrap and center */
+.visual-page .cn-dock-cards {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 5rem;
+  padding: 0.85rem 1rem 0.6rem;
+}
+
+/* Slot drop-hover (brick dragged over it) */
+.visual-page .cn-slot.drop-hover {
+  border-color: #a78bfa;
+  border-style: solid;
+  background: rgba(167, 139, 250, 0.28);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.5);
+}
+
+/* Brick cards */
+.visual-page .cn-brick {
+  padding: 0.55rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: manipulation;
+}
+.visual-page .cn-brick.dragging {
+  opacity: 0;
+}
+.visual-page .cn-brick:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(167, 139, 250, 0.45);
+}
+.visual-page .cn-brick:disabled,
+.visual-page .cn-brick.disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.visual-page .cn-brick-label {
+  pointer-events: none;
+}
+
+/* Done button — replaces the reverse (↕) button position */
+.visual-page .cn-done-btn {
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--font-family), system-ui, sans-serif;
+  cursor: default;
+  opacity: 0.4;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+.visual-page .cn-done-btn.ready {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.55);
+  color: #4ade80;
+  cursor: pointer;
+  opacity: 1;
+}
+.visual-page .cn-done-btn.ready:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.25);
+}
+.visual-page .cn-done-btn.error {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #f87171;
+  opacity: 1;
+}
+.visual-page .cn-done-btn:disabled {
+  cursor: default;
 }

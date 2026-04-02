@@ -158,6 +158,13 @@ export class GameManager {
     }
 
     serverProcess.on('error', error => console.error(`[${new Date()}] Launching Lean Server failed: ${error}`));
+    // Suppress EPIPE on stdin: occurs when the relay writes to a process that has already exited.
+    // Without this handler the error propagates as an unhandled rejection and crashes Node.
+    serverProcess.stdin?.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code !== 'EPIPE') {
+        console.error(`[${new Date()}] Lean Server stdin error: ${err}`)
+      }
+    })
     serverProcess.on('exit', (code, signal) => {
       console.warn(
         `[${new Date()}] Lean Server exited for ${game.owner}/${game.repo}` +

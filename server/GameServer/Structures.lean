@@ -60,6 +60,13 @@ structure EqualityTree where
   isRefl : Bool
   deriving FromJson, ToJson
 
+/-- Bound variable name and pretty-printed body of an existential goal.
+    Populated when the goal type (possibly after unfolding) is `∃ x, P x`. -/
+structure ExistsInfo where
+  varName : String
+  body    : String
+  deriving FromJson, ToJson
+
 /-- One backend-provided click choice for the visual proof UI. -/
 structure ClickActionOption where
   label : String
@@ -141,6 +148,9 @@ structure InteractiveGoalWithHints where
   hints : Array GameHint
   /-- If the goal type is `lhs = rhs`, the parsed equality tree (else none). -/
   equalityTree? : Option EqualityTree := none
+  /-- If the goal type is (or unfolds to) `∃ x, P x`, the bound variable name and
+      pretty-printed body; used by the frontend construction mode. -/
+  existsInfo? : Option ExistsInfo := none
   /-- Backend-rendered forms obtained only from reducible unfolding, shown in the
       visual proof UI on right-click. -/
   reductionForms : Array String := #[]
