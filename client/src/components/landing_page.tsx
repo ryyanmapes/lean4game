@@ -42,7 +42,7 @@ function LandingPage() {
       {/* Visual Mode feature section */}
       <section className="lp-visual-section">
         <h2 className="lp-section-title">Visual Proof Mode</h2>
-        <p className="lp-section-desc">Construct proofs by dragging hypotheses and tactics — no typing required.</p>
+        <p className="lp-section-desc">An experimental drag-and-drop interface for working in Lean.</p>
         <div className="lp-visual-links">
           <Link to="/g/leanprover-community/nng4/visual" className="lp-visual-btn">
             Natural Numbers Game

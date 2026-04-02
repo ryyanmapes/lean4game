@@ -240,12 +240,13 @@ export function TransformationView({
 
   const GAP_PX = 12
   const maxCardPx = maxCardWidthsByTab[selectedTab] ?? 0
+  const hasRules = tabRules.length > 0
   const itemsPerPage = (pageWidth > 0 && maxCardPx > 0)
     ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
-    : tabRules.length  // show all until measured
+    : Math.max(1, tabRules.length)  // show all until measured, but keep empty tabs safe
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
-  const clampedPage = Math.min(desiredPage, totalPages - 1)
+  const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
@@ -467,12 +468,12 @@ export function TransformationView({
             <button
               className="tr-nav-btn"
               onClick={() => { onPageIndexChange(selectedTab, Math.max(0, clampedPage - 1)); setHoveredId(null) }}
-              disabled={clampedPage === 0 || tabRules.length === 0 || isProcessing}
+              disabled={clampedPage === 0 || !hasRules || isProcessing}
               aria-label="Previous rule"
             >‹</button>
 
-            <div className="tr-rule-page" ref={pageRef}>
-              {tabRules.length > 0 ? (
+            <div className={`tr-rule-page${hasRules ? '' : ' empty'}`} ref={pageRef}>
+              {hasRules ? (
                 <>
                   <div className="tr-rule-page-cards">
                     {pageItems.map(rule => (
@@ -494,17 +495,17 @@ export function TransformationView({
                   <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
                 </>
               ) : (
-                <>
+                <div className="tr-rule-page-empty">
                   <span className="tr-no-rules">No rules available</span>
                   <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
-                </>
+                </div>
               )}
             </div>
 
             <button
               className="tr-nav-btn"
               onClick={() => { onPageIndexChange(selectedTab, Math.min(totalPages - 1, clampedPage + 1)); setHoveredId(null) }}
-              disabled={clampedPage >= totalPages - 1 || tabRules.length === 0 || isProcessing}
+              disabled={clampedPage >= totalPages - 1 || !hasRules || isProcessing}
               aria-label="Next rule"
             >›</button>
           </div>

@@ -868,6 +868,8 @@
   display: flex;
   flex-direction: column;
   z-index: 50;
+  --tr-overlay-dock-min-height: 5.7rem;
+  --tr-overlay-rule-row-height: 3.45rem;
 }
 
 /* Back button — just right of the proof tab toggle, shifts with sidebar */
@@ -1038,6 +1040,12 @@
   min-height: 6.5rem;
 }
 
+.visual-page.tr-overlay .tr-dock-cards {
+  gap: 0.6rem;
+  padding: 0.75rem 0.75rem 0.45rem;
+  min-height: var(--tr-overlay-dock-min-height);
+}
+
 .visual-page .tr-dock-tabs {
   display: flex;
   flex-direction: row;
@@ -1059,6 +1067,10 @@
   transition: color 0.15s, border-color 0.15s, background 0.15s;
   white-space: nowrap;
   letter-spacing: 0.01em;
+}
+
+.visual-page.tr-overlay .tr-tab-btn {
+  padding: 0.8rem 0.85rem;
 }
 .visual-page .tr-tab-btn:last-child {
   border-right: none;
@@ -1094,6 +1106,11 @@
   touch-action: manipulation;
   transition: background 0.15s, color 0.15s;
 }
+
+.visual-page.tr-overlay .tr-nav-btn {
+  width: 3.25rem;
+  border-radius: 10px;
+}
 .visual-page .tr-nav-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
   color: #e2e8f0;
@@ -1112,6 +1129,12 @@
   min-width: 0;
 }
 
+.visual-page.tr-overlay .tr-rule-page {
+  gap: 0.3rem;
+  justify-content: center;
+  min-height: calc(var(--tr-overlay-rule-row-height) + 1rem);
+}
+
 .visual-page .tr-rule-page-cards {
   display: flex;
   flex-direction: row;
@@ -1120,6 +1143,11 @@
   flex-wrap: nowrap;
   width: 100%;
   overflow: hidden;
+}
+
+.visual-page.tr-overlay .tr-rule-page-cards {
+  min-height: var(--tr-overlay-rule-row-height);
+  align-items: stretch;
 }
 
 /* Cards in paginated context size to content; flex-shrink: 0 keeps them at natural width
@@ -1135,6 +1163,16 @@
   color: #475569;
   line-height: 1rem;
   min-height: 1rem;
+}
+
+.visual-page .tr-rule-page-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: calc(var(--tr-overlay-rule-row-height) + 0.25rem);
+  width: 100%;
 }
 
 .visual-page .tr-no-rules {
@@ -1159,6 +1197,17 @@
   transition: background 0.2s, box-shadow 0.2s;
   flex-shrink: 0;
 }
+
+.visual-page.tr-overlay .tr-rule-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--tr-overlay-rule-row-height);
+  max-width: min(20rem, calc(100vw - 14rem));
+  padding: 0.6rem 0.9rem;
+  overflow: hidden;
+}
+
 .visual-page .tr-rule-card:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -1174,6 +1223,16 @@
   font-family: var(--font-family), system-ui, sans-serif;
   white-space: nowrap;
 }
+
+.visual-page.tr-overlay .tr-rule-card h3,
+.visual-page.tr-overlay .tr-symbol {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .visual-page .tr-symbol {
   font-family: 'Cambria Math', 'Latin Modern Math', monospace;
   color: #cbd5e1;
