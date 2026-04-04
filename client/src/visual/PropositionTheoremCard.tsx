@@ -1,13 +1,16 @@
 import * as React from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import type { PropositionTheorem, PropositionTheoremCopy } from './types'
+import { formatFormulaText } from './expr-engine'
 
 function PropositionTheoremContent({ theorem }: { theorem: PropositionTheorem }) {
+  const proposition = formatFormulaText(theorem.proposition)
+
   return (
     <>
       <span className="hyp-name">{theorem.label}</span>
       <span className="hyp-colon">:</span>
-      <span className="proposition">{theorem.proposition}</span>
+      <span className="proposition">{proposition}</span>
     </>
   )
 }

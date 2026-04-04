@@ -3,6 +3,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import type { HypCard as HypCardType } from './types'
+import { formatFormulaText } from './expr-engine'
 
 interface HypCardProps {
   card: HypCardType
@@ -76,7 +77,7 @@ export function HypCard({
       ? 'Double-click to open transformation view'
       : undefined
   const hypName = card.hyp.names[0] ?? ''
-  const hypType = TaggedText_stripTags(card.hyp.type)
+  const hypType = formatFormulaText(TaggedText_stripTags(card.hyp.type))
 
   React.useEffect(() => {
     return () => {

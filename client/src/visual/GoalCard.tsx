@@ -2,35 +2,7 @@ import * as React from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import type { InteractiveGoal } from '../components/infoview/rpc_api'
-import { parse, printExpression } from './expr-engine'
-import type { ExpressionNode } from './expr-types'
-
-function leafCount(node: ExpressionNode): number {
-  if (node.type === 'variable' || node.type === 'constant') return 1
-  if (node.type === 'app') return 1 + leafCount(node.arg)
-  if (node.type === 'binary') return leafCount(node.left) + leafCount(node.right)
-  return 0
-}
-
-/** Re-print a simple arithmetic string with explicit associativity parens.
- *  Falls back to the original if the expression can't be fully parsed. */
-function formatArith(s: string): string {
-  try {
-    const ast = parse(s.trim())
-    const tokenCount = (s.match(/[\p{L}\p{N}_]+/gu) || []).length
-    if (leafCount(ast) !== tokenCount) return s
-    return printExpression(ast)
-  } catch {
-    return s
-  }
-}
-
-/** Post-process a Lean goal string of the form `lhs = rhs` to add parens. */
-function formatGoalText(text: string): string {
-  const eqIdx = text.indexOf(' = ')
-  if (eqIdx === -1) return text
-  return `${formatArith(text.slice(0, eqIdx))} = ${formatArith(text.slice(eqIdx + 3))}`
-}
+import { formatFormulaText } from './expr-engine'
 
 interface GoalCardProps {
   id: string
@@ -63,7 +35,7 @@ export function GoalCard({
 }: GoalCardProps) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isInteractive })
   const clickTimeoutRef = React.useRef<number | null>(null)
-  const goalText = formatGoalText(TaggedText_stripTags(goal.type))
+  const goalText = formatFormulaText(TaggedText_stripTags(goal.type))
 
   const classes = [
     'statement-card',

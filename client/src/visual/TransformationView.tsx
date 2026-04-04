@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } fr
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
-import { parse, printExpression, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findNodeById, findPath } from './expr-engine'
+import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findNodeById, findPath } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
@@ -250,7 +250,7 @@ export function TransformationView({
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
-  const staticStr = (() => { try { return printExpression(parse(rawStaticStr)) } catch { return rawStaticStr } })()
+  const staticStr = formatFormulaText(rawStaticStr)
 
   useEffect(() => {
     if (!activeId) return

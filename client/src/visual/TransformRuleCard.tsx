@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { parse, printExpression } from './expr-engine'
+import { parse, printDisplayExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 
 interface EqualityHypCardProps {
@@ -17,9 +17,9 @@ interface EqualityHypCardProps {
 }
 
 function formatRuleExpr(expr: string, node?: ExpressionNode): string {
-  if (node) return printExpression(node)
+  if (node) return printDisplayExpression(node)
   try {
-    return printExpression(parse(expr))
+    return printDisplayExpression(parse(expr))
   } catch {
     return expr
   }

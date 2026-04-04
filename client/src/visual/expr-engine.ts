@@ -4,12 +4,35 @@ import { v4 as uuidv4 } from 'uuid'
 
 // --- Parser ---
 
+interface BinaryOpInfo {
+  op: Op
+  precedence: number
+  associativity: 'left' | 'right'
+}
+
+const BINARY_OPS: Record<string, BinaryOpInfo> = {
+  '*': { op: '*', precedence: 6, associativity: 'left' },
+  '/': { op: '/', precedence: 6, associativity: 'left' },
+  '+': { op: '+', precedence: 5, associativity: 'left' },
+  '-': { op: '-', precedence: 5, associativity: 'left' },
+  '=': { op: '=', precedence: 4, associativity: 'left' },
+  '∧': { op: '∧', precedence: 3, associativity: 'left' },
+  '\\land': { op: '∧', precedence: 3, associativity: 'left' },
+  '∨': { op: '∨', precedence: 2, associativity: 'left' },
+  '\\lor': { op: '∨', precedence: 2, associativity: 'left' },
+  '→': { op: '→', precedence: 1, associativity: 'right' },
+  '->': { op: '→', precedence: 1, associativity: 'right' },
+  '=>': { op: '→', precedence: 1, associativity: 'right' },
+  '\\to': { op: '→', precedence: 1, associativity: 'right' },
+  '\\implies': { op: '→', precedence: 1, associativity: 'right' },
+}
+
 class Parser {
   private tokens: string[]
   private current = 0
 
   constructor(input: string) {
-    this.tokens = input.match(/([\p{L}\p{N}_]+|[+\-*/()\[\]]|\S)/gu) || []
+    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|->|=>|[\p{L}\p{N}_]+|[+\-*/=()\[\]∧∨→]|\S)/gu) || []
   }
 
   private peek(): string | null {
@@ -70,23 +93,25 @@ class Parser {
     return expr
   }
 
-  private parseTerm(): ExpressionNode {
-    let left = this.parsePrimary()
-    while (this.peek() === '*' || this.peek() === '/') {
-      const op = this.consume() as Op
-      const right = this.parsePrimary()
-      left = { type: 'binary', op, left, right, id: uuidv4() }
-    }
-    return left
+  private peekBinaryOp(): BinaryOpInfo | null {
+    const token = this.peek()
+    return token ? (BINARY_OPS[token] ?? null) : null
   }
 
-  public parseExpression(): ExpressionNode {
-    let left = this.parseTerm()
-    while (this.peek() === '+' || this.peek() === '-') {
-      const op = this.consume() as Op
-      const right = this.parseTerm()
-      left = { type: 'binary', op, left, right, id: uuidv4() }
+  public parseExpression(minPrecedence = 1): ExpressionNode {
+    let left = this.parsePrimary()
+
+    while (true) {
+      const nextOp = this.peekBinaryOp()
+      if (!nextOp || nextOp.precedence < minPrecedence) break
+
+      this.consume()
+      const right = this.parseExpression(
+        nextOp.associativity === 'left' ? nextOp.precedence + 1 : nextOp.precedence
+      )
+      left = { type: 'binary', op: nextOp.op, left, right, id: uuidv4() }
     }
+
     return left
   }
 
@@ -176,28 +201,68 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
 // --- Printer ---
 
 function opPrecedence(op: Op): number {
-  return op === '*' || op === '/' ? 2 : 1
+  return BINARY_OPS[op].precedence
 }
 
-function needsParens(child: ExpressionNode, parentOp: Op): boolean {
+function isArithmeticOp(op: Op): boolean {
+  return op === '+' || op === '-' || op === '*' || op === '/'
+}
+
+function needsStructuralParens(child: ExpressionNode, parentOp: Op): boolean {
   if (child.type !== 'binary') return false
   if (child.op === parentOp) return true
   if (opPrecedence(child.op) < opPrecedence(parentOp)) return true
   return false
 }
 
-export function printExpression(node: ExpressionNode): string {
+function needsDisplayParens(
+  child: ExpressionNode,
+  parentOp: Op,
+  side: 'left' | 'right',
+): boolean {
+  if (child.type !== 'binary') return false
+
+  if (isArithmeticOp(child.op) && (isArithmeticOp(parentOp) || parentOp === '=')) {
+    return needsStructuralParens(child, parentOp)
+  }
+
+  return true
+}
+
+function printExpressionWithParens(
+  node: ExpressionNode,
+  needsParens: (child: ExpressionNode, parentOp: Op, side: 'left' | 'right') => boolean,
+): string {
   if (node.type === 'variable') return node.name
   if (node.type === 'constant') return node.value.toString()
-  if (node.type === 'app') return `${node.func}(${printExpression(node.arg)})`
+  if (node.type === 'app') return `${node.func}(${printExpressionWithParens(node.arg, needsParens)})`
   if (node.type === 'binary') {
-    const leftStr = printExpression(node.left)
-    const rightStr = printExpression(node.right)
-    const leftSafe = needsParens(node.left, node.op) ? `(${leftStr})` : leftStr
-    const rightSafe = needsParens(node.right, node.op) ? `(${rightStr})` : rightStr
+    const leftStr = printExpressionWithParens(node.left, needsParens)
+    const rightStr = printExpressionWithParens(node.right, needsParens)
+    const leftSafe = needsParens(node.left, node.op, 'left') ? `(${leftStr})` : leftStr
+    const rightSafe = needsParens(node.right, node.op, 'right') ? `(${rightStr})` : rightStr
     return `${leftSafe} ${node.op} ${rightSafe}`
   }
   return ''
+}
+
+export function printExpression(node: ExpressionNode): string {
+  return printExpressionWithParens(node, (child, parentOp) => needsStructuralParens(child, parentOp))
+}
+
+export function printDisplayExpression(node: ExpressionNode): string {
+  return printExpressionWithParens(node, needsDisplayParens)
+}
+
+export function formatFormulaText(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length === 0) return normalized
+
+  try {
+    return printDisplayExpression(parse(normalized))
+  } catch {
+    return normalized
+  }
 }
 
 // --- Helpers ---
@@ -348,7 +413,7 @@ function substituteVariables(
   if (node.type === 'app') {
     return { ...node, arg: substituteVariables(node.arg, bindings), id: uuidv4() }
   }
-  return { ...node, id: uuidv4() }
+  throw new Error('Unknown expression node')
 }
 
 /**

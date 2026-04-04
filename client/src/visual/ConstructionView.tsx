@@ -4,6 +4,7 @@ import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from '@dnd-kit/core'
+import { formatFormulaText } from './expr-engine'
 
 // ── Construction term types ───────────────────────────────────────────────────
 
@@ -199,6 +200,7 @@ export function ConstructionView({
   const [isDoneProcessing, setIsDoneProcessing] = useState(false)
   const [doneError, setDoneError] = useState(false)
   const [activeBrickId, setActiveBrickId] = useState<string | null>(null)
+  const formattedGoalBody = formatFormulaText(goalBody)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
@@ -322,7 +324,7 @@ export function ConstructionView({
             {' '}
             <span className="cn-propose-keyword">such that</span>
             {' '}
-            <span className="cn-propose-body proposition">{goalBody}</span>
+            <span className="cn-propose-body proposition">{formattedGoalBody}</span>
           </div>
 
           {/* Term display */}
