@@ -17,12 +17,6 @@ import type { ProofState } from '../components/infoview/rpc_api'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert'])
-// AdvMultiplication 9 is the first active NNG4 lesson that teaches the
-// induction-generalizing pattern formerly introduced alongside `revert`.
-const VISUAL_REVERT_UNLOCK = {
-  worldId: 'AdvMultiplication',
-  levelId: 9,
-}
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1
@@ -94,37 +88,15 @@ function parseTheoremStatement(
   return parsed ? { ...parsed, forallFooter: theoremDisplay.forallFooter } : null
 }
 
-function isAtOrAfterLevel(
-  currentWorldId: string,
-  currentLevelId: number,
-  unlockWorldId: string,
-  unlockLevelId: number,
-  worldRank: Record<string, number>,
-): boolean {
-  const currentRank = worldRank[currentWorldId]
-  const unlockRank = worldRank[unlockWorldId]
-  if (currentRank == null || unlockRank == null) return false
-  return currentRank > unlockRank || (currentRank === unlockRank && currentLevelId >= unlockLevelId)
-}
-
 function withVisualOnlyTactics(
   tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>,
-  options: {
-    worldId: string
-    levelId: number
-    worldRank: Record<string, number>
-  },
 ) {
-  const revertUnlocked = isAtOrAfterLevel(
-    options.worldId,
-    options.levelId,
-    VISUAL_REVERT_UNLOCK.worldId,
-    VISUAL_REVERT_UNLOCK.levelId,
-    options.worldRank,
+  const revertUnlocked = tactics.some(tactic =>
+    tactic.name === 'induction' && !tactic.locked && !tactic.hidden,
   )
   const nextTactics = tactics.map(tactic =>
-    tactic.name === 'revert' && revertUnlocked
-      ? { ...tactic, locked: false, hidden: false }
+    tactic.name === 'revert'
+      ? { ...tactic, locked: !revertUnlocked, hidden: false }
       : tactic,
   )
   const alreadyPresent = nextTactics.some(tactic => tactic.name === 'revert')
@@ -287,11 +259,7 @@ export function VisualProofPage() {
           adj[n].sort().forEach((m: string) => { if (--inDegree[m] === 0) queue.push(m) })
         }
 
-        const tacticsWithVisualUnlocks = withVisualOnlyTactics(tactics, {
-          worldId,
-          levelId,
-          worldRank,
-        })
+        const tacticsWithVisualUnlocks = withVisualOnlyTactics(tactics)
 
         // Category order matches the NNG4 inventory tab order: first occurrence of each
         // category in the alphabetically-sorted lemma list (same logic as inventorySubtabOptionsAtom).
