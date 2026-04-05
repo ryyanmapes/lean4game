@@ -2,6 +2,7 @@ import GameServer.EnvExtensions
 import GameServer.GoalClick
 import GameServer.InteractiveGoal
 import GameServer.Hints
+import GameServer.PremiseApplication
 import I18n
 
 open Lean
@@ -515,30 +516,15 @@ private def dragToAnnotationForParsed? (drag : ParsedDragTo) (goal : MVarId) :
   let sourceType ← whnf sourceTypeRaw
   let targetType ← whnf targetTypeRaw
 
-  let mkPremiseReplacement? := fun implicationName implicationExpr implicationType premiseName premiseExpr premiseType premiseIsLocal => do
-    let savedMCtx ← getMCtx
-    try
-      let (args, _, _) ← forallMetaTelescopeReducing implicationType
-      for i in [:args.size] do
-        let dom ← instantiateMVars (← inferType args[i]!)
-        if (← isProp dom) && (← isDefEq dom premiseType) then
-          let mut app := implicationExpr
-          for j in [:i] do
-            app := mkApp app args[j]!
-          app := mkApp app premiseExpr
-          let _ ← inferType app
-          let applied ← instantiateMVars app
-          setMCtx savedMCtx
-          if premiseIsLocal then
-            return some s!"apply {implicationName} at {premiseName}"
-          else
-            let appText ← ppExpr applied
-            return some s!"have := {appText.pretty}"
-      setMCtx savedMCtx
-      return none
-    catch _ =>
-      setMCtx savedMCtx
-      return none
+  let mkPremiseReplacement? := fun _ implicationExpr implicationType premiseName premiseExpr premiseType premiseIsLocal => do
+    let some applied ← GameServer.mkPremiseApplication? implicationExpr implicationType premiseExpr premiseType
+      | return none
+    let appText ← ppExpr applied
+    if premiseIsLocal then
+      -- Lean 4 no longer supports `apply ... at ...`; shadow the premise name instead.
+      return some s!"have {premiseName} := {appText.pretty}"
+    else
+      return some s!"have := {appText.pretty}"
 
   if let some ann ← mkPremiseReplacement? drag.targetName targetExpr targetType drag.sourceName sourceExpr sourceType sourceIsLocal then
     return some ann
@@ -622,9 +608,23 @@ private def freshUserName (base : String) : MetaM Name := do
   pure candidate
 
 private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal.withContext do
-  match ← clickGoalKind? (← goal.getType) with
+  let target ← goal.getType
+  let targetWhnf ← withReducible (whnf target)
+  match ← clickGoalKind? target with
   | some .completeByRfl =>
       pure (some "rfl")
+  | some .introVar =>
+      match targetWhnf with
+      | .forallE binderName domain _ _ =>
+          if ← isProp domain then
+            pure (some "intro")
+          else if binderName.isAnonymous then
+            pure (some "intro")
+          else
+            let nextName ← freshUserName binderName.toString
+            pure <| some s!"intro {nextName}"
+      | _ =>
+          pure (some "intro")
   | some .introProp =>
       let hName ← freshUserName "h"
       pure <| some s!"intro {hName}"
@@ -891,6 +891,23 @@ def tryEqualityTree (e : Expr) : MetaM (Option EqualityTree) := do
       return some { lhs := lhsTree, rhs := rhsTree, isRefl }
   | _ => return none
 
+private def isReflexiveEqualityProp (e : Expr) : MetaM Bool := do
+  let e ← withReducible (whnf e)
+  match e.consumeMData with
+  | .app (.app (.app (.const ``Eq _) _) lhs) rhs =>
+      withReducible (isDefEq lhs rhs)
+  | _ =>
+      pure false
+
+private def isReflexiveEqualityImplication (e : Expr) : MetaM Bool := do
+  match e.consumeMData with
+  | .forallE _ domain _ _ =>
+      if !(← isProp domain) then
+        return false
+      isReflexiveEqualityProp domain
+  | _ =>
+      pure false
+
 /-- If `e` is (or unfolds to) `@Exists α (fun x => body)`, return the bound variable name and
     a pretty-printed body string.  Uses default-transparency `whnf` so that definitions like
     `Nat.le` (which is `∃ k, n + k = m` in NNG4) are unfolded even if not `@[reducible]`. -/
@@ -921,6 +938,8 @@ private def goalClickAction? (goal : MVarId) : MetaM (Option ClickAction) := goa
   match ← clickGoalKind? target with
   | some .completeByRfl =>
       pure <| some (directClickAction "click_goal" "Click to complete")
+  | some .introVar =>
+      pure <| some (directClickAction "click_goal" "Click to introduce variable")
   | some .introProp =>
       pure <| some (directClickAction "click_goal" "Click to introduce assumption")
   | some .splitAnd =>
@@ -948,21 +967,28 @@ private def goalClickAction? (goal : MVarId) : MetaM (Option ClickAction) := goa
           pure none
 
 private def hypClickAction? (hypName : String) (fvarId : FVarId) : MetaM (Option ClickAction) := do
-  let hypType ← withReducible (whnf (← inferType (.fvar fvarId)))
+  let hypTypeExpr ← inferType (.fvar fvarId)
+  let hypType ← withReducible (whnf hypTypeExpr)
   match hypType with
   | .app (.app (.const ``And _) _) _ =>
       pure <| some (directClickAction s!"click_prop {hypName}" "Click to split conjunction")
   | .app (.app (.const ``Or _) _) _ =>
       pure <| some (splitClickAction s!"click_prop {hypName}" "Click to split into cases")
   | _ =>
-      -- For existentials, also try default-transparency whnf so that non-reducible definitions
-      -- that expand to `∃ x, P x` (e.g. `MyNat.le`) are detected.
-      let hypTypeFull ← whnf (← inferType (.fvar fvarId))
-      match hypTypeFull with
-      | .app (.app (.const ``Exists _) _) _ =>
-          pure <| some (directClickAction s!"click_prop {hypName}" "Click to introduce witness and condition")
-      | _ =>
-          pure none
+      if ← isReflexiveEqualityImplication hypType then
+        pure <| some (directClickAction s!"click_prop {hypName}" "Click to specialize with rfl")
+      else
+        -- For existentials, also try default-transparency whnf so that non-reducible definitions
+        -- that expand to `∃ x, P x` (e.g. `MyNat.le`) are detected.
+        let hypTypeFull ← whnf hypTypeExpr
+        match hypTypeFull with
+        | .app (.app (.const ``Exists _) _) _ =>
+            pure <| some (directClickAction s!"click_prop {hypName}" "Click to introduce witness and condition")
+        | _ =>
+            if ← isReflexiveEqualityImplication hypTypeFull then
+              pure <| some (directClickAction s!"click_prop {hypName}" "Click to specialize with rfl")
+            else
+              pure none
 
 private def interactiveGoalWithHintsForGoal (levelId : LevelId) (goal : MVarId) :
     MetaM InteractiveGoalWithHints := do

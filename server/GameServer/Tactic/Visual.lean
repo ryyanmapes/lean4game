@@ -6,6 +6,7 @@ import Lean.Meta.Tactic.Assert
 import Lean.Meta.Tactic.Rename
 import Lean.Parser.Extension
 import GameServer.GoalClick
+import GameServer.PremiseApplication
 
 namespace GameServer
 
@@ -20,14 +21,6 @@ private def tryTactic (stx : TSyntax `tactic) : TacticM Bool := do
     restoreState savedState
     return false
 
-private def tryTacticString (src : String) : TacticM Bool := do
-  let env ← getEnv
-  match Lean.Parser.runParserCategory env `tactic src with
-  | .error _ =>
-    return false
-  | .ok stx =>
-    tryTactic (⟨stx⟩ : TSyntax `tactic)
-
 private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
   let savedState ← saveState
   try
@@ -36,9 +29,6 @@ private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
   catch _ =>
     restoreState savedState
     return false
-
-private def tryApplyAt (fn premise : Ident) : TacticM Bool := do
-  tryTacticString s!"apply {fn.getId} at {premise.getId}"
 
 private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
   withMainContext do
@@ -52,30 +42,6 @@ private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
           throwAbortTactic
         let exprType ← inferType expr
         pure (expr, exprType)
-
-private def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : TacticM (Option Expr) := do
-  withMainContext do
-    let savedMCtx ← getMCtx
-    try
-      let (args, _, _) ← forallMetaTelescopeReducing fnType
-      for i in [:args.size] do
-        let dom ← instantiateMVars (← inferType args[i]!)
-        if (← isProp dom) && (← isDefEq dom argType) then
-          let mut app := fnExpr
-          for j in [:i] do
-            app := mkApp app args[j]!
-          app := mkApp app argExpr
-          let _ ← inferType app
-          let applied ← instantiateMVars app
-          if applied.hasMVar then
-            continue
-          setMCtx savedMCtx
-          return some applied
-      setMCtx savedMCtx
-      return none
-    catch _ =>
-      setMCtx savedMCtx
-      return none
 
 private def replaceNamedExprWithProof (id : Ident) (proof : Expr) : TacticM Unit := do
   withMainContext do
@@ -94,12 +60,6 @@ syntax (name := drag_to) "drag_to" ident ident : tactic
   let a : Ident := ⟨stx[1]⟩
   let b : Ident := ⟨stx[2]⟩
   withMainContext do
-    if ← tryApplyAt b a then
-      return
-
-    if ← tryApplyAt a b then
-      return
-
     let (aExpr, aTypeRaw) ← resolveNamedExprAndType a
     let (bExpr, bTypeRaw) ← resolveNamedExprAndType b
     let aType ← whnf aTypeRaw
@@ -499,6 +459,18 @@ syntax (name := click_goal) "click_goal" : tactic
       liftMetaTactic fun mvarId => withReducible do
         mvarId.refl
         pure []
+  | some .introVar =>
+      match goalWhnf with
+      | .forallE binderName domain _ _ =>
+          if ← isProp domain then
+            evalTacticString "intro"
+          else if binderName.isAnonymous then
+            evalTacticString "intro"
+          else
+            let nextName ← freshUserName binderName.toString
+            evalTacticString s!"intro {nextName}"
+      | _ =>
+          evalTacticString "intro"
   | some .introProp =>
       let hName ← freshUserName "h"
       evalTacticString s!"intro {hName}"
@@ -513,10 +485,10 @@ syntax (name := click_goal) "click_goal" : tactic
           throwError "click_goal: current goal is not directly clickable.\n\
             goal : {goal}"
       | .forallE _ domain _ _ =>
-          unless ← isProp domain do
-            throwError "click_goal: only proposition implications can be introduced by clicking.\n\
+          if ← isProp domain then
+            throwError "click_goal: proposition implication could not be introduced.\n\
               goal : {goal}"
-          throwError "click_goal: current goal is not directly clickable.\n\
+          throwError "click_goal: forall goal could not be introduced.\n\
             goal : {goal}"
       | _ =>
           throwError "click_goal: current goal is not directly clickable.\n\
@@ -543,6 +515,13 @@ syntax (name := click_goal_right) "click_goal_right" : tactic
 
 @[tactic click_goal_right] def evalClickGoalRight : Tactic := fun _ =>
   liftMetaTactic (leftRightMeta `right 1 2)
+
+private def isReflexiveEqualityProp (e : Expr) : MetaM Bool := do
+  let e ← withReducible (whnf e)
+  if let some (_, lhsExpr, rhsExpr) ← matchEq? e.consumeMData then
+    withReducible (isDefEq lhsExpr rhsExpr)
+  else
+    pure false
 
 syntax (name := click_prop) "click_prop" ident : tactic
 
@@ -583,6 +562,12 @@ syntax (name := click_prop) "click_prop" ident : tactic
       let condIdent : Ident := mkIdent (← freshUserName "h")
       evalTactic (← `(tactic| have ⟨$varIdent, $condIdent⟩ := $h))
       evalTactic (← `(tactic| clear $h))
+    | .forallE _ domain _ _ =>
+      if (← isProp domain) && (← isReflexiveEqualityProp domain) then
+        evalTactic (← `(tactic| specialize $h rfl))
+      else
+        throwError "click_prop: '{h.getId}' cannot be decomposed\n\
+          {h.getId} : {hDecl.type}"
     | _ =>
       throwError "click_prop: '{h.getId}' cannot be decomposed\n\
         {h.getId} : {hDecl.type}"
@@ -624,6 +609,10 @@ example (P Q R : Prop) (h : P ∨ Q) (hp : P → R) (hq : Q → R) : R := by
   click_prop h
   · exact hp left
   · exact hq right
+
+example (a : Nat) (B : Prop) (h : (a = a) → B) : B := by
+  click_prop h
+  exact h
 
 example (P Q : Prop) (h : P) : P ∨ Q := by
   click_goal_left

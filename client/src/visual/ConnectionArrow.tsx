@@ -6,7 +6,14 @@ interface Props {
 }
 
 export function ConnectionArrow({ start, end }: Props) {
-  const path = `M ${start.x} ${start.y} C ${start.x} ${start.y - 50}, ${end.x} ${end.y + 50}, ${end.x} ${end.y}`
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const scale = 50
+  // CP1: exit start going up; CP2: arrive at end from the direction of start
+  const cp2x = end.x - (dx / len) * scale
+  const cp2y = end.y - (dy / len) * scale
+  const path = `M ${start.x} ${start.y} C ${start.x} ${start.y - scale}, ${cp2x} ${cp2y}, ${end.x} ${end.y}`
 
   return (
     <svg className="tr-connection-arrow" style={{ overflow: 'visible' }}>

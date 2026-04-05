@@ -19,6 +19,7 @@ import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExp
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
+import { buildForallSpecificationFromDisplay } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import {
@@ -63,7 +64,18 @@ const HITBOX_PADDING = 16
 const DEFAULT_WIDTH = 200
 const DEFAULT_HEIGHT = 50
 
-function resolveCollisions(hyps: HypCardType[], obstacleIds: string[] = []): HypCardType[] {
+interface CanvasBounds {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+function resolveCollisions(
+  hyps: HypCardType[],
+  obstacleIds: string[] = [],
+  canvasBounds: CanvasBounds = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
+): HypCardType[] {
   if (hyps.length === 0) return hyps
 
   const items: { id: string; x: number; y: number; hw: number; hh: number; fixed: boolean }[] =
@@ -85,8 +97,8 @@ function resolveCollisions(hyps: HypCardType[], obstacleIds: string[] = []): Hyp
     if (rect) {
       items.push({
         id,
-        x: rect.left,
-        y: rect.top,
+        x: rect.left - canvasBounds.left,
+        y: rect.top - canvasBounds.top,
         hw: rect.width / 2 + HITBOX_PADDING,
         hh: rect.height / 2 + HITBOX_PADDING,
         fixed: true,
@@ -118,8 +130,8 @@ function resolveCollisions(hyps: HypCardType[], obstacleIds: string[] = []): Hyp
   const margin = 100
   for (const item of items) {
     if (!item.fixed) {
-      item.x = Math.max(margin, item.x)
-      item.y = Math.max(margin, item.y)
+      item.x = Math.max(margin, Math.min(canvasBounds.width - margin, item.x))
+      item.y = Math.max(margin, Math.min(canvasBounds.height - margin, item.y))
     }
   }
 
@@ -378,7 +390,7 @@ function parsedGoalEquality(stream: GoalStream) {
 
 function parsedHypEquality(card: HypCardType) {
   const hypName = card.hyp.names[0] ?? '?'
-  return parseEqualityHyp(TaggedText_stripTags(card.hyp.type).trim(), hypName, card.id)
+  return parseEqualityHyp((card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim(), hypName, card.id)
 }
 
 function goalIsReflexiveEquality(stream: GoalStream): boolean {
@@ -396,8 +408,44 @@ function goalIsConstructable(stream: GoalStream): boolean {
   return stream.existsInfo !== undefined
 }
 
+function hypForallSpecification(card: HypCardType) {
+  const mainText = (card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim()
+  return buildForallSpecificationFromDisplay(mainText, card.hyp.forallFooter)
+}
+
+function theoremForallSpecification(theorem: PropositionTheorem) {
+  return theorem.forallSpecification
+}
+
+function hypIsConstructable(card: HypCardType): boolean {
+  return hypForallSpecification(card) !== undefined
+}
+
 function hypIsTransformable(card: HypCardType): boolean {
   return card.hyp.equalityTree !== undefined || parsedHypEquality(card) !== null
+}
+
+function natContextVarNames(stream: GoalStream): string[] {
+  return stream.hyps
+    .filter(card => {
+      const typeText = TaggedText_stripTags(card.hyp.type).trim()
+      return typeText === 'ℕ' || typeText === 'Nat' || typeText === 'MyNat'
+    })
+    .map(card => card.hyp.names[0])
+    .filter((name): name is string => Boolean(name))
+}
+
+function nextFreshHypName(cards: HypCardType[], baseName: string): string {
+  const existing = new Set(cards.map(card => card.hyp.names[0] ?? ''))
+  if (!existing.has(baseName)) return baseName
+
+  let suffix = 2
+  while (existing.has(`${baseName}${suffix}`)) suffix += 1
+  return `${baseName}${suffix}`
+}
+
+function parenthesizedLeanArg(exprStr: string): string {
+  return `(${exprStr})`
 }
 
 function isVisualOnlyPlayTactic(playTactic: string): boolean {
@@ -583,8 +631,7 @@ function isConjunctionText(text: string): boolean {
   return normalized.includes('∧') || normalized.startsWith('And ') || normalized.includes(' And ')
 }
 
-
-function extractImplicationTarget(text: string): string | null {
+function splitImplicationText(text: string): [string, string] | null {
   const normalized = stripOuterParens(text)
   let depth = 0
   let lastArrowIndex = -1
@@ -606,7 +653,42 @@ function extractImplicationTarget(text: string): string | null {
   }
 
   if (lastArrowIndex === -1) return null
-  return stripOuterParens(normalized.slice(lastArrowIndex + lastArrowWidth))
+  const premise = stripOuterParens(normalized.slice(0, lastArrowIndex))
+  const codomain = stripOuterParens(normalized.slice(lastArrowIndex + lastArrowWidth))
+  return premise && codomain ? [premise, codomain] : null
+}
+
+function splitEqualityText(text: string): [string, string] | null {
+  const normalized = stripOuterParens(text)
+  let depth = 0
+
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (depth === 0 && ch === '=') {
+      const left = stripOuterParens(normalized.slice(0, i))
+      const right = stripOuterParens(normalized.slice(i + 1))
+      return left && right ? [left, right] : null
+    }
+  }
+
+  return null
+}
+
+function isReflexiveEqualityImplicationText(text: string): boolean {
+  const implication = splitImplicationText(text)
+  if (!implication) return false
+
+  const [premise] = implication
+  const equality = splitEqualityText(premise)
+  if (!equality) return false
+
+  return formulasMatch(equality[0], equality[1])
+}
+
+function extractImplicationTarget(text: string): string | null {
+  return splitImplicationText(text)?.[1] ?? null
 }
 
 function findHypCardByName(stream: GoalStream | null, hypName: string): HypCardType | null {
@@ -624,14 +706,16 @@ function inferLeanTacticFromVisualInteraction(
   if (playTactic.startsWith('click_prop ')) {
     const hypName = playTactic.slice('click_prop '.length).trim()
     const hypCard = findHypCardByName(stream, hypName)
-    // And is the only case that doesn't use cases-style elimination.
-    // Or, Exists, and non-reducible defs like `le` all eliminate via cases.
     if (hypCard) {
       const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
       if (isConjunctionText(hypType)) {
         return `have left := And.left ${hypName}; have right := And.right ${hypName}; clear ${hypName}`
       }
+      if (isReflexiveEqualityImplicationText(hypType)) {
+        return `specialize ${hypName} rfl`
+      }
     }
+    // Or, Exists, and non-reducible defs like `le` eliminate via cases.
     return `cases ${hypName}`
   }
 
@@ -752,6 +836,20 @@ type TransformTarget =
   | { kind: 'goal'; streamId: string }
   | { kind: 'hyp'; streamId: string; hypId: string; hypName: string }
 
+type ConstructionTarget =
+  | { kind: 'exists_goal'; streamId: string }
+  | {
+      kind: 'forall_spec'
+      streamId: string
+      sourceKind: 'hyp' | 'theorem_copy' | 'theorem_template'
+      sourceRef: string
+      sourceId?: string
+      prompt: {
+        varName: string
+        body: string
+      }
+    }
+
 interface VisualCanvasProps {
   initialState: CanvasState
   theoremEqualityHyps: EqualityHyp[]
@@ -777,6 +875,7 @@ function TheoremTray({
   onTabChange,
   pageIndexByTab,
   onPageIndexChange,
+  onTheoremDoubleClick,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
@@ -784,6 +883,7 @@ function TheoremTray({
   onTabChange: (tab: TrayTab) => void
   pageIndexByTab: Record<TrayTab, number>
   onPageIndexChange: (tab: TrayTab, pageIndex: number) => void
+  onTheoremDoubleClick?: (theorem: PropositionTheorem) => void
 }) {
   // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
@@ -873,7 +973,13 @@ function TheoremTray({
               {pageItems.map(item =>
                 visibleTab === 'tactics'
                   ? <VisualTacticTemplateCard key={(item as VisualTactic).id} tactic={item as VisualTactic} />
-                  : <PropositionTheoremTemplateCard key={(item as PropositionTheorem).id} theorem={item as PropositionTheorem} />
+                  : <PropositionTheoremTemplateCard
+                      key={(item as PropositionTheorem).id}
+                      theorem={item as PropositionTheorem}
+                      onDoubleClick={onTheoremDoubleClick && (item as PropositionTheorem).forallSpecification
+                        ? () => onTheoremDoubleClick(item as PropositionTheorem)
+                        : undefined}
+                    />
               )}
             </div>
             <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
@@ -916,6 +1022,7 @@ export function VisualCanvas({
   onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, previouslyCompleted,
   onLevelCompleted
 }: VisualCanvasProps) {
+  const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -945,7 +1052,7 @@ export function VisualCanvas({
   }, [propositionTheorems])
 
   const [transformTarget, setTransformTarget] = useState<TransformTarget | null>(null)
-  const [constructionTarget, setConstructionTarget] = useState<{ streamId: string } | null>(null)
+  const [constructionTarget, setConstructionTarget] = useState<ConstructionTarget | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
   const [transformWorkingSide, setTransformWorkingSide] = useState<'left' | 'right'>('right')
@@ -1034,18 +1141,51 @@ export function VisualCanvas({
     return () => observer.disconnect()
   }, [propositionTheorems.length, visualTactics.length])
 
+  function getCombiningCanvasBounds(): CanvasBounds {
+    const rect = combiningCanvasRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return {
+        left: 0,
+        top: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }
+    }
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    }
+  }
+
+  function clampCanvasPosition(
+    x: number,
+    y: number,
+    maxWidth: number,
+    maxHeight: number,
+    margin = 50,
+  ): { x: number; y: number } {
+    const bounds = getCombiningCanvasBounds()
+    return {
+      x: Math.max(margin, Math.min(bounds.width - maxWidth, x)),
+      y: Math.max(margin, Math.min(bounds.height - maxHeight, y)),
+    }
+  }
+
   useLayoutEffect(() => {
+    const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => {
       const obstacleIds = prev.streams.map(s => s.id)
       return {
         ...prev,
         streams: prev.streams.map(stream => ({
           ...stream,
-          hyps: resolveCollisions(stream.hyps, obstacleIds),
+          hyps: resolveCollisions(stream.hyps, obstacleIds, canvasBounds),
         })),
       }
     })
-  }, [])
+  }, [showProofSidebar])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -1426,6 +1566,10 @@ export function VisualCanvas({
     const goalIds = new Set(canvasState.streams.map(s => s.id))
 
     if (tacticTemplate) {
+      if (tacticTemplate.name === 'revert' && goalIds.has(overId as string)) {
+        return
+      }
+
       if (goalIds.has(overId as string)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
         applyInteraction(playTactic, activeId, {
@@ -1504,10 +1648,14 @@ export function VisualCanvas({
       if (overId === THEOREM_TRAY_ID) return
       const startRect = active.rect.current.initial
       if (!startRect) return
-      const margin = 50
+      const bounds = getCombiningCanvasBounds()
       createTheoremCopy(theoremTemplate, {
-        x: Math.max(margin, Math.min(window.innerWidth - 320, startRect.left + delta.x)),
-        y: Math.max(margin, Math.min(window.innerHeight - 220, startRect.top + delta.y)),
+        ...clampCanvasPosition(
+          startRect.left - bounds.left + delta.x,
+          startRect.top - bounds.top + delta.y,
+          320,
+          220,
+        ),
       })
       return
     }
@@ -1569,30 +1717,27 @@ export function VisualCanvas({
     // Otherwise just reposition the card
     if (isProcessing) return
     if (sourceTheoremCopy) {
-      const margin = 50
       setTheoremCopies(prev => prev.map(copy => {
         if (copy.id !== sourceTheoremCopy.id) return copy
         return {
           ...copy,
-          position: {
-            x: Math.max(margin, Math.min(window.innerWidth - 320, copy.position.x + delta.x)),
-            y: Math.max(margin, Math.min(window.innerHeight - margin, copy.position.y + delta.y)),
-          },
+          position: clampCanvasPosition(copy.position.x + delta.x, copy.position.y + delta.y, 320, 50),
         }
       }))
       return
     }
     setCanvasState(prev => {
-      const margin = 50
+      const canvasBounds = getCombiningCanvasBounds()
       const obstacleIds = prev.streams.map(s => s.id)
       const streams = prev.streams.map(stream => {
         const moved = stream.hyps.map(h => {
           if (h.id !== activeId) return h
-          const newX = Math.max(margin, Math.min(window.innerWidth - 250, h.position.x + delta.x))
-          const newY = Math.max(margin, Math.min(window.innerHeight - margin, h.position.y + delta.y))
-          return { ...h, position: { x: newX, y: newY } }
+          return {
+            ...h,
+            position: clampCanvasPosition(h.position.x + delta.x, h.position.y + delta.y, 250, 50),
+          }
         })
-        return { ...stream, hyps: resolveCollisions(moved, obstacleIds) }
+        return { ...stream, hyps: resolveCollisions(moved, obstacleIds, canvasBounds) }
       })
       return { ...prev, streams }
     })
@@ -1606,6 +1751,56 @@ export function VisualCanvas({
 
   function hasReductionForms(forms?: string[]): forms is string[] {
     return (forms?.length ?? 0) > 0
+  }
+
+  function defaultConstructionStream(preferredStreamId?: string): GoalStream | null {
+    return (preferredStreamId
+      ? canvasState.streams.find(stream => stream.id === preferredStreamId) ?? null
+      : null)
+      ?? currentStream
+      ?? (activeStreamId ? canvasState.streams.find(stream => stream.id === activeStreamId) ?? null : null)
+      ?? canvasState.streams[0]
+      ?? null
+  }
+
+  function openHypConstruction(stream: GoalStream, card: HypCardType): boolean {
+    const prompt = hypForallSpecification(card)
+    const sourceRef = interactionHypName(card)
+    if (!prompt || !sourceRef) return false
+    closeReductionTooltip()
+    setSolvedGoalId(null)
+    setConstructionTarget({
+      kind: 'forall_spec',
+      streamId: stream.id,
+      sourceKind: 'hyp',
+      sourceRef,
+      sourceId: card.id,
+      prompt,
+    })
+    return true
+  }
+
+  function openTheoremConstruction(
+    theorem: PropositionTheorem,
+    sourceKind: 'theorem_copy' | 'theorem_template',
+    sourceId?: string,
+    preferredStreamId?: string,
+  ): boolean {
+    if (isProcessing || canvasState.completed) return false
+    const stream = defaultConstructionStream(preferredStreamId)
+    const prompt = theoremForallSpecification(theorem)
+    if (!stream || !prompt) return false
+    closeReductionTooltip()
+    setSolvedGoalId(null)
+    setConstructionTarget({
+      kind: 'forall_spec',
+      streamId: stream.id,
+      sourceKind,
+      sourceRef: theorem.theoremName,
+      sourceId,
+      prompt,
+    })
+    return true
   }
 
   function goalChoiceMenuPosition(goalId: string, optionCount: number): { x: number; y: number } {
@@ -1687,11 +1882,12 @@ export function VisualCanvas({
     })
   }
 
-  function handleHypDoubleClick(cardId: string) {
+  function handleHypDoubleClick(streamId: string, cardId: string) {
     if (isProcessing || canvasState.completed) return
-    const stream = canvasState.streams.find(s => s.hyps.some(h => h.id === cardId))
+    const stream = canvasState.streams.find(candidate => candidate.id === streamId)
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
+    if (openHypConstruction(stream, card)) return
     if (!hypIsTransformable(card)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
@@ -1718,7 +1914,7 @@ export function VisualCanvas({
     // Existential goal → construction mode
     if (goalIsConstructable(stream)) {
       setSolvedGoalId(null)
-      setConstructionTarget({ streamId })
+      setConstructionTarget({ kind: 'exists_goal', streamId })
       return
     }
 
@@ -1729,6 +1925,16 @@ export function VisualCanvas({
     setTransformWorkingSide('right')
     setTransformationVersion(0)
     setTransformTarget({ kind: 'goal', streamId })
+  }
+
+  function handleTheoremCopyDoubleClick(copyId: string, streamId?: string) {
+    const copy = getTheoremCopyById(copyId)
+    if (!copy) return
+    openTheoremConstruction(copy.theorem, 'theorem_copy', copy.id, streamId)
+  }
+
+  function handleTheoremTemplateDoubleClick(theorem: PropositionTheorem, streamId?: string) {
+    openTheoremConstruction(theorem, 'theorem_template', undefined, streamId)
   }
 
   function closeTransformationView() {
@@ -1770,15 +1976,39 @@ export function VisualCanvas({
   }
 
   /** Called by ConstructionView when the player clicks Done ›.
-   *  Sends `use <expr>` to Lean and returns whether it was accepted. */
-  async function handleUse(exprStr: string): Promise<boolean> {
-    if (isProcessing) return false
-    const focusedStream = constructionTarget
-      ? canvasState.streams.find(s => s.id === constructionTarget.streamId) ?? null
-      : null
+   *  Sends either `use <expr>` or `have h := source <expr>` to Lean and returns
+   *  whether it was accepted. */
+  async function handleConstructionApply(exprStr: string): Promise<boolean> {
+    if (isProcessing || !constructionTarget) return false
+    const target = constructionTarget
+    const focusedStream = canvasState.streams.find(s => s.id === target.streamId) ?? null
     if (!focusedStream) return false
 
-    const playTactic = `use ${exprStr}`
+    let playTactic = `use ${exprStr}`
+    let placementHint: PlacementHint | undefined
+    let consumedTheoremCopyIds: string[] | undefined
+
+    if (target.kind === 'forall_spec') {
+      const baseName = target.sourceKind === 'hyp'
+        ? nextFreshHypName(focusedStream.hyps, target.sourceRef)
+        : nextFreshHypName(focusedStream.hyps, 'h')
+      playTactic = `have ${baseName} := ${target.sourceRef} ${parenthesizedLeanArg(exprStr)}`
+
+      if (target.sourceKind === 'theorem_copy' && target.sourceId) {
+        const copy = getTheoremCopyById(target.sourceId)
+        if (copy) {
+          consumedTheoremCopyIds = [copy.id]
+          placementHint = {
+            hypId: `${copy.id}::specified`,
+            streamId: focusedStream.id,
+            hypName: baseName,
+            originalPosition: copy.position,
+            droppedPosition: copy.position,
+          }
+        }
+      }
+    }
+
     const command = focusCommandForStream(playTactic, focusedStream, proofTree)
     closeReductionTooltip()
     setIsProcessing(true)
@@ -1806,7 +2036,7 @@ export function VisualCanvas({
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
       : undefined
-    const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
+    let { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
       proofTree,
       canvasState,
       mergedCanvas,
@@ -1829,6 +2059,12 @@ export function VisualCanvas({
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
+    consumeTheoremCopies(consumedTheoremCopyIds)
+
+    if (placementHint) {
+      triggerGeneratedCardAnimation({ hypName: placementHint.hypName })
+      nextCanvas = updatePlacedHypPosition(nextCanvas, placementHint, placementHint.droppedPosition)
+    }
 
     if (leanCanvas.completed) {
       setCanvasState(prev => ({ ...prev, completed: true }))
@@ -1836,8 +2072,14 @@ export function VisualCanvas({
         setCanvasState(nextCanvas)
         setDisplayCanvasState(leanCanvas)
       }, 700)
-    } else {
-      setCanvasState(nextCanvas)
+      return true
+    }
+
+    setCanvasState(nextCanvas)
+    if (placementHint) {
+      window.setTimeout(() => {
+        setCanvasState(prev => placeHypNearAnchor(prev, placementHint!))
+      }, 24)
     }
 
     return true
@@ -2114,11 +2356,19 @@ export function VisualCanvas({
       if (card.hyp.equalityTree) {
         const lhs = exprTreeToNode(card.hyp.equalityTree.lhs)
         const rhs = exprTreeToNode(card.hyp.equalityTree.rhs)
-        return [{ id: card.id, label: name, lhsStr: printExpression(lhs), rhsStr: printExpression(rhs), lhs, rhs }]
+        return [{
+          id: card.id,
+          label: name,
+          lhsStr: printExpression(lhs),
+          rhsStr: printExpression(rhs),
+          lhs,
+          rhs,
+          forallFooter: card.hyp.forallFooter,
+        } as EqualityHyp]
       }
       const parsedHyp = parsedHypEquality(card)
       return parsedHyp
-        ? [{ ...parsedHyp, label: name }]
+        ? [{ ...parsedHyp, label: name, forallFooter: card.hyp.forallFooter } as EqualityHyp]
         : []
     })
 
@@ -2137,19 +2387,32 @@ export function VisualCanvas({
   const constructionProps = (() => {
     if (!constructionTarget) return null
     const stream = canvasState.streams.find(s => s.id === constructionTarget.streamId)
-    if (!stream?.existsInfo) return null
-    const natVarNames = stream.hyps
-      .filter(card => {
-        const t = TaggedText_stripTags(card.hyp.type).trim()
-        return t === 'ℕ' || t === 'Nat'
-      })
-      .map(card => card.hyp.names[0])
-      .filter((n): n is string => !!n)
-    const existingHypNames = new Set(
-      stream.hyps.flatMap(card => card.hyp.names).filter((n): n is string => !!n)
-    )
-    const displayExistsInfo = contextualizeExistsDisplay(stream.existsInfo, existingHypNames)
-    return { varName: displayExistsInfo.varName, goalBody: displayExistsInfo.body, contextVarNames: natVarNames }
+    if (!stream) return null
+    if (constructionTarget.kind === 'exists_goal') {
+      if (!stream.existsInfo) return null
+      const existingHypNames = new Set(
+        stream.hyps.flatMap(card => card.hyp.names).filter((name): name is string => Boolean(name))
+      )
+      const displayExistsInfo = contextualizeExistsDisplay(stream.existsInfo, existingHypNames)
+      return {
+        promptMode: 'propose' as const,
+        varName: displayExistsInfo.varName,
+        goalBody: displayExistsInfo.body,
+        contextVarNames: natContextVarNames(stream),
+      }
+    }
+    return {
+      promptMode: 'specify' as const,
+      varName: constructionTarget.prompt.varName,
+      goalBody: constructionTarget.prompt.body,
+      contextVarNames: natContextVarNames(stream),
+    }
+  })()
+
+  const constructionTargetKey = (() => {
+    if (!constructionTarget) return ''
+    if (constructionTarget.kind === 'exists_goal') return `exists:${constructionTarget.streamId}`
+    return `${constructionTarget.sourceKind}:${constructionTarget.sourceId ?? constructionTarget.sourceRef}:${constructionTarget.streamId}`
   })()
 
   const activeStreamIds = collectActiveStreamIds(proofTree)
@@ -2346,7 +2609,7 @@ export function VisualCanvas({
   function openTestHypTransform(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const card = requireHypCard(stream, hypName)
-    handleHypDoubleClick(card.id)
+    handleHypDoubleClick(stream.id, card.id)
   }
 
   async function applyTestRewriteInTransform(
@@ -2600,10 +2863,11 @@ export function VisualCanvas({
 
 
 
-          <div className="combining-canvas" data-testid="combining-canvas">
+          <div className="combining-canvas" data-testid="combining-canvas" ref={combiningCanvasRef}>
             {visibleHyps.map(card => {
               const clickAction = card.hyp.clickAction
               const isClickable = hasClickAction(clickAction)
+              const isConstructable = hypIsConstructable(card)
               const isTransformable = hypIsTransformable(card)
               return (
                 <HypCard
@@ -2618,9 +2882,12 @@ export function VisualCanvas({
                   isFailing={failingCardId === card.id}
                   isClickable={streamInteractionsEnabled && isClickable}
                   clickTooltip={clickAction?.tooltip}
-                  isTransformable={streamInteractionsEnabled && isTransformable}
+                  isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
+                  isConstructable={streamInteractionsEnabled && isConstructable}
                   onClickAction={streamInteractionsEnabled && isClickable && displayStream ? () => handleHypClick(displayStream.id, card.id, clickAction) : undefined}
-                  onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleHypDoubleClick(card.id) : undefined}
+                  onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
+                    ? () => handleHypDoubleClick(displayStream.id, card.id)
+                    : undefined}
                   onContextMenu={(event) => handleReductionContextMenu(event, card.id, card.hyp.reductionForms, streamHypNames(displayStream))}
                   onMouseLeave={() => handleReductionMouseLeave(card.id)}
                 />
@@ -2631,6 +2898,9 @@ export function VisualCanvas({
                 key={copy.id}
                 copy={copy}
                 isFailing={failingTheoremCopyId === copy.id}
+                onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(copy.theorem) && currentStream
+                  ? () => handleTheoremCopyDoubleClick(copy.id, currentStream.id)
+                  : undefined}
               />
             ))}
             <div className="goals-container" data-testid="goals-container">
@@ -2707,6 +2977,9 @@ export function VisualCanvas({
               tactics={visualTactics}
               activeTab={activeTrayTab}
               onTabChange={setActiveTrayTab}
+              onTheoremDoubleClick={streamInteractionsEnabled && currentStream
+                ? theorem => handleTheoremTemplateDoubleClick(theorem, currentStream.id)
+                : undefined}
               pageIndexByTab={trayPageIndexByTab}
               onPageIndexChange={(tab, pageIndex) => {
                 setTrayPageIndexByTab(prev =>
@@ -2818,12 +3091,13 @@ export function VisualCanvas({
       {/* Construction overlay — outside the canvas DndContext, same as transformation overlay */}
       {constructionProps && (
         <ConstructionView
-          key={constructionTarget?.streamId ?? ''}
+          key={constructionTargetKey}
           style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
           varName={constructionProps.varName}
           goalBody={constructionProps.goalBody}
           contextVarNames={constructionProps.contextVarNames}
-          onApply={handleUse}
+          promptMode={constructionProps.promptMode}
+          onApply={handleConstructionApply}
           onClose={closeConstructionView}
           isProcessing={isProcessing}
           headerSlot={

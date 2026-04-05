@@ -10,6 +10,7 @@ interface EqualityHypCardProps {
   rhsStr: string
   lhsNode?: ExpressionNode
   rhsNode?: ExpressionNode
+  forallFooter?: string
   isReverse: boolean
   isFailing?: boolean
   onMouseEnter?: () => void
@@ -32,6 +33,7 @@ export function EqualityHypCard({
   rhsStr,
   lhsNode,
   rhsNode,
+  forallFooter,
   isReverse,
   isFailing = false,
   onMouseEnter,
@@ -56,10 +58,11 @@ export function EqualityHypCard({
       title={tooltip}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`tr-rule-card tr-eq-card${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}`}
+      className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}`}
     >
       <h3>{label}</h3>
       <div className="tr-symbol">{symbol}</div>
+      {forallFooter && <div className="tr-forall-footer">{formatRuleExpr(forallFooter)}</div>}
     </div>
   )
 }

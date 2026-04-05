@@ -187,7 +187,7 @@ function VisualMapAppBar({ gameTitle }: { gameTitle: string }) {
     <div className="visual-map-appbar">
       <button
         className="visual-map-back-btn"
-        onClick={() => navigate(`/${gameId}`)}
+        onClick={() => navigate('/')}
         title={t("Home")}
         aria-label={t("Home")}
       >

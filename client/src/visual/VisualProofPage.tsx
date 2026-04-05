@@ -12,10 +12,17 @@ import { VisualHeader } from './VisualHeader'
 import type { CanvasState, PropositionTheorem, VisualTactic } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
+import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
 import type { ProofState } from '../components/infoview/rpc_api'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert'])
+// AdvMultiplication 9 is the first active NNG4 lesson that teaches the
+// induction-generalizing pattern formerly introduced alongside `revert`.
+const VISUAL_REVERT_UNLOCK = {
+  worldId: 'AdvMultiplication',
+  levelId: 9,
+}
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1
@@ -70,135 +77,71 @@ async function fetchJsonWithRetry<T>(
   return null
 }
 
-function extractTheoremStatementBody(statement: string): string {
-  let body = statement
-  let depth = 0
-  for (let i = 0; i < statement.length; i++) {
-    if (statement[i] === '(') depth++
-    else if (statement[i] === ')') depth--
-    else if (depth === 0 && statement.slice(i, i + 2) === ': ') {
-      body = statement.slice(i + 2)
-      break
-    }
-  }
-  return body
-    .replace(/â†’/g, '→')
-    .replace(/â†/g, '←')
-    .replace(/â†”/g, '↔')
-    .replace(/\bMyNat\./g, '')
-    .replace(/\bNat\./g, '')
-    .trim()
-}
-
-function normalizeTheoremStatement(statement: string): string {
-  return statement
-    .replace(/Ã¢â€ â€™/g, 'â†’')
-    .replace(/Ã¢â€ Â/g, 'â†')
-    .replace(/Ã¢â€ â€/g, 'â†”')
-    .replace(/\bMyNat\./g, '')
-    .replace(/\bNat\./g, '')
-    .trim()
-}
-
-function splitLeadingBinder(statement: string): { binder: string; rest: string } | null {
-  const trimmed = statement.trim()
-  if (!trimmed.startsWith('(')) return null
-
-  let depth = 0
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === '(') depth++
-    else if (trimmed[i] === ')') {
-      depth--
-      if (depth === 0) {
-        return {
-          binder: trimmed.slice(1, i).trim(),
-          rest: trimmed.slice(i + 1).trim(),
-        }
-      }
-    }
-  }
-
-  return null
-}
-
-function stripOuterParens(statement: string): string {
-  let current = statement.trim()
-  while (current.startsWith('(') && current.endsWith(')')) {
-    let depth = 0
-    let wrapsWhole = true
-    for (let i = 0; i < current.length; i++) {
-      if (current[i] === '(') depth++
-      else if (current[i] === ')') {
-        depth--
-        if (depth === 0 && i < current.length - 1) {
-          wrapsWhole = false
-          break
-        }
-      }
-    }
-    if (!wrapsWhole) break
-    current = current.slice(1, -1).trim()
-  }
-  return current
-}
-
-function hasTopLevelImplication(statement: string): boolean {
-  statement = stripOuterParens(statement)
-  let depth = 0
-  for (let i = 0; i < statement.length; i++) {
-    const ch = statement[i]
-    if (ch === '(') depth++
-    else if (ch === ')') depth--
-    else if (depth === 0) {
-      if (statement.slice(i, i + 1) === '→') return true
-      if (statement.slice(i, i + 2) === '->') return true
-      if (statement.slice(i, i + 2) === '=>') return true
-      if (statement.slice(i, i + 3) === '\\to') return true
-      if (statement.slice(i, i + 8) === '\\implies') return true
-    }
-  }
-  return false
-}
-
-function isPropositionBinderType(type: string): boolean {
-  const normalized = stripOuterParens(type.trim())
-  return normalized.includes(' = ')
-    || normalized.includes(' ≠ ')
-    || normalized.includes('∧')
-    || normalized.includes('∨')
-    || normalized.startsWith('¬')
-    || normalized === 'False'
-    || normalized === 'True'
-    || hasTopLevelImplication(normalized)
-}
-
-function buildPropositionTheorem(statement: string): string {
-  let rest = normalizeTheoremStatement(statement)
-  const premises: string[] = []
-
-  while (true) {
-    const split = splitLeadingBinder(rest)
-    if (!split) break
-    const colonIdx = split.binder.lastIndexOf(':')
-    const binderType = colonIdx === -1 ? '' : split.binder.slice(colonIdx + 1).trim()
-    if (binderType && isPropositionBinderType(binderType)) premises.push(binderType)
-    rest = split.rest
-  }
-
-  if (rest.startsWith(':')) rest = rest.slice(1).trim()
-  return premises.length > 0 ? `${premises.join(' → ')} → ${rest}` : rest
-}
-
 /** Parse an NNG4 theorem statement like " (a d : ℕ) : a + MyNat.succ d = MyNat.succ (a + d)"
  *  by stripping the argument prefix and normalizing Lean notation for the arithmetic parser. */
-function parseTheoremStatement(statement: string, displayName: string, thmName: string): EqualityHyp | null {
-  // 1. Strip "(args : Type) :" prefix — find the first ": " at parenthesis depth 0
-  let body = extractTheoremStatementBody(statement)
+function parseTheoremStatement(
+  statement: string,
+  displayName: string,
+  thmName: string,
+): (EqualityHyp & { forallFooter?: string }) | null {
+  const theoremDisplay = buildEqualityTheoremDisplay(statement)
+  let body = theoremDisplay.mainText
   body = body
     .replace(/\bsucc\s+(\d+)\b/g, 'succ($1)')
     .replace(/\bsucc\s+\(/g, 'succ(')
     .replace(/\bsucc\s+([a-zA-Z]\w*)/g, 'succ($1)')
-  return parseEqualityHyp(body, displayName, thmName)
+  const parsed = parseEqualityHyp(body, displayName, thmName)
+  return parsed ? { ...parsed, forallFooter: theoremDisplay.forallFooter } : null
+}
+
+function isAtOrAfterLevel(
+  currentWorldId: string,
+  currentLevelId: number,
+  unlockWorldId: string,
+  unlockLevelId: number,
+  worldRank: Record<string, number>,
+): boolean {
+  const currentRank = worldRank[currentWorldId]
+  const unlockRank = worldRank[unlockWorldId]
+  if (currentRank == null || unlockRank == null) return false
+  return currentRank > unlockRank || (currentRank === unlockRank && currentLevelId >= unlockLevelId)
+}
+
+function withVisualOnlyTactics(
+  tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>,
+  options: {
+    worldId: string
+    levelId: number
+    worldRank: Record<string, number>
+  },
+) {
+  const revertUnlocked = isAtOrAfterLevel(
+    options.worldId,
+    options.levelId,
+    VISUAL_REVERT_UNLOCK.worldId,
+    VISUAL_REVERT_UNLOCK.levelId,
+    options.worldRank,
+  )
+  const nextTactics = tactics.map(tactic =>
+    tactic.name === 'revert' && revertUnlocked
+      ? { ...tactic, locked: false, hidden: false }
+      : tactic,
+  )
+  const alreadyPresent = nextTactics.some(tactic => tactic.name === 'revert')
+
+  if (!alreadyPresent) {
+    const revertEntry = {
+      name: 'revert',
+      displayName: 'revert',
+      hidden: false,
+      locked: !revertUnlocked,
+    }
+    const inductionIndex = nextTactics.findIndex(tactic => tactic.name === 'induction')
+    if (inductionIndex >= 0) nextTactics.splice(inductionIndex + 1, 0, revertEntry)
+    else nextTactics.push(revertEntry)
+  }
+
+  return nextTactics
 }
 
 export function VisualProofPage() {
@@ -327,7 +270,10 @@ export function VisualProofPage() {
 
         // Compute topological world rank from game graph edges (Kahn's BFS).
         const edges = gameData?.worlds?.edges ?? []
-        const nodes = new Set(edges.flatMap(([a, b]: string[]) => [a, b]))
+        const nodes = new Set([
+          ...Object.keys(gameData?.worlds?.nodes ?? {}),
+          ...edges.flatMap(([a, b]: string[]) => [a, b]),
+        ])
         const inDegree: Record<string, number> = {}
         const adj: Record<string, string[]> = {}
         nodes.forEach((n: string) => { inDegree[n] = 0; adj[n] = [] })
@@ -340,6 +286,12 @@ export function VisualProofPage() {
           worldRank[n] = r++
           adj[n].sort().forEach((m: string) => { if (--inDegree[m] === 0) queue.push(m) })
         }
+
+        const tacticsWithVisualUnlocks = withVisualOnlyTactics(tactics, {
+          worldId,
+          levelId,
+          worldRank,
+        })
 
         // Category order matches the NNG4 inventory tab order: first occurrence of each
         // category in the alphabetically-sorted lemma list (same logic as inventorySubtabOptionsAtom).
@@ -358,7 +310,7 @@ export function VisualProofPage() {
             || (x.declIndex ?? Infinity) - (y.declIndex ?? Infinity)
             || x.displayName.localeCompare(y.displayName)
           )
-        const availableTactics = tactics
+        const availableTactics = tacticsWithVisualUnlocks
           .filter(t => !t.locked && !t.hidden && SUPPORTED_VISUAL_TACTICS.has(t.name))
           .map(tactic => ({
             id: tactic.name,
@@ -390,13 +342,15 @@ export function VisualProofPage() {
           if (result.status !== 'fulfilled') continue
           const { thm, statement, theoremKind } = result.value
           if (!statement) continue
-          const body = extractTheoremStatementBody(statement)
           if (theoremKind === 'proposition') {
+            const theoremDisplay = buildPropositionTheoremDisplay(statement)
             propositionHyps.push({
               id: thm.name,
               theoremName: thm.name,
               label: thm.displayName || thm.name,
-              proposition: buildPropositionTheorem(statement),
+              proposition: theoremDisplay.mainText,
+              forallFooter: theoremDisplay.forallFooter,
+              forallSpecification: theoremDisplay.forallSpecification,
             })
             continue
           }

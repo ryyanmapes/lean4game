@@ -39,6 +39,10 @@ function goalTypeText(stream: GoalStream): string {
   return normalizePropositionText(stripTaggedText(stream.goal.type).trim())
 }
 
+function goalDisplayText(stream: GoalStream): string {
+  return stripTaggedText(stream.goal.type).trim()
+}
+
 function findHypCardByInteractionName(stream: GoalStream, hypName: string): HypCardType | null {
   return stream.hyps.find(card =>
     card.hyp.playName === hypName || card.hyp.names[0] === hypName
@@ -257,6 +261,70 @@ function splitEqualityTarget(text: string): [string, string] | null {
     ?? splitTopLevelInfix(text, '=')
 }
 
+function splitLeadingForallTargetForRuntime(
+  text: string,
+): { varName: string; domain: string; body: string } | null {
+  let rest = stripTaggedText(text).trim()
+  if (!rest.startsWith('∀')) return null
+  rest = rest.slice(1).trimStart()
+
+  const binderTexts: string[] = []
+  while (rest.startsWith('(')) {
+    let depth = 0
+    let closeIndex = -1
+    for (let i = 0; i < rest.length; i++) {
+      const ch = rest[i]
+      if (ch === '(') depth += 1
+      else if (ch === ')') {
+        depth -= 1
+        if (depth === 0) {
+          closeIndex = i
+          break
+        }
+      }
+    }
+    if (closeIndex === -1) return null
+    binderTexts.push(rest.slice(1, closeIndex).trim())
+    rest = rest.slice(closeIndex + 1).trimStart()
+  }
+
+  if (!rest.startsWith(',')) return null
+  const bodyAfterComma = rest.slice(1).trim()
+  const [firstBinder, ...remainingBinders] = binderTexts
+  if (!firstBinder) return null
+
+  const colonIndex = firstBinder.lastIndexOf(':')
+  const namesText = colonIndex === -1 ? firstBinder : firstBinder.slice(0, colonIndex).trim()
+  const domain = colonIndex === -1 ? '' : firstBinder.slice(colonIndex + 1).trim()
+  const names = namesText.split(/\s+/).filter(Boolean)
+  const [varName, ...remainingNames] = names
+  if (!varName) return null
+
+  const remainingBinderTexts = [
+    ...(remainingNames.length > 0 && domain ? [`${remainingNames.join(' ')} : ${domain}`] : []),
+    ...remainingBinders,
+  ]
+  const body = remainingBinderTexts.length > 0
+    ? `∀ ${remainingBinderTexts.map(binder => `(${binder})`).join(' ')}, ${bodyAfterComma}`
+    : bodyAfterComma
+
+  return { varName, domain, body }
+}
+
+function splitReflexiveEqualityImplicationTargetForRuntime(text: string): [string, string] | null {
+  const implication = splitImplicationTargetForRuntime(text)
+  if (!implication) return null
+
+  const [premise, codomain] = implication
+  const equality = splitEqualityTarget(premise)
+  if (!equality) return null
+
+  const [lhs, rhs] = equality
+  return normalizePropositionText(lhs) === normalizePropositionText(rhs)
+    ? [normalizePropositionText(premise), normalizePropositionText(codomain)]
+    : null
+}
+
 function normalizePropositionText(text: string): string {
   const normalized = stripOuterParens(text).replace(/\s+/g, ' ').trim()
   try {
@@ -336,7 +404,9 @@ function synthesizeHypSplitStream(
   focusedStream: GoalStream,
   hypName: string,
 ): GoalStream | null {
-  const targetIndex = focusedStream.hyps.findIndex(card => card.hyp.names[0] === hypName)
+  const targetIndex = focusedStream.hyps.findIndex(card =>
+    card.hyp.playName === hypName || card.hyp.names[0] === hypName,
+  )
   if (targetIndex === -1) return null
 
   const targetCard = focusedStream.hyps[targetIndex]
@@ -368,6 +438,45 @@ function synthesizeHypSplitStream(
   return {
     ...focusedStream,
     hyps: nextHyps,
+  }
+}
+
+function synthesizeHypReflexiveSpecializationStream(
+  focusedStream: GoalStream,
+  hypName: string,
+): GoalStream | null {
+  const targetIndex = focusedStream.hyps.findIndex(card =>
+    card.hyp.playName === hypName || card.hyp.names[0] === hypName,
+  )
+  if (targetIndex === -1) return null
+
+  const targetCard = focusedStream.hyps[targetIndex]
+  const implication = splitReflexiveEqualityImplicationTargetForRuntime(
+    stripTaggedText(targetCard.hyp.type).trim(),
+  )
+  if (!implication) return null
+
+  const [, codomain] = implication
+  const hypNameForCard = targetCard.hyp.names[0] ?? hypName
+  const hypPlayName = targetCard.hyp.playName ?? hypNameForCard
+
+  return {
+    ...focusedStream,
+    hyps: focusedStream.hyps.map((card, index) =>
+      index !== targetIndex
+        ? card
+        : {
+            ...card,
+            hyp: {
+              ...card.hyp,
+              fvarIds: undefined,
+              type: { text: codomain },
+              val: undefined,
+              clickAction: buildHypClickAction(codomain, hypNameForCard, hypPlayName),
+              reductionForms: [],
+            },
+          },
+    ),
   }
 }
 
@@ -504,7 +613,16 @@ function synthesizedCardPosition(cardIndex: number): { x: number; y: number } {
 }
 
 function buildGoalClickAction(typeText: string) {
-  const normalized = normalizePropositionText(typeText)
+  const raw = stripTaggedText(typeText).trim()
+  if (splitLeadingForallTargetForRuntime(raw)) {
+    return {
+      playTactic: 'click_goal',
+      tooltip: 'Click to introduce variable',
+      options: [],
+    }
+  }
+
+  const normalized = normalizePropositionText(raw)
   const equalityTarget = splitEqualityTarget(normalized)
   if (equalityTarget) {
     const [lhs, rhs] = equalityTarget
@@ -576,18 +694,26 @@ function buildHypClickAction(typeText: string, hypName: string, playName: string
     }
   }
 
+  if (splitReflexiveEqualityImplicationTargetForRuntime(normalized)) {
+    return {
+      playTactic: `click_prop ${playName}`,
+      tooltip: 'Click to specialize with rfl',
+      options: [],
+    }
+  }
+
   return undefined
 }
 
 function withSynthesizedInteractivity(stream: GoalStream): GoalStream {
-  const streamGoalType = goalTypeText(stream)
+  const streamGoalDisplay = goalDisplayText(stream)
   return {
     ...stream,
     goal: {
       ...stream.goal,
-      clickAction: goalClickActionMatchesType(streamGoalType, stream.goal.clickAction)
+      clickAction: goalClickActionMatchesType(streamGoalDisplay, stream.goal.clickAction)
         ? stream.goal.clickAction
-        : buildGoalClickAction(goalTypeText(stream)),
+        : buildGoalClickAction(streamGoalDisplay),
     },
     hyps: stream.hyps.map(card => {
       const hypName = card.hyp.names[0] ?? ''
@@ -614,6 +740,36 @@ function normalizeCanvasInteractivity(canvas: CanvasState): CanvasState {
 }
 
 function synthesizeGoalIntroStream(focusedStream: GoalStream): GoalStream | null {
+  const explicitForall = splitLeadingForallTargetForRuntime(goalDisplayText(focusedStream))
+  if (explicitForall) {
+    const nextHyps = cloneHypCards(focusedStream.hyps)
+    nextHyps.push({
+      id: uuidv4(),
+      hyp: {
+        names: [explicitForall.varName],
+        type: { text: explicitForall.domain },
+        clickAction: explicitForall.domain
+          ? buildHypClickAction(explicitForall.domain, explicitForall.varName)
+          : undefined,
+        reductionForms: [],
+      },
+      position: synthesizedCardPosition(nextHyps.length),
+    })
+
+    return {
+      ...focusedStream,
+      goal: {
+        ...focusedStream.goal,
+        mvarId: undefined,
+        type: { text: explicitForall.body },
+        clickAction: buildGoalClickAction(explicitForall.body),
+        reductionForms: [],
+      },
+      hyps: nextHyps,
+      reductionForms: [],
+    }
+  }
+
   const implication = splitImplicationTargetForRuntime(goalTypeText(focusedStream))
   if (!implication) return null
 
@@ -701,7 +857,8 @@ function synthesizeContinuationStream(
   }
   if (playTactic.startsWith('click_prop ')) {
     const hypName = playTactic.slice('click_prop '.length).trim()
-    return synthesizeHypSplitStream(focusedStream, hypName)
+    return synthesizeHypReflexiveSpecializationStream(focusedStream, hypName)
+      ?? synthesizeHypSplitStream(focusedStream, hypName)
   }
   if (playTactic.startsWith('drag_to ')) {
     const [, sourceName, targetName] = playTactic.trim().split(/\s+/)

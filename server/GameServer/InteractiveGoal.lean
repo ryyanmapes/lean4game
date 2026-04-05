@@ -66,6 +66,44 @@ instance : Append InteractiveGoals := ⟨InteractiveGoals.append⟩
 instance : EmptyCollection InteractiveGoals := ⟨{goals := #[]}⟩
 
 open Meta in
+private def prettyExprString (e : Expr) : MetaM String := do
+  return (← ppExpr e).pretty.trimAscii.toString
+
+open Meta in
+private def prettyBinderString (binderName : Name) (binderInfo : BinderInfo) (type : Expr) : MetaM String := do
+  let typeStr ← prettyExprString type
+  let nameStr := toString binderName
+  pure <| match binderInfo with
+    | .implicit       => "{" ++ nameStr ++ " : " ++ typeStr ++ "}"
+    | .strictImplicit => "⦃" ++ nameStr ++ " : " ++ typeStr ++ "⦄"
+    | .instImplicit   =>
+        if binderName == Name.anonymous then "[" ++ typeStr ++ "]"
+        else "[" ++ nameStr ++ " : " ++ typeStr ++ "]"
+    | _               => s!"({nameStr} : {typeStr})"
+
+open Meta in
+private partial def quantifiedTypeDisplay? (type : Expr) : MetaM (Option (String × String)) := do
+  let rec go (e : Expr) (binders : Array String) : MetaM (Option (String × String)) := do
+    let e ← instantiateMVars e
+    match e.consumeMData with
+    | .forallE binderName domain body binderInfo =>
+        if ← isProp domain then
+          if binders.isEmpty then
+            return none
+          else
+            return some (← prettyExprString e, s!"∀ {String.intercalate " " binders.toList}")
+        withLocalDecl binderName binderInfo domain fun fvar => do
+          let binderName ← fvar.fvarId!.getUserName
+          let binderStr ← prettyBinderString binderName binderInfo domain
+          go (body.instantiate1 fvar) (binders.push binderStr)
+    | _ =>
+        if binders.isEmpty then
+          return none
+        else
+          return some (← prettyExprString e, s!"∀ {String.intercalate " " binders.toList}")
+  go type #[]
+
+open Meta in
 -- duplicated with custom `InteractiveHypothesisBundle` and therefore added `isAssumption?`
 @[inherit_doc Lean.Widget.addInteractiveHypothesisBundle]
 def addInteractiveHypothesisBundle (hyps : Array InteractiveHypothesisBundle)
@@ -75,13 +113,16 @@ def addInteractiveHypothesisBundle (hyps : Array InteractiveHypothesisBundle)
     throwError "Can only add a nonzero number of ids as an InteractiveHypothesisBundle."
   let fvarIds := ids.map Prod.snd
   let names := ids.map Prod.fst
+  let quantifiedDisplay? ← quantifiedTypeDisplay? type
   return hyps.push {
     names
     fvarIds
-    type        := (← ppExprTagged type)
-    val?        := (← value?.mapM ppExprTagged)
+    type := (← ppExprTagged type)
+    typeBody? := quantifiedDisplay?.map Prod.fst
+    forallFooter? := quantifiedDisplay?.map Prod.snd
+    val? := (← value?.mapM ppExprTagged)
     isInstance? := if (← isClass? type).isSome then true else none
-    isType?     := if (← instantiateMVars type).isSort then true else none
+    isType? := if (← instantiateMVars type).isSort then true else none
     -- Added:
     isAssumption? := if (← inferType type).isProp then true else none
   }

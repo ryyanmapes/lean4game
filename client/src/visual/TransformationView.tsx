@@ -35,31 +35,43 @@ function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   return draggedId.startsWith('thm_') ? hyp.id : hyp.label
 }
 
-/** Parse a goal equality string "lhs = rhs" into parts. Returns null if unparseable. */
-export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: string } | null {
-  const idx = typeStr.indexOf(' = ')
-  if (idx === -1) return null
-  const lhsStr = typeStr.slice(0, idx).trim()
-  const rhsStr = typeStr.slice(idx + 3).trim()
+function parseTopLevelEquality(typeStr: string): {
+  lhsStr: string
+  rhsStr: string
+  lhs: ExpressionNode
+  rhs: ExpressionNode
+} | null {
   try {
-    parse(lhsStr)
-    parse(rhsStr)
-    return { lhsStr, rhsStr }
+    const parsed = parse(typeStr.trim())
+    if (parsed.type !== 'binary' || parsed.op !== '=') return null
+    return {
+      lhsStr: printExpression(parsed.left),
+      rhsStr: printExpression(parsed.right),
+      lhs: parsed.left,
+      rhs: parsed.right,
+    }
   } catch {
     return null
   }
 }
 
+/** Parse a goal equality string "lhs = rhs" into parts. Returns null if unparseable. */
+export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: string } | null {
+  const parsed = parseTopLevelEquality(typeStr)
+  return parsed ? { lhsStr: parsed.lhsStr, rhsStr: parsed.rhsStr } : null
+}
+
 /** Try to parse a hyp type string as "lhsStr = rhsStr". */
 export function parseEqualityHyp(typeStr: string, hypName: string, hypId: string): EqualityHyp | null {
-  const idx = typeStr.indexOf(' = ')
-  if (idx === -1) return null
-  const lhsStr = typeStr.slice(0, idx).trim()
-  const rhsStr = typeStr.slice(idx + 3).trim()
-  try {
-    return { id: hypId, label: hypName, lhsStr, rhsStr, lhs: parse(lhsStr), rhs: parse(rhsStr) }
-  } catch {
-    return null
+  const parsed = parseTopLevelEquality(typeStr)
+  if (!parsed) return null
+  return {
+    id: hypId,
+    label: hypName,
+    lhsStr: parsed.lhsStr,
+    rhsStr: parsed.rhsStr,
+    lhs: parsed.lhs,
+    rhs: parsed.rhs,
   }
 }
 
@@ -434,8 +446,9 @@ export function TransformationView({
             className="tr-controls"
             style={{
               position: 'fixed',
-              left: '2rem',
+              left: 'calc(var(--proof-sidebar-width, 0px) + 2rem)',
               bottom: `calc(2rem + ${ruleDockHeight}px)`,
+              zIndex: 20,
             }}
           >
             <button
@@ -485,6 +498,7 @@ export function TransformationView({
                         rhsStr={rule.rhsStr}
                         lhsNode={rule.lhs}
                         rhsNode={rule.rhs}
+                        forallFooter={(rule as EqualityHyp & { forallFooter?: string }).forallFooter}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         onMouseEnter={() => setHoveredId(rule.dragId)}

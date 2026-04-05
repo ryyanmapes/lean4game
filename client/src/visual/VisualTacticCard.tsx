@@ -2,6 +2,12 @@ import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import type { VisualTactic } from './types'
 
+function tacticTitle(tactic: VisualTactic): string {
+  return tactic.name === 'revert'
+    ? 'Drag onto a hypothesis to apply this tactic'
+    : 'Drag onto a goal or hypothesis to apply this tactic'
+}
+
 function VisualTacticContent({ tactic }: { tactic: VisualTactic }) {
   return <span className="tactic-label">{tactic.label}</span>
 }
@@ -30,7 +36,7 @@ export function VisualTacticTemplateCard({ tactic }: { tactic: VisualTactic }) {
       className={`statement-card tactic-tray-card${isDragging ? ' dragging' : ''}`}
       {...listeners}
       {...attributes}
-      title="Drag onto a goal or equality hypothesis to apply this tactic"
+      title={tacticTitle(tactic)}
     >
       <VisualTacticContent tactic={tactic} />
     </div>

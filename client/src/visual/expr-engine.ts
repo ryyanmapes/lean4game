@@ -222,6 +222,10 @@ function needsDisplayParens(
 ): boolean {
   if (child.type !== 'binary') return false
 
+  if (child.op === '=') {
+    return needsStructuralParens(child, parentOp)
+  }
+
   if (isArithmeticOp(child.op) && (isArithmeticOp(parentOp) || parentOp === '=')) {
     return needsStructuralParens(child, parentOp)
   }

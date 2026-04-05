@@ -186,12 +186,13 @@ interface Props {
   onApply: (exprStr: string) => Promise<boolean>
   onClose: () => void
   isProcessing: boolean
+  promptMode?: 'propose' | 'specify'
   style?: React.CSSProperties
   headerSlot?: React.ReactNode
 }
 
 export function ConstructionView({
-  varName, goalBody, contextVarNames, onApply, onClose, isProcessing, style, headerSlot,
+  varName, goalBody, contextVarNames, onApply, onClose, isProcessing, promptMode = 'propose', style, headerSlot,
 }: Props) {
   const [term, setTerm] = useState<ConstructionTerm>(() => makeSlot())
   const [history, setHistory] = useState<ConstructionTerm[]>([])
@@ -208,6 +209,7 @@ export function ConstructionView({
   const isComplete = slotCount === 0
   const canUndo = history.length > 0
   const busy = isProcessing || isDoneProcessing
+  const isSpecifyMode = promptMode === 'specify'
 
   // Clear stale slot selection when the selected slot gets filled
   useEffect(() => {
@@ -318,13 +320,27 @@ export function ConstructionView({
 
           {/* "Propose x such that P x" header */}
           <div className="cn-propose-label">
-            <span className="cn-propose-keyword">Propose</span>
-            {' '}
-            <span className="cn-propose-var">{varName}</span>
-            {' '}
-            <span className="cn-propose-keyword">such that</span>
-            {' '}
-            <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+            {isSpecifyMode ? (
+              <>
+                <span className="cn-propose-keyword">Specify</span>
+                {' '}
+                <span className="cn-propose-var">{varName}</span>
+                {' '}
+                <span className="cn-propose-keyword">for which you'll have</span>
+                {' '}
+                <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+              </>
+            ) : (
+              <>
+                <span className="cn-propose-keyword">Propose</span>
+                {' '}
+                <span className="cn-propose-var">{varName}</span>
+                {' '}
+                <span className="cn-propose-keyword">such that</span>
+                {' '}
+                <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+              </>
+            )}
           </div>
 
           {/* Term display */}
@@ -352,7 +368,7 @@ export function ConstructionView({
               onClick={() => void handleDone()}
               disabled={!isComplete || busy}
               className={`cn-done-btn${isComplete ? ' ready' : ''}${doneError ? ' error' : ''}`}
-              title={isComplete ? 'Submit witness to Lean' : 'Fill all slots to continue'}
+              title={isComplete ? (isSpecifyMode ? 'Submit specification to Lean' : 'Submit witness to Lean') : 'Fill all slots to continue'}
             >Done ›</button>
           </div>
         </div>

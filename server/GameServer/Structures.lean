@@ -88,6 +88,10 @@ structure ClickAction where
 structure InteractiveHypothesisBundle extends Lean.Widget.InteractiveHypothesisBundle where
   /-- The hypothesis's type is of type `Prop` -/
   isAssumption? : Option Bool := none
+  /-- Visual-card body text after stripping leading non-propositional forall binders, if any. -/
+  typeBody? : Option String := none
+  /-- Compact footer text for the stripped leading non-propositional forall binders. -/
+  forallFooter? : Option String := none
   /-- If the hypothesis type is `lhs = rhs`, the parsed equality tree (else none). -/
   equalityTree? : Option EqualityTree := none
   /-- Backend-rendered forms obtained only from reducible unfolding, shown in the

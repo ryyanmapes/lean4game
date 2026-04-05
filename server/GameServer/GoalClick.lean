@@ -7,6 +7,7 @@ open Lean Meta
 /-- Shared classification for direct goal clicks in the visual proof UI. -/
 inductive ClickGoalKind where
   | completeByRfl
+  | introVar
   | introProp
   | splitAnd
 
@@ -28,8 +29,8 @@ private def hasLeadingPropBinderReducing (target : Expr) : MetaM Bool := do
     throw ex
 
 /-- Recognize goals that can be handled by a direct click:
-`rfl`-solvable equalities and proposition implications, including reducible
-surface forms like `¬ P` and `a ≠ b`. -/
+`rfl`-solvable equalities, forall binders, and proposition implications,
+including reducible surface forms like `¬ P` and `a ≠ b`. -/
 def clickGoalKind? (target : Expr) : MetaM (Option ClickGoalKind) := do
   let targetWhnf ← withReducible (whnf target)
   match targetWhnf with
@@ -44,7 +45,7 @@ def clickGoalKind? (target : Expr) : MetaM (Option ClickGoalKind) := do
       if ← isProp domain then
         pure <| some .introProp
       else
-        pure none
+        pure <| some .introVar
   | _ =>
       if ← hasLeadingPropBinderReducing target then
         pure <| some .introProp

@@ -5,19 +5,23 @@ import { formatFormulaText } from './expr-engine'
 
 function PropositionTheoremContent({ theorem }: { theorem: PropositionTheorem }) {
   const proposition = formatFormulaText(theorem.proposition)
+  const forallFooter = theorem.forallFooter ? formatFormulaText(theorem.forallFooter) : undefined
 
   return (
     <>
-      <span className="hyp-name">{theorem.label}</span>
-      <span className="hyp-colon">:</span>
-      <span className="proposition">{proposition}</span>
+      <div className="statement-card-main">
+        <span className="hyp-name">{theorem.label}</span>
+        <span className="hyp-colon">:</span>
+        <span className="proposition">{proposition}</span>
+      </div>
+      {forallFooter && <div className="statement-forall-footer">{forallFooter}</div>}
     </>
   )
 }
 
 export function PropositionTheoremPreviewCard({ theorem }: { theorem: PropositionTheorem }) {
   return (
-    <div className="statement-card theorem-copy-card theorem-overlay-card">
+    <div className={`statement-card theorem-copy-card theorem-overlay-card${theorem.forallFooter ? ' has-forall-footer' : ''}`}>
       <PropositionTheoremContent theorem={theorem} />
     </div>
   )
@@ -25,25 +29,32 @@ export function PropositionTheoremPreviewCard({ theorem }: { theorem: Propositio
 
 interface PropositionTheoremTemplateCardProps {
   theorem: PropositionTheorem
+  onDoubleClick?: () => void
 }
 
-export function PropositionTheoremTemplateCard({ theorem }: PropositionTheoremTemplateCardProps) {
+export function PropositionTheoremTemplateCard({ theorem, onDoubleClick }: PropositionTheoremTemplateCardProps) {
   const dragId = `theorem_template_${theorem.id}`
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dragId,
     data: { theoremTemplate: true, theorem },
   })
   const style: React.CSSProperties | undefined = isDragging ? { visibility: 'hidden' } : undefined
+  const title = theorem.forallSpecification
+    ? 'Drag out to create a theorem copy, or double-click to specify an expression'
+    : 'Drag out to create a theorem copy'
 
   return (
     <div
       ref={setNodeRef}
       id={dragId}
+      data-testid="theorem-tray-card"
+      data-theorem-name={theorem.theoremName}
       style={style}
-      className={`statement-card theorem-tray-card${isDragging ? ' dragging' : ''}`}
+      className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}`}
+      onDoubleClick={!isDragging ? onDoubleClick : undefined}
       {...listeners}
       {...attributes}
-      title="Drag out to create a theorem copy"
+      title={title}
     >
       <PropositionTheoremContent theorem={theorem} />
     </div>
@@ -53,9 +64,10 @@ export function PropositionTheoremTemplateCard({ theorem }: PropositionTheoremTe
 interface PropositionTheoremCopyCardProps {
   copy: PropositionTheoremCopy
   isFailing?: boolean
+  onDoubleClick?: () => void
 }
 
-export function PropositionTheoremCopyCard({ copy, isFailing = false }: PropositionTheoremCopyCardProps) {
+export function PropositionTheoremCopyCard({ copy, isFailing = false, onDoubleClick }: PropositionTheoremCopyCardProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: copy.id,
     data: { theoremCopy: true, theorem: copy.theorem },
@@ -81,6 +93,8 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false }: Proposit
   const classes = [
     'statement-card',
     'theorem-copy-card',
+    copy.theorem.forallFooter ? 'has-forall-footer' : '',
+    copy.theorem.forallSpecification ? 'constructable' : '',
     isDragging ? 'dragging' : '',
     isOver && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
@@ -89,10 +103,15 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false }: Proposit
   return (
     <div
       id={copy.id}
+      data-testid="theorem-copy-card"
+      data-theorem-name={copy.theorem.theoremName}
       ref={setRef}
       style={style}
       className={classes}
-      title="Drag onto cards to use this theorem, or back to the theorem bar to delete it"
+      onDoubleClick={!isDragging ? onDoubleClick : undefined}
+      title={copy.theorem.forallSpecification
+        ? 'Drag onto cards to use this theorem, or double-click to specify an expression'
+        : 'Drag onto cards to use this theorem, or back to the theorem bar to delete it'}
       {...listeners}
       {...attributes}
     >

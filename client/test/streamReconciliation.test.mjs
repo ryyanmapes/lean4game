@@ -692,3 +692,87 @@ test('the full nested conjunction proof can reconcile from A through final C com
   assert.deepEqual(afterCComplete.nextCanvas.streams, [])
   assert.equal(findLeafForStream(afterCComplete.nextTree, appliedB.id)?.completed, true)
 })
+
+test('click_prop specializes a reflexive-equality implication hypothesis in place', () => {
+  const focusedStream = stream('stream-rfl', 'Goal', 'main', [
+    hyp('hyp-rfl', 'h', 'a = a → B'),
+    hyp('hyp-q', 'hq', 'Q'),
+  ])
+  const beforeTree = {
+    id: 'leaf-rfl',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'click_prop h',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  const specializedStream = result.focusedStreams[0]
+  assert.ok(specializedStream)
+  assert.equal(specializedStream.goal.type.text, 'Goal')
+  assert.equal(hypTypeFor(specializedStream, 'h'), 'B')
+  assert.equal(hypTypeFor(specializedStream, 'hq'), 'Q')
+  assert.equal(result.nextCanvas.streams.length, 1)
+  assert.equal(result.nextCanvas.streams[0]?.id, specializedStream.id)
+
+  const leaf = findLeafForStream(result.nextTree, specializedStream.id)
+  assert.ok(leaf)
+  assert.equal(leaf?.completed, false)
+})
+
+test('click_goal on an explicit forall goal introduces the bound variable before the implication', () => {
+  const focusedStream = stream('stream-forall', '∀ (c : ℕ), a * 0 = a * c → 0 = c', 'main', [])
+  const beforeTree = {
+    id: 'leaf-forall',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'click_goal',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  const introducedStream = result.focusedStreams[0]
+  assert.ok(introducedStream)
+  assert.equal(introducedStream.goal.type.text, 'a * 0 = a * c → 0 = c')
+  assert.equal(introducedStream.goal.clickAction?.playTactic, 'click_goal')
+  assert.equal(introducedStream.goal.clickAction?.tooltip, 'Click to introduce assumption')
+  assert.equal(hypTypeFor(introducedStream, 'c'), 'ℕ')
+  assert.equal(result.nextCanvas.streams.length, 1)
+  assert.equal(result.nextCanvas.streams[0]?.id, introducedStream.id)
+})

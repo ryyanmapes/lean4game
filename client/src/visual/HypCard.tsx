@@ -14,6 +14,7 @@ interface HypCardProps {
   isClickable?: boolean
   clickTooltip?: string
   isTransformable?: boolean
+  isConstructable?: boolean
   animateMove?: boolean
   onClickAction?: () => void
   onDoubleClick?: () => void
@@ -30,6 +31,7 @@ export function HypCard({
   isClickable = false,
   clickTooltip,
   isTransformable = false,
+  isConstructable = false,
   animateMove = false,
   onClickAction,
   onDoubleClick,
@@ -63,21 +65,26 @@ export function HypCard({
 
   const classes = [
     'statement-card',
+    card.hyp.forallFooter ? 'has-forall-footer' : '',
     isDragging ? 'dragging' : '',
     isOver && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
     isClickable ? 'clickable' : '',
     isTransformable ? 'transformable' : '',
+    isConstructable ? 'constructable' : '',
     animateMove ? 'fly-in' : '',
   ].filter(Boolean).join(' ')
 
   const title = isClickable
     ? clickTooltip
-    : isTransformable
+    : isConstructable
+      ? 'Double-click to specify an expression'
+      : isTransformable
       ? 'Double-click to open transformation view'
       : undefined
   const hypName = card.hyp.names[0] ?? ''
-  const hypType = formatFormulaText(TaggedText_stripTags(card.hyp.type))
+  const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
+  const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
 
   React.useEffect(() => {
     return () => {
@@ -122,16 +129,19 @@ export function HypCard({
       style={style}
       className={classes}
       onClick={isInteractive && isClickable && !isDragging ? handleClick : undefined}
-      onDoubleClick={isInteractive && isTransformable && !isDragging ? handleDoubleClick : undefined}
+      onDoubleClick={isInteractive && (isTransformable || isConstructable) && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
       title={title}
       {...(isInteractive ? listeners : {})}
       {...(isInteractive ? attributes : {})}
     >
-      <span className="hyp-name">{card.hyp.names.join(', ')}</span>
-      <span className="hyp-colon">:</span>
-      <span className="proposition">{hypType}</span>
+      <div className="statement-card-main">
+        <span className="hyp-name">{card.hyp.names.join(', ')}</span>
+        <span className="hyp-colon">:</span>
+        <span className="proposition">{hypType}</span>
+      </div>
+      {forallFooter && <div className="statement-forall-footer">{forallFooter}</div>}
     </div>
   )
 }

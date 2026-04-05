@@ -118,6 +118,7 @@
     "cypress:debug": "cross-env DEBUG=cypress:* node scripts/run-cypress.cjs open",
     "test:visual-level2-browser": "node scripts/run-cypress.cjs run --spec cypress/e2e/visualtest-level2.cy.ts --browser electron",
     "test:visual-stream-reconcile": ".\\node_modules\\.bin\\tsc.cmd client\\src\\visual\\proofTree.ts client\\src\\visual\\streamReconciliation.ts client\\src\\visual\\types.ts client\\src\\components\\infoview\\rpc_api.ts --module commonjs --target es2022 --moduleResolution node --outDir tmp-stream-tests --skipLibCheck --esModuleInterop && node --test client/test/streamReconciliation.test.mjs",
+    "test:visual-quantified-statement": ".\\node_modules\\.bin\\tsc.cmd client\\src\\visual\\quantifiedStatement.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-quantified-tests --skipLibCheck --esModuleInterop && node --test client/test/quantifiedStatement.test.mjs",
     "production": "cross-env NODE_ENV=production node relay/dist/src/index.js",
     "translate": "npx i18next-scanner --config client/i18next-scanner.config.cjs",
     "test": "npm run build:test && concurrently -n server,cypress -c blue,green \"npm start\" \"npm run cypress:run:ready\" -k -s first --hide server",

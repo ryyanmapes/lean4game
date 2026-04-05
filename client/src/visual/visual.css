@@ -231,6 +231,10 @@
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
+.visual-page .statement-card.has-forall-footer {
+  white-space: normal;
+}
+
 .visual-page .statement-card:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -420,6 +424,12 @@
   color: var(--text-primary);
 }
 
+.visual-page .statement-card-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
 .visual-page .hyp-name {
   color: #c4b5fd;
   font-weight: 600;
@@ -432,6 +442,16 @@
   margin: 0 0.3rem;
   font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
   font-size: 1.25rem;
+}
+
+.visual-page .statement-forall-footer {
+  margin-top: 0.25rem;
+  color: rgba(148, 163, 184, 0.95);
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .visual-page .goal-prefix {
@@ -521,6 +541,16 @@
 .visual-page .statement-card.clickable:not(.goal):hover:not(.dragging) {
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   background: rgba(96, 165, 250, 0.08);
+}
+
+.visual-page .statement-card.constructable:not(.goal) {
+  cursor: pointer;
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.visual-page .statement-card.constructable:not(.goal):hover:not(.dragging) {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.45), 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: rgba(167, 139, 250, 0.08);
 }
 
 .visual-page .or-tooltip-backdrop {
@@ -1208,6 +1238,10 @@
   overflow: hidden;
 }
 
+.visual-page.tr-overlay .tr-rule-card.has-forall-footer {
+  justify-content: flex-start;
+}
+
 .visual-page .tr-rule-card:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -1238,6 +1272,17 @@
   color: #cbd5e1;
   font-size: 0.8rem;
   opacity: 0.85;
+}
+
+.visual-page .tr-forall-footer {
+  margin-top: 0.15rem;
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Equality hyp cards — blue tint */

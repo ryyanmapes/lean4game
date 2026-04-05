@@ -52,6 +52,10 @@ export interface InteractiveHypothesisBundle {
   playName?: string;
   fvarIds?: FVarId[];
   type: CodeWithInfos;
+  /** Visual-card body text after stripping leading non-propositional forall binders, if any. */
+  typeBody?: string;
+  /** Compact footer text for leading non-propositional forall binders on visual cards. */
+  forallFooter?: string;
   val?: CodeWithInfos;
   isInstance?: boolean;
   isType?: boolean;

@@ -1,4 +1,5 @@
 import type { InteractiveHypothesisBundle, InteractiveGoal, EqualityTree, ExistsInfo } from '../components/infoview/rpc_api'
+import type { ForallSpecificationInfo } from './quantifiedStatement'
 
 /** A single draggable hypothesis card on the canvas. */
 export interface HypCard {
@@ -32,6 +33,8 @@ export interface PropositionTheorem {
   theoremName: string
   label: string
   proposition: string
+  forallFooter?: string
+  forallSpecification?: ForallSpecificationInfo
 }
 
 /** A supported visual tactic rendered as a draggable tray card. */
