@@ -18,6 +18,31 @@ function LandingPage() {
 
   const { t } = useTranslation()
 
+  React.useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const gradient = 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)'
+    const prevHtmlBackground = html.style.background
+    const prevBodyBackground = body.style.background
+    const prevHtmlBackgroundColor = html.style.backgroundColor
+    const prevBodyBackgroundColor = body.style.backgroundColor
+    const prevBodyOverscrollBehaviorY = body.style.overscrollBehaviorY
+
+    html.style.background = gradient
+    body.style.background = gradient
+    html.style.backgroundColor = '#0f172a'
+    body.style.backgroundColor = '#0f172a'
+    body.style.overscrollBehaviorY = 'none'
+
+    return () => {
+      html.style.background = prevHtmlBackground
+      body.style.background = prevBodyBackground
+      html.style.backgroundColor = prevHtmlBackgroundColor
+      body.style.backgroundColor = prevBodyBackgroundColor
+      body.style.overscrollBehaviorY = prevBodyOverscrollBehaviorY
+    }
+  }, [])
+
   return (
     <div className="landing-page landing-page-dark">
       <header className="lp-header">

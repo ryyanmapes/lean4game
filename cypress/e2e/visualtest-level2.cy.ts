@@ -156,7 +156,34 @@ describe('VisualTest Level 2', () => {
     cy.on('uncaught:exception', () => false)
     cy.clearCookies()
     cy.clearLocalStorage()
+    cy.viewport(1280, 720)
     visitVisualTestLevel2()
+  })
+
+  it('keeps the mobile landscape cards clear of the goal', () => {
+    cy.viewport(844, 390)
+    visitVisualTestLevel2()
+
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).then($goal => {
+      const goalRect = $goal.get(0)!.getBoundingClientRect()
+
+      cy.get('[data-testid="hyp-card"]:visible', { timeout: 60000 }).should(cards => {
+        expect(cards.length).to.be.greaterThan(0)
+
+        Array.from(cards).forEach(card => {
+          const rect = (card as HTMLElement).getBoundingClientRect()
+          const hypName = (card as HTMLElement).dataset.hypName ?? 'hypothesis'
+          const overlapsGoal = !(
+            rect.right <= goalRect.left + 8 ||
+            rect.left >= goalRect.right - 8 ||
+            rect.bottom <= goalRect.top + 8 ||
+            rect.top >= goalRect.bottom - 8
+          )
+          expect(overlapsGoal, `${hypName} should not overlap the goal`).to.equal(false)
+          expect(rect.height, `${hypName} should scale down on mobile`).to.be.lessThan(110)
+        })
+      })
+    })
   })
 
   it('keeps the three proof streams in the expected order', () => {

@@ -70,12 +70,20 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
  * Column width and row height are generous to prevent overlap.
  * streamIndex offsets each subgoal's block horizontally.
  */
+function isCompactLandscapeViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth > window.innerHeight && window.innerHeight <= 500
+}
+
 function gridPosition(streamIndex: number, cardIndex: number): { x: number; y: number } {
-  const COL_W = 280
-  const ROW_H = 110
-  const START_X = 80
-  const START_Y = 130
-  const cols = 3
+  const compactLandscape = isCompactLandscapeViewport()
+  const COL_W = compactLandscape ? 180 : 280
+  const ROW_H = compactLandscape ? 92 : 110
+  const START_X = compactLandscape ? 28 : 80
+  const START_Y = compactLandscape ? 96 : 130
+  const cols = compactLandscape
+    ? (window.innerWidth >= 760 ? 3 : 2)
+    : 3
   const col = cardIndex % cols
   const row = Math.floor(cardIndex / cols)
   void streamIndex

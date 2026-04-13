@@ -63,6 +63,7 @@ const REPULSION_ITERATIONS = 10
 const HITBOX_PADDING = 16
 const DEFAULT_WIDTH = 200
 const DEFAULT_HEIGHT = 50
+const COLLISION_EDGE_MARGIN = 24
 
 interface CanvasBounds {
   left: number
@@ -78,16 +79,29 @@ function resolveCollisions(
 ): HypCardType[] {
   if (hyps.length === 0) return hyps
 
-  const items: { id: string; x: number; y: number; hw: number; hh: number; fixed: boolean }[] =
+  const items: {
+    id: string
+    cx: number
+    cy: number
+    width: number
+    height: number
+    hw: number
+    hh: number
+    fixed: boolean
+  }[] =
     hyps.map(h => {
       const el = document.getElementById(h.id)
       const rect = el?.getBoundingClientRect()
+      const width = rect ? rect.width : DEFAULT_WIDTH
+      const height = rect ? rect.height : DEFAULT_HEIGHT
       return {
         id: h.id,
-        x: h.position.x,
-        y: h.position.y,
-        hw: (rect ? rect.width : DEFAULT_WIDTH) / 2 + HITBOX_PADDING,
-        hh: (rect ? rect.height : DEFAULT_HEIGHT) / 2 + HITBOX_PADDING,
+        cx: h.position.x + width / 2,
+        cy: h.position.y + height / 2,
+        width,
+        height,
+        hw: width / 2 + HITBOX_PADDING,
+        hh: height / 2 + HITBOX_PADDING,
         fixed: false,
       }
     })
@@ -97,8 +111,10 @@ function resolveCollisions(
     if (rect) {
       items.push({
         id,
-        x: rect.left - canvasBounds.left,
-        y: rect.top - canvasBounds.top,
+        cx: rect.left - canvasBounds.left + rect.width / 2,
+        cy: rect.top - canvasBounds.top + rect.height / 2,
+        width: rect.width,
+        height: rect.height,
         hw: rect.width / 2 + HITBOX_PADDING,
         hh: rect.height / 2 + HITBOX_PADDING,
         fixed: true,
@@ -109,8 +125,8 @@ function resolveCollisions(
   for (let iter = 0; iter < REPULSION_ITERATIONS; iter++) {
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {
-        const dx = items[j].x - items[i].x
-        const dy = items[j].y - items[i].y
+        const dx = items[j].cx - items[i].cx
+        const dy = items[j].cy - items[i].cy
         const rx = items[i].hw + items[j].hw
         const ry = items[i].hh + items[j].hh
         const nx = dx / rx
@@ -120,25 +136,55 @@ function resolveCollisions(
           const force = (1 - ellipDist) / 2
           const pushX = (nx / ellipDist) * force * rx
           const pushY = (ny / ellipDist) * force * ry
-          if (!items[i].fixed) { items[i].x -= pushX; items[i].y -= pushY }
-          if (!items[j].fixed) { items[j].x += pushX; items[j].y += pushY }
+          if (!items[i].fixed) { items[i].cx -= pushX; items[i].cy -= pushY }
+          if (!items[j].fixed) { items[j].cx += pushX; items[j].cy += pushY }
         }
       }
     }
   }
 
-  const margin = 100
   for (const item of items) {
     if (!item.fixed) {
-      item.x = Math.max(margin, Math.min(canvasBounds.width - margin, item.x))
-      item.y = Math.max(margin, Math.min(canvasBounds.height - margin, item.y))
+      const minX = item.hw + COLLISION_EDGE_MARGIN
+      const maxX = Math.max(minX, canvasBounds.width - item.hw - COLLISION_EDGE_MARGIN)
+      const minY = item.hh + COLLISION_EDGE_MARGIN
+      const maxY = Math.max(minY, canvasBounds.height - item.hh - COLLISION_EDGE_MARGIN)
+      item.cx = Math.max(minX, Math.min(maxX, item.cx))
+      item.cy = Math.max(minY, Math.min(maxY, item.cy))
     }
   }
 
   return hyps.map(h => {
     const item = items.find(p => p.id === h.id)
-    return item ? { ...h, position: { x: item.x, y: item.y } } : h
+    return item
+      ? {
+          ...h,
+          position: {
+            x: item.cx - item.width / 2,
+            y: item.cy - item.height / 2,
+          },
+        }
+      : h
   })
+}
+
+function positionsDiffer(left: { x: number; y: number }, right: { x: number; y: number }) {
+  return Math.abs(left.x - right.x) > 0.5 || Math.abs(left.y - right.y) > 0.5
+}
+
+function resolveCanvasStateCollisions(canvas: CanvasState, canvasBounds: CanvasBounds): CanvasState {
+  const obstacleIds = canvas.streams.map(stream => stream.id)
+  let changed = false
+
+  const streams = canvas.streams.map(stream => {
+    const resolvedHyps = resolveCollisions(stream.hyps, obstacleIds, canvasBounds)
+    if (!changed) {
+      changed = resolvedHyps.some((hyp, index) => positionsDiffer(hyp.position, stream.hyps[index]!.position))
+    }
+    return changed ? { ...stream, hyps: resolvedHyps } : stream
+  })
+
+  return changed ? { ...canvas, streams } : canvas
 }
 
 /** Merge a freshly computed canvas state with the current one, preserving
@@ -1023,6 +1069,7 @@ export function VisualCanvas({
   onLevelCompleted
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
+  const [layoutVersion, setLayoutVersion] = useState(0)
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -1101,6 +1148,31 @@ export function VisualCanvas({
   const logKey = `${worldId}/${levelId}`
 
   useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevHtmlOverscrollBehavior = html.style.overscrollBehavior
+    const prevBodyOverscrollBehavior = body.style.overscrollBehavior
+
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    html.style.overscrollBehavior = 'none'
+    body.style.overscrollBehavior = 'none'
+
+    const handleResize = () => setLayoutVersion(version => version + 1)
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      html.style.overscrollBehavior = prevHtmlOverscrollBehavior
+      body.style.overscrollBehavior = prevBodyOverscrollBehavior
+    }
+  }, [])
+
+  useEffect(() => {
     if (canvasState.completed) {
       onLevelCompleted?.()
     }
@@ -1164,28 +1236,21 @@ export function VisualCanvas({
     y: number,
     maxWidth: number,
     maxHeight: number,
-    margin = 50,
+    margin = COLLISION_EDGE_MARGIN,
   ): { x: number; y: number } {
     const bounds = getCombiningCanvasBounds()
+    const maxX = Math.max(margin, bounds.width - maxWidth - margin)
+    const maxY = Math.max(margin, bounds.height - maxHeight - margin)
     return {
-      x: Math.max(margin, Math.min(bounds.width - maxWidth, x)),
-      y: Math.max(margin, Math.min(bounds.height - maxHeight, y)),
+      x: Math.max(margin, Math.min(maxX, x)),
+      y: Math.max(margin, Math.min(maxY, y)),
     }
   }
 
   useLayoutEffect(() => {
     const canvasBounds = getCombiningCanvasBounds()
-    setCanvasState(prev => {
-      const obstacleIds = prev.streams.map(s => s.id)
-      return {
-        ...prev,
-        streams: prev.streams.map(stream => ({
-          ...stream,
-          hyps: resolveCollisions(stream.hyps, obstacleIds, canvasBounds),
-        })),
-      }
-    })
-  }, [showProofSidebar])
+    setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds))
+  }, [canvasState.streams, showProofSidebar, layoutVersion])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })

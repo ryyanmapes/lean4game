@@ -231,6 +231,8 @@ export function VisualWorldMap() {
   const gameId = React.useContext(GameIdContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
   useRetryUntilData(gameInfo)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const svgRef = React.useRef<SVGSVGElement>(null)
 
   if (!gameInfo.data) {
     return (
@@ -303,11 +305,46 @@ export function VisualWorldMap() {
   const padding = R + 2.1 * r
   const dx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * padding : null
 
+  const centerMapHorizontally = React.useCallback(() => {
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return
+    const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth
+    if (maxScrollLeft <= 0) return
+    scrollEl.scrollLeft = maxScrollLeft / 2
+  }, [])
+
+  React.useLayoutEffect(() => {
+    if (!bounds) return
+    const rafId = window.requestAnimationFrame(centerMapHorizontally)
+    return () => window.cancelAnimationFrame(rafId)
+  }, [bounds, dx, centerMapHorizontally])
+
+  React.useEffect(() => {
+    if (!bounds) return
+
+    const handleResize = () => centerMapHorizontally()
+    window.addEventListener('resize', handleResize)
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => window.removeEventListener('resize', handleResize)
+    }
+
+    const observer = new ResizeObserver(() => centerMapHorizontally())
+    if (scrollRef.current) observer.observe(scrollRef.current)
+    if (svgRef.current) observer.observe(svgRef.current)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      observer.disconnect()
+    }
+  }, [bounds, centerMapHorizontally])
+
   return (
     <div className="visual-page visual-map-page">
       <VisualMapAppBar gameTitle={title || gameId} />
-      <div className="visual-map-scroll">
+      <div className="visual-map-scroll" ref={scrollRef}>
         <svg
+          ref={svgRef}
           xmlns="http://www.w3.org/2000/svg"
           xmlnsXlink="http://www.w3.org/1999/xlink"
           width={bounds ? `${ds * dx}` : ''}

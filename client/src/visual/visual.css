@@ -20,6 +20,7 @@
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ── Loading / error state ── */
@@ -209,6 +210,7 @@
   width: calc(100% - var(--proof-sidebar-width, 0px));
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   margin-left: var(--proof-sidebar-width, 0px);
   transition: margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1),
               width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -2033,4 +2035,154 @@
 }
 .visual-page .cn-done-btn:disabled {
   cursor: default;
+}
+
+@media (hover: none) and (orientation: landscape) {
+  .visual-page .combining-canvas,
+  .visual-page.tr-overlay {
+    touch-action: none;
+  }
+
+  .visual-page .statement-card {
+    padding: 0.7rem 1rem;
+    border-radius: 10px;
+  }
+
+  .visual-page .statement-card.theorem-copy-card,
+  .visual-page .statement-card.theorem-tray-card {
+    max-width: min(22rem, calc(100vw - 3rem));
+  }
+
+  .visual-page .statement-card.tactic-tray-card {
+    max-width: min(14rem, calc(100vw - 3rem));
+  }
+
+  .visual-page .statement-card.goal {
+    max-width: min(16.5rem, calc(100vw - 1.5rem));
+  }
+
+  .visual-page .goals-container {
+    right: 1rem;
+    top: calc(52px + 4.2rem);
+    transform: none;
+    gap: 0.6rem;
+  }
+
+  .visual-page .proposition,
+  .visual-page .hyp-name,
+  .visual-page .hyp-colon {
+    font-size: 0.98rem;
+  }
+
+  .visual-page .statement-forall-footer {
+    font-size: 0.74rem;
+  }
+
+  .visual-page .goal-prefix {
+    font-size: 0.62rem;
+  }
+
+  .visual-page .stream-nav-btn {
+    padding: 0.1rem 0.4rem;
+  }
+
+  .visual-page .stream-label {
+    font-size: 0.68rem;
+  }
+
+  .visual-page .proof-tree-panel {
+    top: calc(52px + 0.65rem);
+    right: 0.8rem;
+    gap: 0.25rem;
+  }
+
+  .visual-page .proof-tree-diagram {
+    padding: 0.15rem;
+  }
+
+  .visual-header {
+    padding: 0 0.75rem;
+  }
+
+  .visual-header-nav-btn {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .visual-header-level,
+  .visual-header-title {
+    font-size: 0.82rem;
+  }
+
+  .visual-page.tr-overlay {
+    --tr-overlay-dock-min-height: 4.9rem;
+    --tr-overlay-rule-row-height: 3rem;
+  }
+
+  .visual-page.tr-overlay .tr-back-btn {
+    top: calc(52px + 0.4rem);
+    padding: 0.45rem 0.85rem;
+  }
+
+  .visual-page .tr-main-area {
+    padding-top: 3.25rem;
+  }
+
+  .visual-page .tr-static-group {
+    left: 1rem;
+  }
+
+  .visual-page .tr-static-group.static-right {
+    right: 1rem;
+  }
+
+  .visual-page .tr-static-group.pinned-top {
+    top: calc(52px + 3rem);
+  }
+
+  .visual-page .tr-static-label {
+    font-size: 1.25rem;
+  }
+
+  .visual-page .tr-expr-wrapper {
+    transform: scale(1.1);
+  }
+
+  .visual-page .tr-controls,
+  .visual-page .tr-side-controls {
+    bottom: 1rem;
+  }
+
+  .visual-page .tr-rule-card {
+    padding: 0.45rem 0.65rem;
+    border-radius: 10px;
+  }
+
+  .visual-page.tr-overlay .tr-rule-card {
+    max-width: min(14rem, calc(100vw - 8rem));
+  }
+
+  .visual-page .tr-rule-card h3,
+  .visual-page .tr-symbol {
+    font-size: 0.72rem;
+  }
+
+  .visual-page .tr-forall-footer {
+    font-size: 0.62rem;
+  }
+
+  .visual-page .tr-dock-cards {
+    gap: 0.5rem;
+    padding: 0.5rem 0.5rem 0.35rem;
+    min-height: 5.3rem;
+  }
+
+  .visual-page .tr-tab-btn {
+    padding: 0.6rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .visual-page .tactic-label {
+    font-size: 0.88rem;
+  }
 }
