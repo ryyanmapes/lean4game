@@ -2185,4 +2185,30 @@
   .visual-page .tactic-label {
     font-size: 0.88rem;
   }
+
+  .visual-page.tr-transformation-overlay .tr-back-btn {
+    top: 0.45rem;
+    left: calc(env(safe-area-inset-left, 0px) + 0.65rem);
+    padding: 0.28rem 0.72rem;
+    font-size: 0.78rem;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-main-area {
+    padding-top: 2.2rem;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-controls,
+  .visual-page.tr-transformation-overlay .tr-side-controls {
+    bottom: calc(var(--tr-rule-dock-height, 0px) + 0.3rem) !important;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-static-group:not(.static-right) {
+    left: 3.5rem;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-static-group.pinned-top:not(.static-right) {
+    top: calc(52px + 2.45rem);
+  }
 }

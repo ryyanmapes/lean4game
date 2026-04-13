@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import Backend from "i18next-http-backend"
 import { initReactI18next } from "react-i18next";
+import { getAppRelativePath } from "./utils/url";
 
 i18n
 .use(initReactI18next)
@@ -13,9 +14,9 @@ i18n
         const lng = namespaces[0] === "g/hhu-adam/robo" ? "de" : lngs[0];
 
         if (namespaces[0].startsWith("g/")) {
-          return `/i18n/${namespaces[0]}/${lng}/Game.json`;
+          return getAppRelativePath(`i18n/${namespaces[0]}/${lng}/Game.json`);
         } else {
-          return `/locales/${lng}/${namespaces[0]}.json`;
+          return getAppRelativePath(`locales/${lng}/${namespaces[0]}.json`);
         }
       }
     },
