@@ -17,10 +17,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     && echo "UTC" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
-# Install elan. The concrete Lean version is determined per-game by lean-toolchain.
-RUN curl -sSfL \
-      https://github.com/leanprover/elan/releases/download/v3.1.1/elan-x86_64-unknown-linux-gnu.tar.gz \
-    | tar xz && ./elan-init -y --default-toolchain none
+# Install elan using the official bootstrap script so Docker keeps up with
+# newer Lean toolchain tags.
+RUN curl https://elan.lean-lang.org/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
 ENV PATH="${PATH}:/root/.elan/bin"
 
 # Copy the modified GameServer Lean library.
@@ -33,7 +32,7 @@ COPY NNG4 /NNG4
 WORKDIR /NNG4
 # Fetch the toolchain, then download pre-compiled mathlib .olean cache.
 # lake exe cache get saves hours of compilation.
-RUN elan toolchain install "$(cat lean-toolchain)"
+RUN TOOLCHAIN="$(tr -d '\r\n' < lean-toolchain)" && elan toolchain install "$TOOLCHAIN"
 RUN lake exe cache get
 RUN lake build
 
