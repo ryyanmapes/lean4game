@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import type { HypCard as HypCardType } from './types'
 import { formatFormulaText } from './expr-engine'
+import { colorizeFormula } from './colorizeFormula'
 
 interface HypCardProps {
   card: HypCardType
@@ -139,9 +140,9 @@ export function HypCard({
       <div className="statement-card-main">
         <span className="hyp-name">{card.hyp.names.join(', ')}</span>
         <span className="hyp-colon">:</span>
-        <span className="proposition">{hypType}</span>
+        <span className="proposition">{colorizeFormula(hypType)}</span>
       </div>
-      {forallFooter && <div className="statement-forall-footer">{forallFooter}</div>}
+      {forallFooter && <div className="statement-forall-footer">{colorizeFormula(forallFooter)}</div>}
     </div>
   )
 }

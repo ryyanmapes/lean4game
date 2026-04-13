@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import type { PropositionTheorem, PropositionTheoremCopy } from './types'
 import { formatFormulaText } from './expr-engine'
+import { colorizeFormula, hasIntegerNotation } from './colorizeFormula'
 
 function PropositionTheoremContent({ theorem }: { theorem: PropositionTheorem }) {
   const proposition = formatFormulaText(theorem.proposition)
@@ -12,11 +13,16 @@ function PropositionTheoremContent({ theorem }: { theorem: PropositionTheorem })
       <div className="statement-card-main">
         <span className="hyp-name">{theorem.label}</span>
         <span className="hyp-colon">:</span>
-        <span className="proposition">{proposition}</span>
+        <span className="proposition">{colorizeFormula(proposition)}</span>
       </div>
-      {forallFooter && <div className="statement-forall-footer">{forallFooter}</div>}
+      {forallFooter && <div className="statement-forall-footer">{colorizeFormula(forallFooter)}</div>}
     </>
   )
+}
+
+/** Returns true if this theorem involves integer notation (MyInt namespace or integer symbols). */
+function isIntegerTheorem(theorem: PropositionTheorem): boolean {
+  return theorem.theoremName.startsWith('MyInt.') || hasIntegerNotation(theorem.proposition)
 }
 
 export function PropositionTheoremPreviewCard({ theorem }: { theorem: PropositionTheorem }) {
