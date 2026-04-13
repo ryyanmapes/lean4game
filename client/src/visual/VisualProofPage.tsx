@@ -14,6 +14,7 @@ import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
 import type { ProofState } from '../components/infoview/rpc_api'
+import { getDataBaseUrl } from '../utils/url'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert'])
@@ -220,7 +221,7 @@ export function VisualProofPage() {
     setWorldSize(null)
     if (!worldId || !levelId) return
     let active = true
-    const baseUrl = window.location.origin + '/data'
+    const baseUrl = getDataBaseUrl().replace(/\/$/, '')
 
     Promise.all([
       fetchJsonWithRetry<{

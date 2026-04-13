@@ -233,18 +233,7 @@ export function VisualWorldMap() {
   useRetryUntilData(gameInfo)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const svgRef = React.useRef<SVGSVGElement>(null)
-
-  if (!gameInfo.data) {
-    return (
-      <div className="visual-page visual-map-page">
-        <Box display="flex" alignItems="center" justifyContent="center" sx={{ height: '100vh' }}>
-          <CircularProgress sx={{ color: '#8b5cf6' }} />
-        </Box>
-      </div>
-    )
-  }
-
-  const { worlds, worldSize, title } = gameInfo.data
+  const { worlds, worldSize, title } = gameInfo.data ?? {}
   const { nodes, bounds }: any = worlds ? computeWorldLayout(worlds) : { nodes: {} }
 
   // Compute completion state (same logic as WorldTreePanel)
@@ -338,6 +327,16 @@ export function VisualWorldMap() {
       observer.disconnect()
     }
   }, [bounds, centerMapHorizontally])
+
+  if (!gameInfo.data) {
+    return (
+      <div className="visual-page visual-map-page">
+        <Box display="flex" alignItems="center" justifyContent="center" sx={{ height: '100vh' }}>
+          <CircularProgress sx={{ color: '#8b5cf6' }} />
+        </Box>
+      </div>
+    )
+  }
 
   return (
     <div className="visual-page visual-map-page">

@@ -1,4 +1,5 @@
 import type { ProofState } from '../components/infoview/rpc_api'
+import { getWebsocketUrl } from '../utils/url'
 
 const OPEN_TIMEOUT_MS = 15000
 const REQUEST_TIMEOUT_MS = 30000
@@ -37,8 +38,7 @@ export class LeanRpcClient {
     this.levelId = levelId
     const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
     this.uri = `file:///${worldId}/${levelId}.lean?session=${encodeURIComponent(sessionId)}`
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/websocket/${gameId}`
+    const wsUrl = getWebsocketUrl(gameId)
     this.ws = new WebSocket(wsUrl)
     this.ws.onmessage = (e) => this.onMessage(JSON.parse(e.data))
     this.ws.onclose = () => {

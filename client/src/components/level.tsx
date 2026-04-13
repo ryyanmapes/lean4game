@@ -44,6 +44,7 @@ import i18next from 'i18next'
 import { useGameTranslation } from '../utils/translation'
 import { InventoryPanel } from './inventory/inventory_panel'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
+import { getWebsocketUrl } from '../utils/url'
 
 
 let sharedLeanMonaco: LeanMonaco | null = null
@@ -280,7 +281,7 @@ function PlayableLevel() {
   const [leanMonacoEditor, setLeanMonacoEditor] = useState<LeanMonacoEditor|null>(null)
   const [editorConnection, setEditorConnection] = useState<null|EditorConnection>(null)
 
-  const socketUrl = ((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + '/websocket/' + gameId
+  const socketUrl = getWebsocketUrl(gameId)
 
   const [options, setOptions] = useState<LeanMonacoOptions>({
     // TODO: copy old settings

@@ -4,6 +4,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { retry } from '@reduxjs/toolkit/query'
 import { InventoryTab } from '../store/inventory-atoms'
+import { getDataBaseUrl } from '../utils/url'
 
 
 export interface GameTile {
@@ -83,7 +84,7 @@ interface Doc {
 }
 
 const baseQuery = retry(
-  fetchBaseQuery({ baseUrl: window.location.origin + "/data" }),
+  fetchBaseQuery({ baseUrl: getDataBaseUrl() }),
   { maxRetries: 5 },
 )
 
