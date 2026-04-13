@@ -14,8 +14,12 @@ function getAppBaseUrl(): URL {
   return baseUrl
 }
 
+export function getAppRelativePath(relativePath: string): string {
+  return new URL(relativePath, getAppBaseUrl()).pathname
+}
+
 export function getDataBaseUrl(): string {
-  return new URL('data/', getAppBaseUrl()).toString()
+  return getAppRelativePath('data/')
 }
 
 export function getWebsocketUrl(gameId: string): string {

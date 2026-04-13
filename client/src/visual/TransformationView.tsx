@@ -402,7 +402,13 @@ export function TransformationView({
   }
 
   return (
-    <div className="visual-page tr-overlay" style={style}>
+    <div
+      className="visual-page tr-overlay tr-transformation-overlay"
+      style={{
+        ...(style ?? {}),
+        '--tr-rule-dock-height': `${ruleDockHeight}px`,
+      } as React.CSSProperties}
+    >
       {headerSlot}
       <DndContext
         sensors={sensors}
@@ -447,7 +453,6 @@ export function TransformationView({
             style={{
               position: 'fixed',
               left: 'calc(var(--proof-sidebar-width, 0px) + 2rem)',
-              bottom: `calc(2rem + ${ruleDockHeight}px)`,
               zIndex: 20,
             }}
           >
