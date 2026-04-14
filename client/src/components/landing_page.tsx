@@ -72,6 +72,9 @@ function LandingPage() {
           <Link to="/g/leanprover-community/nng4/visual" className="lp-visual-btn">
             Natural Numbers Game
           </Link>
+          <Link to="/g/local/RNG/visual" className="lp-visual-btn">
+            Real Numbers Game
+          </Link>
           <Link to="/g/leanprover-community/VisualTest/visual" className="lp-visual-btn">
             Visual Test
           </Link>

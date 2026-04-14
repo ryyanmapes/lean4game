@@ -6,8 +6,8 @@
  */
 
 export type VisualInteraction =
-  | { type: 'drag_to';    nameA: string; nameB: string }
-  | { type: 'drag_goal';  hypName: string }
+  | { type: 'drag_to';    nameA: string; nameB: string; reverse?: boolean }
+  | { type: 'drag_goal';  hypName: string; reverse?: boolean }
   | { type: 'drag_tactic'; tacticName: string; targetHypName?: string }
   | { type: 'drag_induction'; hypName: string }
   | { type: 'drag_cases'; hypName: string }
@@ -25,9 +25,13 @@ export type VisualInteraction =
 export function interactionToPlayTactic(i: VisualInteraction): string {
   switch (i.type) {
     case 'drag_to':
-      return `drag_to ${i.nameA} ${i.nameB}`
+      return i.reverse
+        ? `drag_to ← ${i.nameA} ${i.nameB}`
+        : `drag_to ${i.nameA} ${i.nameB}`
     case 'drag_goal':
-      return `drag_goal ${i.hypName}`
+      return i.reverse
+        ? `drag_goal ← ${i.hypName}`
+        : `drag_goal ${i.hypName}`
     case 'drag_tactic':
       if (i.tacticName === 'revert' && i.targetHypName) {
         return `revert ${i.targetHypName}`

@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import type { InteractiveGoal } from '../components/infoview/rpc_api'
 import { formatFormulaText } from './expr-engine'
+import { colorizeFormula } from './colorizeFormula'
 
 interface GoalCardProps {
   id: string
@@ -106,7 +107,7 @@ export function GoalCard({
       title={title}
     >
       <div className="goal-prefix">Goal</div>
-      <span className="proposition">{goalText}</span>
+      <span className="proposition">{colorizeFormula(goalText)}</span>
     </div>
   )
 }

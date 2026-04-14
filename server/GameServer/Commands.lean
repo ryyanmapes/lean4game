@@ -22,8 +22,14 @@ def getTheoremKind (name : Name) : CommandElabM TheoremKind := do
     for arg in args do
       if ← isProp (← inferType arg) then
         return .proposition
-    if (← matchEq? body).isSome then
-      pure .equality
+    if let some (_, lhs, rhs) ← matchEq? body then
+      -- A theorem whose body is `a = a` (lhs and rhs syntactically equal)
+      -- is reflexivity-like and not useful as a rewrite rule; surface it in
+      -- the proposition menu instead.
+      if lhs == rhs then
+        pure .proposition
+      else
+        pure .equality
     else
       pure .proposition
 

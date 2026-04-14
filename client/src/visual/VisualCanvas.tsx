@@ -922,6 +922,8 @@ function TheoremTray({
   pageIndexByTab,
   onPageIndexChange,
   onTheoremDoubleClick,
+  getTemplateIffDirection,
+  onTemplateContextMenu,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
@@ -930,6 +932,8 @@ function TheoremTray({
   pageIndexByTab: Record<TrayTab, number>
   onPageIndexChange: (tab: TrayTab, pageIndex: number) => void
   onTheoremDoubleClick?: (theorem: PropositionTheorem) => void
+  getTemplateIffDirection: (templateId: string) => 'forward' | 'reverse'
+  onTemplateContextMenu: (event: React.MouseEvent<HTMLDivElement>, templateId: string, theorem: PropositionTheorem) => void
 }) {
   // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
@@ -1019,13 +1023,21 @@ function TheoremTray({
               {pageItems.map(item =>
                 visibleTab === 'tactics'
                   ? <VisualTacticTemplateCard key={(item as VisualTactic).id} tactic={item as VisualTactic} />
-                  : <PropositionTheoremTemplateCard
-                      key={(item as PropositionTheorem).id}
-                      theorem={item as PropositionTheorem}
-                      onDoubleClick={onTheoremDoubleClick && (item as PropositionTheorem).forallSpecification
-                        ? () => onTheoremDoubleClick(item as PropositionTheorem)
-                        : undefined}
-                    />
+                  : (() => {
+                      const theorem = item as PropositionTheorem
+                      const templateId = `theorem_template_${theorem.id}`
+                      return (
+                        <PropositionTheoremTemplateCard
+                          key={theorem.id}
+                          theorem={theorem}
+                          iffDirection={getTemplateIffDirection(templateId)}
+                          onDoubleClick={onTheoremDoubleClick && theorem.forallSpecification
+                            ? () => onTheoremDoubleClick(theorem)
+                            : undefined}
+                          onContextMenu={(event) => onTemplateContextMenu(event, templateId, theorem)}
+                        />
+                      )
+                    })()
               )}
             </div>
             <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
@@ -1114,6 +1126,7 @@ export function VisualCanvas({
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
   const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>([])
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
+  const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>('theorems')
   const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
@@ -1127,6 +1140,8 @@ export function VisualCanvas({
   })
   const [goalChoiceMenu, setGoalChoiceMenu] = useState<GoalChoiceMenu | null>(null)
   const [reductionTooltip, setReductionTooltip] = useState<ReductionTooltip | null>(null)
+  // Keyed by card id (hyp id, theorem copy id, or theorem template id). Presence = reverse; absence = forward.
+  const [iffDirections, setIffDirections] = useState<Record<string, true>>({})
   const reductionTooltipCloseTimerRef = useRef<number | null>(null)
   const visualTestStateRef = useRef<{
     canvasState: CanvasState
@@ -1610,12 +1625,14 @@ export function VisualCanvas({
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setActiveDraggedTheorem(isTheoremDrag && theorem ? theorem : null)
+    setActiveDraggedTheoremSourceId(isTheoremDrag ? String(event.active.id) : null)
     setActiveDraggedTactic(isTacticDrag && tactic ? tactic : null)
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { delta, active, over } = event
     setActiveDraggedTheorem(null)
+    setActiveDraggedTheoremSourceId(null)
     setActiveDraggedTactic(null)
     const activeId = active.id as string
     const overId = over?.id as string | undefined
@@ -1676,9 +1693,10 @@ export function VisualCanvas({
     }
 
     if (theoremTemplate) {
+      const reverse = getIffDirection(activeId) === 'reverse'
       if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
-          const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName })
+          const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
             targetStreamId: overId as string,
@@ -1704,6 +1722,7 @@ export function VisualCanvas({
             type: 'drag_to',
             nameA: theoremTemplate.theoremName,
             nameB: targetName,
+            reverse,
           })
           applyInteraction(playTactic, activeId, placementHint ? { placementHint } : undefined)
           return
@@ -1734,10 +1753,11 @@ export function VisualCanvas({
     if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard) ?? sourceTheoremCopy?.theorem.theoremName
       if (!sourceName) return
+      const reverse = getIffDirection(activeId) === 'reverse'
 
       if (goalIds.has(overId as string)) {
         // Dropped on a goal card → drag_goal
-        const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName })
+        const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
         applyInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
           targetStreamId: overId as string,
@@ -1768,7 +1788,7 @@ export function VisualCanvas({
           })
         }
 
-        const playTactic = interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName })
+        const playTactic = interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
         const consumedTheoremCopyIds = [sourceTheoremCopy?.id, targetTheoremCopy?.id]
           .filter((id): id is string => Boolean(id))
         applyInteraction(playTactic, activeId, {
@@ -1887,6 +1907,58 @@ export function VisualCanvas({
   function reductionTooltipPosition(element: HTMLElement): { x: number; y: number } {
     const rect = element.getBoundingClientRect()
     return { x: rect.left + rect.width / 2, y: rect.bottom + 10 }
+  }
+
+  function getIffDirection(id: string): 'forward' | 'reverse' {
+    return iffDirections[id] ? 'reverse' : 'forward'
+  }
+
+  function toggleIffDirection(id: string) {
+    setIffDirections(prev => {
+      if (prev[id]) {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }
+      return { ...prev, [id]: true }
+    })
+  }
+
+  /** Returns true if the given text contains an iff operator. */
+  function textHasIff(text: string | undefined): boolean {
+    return !!text && text.includes('↔')
+  }
+
+  function hypCardIsIff(card: HypCardType): boolean {
+    const hypType = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
+    return textHasIff(hypType) || textHasIff(card.hyp.forallFooter)
+  }
+
+  function theoremIsIff(theorem: PropositionTheorem): boolean {
+    return textHasIff(theorem.proposition) || textHasIff(theorem.forallFooter)
+  }
+
+  function handleHypContextMenu(
+    event: React.MouseEvent<HTMLDivElement>,
+    card: HypCardType,
+    contextNames: string[],
+  ) {
+    if (hypCardIsIff(card)) {
+      event.preventDefault()
+      toggleIffDirection(card.id)
+      return
+    }
+    handleReductionContextMenu(event, card.id, card.hyp.reductionForms, contextNames)
+  }
+
+  function handleTheoremCardContextMenu(
+    event: React.MouseEvent<HTMLDivElement>,
+    cardId: string,
+    theorem: PropositionTheorem,
+  ) {
+    if (!theoremIsIff(theorem)) return
+    event.preventDefault()
+    toggleIffDirection(cardId)
   }
 
   function handleReductionContextMenu(
@@ -2417,8 +2489,14 @@ export function VisualCanvas({
 
     const equalityHyps: EqualityHyp[] = transformingStream.hyps.flatMap(card => {
       if (transformTarget?.kind === 'hyp' && card.id === transformTarget.hypId) return []
+      // Integer equalities (≡ᵢ) aren't valid Nat-level rewrite rules — the player
+      // must first unpack them via IntEq_def before using them here.
+      const rawType = (card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) || ''
+      if (rawType.includes('≡ᵢ')) return []
       const name = card.hyp.names[0] ?? '?'
       if (card.hyp.equalityTree) {
+        // Reflexivity-like equalities (lhs ≡ rhs) are useless as rewrite rules.
+        if (card.hyp.equalityTree.isRefl) return []
         const lhs = exprTreeToNode(card.hyp.equalityTree.lhs)
         const rhs = exprTreeToNode(card.hyp.equalityTree.rhs)
         return [{
@@ -2432,9 +2510,9 @@ export function VisualCanvas({
         } as EqualityHyp]
       }
       const parsedHyp = parsedHypEquality(card)
-      return parsedHyp
-        ? [{ ...parsedHyp, label: name, forallFooter: card.hyp.forallFooter } as EqualityHyp]
-        : []
+      if (!parsedHyp) return []
+      if (parsedHyp.lhsStr === parsedHyp.rhsStr) return []
+      return [{ ...parsedHyp, label: name, forallFooter: card.hyp.forallFooter } as EqualityHyp]
     })
 
     return {
@@ -2857,6 +2935,7 @@ export function VisualCanvas({
         onDragEnd={handleDragEnd}
         onDragCancel={() => {
           setActiveDraggedTheorem(null)
+          setActiveDraggedTheoremSourceId(null)
           setActiveDraggedTactic(null)
           closeReductionTooltip()
         }}
@@ -2953,8 +3032,9 @@ export function VisualCanvas({
                   onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
                     ? () => handleHypDoubleClick(displayStream.id, card.id)
                     : undefined}
-                  onContextMenu={(event) => handleReductionContextMenu(event, card.id, card.hyp.reductionForms, streamHypNames(displayStream))}
+                  onContextMenu={(event) => handleHypContextMenu(event, card, streamHypNames(displayStream))}
                   onMouseLeave={() => handleReductionMouseLeave(card.id)}
+                  iffDirection={getIffDirection(card.id)}
                 />
               )
             })}
@@ -2963,9 +3043,11 @@ export function VisualCanvas({
                 key={copy.id}
                 copy={copy}
                 isFailing={failingTheoremCopyId === copy.id}
+                iffDirection={getIffDirection(copy.id)}
                 onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(copy.theorem) && currentStream
                   ? () => handleTheoremCopyDoubleClick(copy.id, currentStream.id)
                   : undefined}
+                onContextMenu={(event) => handleTheoremCardContextMenu(event, copy.id, copy.theorem)}
               />
             ))}
             <div className="goals-container" data-testid="goals-container">
@@ -3045,6 +3127,8 @@ export function VisualCanvas({
               onTheoremDoubleClick={streamInteractionsEnabled && currentStream
                 ? theorem => handleTheoremTemplateDoubleClick(theorem, currentStream.id)
                 : undefined}
+              getTemplateIffDirection={getIffDirection}
+              onTemplateContextMenu={handleTheoremCardContextMenu}
               pageIndexByTab={trayPageIndexByTab}
               onPageIndexChange={(tab, pageIndex) => {
                 setTrayPageIndexByTab(prev =>
@@ -3072,7 +3156,7 @@ export function VisualCanvas({
           )}
           <DragOverlay dropAnimation={null}>
             {activeDraggedTheorem
-              ? <PropositionTheoremPreviewCard theorem={activeDraggedTheorem} />
+              ? <PropositionTheoremPreviewCard theorem={activeDraggedTheorem} iffDirection={getIffDirection(activeDraggedTheoremSourceId ?? `theorem_template_${activeDraggedTheorem.id}`)} />
               : activeDraggedTactic
                 ? <VisualTacticPreviewCard tactic={activeDraggedTactic} />
                 : null}

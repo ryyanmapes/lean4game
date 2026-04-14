@@ -468,6 +468,21 @@
   background: rgba(52, 211, 153, 0.14);
 }
 
+/* Integer theorem cards: blue outline instead of green */
+.visual-page .statement-card.int-theorem {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.08);
+}
+.visual-page .statement-card.int-theorem:hover {
+  background: rgba(96, 165, 250, 0.14);
+}
+
+/* Integer notation symbols rendered in blue */
+.int-op {
+  color: #60a5fa;
+  font-weight: 600;
+}
+
 .visual-page .statement-card.tactic-tray-card {
   border-color: var(--visual-danger-border);
   background: var(--visual-danger-bg);
@@ -2187,12 +2202,22 @@
 .visual-page .cn-var { color: var(--visual-hyp-text); }
 .visual-page .cn-num { color: var(--visual-construction-body); }
 
-/* Expression containers */
+/* Expression containers — bordered boxes to make precedence visible (mirrors .tr-expression-node). */
 .visual-page .cn-expr {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.35rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.06);
 }
+.visual-page .cn-expr.cn-app {
+  background: rgba(96, 165, 250, 0.08);
+  border-color: rgba(96, 165, 250, 0.22);
+}
+/* Hide the explicit parens for `succ(...)` since the box now delimits the argument. */
+.visual-page .cn-expr.cn-app > .cn-paren { display: none; }
 
 .visual-page .cn-func-name {
   color: var(--visual-function-text);
@@ -2468,4 +2493,36 @@
   .visual-page.tr-transformation-overlay .tr-static-group.pinned-top:not(.static-right) {
     top: calc(52px + 2.45rem);
   }
+}
+
+/* ── Iff direction arrow ───────────────────────────────────────────────── */
+
+.iff-op {
+  position: relative;
+  display: inline-block;
+  padding-top: 0.55em;
+  line-height: 1;
+  /* preserve spacing around ↔ */
+  margin: 0 0.05em;
+}
+
+.iff-op .iff-symbol {
+  display: inline-block;
+}
+
+.iff-op .iff-arrow {
+  position: absolute;
+  top: -0.15em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85em;
+  line-height: 1;
+  color: #8b5cf6;
+  font-weight: 700;
+  pointer-events: none;
+  user-select: none;
+}
+
+.iff-op.iff-reverse .iff-arrow {
+  color: #ec4899;
 }

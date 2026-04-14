@@ -32,7 +32,7 @@ class Parser {
   private current = 0
 
   constructor(input: string) {
-    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|->|=>|[\p{L}\p{N}_]+|[+\-*/=()\[\]∧∨→]|\S)/gu) || []
+    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|->|=>|[\p{L}][\p{L}\p{N}_']*|\d+|[+\-*/=()\[\]∧∨→]|\S)/gu) || []
   }
 
   private peek(): string | null {
@@ -44,7 +44,7 @@ class Parser {
   }
 
   private isIdentifier(token: string | null): token is string {
-    return token !== null && /^[\p{L}][\p{L}\p{N}_]*$/u.test(token)
+    return token !== null && /^[\p{L}][\p{L}\p{N}_']*$/u.test(token)
   }
 
   private isPrimaryStart(token: string | null): boolean {
@@ -258,8 +258,87 @@ export function printDisplayExpression(node: ExpressionNode): string {
   return printExpressionWithParens(node, needsDisplayParens)
 }
 
+const FORMAL_DIFF_TOKEN = '\u2014\u2014'
+
+function isUnaryMinusStart(text: string, index: number): boolean {
+  let cursor = index - 1
+  while (cursor >= 0 && text[cursor] === ' ') cursor -= 1
+  if (cursor < 0) return true
+  return '([=∧∨→,:+*/ᵢ'.includes(text[cursor] ?? '')
+}
+
+function skipSpaces(text: string, index: number): number {
+  let cursor = index
+  while (cursor < text.length && text[cursor] === ' ') cursor += 1
+  return cursor
+}
+
+function parseDisplayAtomEnd(text: string, index: number): number | null {
+  const start = skipSpaces(text, index)
+  const first = text[start]
+  if (!first) return null
+
+  if (first === '(') {
+    let depth = 0
+    for (let cursor = start; cursor < text.length; cursor += 1) {
+      const ch = text[cursor]
+      if (ch === '(') depth += 1
+      else if (ch === ')') {
+        depth -= 1
+        if (depth === 0) return cursor + 1
+      }
+    }
+    return null
+  }
+
+  if (/\d/.test(first)) {
+    let cursor = start + 1
+    while (cursor < text.length && /\d/.test(text[cursor] ?? '')) cursor += 1
+    return cursor
+  }
+
+  if (/[\p{L}]/u.test(first)) {
+    let cursor = start + 1
+    while (cursor < text.length && /[\p{L}\p{N}_']/u.test(text[cursor] ?? '')) cursor += 1
+    return cursor
+  }
+
+  return null
+}
+
+function normalizeNegatedFormalDifferences(text: string): string {
+  let result = ''
+  let cursor = 0
+
+  while (cursor < text.length) {
+    if (text[cursor] === '-' && isUnaryMinusStart(text, cursor)) {
+      const leftStart = skipSpaces(text, cursor + 1)
+      const leftEnd = parseDisplayAtomEnd(text, leftStart)
+      if (leftEnd !== null) {
+        const diffStart = skipSpaces(text, leftEnd)
+        if (text.slice(diffStart, diffStart + FORMAL_DIFF_TOKEN.length) === FORMAL_DIFF_TOKEN) {
+          const rightStart = skipSpaces(text, diffStart + FORMAL_DIFF_TOKEN.length)
+          const rightEnd = parseDisplayAtomEnd(text, rightStart)
+          if (rightEnd !== null) {
+            const left = text.slice(leftStart, leftEnd).trim()
+            const right = text.slice(rightStart, rightEnd).trim()
+            result += `-(${left} ${FORMAL_DIFF_TOKEN} ${right})`
+            cursor = rightEnd
+            continue
+          }
+        }
+      }
+    }
+
+    result += text[cursor]
+    cursor += 1
+  }
+
+  return result
+}
+
 export function formatFormulaText(text: string): string {
-  const normalized = text.replace(/\s+/g, ' ').trim()
+  const normalized = normalizeNegatedFormalDifferences(text.replace(/\s+/g, ' ').trim())
   if (normalized.length === 0) return normalized
 
   try {

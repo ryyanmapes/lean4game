@@ -30,6 +30,31 @@ private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
     restoreState savedState
     return false
 
+private def tryRewriteAt (target : Ident) (h : Ident) (symm : Bool) : TacticM Bool := do
+  let savedState ← saveState
+  try
+    if symm then
+      evalTactic (← `(tactic| rw [← $h] at $target:ident))
+    else
+      evalTactic (← `(tactic| rw [$h:ident] at $target:ident))
+    return true
+  catch _ =>
+    restoreState savedState
+    return false
+
+/-- Returns true if `type` (after whnf) is, or is universally quantified over, an `Iff`. -/
+private def typeIsIff (type : Expr) : MetaM Bool := do
+  let type ← whnf type
+  match type with
+  | .app (.app (.const ``Iff _) _) _ => pure true
+  | .forallE _ _ _ _ =>
+    forallTelescopeReducing type fun _ body => do
+      let body ← whnf body
+      match body with
+      | .app (.app (.const ``Iff _) _) _ => pure true
+      | _ => pure false
+  | _ => pure false
+
 private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
   withMainContext do
     match (← getLCtx).findFromUserName? id.getId with
@@ -54,16 +79,43 @@ private def replaceNamedExprWithProof (id : Ident) (proof : Expr) : TacticM Unit
       let (_, mvarId) ← mvarId.note id.getId proof
       replaceMainGoal [mvarId]
 
-syntax (name := drag_to) "drag_to" ident ident : tactic
+/-- If `type` is `A ↔ B`, project `expr : A ↔ B` through `.mp` or `.mpr` to
+    produce a function of type `A → B` (forward) or `B → A` (reverse). Returns
+    `none` if the type is not an `Iff`. -/
+private def iffProject? (expr type : Expr) (isReverse : Bool) : MetaM (Option (Expr × Expr)) := do
+  match type with
+  | .app (.app (.const ``Iff _) lhs) rhs =>
+    let proj := if isReverse then ``Iff.mpr else ``Iff.mp
+    -- `Iff.mp : ∀ {a b : Prop}, (a ↔ b) → a → b`
+    -- `Iff.mpr : ∀ {a b : Prop}, (a ↔ b) → b → a`
+    let fn := mkApp3 (mkConst proj) lhs rhs expr
+    let fnType ←
+      if isReverse then mkArrow rhs lhs
+      else mkArrow lhs rhs
+    pure (some (fn, fnType))
+  | _ => pure none
+
+syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
 
 @[tactic drag_to] def evalDragTo : Tactic := fun stx => do
-  let a : Ident := ⟨stx[1]⟩
-  let b : Ident := ⟨stx[2]⟩
+  let isRev := !stx[1].isNone
+  let a : Ident := ⟨stx[2]⟩
+  let b : Ident := ⟨stx[3]⟩
   withMainContext do
-    let (aExpr, aTypeRaw) ← resolveNamedExprAndType a
-    let (bExpr, bTypeRaw) ← resolveNamedExprAndType b
-    let aType ← whnf aTypeRaw
-    let bType ← whnf bTypeRaw
+    let (aExprRaw, aTypeRaw) ← resolveNamedExprAndType a
+    let (bExprRaw, bTypeRaw) ← resolveNamedExprAndType b
+    let aTypeW ← whnf aTypeRaw
+    let bTypeW ← whnf bTypeRaw
+
+    -- If either side is an Iff, project through `.mp`/`.mpr` based on isRev.
+    let (aExpr, aType) ←
+      match (← iffProject? aExprRaw aTypeW isRev) with
+      | some (e, t) => pure (e, t)
+      | none => pure (aExprRaw, aTypeRaw)
+    let (bExpr, bType) ←
+      match (← iffProject? bExprRaw bTypeW isRev) with
+      | some (e, t) => pure (e, t)
+      | none => pure (bExprRaw, bTypeRaw)
 
     if let some proof ← mkPremiseApplication? bExpr bType aExpr aType then
       replaceNamedExprWithProof a proof
@@ -73,13 +125,23 @@ syntax (name := drag_to) "drag_to" ident ident : tactic
       replaceNamedExprWithProof b proof
       return
 
+    -- Rewrite fallback: if either side is an iff (possibly forall-quantified),
+    -- try using it to rewrite the other hypothesis.
+    if ← typeIsIff aTypeRaw then
+      if ← tryRewriteAt b a isRev then return
+      if ← tryRewriteAt b a (!isRev) then return
+    if ← typeIsIff bTypeRaw then
+      if ← tryRewriteAt a b isRev then return
+      if ← tryRewriteAt a b (!isRev) then return
+
     throwError "drag_to: cannot combine '{a.getId}' and '{b.getId}'\n\
       {a.getId} : {aTypeRaw}\n  {b.getId} : {bTypeRaw}"
 
-syntax (name := drag_goal) "drag_goal" ident : tactic
+syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
 
 @[tactic drag_goal] def evalDragGoal : Tactic := fun stx => do
-  let h : Ident := ⟨stx[1]⟩
+  let isRev := !stx[1].isNone
+  let h : Ident := ⟨stx[2]⟩
   withMainContext do
     let (_, hTypeRaw) ← resolveNamedExprAndType h
     let hType ← whnf hTypeRaw
@@ -90,13 +152,23 @@ syntax (name := drag_goal) "drag_goal" ident : tactic
       evalTactic (← `(tactic| exact False.elim $h))
       return
 
+    -- Iff (possibly forall-quantified): try rewriting in the requested direction.
+    if ← typeIsIff hTypeRaw then
+      if ← tryRewrite h.raw isRev then return
+      if ← tryRewrite h.raw (!isRev) then return
+      if let .app (.app (.const ``Iff _) _) _ := hType then
+        if isRev then
+          if ← tryTactic (← `(tactic| apply Iff.mpr $h)) then return
+        else
+          if ← tryTactic (← `(tactic| apply Iff.mp $h)) then return
+
     if ← isDefEq hType goal then
       evalTactic (← `(tactic| exact $h))
       return
 
     if let .app (.app (.app (.const ``Eq _) _) _) _ := hType then
-      if ← tryRewrite h.raw false then return
-      if ← tryRewrite h.raw true then return
+      if ← tryRewrite h.raw isRev then return
+      if ← tryRewrite h.raw (!isRev) then return
 
     -- Let Lean's own `apply` drive higher-order matching for implications and
     -- quantified theorems. Trying to compare a raw `forall` body against the
@@ -188,6 +260,14 @@ private def mkConvRwScript (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path
   let argSteps := path.map (fun k => s!"arg {k}")
   let steps := sideLine :: (argSteps ++ [s!"rewrite [{rwTerm}]"])
   "conv => { " ++ String.intercalate "; " steps ++ " }"
+
+private def mkConvRwHypScript
+    (targetHyp : Name) (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : String :=
+  let rwTerm := if symm then s!"← {hName}" else s!"{hName}"
+  let sideLine := if sideIsRhs then "rhs" else "lhs"
+  let argSteps := path.map (fun k => s!"arg {k}")
+  let steps := sideLine :: (argSteps ++ [s!"rewrite [{rwTerm}]"])
+  s!"conv at {targetHyp} => " ++ "{ " ++ String.intercalate "; " steps ++ " }"
 
 private def mkAppPrefix (fn : Expr) (args : Array Expr) (upto : Nat) : Expr :=
   (List.range upto).foldl (fun acc j => mkApp acc args[j]!) fn
@@ -338,7 +418,13 @@ private def tryFocusedRewriteHyp
       pure true
   catch _ =>
     restoreState savedState
-    return false
+    let savedState' ← saveState
+    try
+      evalTacticString (mkConvRwHypScript targetHyp.getId h.getId symm sideIsRhs path)
+      return true
+    catch _ =>
+      restoreState savedState'
+      return false
 
 private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (pathOpt : Option (List Nat)) : TacticM Unit := do
   match pathOpt with
@@ -659,6 +745,36 @@ example (x y : Nat) (h : x + y = x) : y = y := by
 example (y : Nat) : 0 <= y ∨ True := by
   click_goal_left
   drag_goal Nat.zero_le
+
+-- Iff: drag_goal forward uses .mp, reverse uses .mpr
+example (P Q : Prop) (h : P ↔ Q) (hp : P) : Q := by
+  drag_goal h
+  exact hp
+
+example (P Q : Prop) (h : P ↔ Q) (hq : Q) : P := by
+  drag_goal ← h
+  exact hq
+
+example (P Q : Prop) (h : P ↔ Q) (hp : P) : Q := by
+  drag_to h hp
+  exact hp
+
+example (P Q : Prop) (h : P ↔ Q) (hq : Q) : P := by
+  drag_to ← h hq
+  exact hq
+
+-- Forall-quantified iff theorem: use `rw` path.
+private theorem iffThmLocal (a b : Nat) : a + 0 = b ↔ a = b := by
+  simp
+
+example (a b : Nat) : a = b → a + 0 = b := by
+  intro h
+  drag_goal iffThmLocal
+  exact h
+
+example (a b : Nat) (h : a + 0 = b) : a = b := by
+  drag_to iffThmLocal h
+  exact h
 
 end Regression
 

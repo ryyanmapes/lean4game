@@ -6,6 +6,8 @@ const { formatFormulaText } = await import('../../tmp-expr-tests/visual/expr-eng
 const AND = '\u2227'
 const OR = '\u2228'
 const IMPLIES = '\u2192'
+const INT_EQ = '\u2261\u1d62'
+const FORMAL_DIFF = '\u2014\u2014'
 
 test('keeps arithmetic associativity explicit within same-precedence chains', () => {
   assert.equal(formatFormulaText('A + B + C'), '(A + B) + C')
@@ -41,4 +43,11 @@ test('keeps implication associativity explicit', () => {
 
 test('accepts LaTeX-style implication aliases', () => {
   assert.equal(formatFormulaText('A \\implies B \\implies C'), `A ${IMPLIES} (B ${IMPLIES} C)`)
+})
+
+test('wraps negated formal differences so integer negation stays visually unambiguous', () => {
+  assert.equal(
+    formatFormulaText(`-a ${FORMAL_DIFF} b ${INT_EQ} -a' ${FORMAL_DIFF} b'`),
+    `-(a ${FORMAL_DIFF} b) ${INT_EQ} -(a' ${FORMAL_DIFF} b')`,
+  )
 })

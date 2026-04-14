@@ -114,7 +114,7 @@ function hasTopLevelImplication(statement: string): boolean {
 
 function hasVisibleRelation(statement: string): boolean {
   const normalized = stripOuterParens(statement)
-  return /[=<>≠≤≥]/u.test(normalized)
+  return /[=<>≠≤≥≡]/u.test(normalized)
 }
 
 function isPropositionBinderType(type: string): boolean {
