@@ -6,6 +6,7 @@ import {
     setIsSavePreferences as setPreferencesIsSavePreferences,
     setLanguage as setLanguagePreferences,
     setIsSuggestionsMobileMode as setIsSuggestionsMobileModePreferences,
+    setIsVisualLightMode as setIsVisualLightModePreferences,
     getWindowDimensions,
     AUTO_SWITCH_THRESHOLD
 } from "../preferences";
@@ -27,6 +28,9 @@ const UsePreferences = () => {
     const isSuggestionsMobileMode = useAppSelector((state) => state.preferences.isSuggestionsMobileMode);
     const setIsSuggestionsMobileMode = (isSuggestionsMobileMode: boolean) => dispatch(setIsSuggestionsMobileModePreferences(isSuggestionsMobileMode))
 
+    const isVisualLightMode = useAppSelector((state) => state.preferences.isVisualLightMode);
+    const setIsVisualLightMode = (isVisualLightMode: boolean) => dispatch(setIsVisualLightModePreferences(isVisualLightMode))
+
     const automaticallyAdjustLayout = () => {
         const {width} = getWindowDimensions()
         setMobile(width < AUTO_SWITCH_THRESHOLD)
@@ -43,7 +47,19 @@ const UsePreferences = () => {
         }
     }, [layout])
 
-    return {mobile, layout, isSavePreferences, language, isSuggestionsMobileMode, setLayout, setIsSavePreferences, setLanguage, setIsSuggestionsMobileMode}
+    return {
+        mobile,
+        layout,
+        isSavePreferences,
+        language,
+        isSuggestionsMobileMode,
+        isVisualLightMode,
+        setLayout,
+        setIsSavePreferences,
+        setLanguage,
+        setIsSuggestionsMobileMode,
+        setIsVisualLightMode,
+    }
 }
 
 export default UsePreferences;

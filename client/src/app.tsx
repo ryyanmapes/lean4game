@@ -22,17 +22,41 @@ function App() {
   const levelId = parseInt(params.levelId)
   const worldId = params.worldId
 
-  const {mobile, layout, isSavePreferences, language, isSuggestionsMobileMode, setLayout, setIsSavePreferences, setLanguage, setIsSuggestionsMobileMode} = UsePreferences()
+  const {
+    mobile,
+    layout,
+    isSavePreferences,
+    language,
+    isSuggestionsMobileMode,
+    isVisualLightMode,
+    setLayout,
+    setIsSavePreferences,
+    setLanguage,
+    setIsSuggestionsMobileMode,
+    setIsVisualLightMode,
+  } = UsePreferences()
 
   React.useEffect(() => {
     i18n.changeLanguage(language)
   }, [language])
 
   return (
-    <div className="app">
+    <div className="app" data-visual-theme={isVisualLightMode ? 'light' : 'dark'}>
       <GameIdContext.Provider value={gameId}>
           <WorldLevelIdContext.Provider value={{worldId, levelId}}>
-          <PreferencesContext.Provider value={{mobile, layout, isSavePreferences, language, isSuggestionsMobileMode, setLayout, setIsSavePreferences, setLanguage, setIsSuggestionsMobileMode}}>
+          <PreferencesContext.Provider value={{
+            mobile,
+            layout,
+            isSavePreferences,
+            language,
+            isSuggestionsMobileMode,
+            isVisualLightMode,
+            setLayout,
+            setIsSavePreferences,
+            setLanguage,
+            setIsSuggestionsMobileMode,
+            setIsVisualLightMode,
+          }}>
             <React.Suspense>
               <Outlet />
             </React.Suspense>

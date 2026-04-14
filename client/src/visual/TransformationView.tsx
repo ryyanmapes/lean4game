@@ -551,7 +551,7 @@ export function TransformationView({
         )}
 
         <DragOverlay dropAnimation={null}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa', opacity: 0 }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--visual-accent-soft)', opacity: 0 }} />
         </DragOverlay>
       </DndContext>
     </div>

@@ -50,7 +50,7 @@ function renderEdges(node: LayoutNode): ReactElement[] {
         y1={node.y + PADDING + NODE_RADIUS}
         x2={child.x + PADDING}
         y2={child.y + PADDING - NODE_RADIUS}
-        stroke="rgba(148, 163, 184, 0.4)"
+        stroke="var(--visual-tree-edge)"
         strokeWidth={2}
       />,
     )
@@ -79,7 +79,7 @@ export function ProofStreamGraph({ tree, currentStreamId, onNavigate }: Props) {
     const cy = node.y + PADDING
 
     if (isLeaf) {
-      const color = isComplete ? '#22c55e' : '#f97316'
+      const color = isComplete ? 'var(--visual-stream-complete)' : 'var(--visual-stream-pending)'
       items.push(
         <g
           key={node.treeNode.id}
@@ -106,7 +106,7 @@ export function ProofStreamGraph({ tree, currentStreamId, onNavigate }: Props) {
               cy={cy}
               r={NODE_RADIUS + 8}
               fill="none"
-              stroke="#8b5cf6"
+              stroke="var(--visual-stream-current-ring)"
               strokeWidth={2}
               opacity={0.8}
             />
@@ -123,7 +123,7 @@ export function ProofStreamGraph({ tree, currentStreamId, onNavigate }: Props) {
           cx={cx}
           cy={cy}
           r={NODE_RADIUS * 0.5}
-          fill="rgba(148, 163, 184, 0.6)"
+          fill="var(--visual-tree-branch)"
         />,
       )
     }

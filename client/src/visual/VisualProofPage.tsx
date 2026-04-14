@@ -336,7 +336,7 @@ export function VisualProofPage() {
   }, [gameId, worldId, levelId])
 
   if (error) {
-    return <div className="visual-loading" style={{ color: '#f87171' }}>Error: {error}</div>
+    return <div className="visual-loading" style={{ color: 'var(--visual-error-text)' }}>Error: {error}</div>
   }
 
   if (!canvasState) {

@@ -19,18 +19,18 @@ export function ConnectionArrow({ start, end }: Props) {
     <svg className="tr-connection-arrow" style={{ overflow: 'visible' }}>
       <defs>
         <marker id="tr-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          <polygon points="0 0, 10 3.5, 0 7" fill="var(--visual-accent-soft)" />
         </marker>
       </defs>
       <path
         d={path}
-        stroke="#a78bfa"
+        stroke="var(--visual-accent-soft)"
         strokeWidth="3"
         fill="none"
         strokeDasharray="5,5"
         markerEnd="url(#tr-arrowhead)"
       />
-      <circle cx={start.x} cy={start.y} r="4" fill="#a78bfa" />
+      <circle cx={start.x} cy={start.y} r="4" fill="var(--visual-accent-soft)" />
     </svg>
   )
 }

@@ -1,24 +1,35 @@
 /**
- * @fileOverview Visual-mode world map. Dark-themed, no sidebars.
+ * @fileOverview Visual-mode world map.
  * All levels are always clickable and route to the /visual level page.
  */
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
+import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  faBars, faXmark, faArrowLeft,
-  faEraser, faDownload, faUpload, faCircleInfo, faGear, faLock, faLockOpen,
+  faArrowLeft,
+  faBars,
+  faCircleInfo,
+  faDownload,
+  faEraser,
+  faGear,
+  faLock,
+  faLockOpen,
+  faSun,
+  faUpload,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons'
 import { useAtom } from 'jotai'
 import cytoscape from 'cytoscape'
 
 import { GameIdContext } from '../app'
+import { PreferencesContext } from '../components/infoview/context'
 import { useGetGameInfoQuery } from '../state/api'
 import { selectCompleted, selectProgress, selectUnlockLevels, changeUnlockLevels } from '../state/progress'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
-import { navOpenAtom, closeNavAtom } from '../store/navigation-atoms'
+import { navOpenAtom } from '../store/navigation-atoms'
 import { popupAtom, PopupType } from '../store/popup-atoms'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { saveState } from '../state/local_storage'
@@ -27,7 +38,6 @@ import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
 import './visual.css'
 
-// ── Layout constants (match world_tree.tsx) ──────────────────────────────────
 const r = 16
 const s = 10
 const lineWidth = 10
@@ -39,32 +49,60 @@ const NMAX = 16
 const NSPIRAL = 12
 const MINFONT = 12
 
-// ── Dark-mode colour palette ─────────────────────────────────────────────────
-const lockedLevel     = '#475569'   // slate-600  – locked level icon
-const unlockedLevel   = '#8b5cf6'   // purple     – unlocked (accessible) level
-const completedLevel  = '#10b981'   // emerald-500 – completed level
+interface VisualMapPalette {
+  lockedLevel: string
+  unlockedLevel: string
+  completedLevel: string
+  lockedWorld: string
+  unlockedWorld: string
+  completedWorld: string
+  lockedLabel: string
+  unlockedLabel: string
+  completedLabel: string
+  lockedPath: string
+  unlockedPath: string
+}
 
-const lockedWorld     = '#334155'   // slate-700
-const unlockedWorld   = '#6d28d9'   // violet-700
-const completedWorld  = '#059669'   // emerald-600
+const DARK_MAP_PALETTE: VisualMapPalette = {
+  lockedLevel: '#475569',
+  unlockedLevel: '#8b5cf6',
+  completedLevel: '#10b981',
+  lockedWorld: '#334155',
+  unlockedWorld: '#6d28d9',
+  completedWorld: '#059669',
+  lockedLabel: '#475569',
+  unlockedLabel: '#5b21b6',
+  completedLabel: '#047857',
+  lockedPath: '#475569',
+  unlockedPath: '#10b981',
+}
 
-const lockedLabel     = '#475569'
-const unlockedLabel   = '#5b21b6'
-const completedLabel  = '#047857'
+const LIGHT_MAP_PALETTE: VisualMapPalette = {
+  lockedLevel: '#94a3b8',
+  unlockedLevel: '#6366f1',
+  completedLevel: '#10b981',
+  lockedWorld: '#cbd5e1',
+  unlockedWorld: '#818cf8',
+  completedWorld: '#34d399',
+  lockedLabel: '#94a3b8',
+  unlockedLabel: '#4f46e5',
+  completedLabel: '#059669',
+  lockedPath: '#cbd5e1',
+  unlockedPath: '#34d399',
+}
 
-const lockedPath      = '#475569'
-const unlockedPath    = '#10b981'
+function toIconProp(icon: unknown): IconProp {
+  return icon as IconProp
+}
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Level icon that always allows navigation and links to the /visual route. */
-function VisualLevelIcon({ world, level, position, completed, unlocked, worldSize }: {
+function VisualLevelIcon({ world, level, position, completed, unlocked, worldSize, palette }: {
   world: string
   level: number
   position: cytoscape.Position
   completed: boolean
   unlocked: boolean
   worldSize: number
+  palette: VisualMapPalette
 }) {
   const gameId = React.useContext(GameIdContext)
   const N = Math.max(worldSize, NMIN)
@@ -82,17 +120,22 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
     ? s * position.y - Math.cos(level * beta) * R
     : s * position.y - Math.cos(level * betaSpiral(level)) * (R + 2 * r * (level - 1) / (NSPIRAL + 1))
 
-  const fill = completed ? completedLevel : unlocked ? unlockedLevel : lockedLevel
+  const fill = completed ? palette.completedLevel : unlocked ? palette.unlockedLevel : palette.lockedLevel
   const to = `/${gameId}/world/${world}/level/${level}/visual`
 
   return (
     <Link to={to} className="level">
       <circle fill={fill} cx={x} cy={y} r={r} />
-      <foreignObject className="level-title-wrapper" x={x} y={y}
-        width={1.42 * r} height={1.42 * r}
-        transform={`translate(${-0.71 * r},${-0.71 * r})`}>
+      <foreignObject
+        className="level-title-wrapper"
+        x={x}
+        y={y}
+        width={1.42 * r}
+        height={1.42 * r}
+        transform={`translate(${-0.71 * r},${-0.71 * r})`}
+      >
         <div>
-          <p className="level-title" style={{ fontSize: Math.floor(r) + 'px' }}>
+          <p className="level-title" style={{ fontSize: `${Math.floor(r)}px` }}>
             {level}
           </p>
         </div>
@@ -101,13 +144,13 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
   )
 }
 
-/** World icon that links to the first unplayed visual level. */
-function VisualWorldIcon({ world, title, position, completedLevels, worldSize }: {
+function VisualWorldIcon({ world, title, position, completedLevels, worldSize, palette }: {
   world: string
   title: string
   position: cytoscape.Position
   completedLevels: boolean[]
   worldSize: number
+  palette: VisualMapPalette
 }) {
   const gameId = React.useContext(GameIdContext)
   const N = Math.max(worldSize, NMIN)
@@ -120,16 +163,21 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize }:
   let nextLevel: number = completedLevels.findIndex(c => !c)
   if (nextLevel <= 1) nextLevel = 1
 
-  const fill = completed ? completedWorld : unlocked ? unlockedWorld : lockedWorld
-  const labelBg = completed ? completedLabel : unlocked ? unlockedLabel : lockedLabel
+  const fill = completed ? palette.completedWorld : unlocked ? palette.unlockedWorld : palette.lockedWorld
+  const labelBg = completed ? palette.completedLabel : unlocked ? palette.unlockedLabel : palette.lockedLabel
 
   return (
     <Link to={`/${gameId}/world/${world}/level/${nextLevel}/visual`}>
       <circle className="world-circle" cx={s * position.x} cy={s * position.y} r={R} fill={fill} />
-      <foreignObject x={s * position.x - 75} y={s * position.y + labelOffset}
-        width="150px" height="2em" style={{ overflow: 'visible' }}>
+      <foreignObject
+        x={s * position.x - 75}
+        y={s * position.y + labelOffset}
+        width="150px"
+        height="2em"
+        style={{ overflow: 'visible' }}
+      >
         <div className="world-label" style={{ backgroundColor: labelBg }}>
-          <p className="world-title" style={{ fontSize: MINFONT + 'px' }}>
+          <p className="world-title" style={{ fontSize: `${MINFONT}px` }}>
             {title || world}
           </p>
         </div>
@@ -138,34 +186,47 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize }:
   )
 }
 
-/** SVG edge between worlds. */
-function VisualWorldPath({ source, target, unlocked }: { source: any; target: any; unlocked: boolean }) {
+function VisualWorldPath({ source, target, unlocked, palette }: {
+  source: { position: cytoscape.Position }
+  target: { position: cytoscape.Position }
+  unlocked: boolean
+  palette: VisualMapPalette
+}) {
   return (
     <line
-      x1={s * source.position.x} y1={s * source.position.y}
-      x2={s * target.position.x} y2={s * target.position.y}
-      stroke={unlocked ? unlockedPath : lockedPath}
+      x1={s * source.position.x}
+      y1={s * source.position.y}
+      x2={s * target.position.x}
+      y2={s * target.position.y}
+      stroke={unlocked ? palette.unlockedPath : palette.lockedPath}
       strokeWidth={lineWidth}
     />
   )
 }
 
-// ── Hamburger menu ────────────────────────────────────────────────────────────
-
 function VisualMapMenuButton() {
   const [navOpen, setNavOpen] = useAtom(navOpenAtom)
   return (
     <button
+      type="button"
       className="visual-map-menu-btn"
       onClick={() => setNavOpen(!navOpen)}
       aria-label="Menu"
     >
-      <FontAwesomeIcon icon={navOpen ? faXmark : faBars} />
+      <FontAwesomeIcon icon={toIconProp(navOpen ? faXmark : faBars)} />
     </button>
   )
 }
 
-function VisualMapAppBar({ gameTitle }: { gameTitle: string }) {
+function VisualMapAppBar({
+  gameTitle,
+  isLightMode,
+  onToggleLightMode,
+}: {
+  gameTitle: string
+  isLightMode: boolean
+  onToggleLightMode: () => void
+}) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -175,7 +236,9 @@ function VisualMapAppBar({ gameTitle }: { gameTitle: string }) {
   const unlockLevels = useAppSelector(selectUnlockLevels(gameId))
   const gameProgress = useAppSelector(selectProgress(gameId))
 
-  function closeMenu() { setNavOpen(false) }
+  function closeMenu() {
+    setNavOpen(false)
+  }
 
   function toggleUnlockLevels() {
     dispatch(changeUnlockLevels({ game: gameId, unlockLevels: !unlockLevels }))
@@ -186,68 +249,81 @@ function VisualMapAppBar({ gameTitle }: { gameTitle: string }) {
   return (
     <div className="visual-map-appbar">
       <button
+        type="button"
         className="visual-map-back-btn"
         onClick={() => navigate('/')}
-        title={t("Home")}
-        aria-label={t("Home")}
+        title={t('Home')}
+        aria-label={t('Home')}
       >
-        <FontAwesomeIcon icon={faArrowLeft} />
+        <FontAwesomeIcon icon={toIconProp(faArrowLeft)} />
       </button>
       <span className="visual-map-title">{gameTitle}</span>
-      <VisualMapMenuButton />
+      <div className="visual-map-actions">
+        <button
+          type="button"
+          className={`visual-map-theme-toggle${isLightMode ? ' active' : ''}`}
+          onClick={onToggleLightMode}
+          aria-pressed={isLightMode}
+          title={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+        >
+          <FontAwesomeIcon icon={toIconProp(faSun)} />
+          <span className="visual-map-theme-label">Light</span>
+        </button>
+        <VisualMapMenuButton />
+      </div>
       <div className={`visual-map-dropdown${navOpen ? ' open' : ''}`}>
         <button onClick={() => { setPopup(PopupType.info); closeMenu() }}>
-          <FontAwesomeIcon icon={faCircleInfo} />&nbsp;{t("Game Info")}
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Game Info')}
         </button>
         <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
-          <FontAwesomeIcon icon={faDownload} />&nbsp;{t("Download")}
+          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Download')}
         </button>
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
-          <FontAwesomeIcon icon={faUpload} />&nbsp;{t("Upload")}
+          <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Upload')}
         </button>
         <button onClick={toggleUnlockLevels} className={unlockLevels ? 'active' : ''}>
-          <FontAwesomeIcon icon={unlockLevels ? faLockOpen : faLock} />&nbsp;{t("Unlock levels")}
+          <FontAwesomeIcon icon={toIconProp(unlockLevels ? faLockOpen : faLock)} />&nbsp;{t('Unlock levels')}
         </button>
         <button onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
-          <FontAwesomeIcon icon={faEraser} />&nbsp;{t("Erase")}
+          <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Erase')}
         </button>
         <button onClick={() => { setPopup(PopupType.preferences); closeMenu() }}>
-          <FontAwesomeIcon icon={faGear} />&nbsp;{t("Preferences")}
+          <FontAwesomeIcon icon={toIconProp(faGear)} />&nbsp;{t('Preferences')}
         </button>
         <button onClick={() => { setPopup(PopupType.impressum); closeMenu() }}>
-          <FontAwesomeIcon icon={faCircleInfo} />&nbsp;{t("Impressum")}
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Impressum')}
         </button>
         <button onClick={() => { setPopup(PopupType.privacy); closeMenu() }}>
-          <FontAwesomeIcon icon={faCircleInfo} />&nbsp;{t("Privacy Policy")}
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Privacy Policy')}
         </button>
       </div>
     </div>
   )
 }
 
-// ── Main world map component ──────────────────────────────────────────────────
-
 export function VisualWorldMap() {
   const gameId = React.useContext(GameIdContext)
+  const { isVisualLightMode, setIsVisualLightMode } = React.useContext(PreferencesContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
   useRetryUntilData(gameInfo)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const svgRef = React.useRef<SVGSVGElement>(null)
+  const mapPalette = isVisualLightMode ? LIGHT_MAP_PALETTE : DARK_MAP_PALETTE
   const { worlds, worldSize, title } = gameInfo.data ?? {}
-  const { nodes, bounds }: any = worlds ? computeWorldLayout(worlds) : { nodes: {} }
+  const { nodes, bounds }: { nodes: Record<string, { position: cytoscape.Position; data: { title?: string } }>; bounds?: { x1: number; x2: number; y1: number; y2: number } } =
+    worlds ? computeWorldLayout(worlds) : { nodes: {} }
 
-  // Compute completion state (same logic as WorldTreePanel)
   const completed: Record<string, boolean[]> = {}
   const svgElements: React.ReactNode[] = []
 
   if (worlds && worldSize) {
     for (const worldId in nodes) {
       completed[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
-        i === 0 || selectCompleted(gameId, worldId, i)(store.getState())
+        i === 0 || selectCompleted(gameId, worldId, i)(store.getState()),
       )
     }
 
-    // Draw edges
     for (const edge of worlds.edges) {
       const sourceCompleted = completed[edge[0]].slice(1).every(Boolean)
       if (!sourceCompleted) completed[edge[1]][0] = false
@@ -257,13 +333,13 @@ export function VisualWorldMap() {
           source={nodes[edge[0]]}
           target={nodes[edge[1]]}
           unlocked={sourceCompleted}
-        />
+          palette={mapPalette}
+        />,
       )
     }
 
-    // Draw worlds and levels
     for (const worldId in nodes) {
-      const position: cytoscape.Position = nodes[worldId].position
+      const position = nodes[worldId].position
       svgElements.push(
         <VisualWorldIcon
           key={`world-${worldId}`}
@@ -272,7 +348,8 @@ export function VisualWorldMap() {
           position={position}
           completedLevels={completed[worldId]}
           worldSize={worldSize[worldId]}
-        />
+          palette={mapPalette}
+        />,
       )
       for (let i = 1; i <= worldSize[worldId]; i++) {
         svgElements.push(
@@ -284,7 +361,8 @@ export function VisualWorldMap() {
             completed={completed[worldId][i]}
             unlocked={completed[worldId][i - 1]}
             worldSize={worldSize[worldId]}
-          />
+            palette={mapPalette}
+          />,
         )
       }
     }
@@ -332,7 +410,7 @@ export function VisualWorldMap() {
     return (
       <div className="visual-page visual-map-page">
         <Box display="flex" alignItems="center" justifyContent="center" sx={{ height: '100vh' }}>
-          <CircularProgress sx={{ color: '#8b5cf6' }} />
+          <CircularProgress sx={{ color: mapPalette.unlockedLevel }} />
         </Box>
       </div>
     )
@@ -340,7 +418,11 @@ export function VisualWorldMap() {
 
   return (
     <div className="visual-page visual-map-page">
-      <VisualMapAppBar gameTitle={title || gameId} />
+      <VisualMapAppBar
+        gameTitle={title || gameId}
+        isLightMode={isVisualLightMode}
+        onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
+      />
       <div className="visual-map-scroll" ref={scrollRef}>
         <svg
           ref={svgRef}

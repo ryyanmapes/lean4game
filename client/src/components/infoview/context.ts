@@ -82,6 +82,7 @@ export interface IPreferencesContext extends PreferencesState{
   setIsSavePreferences: React.Dispatch<React.SetStateAction<PreferencesState["isSavePreferences"]>>;
   setLanguage: React.Dispatch<React.SetStateAction<PreferencesState["language"]>>;
   setIsSuggestionsMobileMode: any;
+  setIsVisualLightMode: React.Dispatch<React.SetStateAction<PreferencesState["isVisualLightMode"]>>;
 }
 
 export const PreferencesContext = React.createContext<IPreferencesContext>({
@@ -90,10 +91,12 @@ export const PreferencesContext = React.createContext<IPreferencesContext>({
   isSavePreferences: false,
   language: "en",
   isSuggestionsMobileMode: false,
+  isVisualLightMode: false,
   setLayout: () => {},
   setIsSavePreferences: () => {},
   setLanguage: () => {},
   setIsSuggestionsMobileMode: () => {},
+  setIsVisualLightMode: () => {},
 })
 
 export const WorldLevelIdContext = React.createContext<{
