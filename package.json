@@ -104,6 +104,7 @@
     "postinstall": "patch-package",
     "prestart": "node scripts/ensure-port-8080-free.cjs",
     "start": "concurrently -n server,relay,client -c blue,yellow,green \"npm run build:server\" \"npm run start:relay\" \"npm run start:client\"",
+    "start:win": "node scripts/start-win.cjs",
     "start:relay": "node scripts/start-relay.cjs",
     "start:client": "cross-env NODE_ENV=development vite --host",
     "build": "node scripts/run-sequential.cjs build:server build:relay build:client build:test",

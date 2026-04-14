@@ -11,9 +11,10 @@ const DISPLAY_MAP: Record<string, string> = {
   '≡ᵢ': ' = ',
   '+ᵢ': ' + ',
   'negᵢ': '-',
+  '——': '—',
 }
 
-const INT_TOKENS = new Set(Object.keys(DISPLAY_MAP).concat('——'))
+const INT_TOKENS = new Set(Object.keys(DISPLAY_MAP))
 
 /**
  * Takes a plain-text formula string and returns React nodes where

@@ -226,7 +226,7 @@ export function VisualProofPage() {
     Promise.all([
       fetchJsonWithRetry<{
         title?: string | null
-        lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
+        lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
         tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number } }>(`${baseUrl}/${gameId}/game.json`),
@@ -236,7 +236,7 @@ export function VisualProofPage() {
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         const rawWorldTitle = gameData?.worlds?.nodes?.[worldId]?.title
         if (rawWorldTitle) setWorldTitle(rawWorldTitle.replace(/\s*World\s*$/i, '').trim())
-        const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
+        const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
           levelData.lemmas ?? []
         const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
           levelData.tactics ?? []
@@ -271,7 +271,7 @@ export function VisualProofPage() {
         })
 
         const available = lemmas
-          .filter(t => !t.locked && !t.hidden)
+          .filter(t => !t.locked && !t.hidden && !t.disabled)
           .sort((x, y) =>
             (categoryOrder[x.category ?? ''] ?? Infinity) - (categoryOrder[y.category ?? ''] ?? Infinity)
             || (worldRank[x.world ?? ''] ?? Infinity) - (worldRank[y.world ?? ''] ?? Infinity)

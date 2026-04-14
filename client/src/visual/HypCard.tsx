@@ -5,6 +5,7 @@ import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import type { HypCard as HypCardType } from './types'
 import { formatFormulaText } from './expr-engine'
 import { colorizeFormula } from './colorizeFormula'
+import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
 
 interface HypCardProps {
   card: HypCardType
@@ -17,6 +18,7 @@ interface HypCardProps {
   isTransformable?: boolean
   isConstructable?: boolean
   animateMove?: boolean
+  iffDirection?: IffDirection
   onClickAction?: () => void
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -34,6 +36,7 @@ export function HypCard({
   isTransformable = false,
   isConstructable = false,
   animateMove = false,
+  iffDirection = 'forward',
   onClickAction,
   onDoubleClick,
   onContextMenu,
@@ -86,6 +89,7 @@ export function HypCard({
   const hypName = card.hyp.names[0] ?? ''
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
   const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
+  const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
 
   React.useEffect(() => {
     return () => {
@@ -140,9 +144,17 @@ export function HypCard({
       <div className="statement-card-main">
         <span className="hyp-name">{card.hyp.names.join(', ')}</span>
         <span className="hyp-colon">:</span>
-        <span className="proposition">{colorizeFormula(hypType)}</span>
+        <span className="proposition">
+          {isIff ? renderFormulaWithIffArrow(hypType, iffDirection) : colorizeFormula(hypType)}
+        </span>
       </div>
-      {forallFooter && <div className="statement-forall-footer">{colorizeFormula(forallFooter)}</div>}
+      {forallFooter && (
+        <div className="statement-forall-footer">
+          {hasIffNotation(forallFooter) && isIff
+            ? renderFormulaWithIffArrow(forallFooter, iffDirection)
+            : colorizeFormula(forallFooter)}
+        </div>
+      )}
     </div>
   )
 }
