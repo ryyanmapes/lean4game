@@ -448,14 +448,7 @@ export function TransformationView({
           </div>
 
           {/* Undo */}
-          <div
-            className="tr-controls"
-            style={{
-              position: 'fixed',
-              left: 'calc(var(--proof-sidebar-width, 0px) + 2rem)',
-              zIndex: 20,
-            }}
-          >
+          <div className="tr-controls">
             <button
               onClick={handleUndo}
               disabled={!(canUndo ?? rewriteStepCount > 0) || isProcessing}
@@ -473,6 +466,7 @@ export function TransformationView({
               title={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
             >↕</button>
           </div>
+
         </div>
 
         {/* Rule dock */}

@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences } from "./local_storage";
+import { loadPreferences, loadVisualLightModePreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -25,9 +25,13 @@ const defaultPreferencesState: PreferencesState = {
   isVisualLightMode: false,
 }
 
+const savedPreferences = loadPreferences()
+const savedVisualLightMode = loadVisualLightModePreference()
+
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
-  ...loadPreferences(),
+  ...savedPreferences,
+  isVisualLightMode: savedVisualLightMode ?? savedPreferences?.isVisualLightMode ?? defaultPreferencesState.isVisualLightMode,
 }
 
 export const preferencesSlice = createSlice({

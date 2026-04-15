@@ -8,7 +8,7 @@ import { connection } from '../connection'
 import { apiSlice } from './api'
 import { progressSlice } from './progress'
 import { preferencesSlice } from "./preferences"
-import { saveState, savePreferences, removePreferences} from "./local_storage";
+import { saveState, savePreferences, removePreferences, saveVisualLightModePreference } from "./local_storage";
 
 
 export const store = configureStore({
@@ -31,6 +31,7 @@ store.subscribe(
     saveState(store.getState()[progressSlice.name]);
 
     const preferencesState = store.getState()[preferencesSlice.name]
+    saveVisualLightModePreference(preferencesState.isVisualLightMode)
     preferencesState.isSavePreferences ? savePreferences(preferencesState) : removePreferences()
   }, 800)
 );

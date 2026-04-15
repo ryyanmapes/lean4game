@@ -1,4 +1,4 @@
-import { GameHint, InteractiveGoalsWithHints, ProofState } from "./infoview/rpc_api";
+import { GameHint, InteractiveGoalsWithHints } from "./infoview/rpc_api";
 import * as React from 'react';
 import { Markdown } from './markdown';
 import { DeletedChatContext, ProofContext } from "./infoview/context";
@@ -13,14 +13,23 @@ import { useTranslation } from "react-i18next";
  * and have the variables substituted just before displaying.
  */
 function getHintText(hint: GameHint): string {
-  const gameId = React.useContext(GameIdContext)
-  let { t: gT } = useGameTranslation()
+  // Keep the component subscribed to game changes so translated hints refresh.
+  React.useContext(GameIdContext)
+  const { t: gT } = useGameTranslation()
   if (hint.rawText) {
-    // Replace the variable names used in the hint with the ones used by the player
-    // variable names are marked like `«{g}»` inside the text.
-    return gT(hint.rawText).replaceAll(/«\{(.*?)\}»/g, ((_, v) =>
-      // `hint.varNames` contains tuples `[oldName, newName]`
-      (hint.varNames.find(x => x[0] == v))[1]))
+    // Replace the variable names used in the hint with the ones used by the player.
+    // If a placeholder mapping is missing, fall back to the already-rendered hint
+    // text from the server instead of crashing and dropping the hint entirely.
+    let missingMapping = false
+    const substituted = gT(hint.rawText).replaceAll(/(?:\u00C2)?\u00AB\{(.*?)\}(?:\u00C2)?\u00BB/g, ((_, v) => {
+      const mappedName = hint.varNames.find(x => x[0] == v)?.[1]
+      if (!mappedName) {
+        missingMapping = true
+        return v
+      }
+      return mappedName
+    }))
+    return missingMapping ? hint.text : substituted
   } else {
     // hints created in the frontend do not have a `rawText`
     // TODO: `hint.text` could be removed in theory.
@@ -70,17 +79,17 @@ export function DeletedHints({hints} : {hints: GameHint[]}) {
   </>
 }
 
-/** Filter hints to not show consequtive identical hints twice.
+/** Filter hints to not show consecutive identical hints twice.
  * Hidden hints are not filtered.
  */
 export function filterHints(hints: GameHint[], prevHints: GameHint[]): GameHint[] {
   if (!hints) {
-    return []}
-  else if (!prevHints) {
-    return hints }
-  else {
+    return []
+  } else if (!prevHints) {
+    return hints
+  } else {
     return hints.filter((hint) => hint.hidden ||
-    (prevHints.find(x => (x.text == hint.text && x.hidden == hint.hidden)) === undefined)
+      (prevHints.find(x => (x.text == hint.text && x.hidden == hint.hidden)) === undefined)
     )
   }
 }
@@ -95,20 +104,20 @@ export function MoreHelpButton({selected=null} : {selected?: number}) {
 
   const { t } = useTranslation()
 
-  const {proof, setProof} = React.useContext(ProofContext)
-  const {deletedChat, setDeletedChat, showHelp, setShowHelp} = React.useContext(DeletedChatContext)
+  const {proof} = React.useContext(ProofContext)
+  const {showHelp, setShowHelp} = React.useContext(DeletedChatContext)
 
-  let k = proof?.steps.length ?
+  const k = proof?.steps.length ?
     ((selected === null) ? (proof?.steps.length - (lastStepHasErrors(proof) ? 2 : 1)) : selected)
     : 0
 
-  const activateHiddenHints = (ev) => {
+  const activateHiddenHints = (_ev) => {
     // If the last step (`k`) has errors, we want the hidden hints from the
     // second-to-last step to be affected
     if (!(proof?.steps.length)) {return}
 
     // state must not be mutated, therefore we need to clone the set
-    let tmp = new Set(showHelp)
+    const tmp = new Set(showHelp)
     if (tmp.has(k)) {
       tmp.delete(k)
     } else {
@@ -123,4 +132,6 @@ export function MoreHelpButton({selected=null} : {selected?: number}) {
       {t("Show more help!")}
     </Button>
   }
+
+  return null
 }

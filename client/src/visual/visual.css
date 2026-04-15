@@ -1225,10 +1225,10 @@
 .visual-page .tr-controls {
   position: absolute;
   bottom: 2rem;
-  left: 2rem;
+  left: calc(var(--proof-sidebar-width, 0px) + 2rem);
   display: flex;
   gap: 1rem;
-  z-index: 25;
+  z-index: 30;
   transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -1239,6 +1239,7 @@
   right: 2rem;
   display: flex;
   gap: 1rem;
+  z-index: 30;
 }
 
 .visual-page .tr-ctrl-btn {
@@ -1267,6 +1268,14 @@
 .visual-page .tr-ctrl-btn.active-undo { color: var(--visual-warning); background: var(--visual-warning-bg); }
 .visual-page .tr-ctrl-btn.active-reverse { color: var(--visual-slot-text); background: var(--visual-choice-bg); }
 .visual-page .tr-ctrl-btn.reset { color: var(--visual-danger); }
+
+.visual-page.tr-transformation-overlay .tr-controls {
+  left: 2rem;
+}
+
+.visual-page.tr-construction-overlay .tr-controls {
+  left: 2rem;
+}
 
 /* ── Rule dock (double-decker: cards on top, tabs on bottom) ── */
 .visual-page .tr-rule-dock {
@@ -2473,6 +2482,18 @@
     left: calc(env(safe-area-inset-left, 0px) + 0.65rem);
     padding: 0.28rem 0.72rem;
     font-size: 0.78rem;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-controls {
+    left: 2rem;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-controls .tr-ctrl-btn,
+  .visual-page.tr-transformation-overlay .tr-side-controls .tr-ctrl-btn {
+    width: 2.45rem;
+    height: 2.45rem;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

@@ -69,8 +69,8 @@ relay.on('exit', (code) => {
   })
 })
 
-// client: vite --host with NODE_ENV=development
-run('client', `"${viteBin}"`, ['--host'], {
+// client: bind to Cypress' expected port and fail fast if it is unavailable.
+run('client', `"${viteBin}"`, ['--host', '--port', '3000', '--strictPort'], {
   env: { ...process.env, NODE_ENV: 'development' },
 })
 

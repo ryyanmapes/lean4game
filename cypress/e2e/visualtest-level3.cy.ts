@@ -239,8 +239,23 @@ function findOrAssumptionName(hypTypes: Record<string, string>) {
     })?.[0]
 }
 
+function waitForOrAssumptionState() {
+  return cy.window({ timeout: 60000 }).should(win => {
+    const harness = (win as VisualHarnessWindow).__visualTestHarness
+    expect(harness).to.exist
+    const snapshot = harness!.getCurrentStreamSnapshot()
+    const hasOrAssumption = Boolean(findOrAssumptionName(snapshot.hypTypes))
+    const canIntroduceGoal = snapshot.goalPlayTactic === 'click_goal'
+    expect(hasOrAssumption || canIntroduceGoal, JSON.stringify(snapshot)).to.equal(true)
+  }).then(win => {
+    const harness = (win as VisualHarnessWindow).__visualTestHarness
+    expect(harness).to.exist
+    return harness!.getCurrentStreamSnapshot()
+  })
+}
+
 function ensureOrAssumptionName() {
-  return currentStreamSnapshot().then(snapshot => {
+  return waitForOrAssumptionState().then(snapshot => {
     const existing = findOrAssumptionName(snapshot.hypTypes)
     if (existing) return existing
 
@@ -310,8 +325,7 @@ describe('VisualTest Level 3', () => {
 
     solveCurrentOrBranch()
 
-    cy.get('.completion-banner-title', { timeout: 60000 }).should('contain.text', 'Proof complete!')
-    cy.get('.completion-banner-sub', { timeout: 60000 }).should('contain.text', 'All goals have been solved.')
+    cy.get('.visual-header.completed', { timeout: 60000 }).should('be.visible')
     cy.get('[data-testid="proof-stream-leaf"][data-completed="true"]', { timeout: 60000 })
       .should('have.length', 2)
 
@@ -340,7 +354,9 @@ describe('VisualTest Level 3', () => {
     focusRemainingOrBranch()
     solveCurrentOrBranch()
 
-    cy.get('.completion-banner-title', { timeout: 60000 }).should('contain.text', 'Proof complete!')
+    cy.get('.visual-header.completed', { timeout: 60000 }).should('be.visible')
+    cy.get('[data-testid="proof-stream-leaf"][data-completed="true"]', { timeout: 60000 })
+      .should('have.length', 2)
 
     playLogEntries().then(entries => {
       expect(entries.map(entry => entry.leanTactic)).to.deep.equal([
@@ -354,13 +370,12 @@ describe('VisualTest Level 3', () => {
       ])
     })
 
-    cy.contains('button', 'View Proof').click()
-    cy.get('.proof-steps-table tbody tr').should('have.length', 7)
-    cy.get('.proof-steps-table tbody tr').then(rows => {
-      const leanTactics = Array.from(rows).map(row => {
-        const cells = row.querySelectorAll('td')
-        return (cells[2]?.textContent ?? '').trim()
-      })
+    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
+    cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+    cy.get('.proof-sidebar-step').should('have.length', 7)
+    cy.get('.proof-sidebar-step-text').then(steps => {
+      const leanTactics = Array.from(steps).map(step => step.textContent?.trim() ?? '')
       expect(leanTactics).to.deep.equal([
         'right',
         'intro h',
@@ -371,7 +386,7 @@ describe('VisualTest Level 3', () => {
         'exact right',
       ])
     })
-    cy.get('.proof-steps-table tbody td.lean-tactic')
+    cy.get('.proof-sidebar-step-text')
       .should('not.contain.text', 'click_prop')
       .and('not.contain.text', 'drag_goal')
   })

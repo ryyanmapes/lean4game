@@ -137,7 +137,7 @@ function buildThreeStreams() {
   hypCard('h').should('be.visible')
 
   clickGoal()
-  hypCard('h2').should('be.visible')
+  hypCard('h1').should('be.visible')
 
   clickGoal()
   streamLabelShouldBe(1, 2)
@@ -208,23 +208,23 @@ describe('VisualTest Level 2', () => {
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
   })
 
-  it('splits h2 on the middle stream without jumping to the wrong goal', () => {
+  it('splits h1 on the middle stream without jumping to the wrong goal', () => {
     buildThreeStreams()
 
     clickNextStream()
     streamLabelShouldBe(2, 3)
     goalTextShouldContain('B')
-    hypCard('h2').should('have.class', 'clickable')
+    hypCard('h1').should('have.class', 'clickable')
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
 
     playLogEntries().then(entriesBefore => {
-      clickHyp('h2')
+      clickHyp('h1')
       cy.window().should(win => {
         const raw = win.localStorage.getItem('playlog/Prototype/2')
         const entriesAfter = raw ? JSON.parse(raw) : []
         expect(entriesAfter.length).to.equal(entriesBefore.length + 1)
-        expect(entriesAfter.at(-1)?.playTactic).to.equal('click_prop h2')
+        expect(entriesAfter.at(-1)?.playTactic).to.equal('click_prop h1')
         expect(entriesAfter.at(-1)?.succeeded).to.equal(true)
       })
     })
@@ -233,7 +233,7 @@ describe('VisualTest Level 2', () => {
     goalTextShouldContain('B')
     hypCard('left').should('be.visible')
     hypCard('right').should('be.visible')
-    cy.get('[data-testid="hyp-card"][data-hyp-name="h2"]').should('not.exist')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="h1"]').should('not.exist')
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
   })
@@ -242,7 +242,7 @@ describe('VisualTest Level 2', () => {
     buildThreeStreams()
 
     clickNextStream()
-    clickHyp('h2')
+    clickHyp('h1')
     hypCard('left').should('be.visible')
     hypCard('right').should('be.visible')
     goalTextShouldContain('B')
@@ -273,8 +273,8 @@ describe('VisualTest Level 2', () => {
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
 
-    clickHypViaHarness('h2')
-    lastPlayTacticShouldBe('click_prop h2')
+    clickHypViaHarness('h1')
+    lastPlayTacticShouldBe('click_prop h1')
     hypCard('left').should('be.visible')
     hypCard('right').should('be.visible')
     goalTextShouldContain('B')
@@ -288,8 +288,8 @@ describe('VisualTest Level 2', () => {
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
 
-    clickHypViaHarness('h2')
-    lastPlayTacticShouldBe('click_prop h2')
+    clickHypViaHarness('h1')
+    lastPlayTacticShouldBe('click_prop h1')
     hypCard('left').should('be.visible')
     hypCard('right').should('be.visible')
     goalTextShouldContain('C')
@@ -316,8 +316,7 @@ describe('VisualTest Level 2', () => {
     dragHypToGoal('left')
     lastPlayTacticShouldBe('drag_goal left')
 
-    cy.get('.completion-banner-title', { timeout: 60000 }).should('contain.text', 'Proof complete!')
-    cy.get('.completion-banner-sub', { timeout: 60000 }).should('contain.text', 'All goals have been solved.')
+    cy.get('.visual-header.completed', { timeout: 60000 }).should('be.visible')
     cy.get('[data-testid="proof-stream-leaf"][data-completed="true"]', { timeout: 60000 })
       .should('have.length', 3)
     proofTreeShouldHaveUniqueStreamIds()
@@ -329,9 +328,9 @@ describe('VisualTest Level 2', () => {
         'click_goal',
         'click_goal',
         'drag_goal h',
-        'click_prop h2',
+        'click_prop h1',
         'drag_goal left',
-        'click_prop h2',
+        'click_prop h1',
         'drag_to h right',
         'drag_to left h',
         'drag_goal left',

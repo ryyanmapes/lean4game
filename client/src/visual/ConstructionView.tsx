@@ -304,7 +304,7 @@ export function ConstructionView({
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveBrickId(null)}>
-      <div className="visual-page tr-overlay" style={style}>
+      <div className="visual-page tr-overlay tr-construction-overlay" style={style}>
         {headerSlot}
 
         {/* Back button */}

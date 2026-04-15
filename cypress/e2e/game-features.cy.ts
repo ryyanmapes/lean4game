@@ -98,19 +98,17 @@ describe('Basic Lean4Game Features', () => {
       cy.get(".fa-code").click()
 
       cy.get('.codeview', { timeout: 60000 }).should('be.visible')
-      cy.get('.infoview', { timeout: 60000 }).should('be.visible')
-      cy.get('.infoview').contains('x + x = y', { timeout: 60000 })
-      cy.get('.infoview').contains('You can either start using h or g.', { timeout: 60000 })
+      cy.contains('You can either start using h or g.', { timeout: 60000 }).should('be.visible')
+      goalShouldContain('x + x = y', 60000)
 
       cy.get('.codeview').type('rw [h]{enter}')
 
       goalShouldContain('2 + 2 = y', 60000)
-      cy.get('.infoview').contains('2 + 2 = y', { timeout: 60000 })
-      cy.get('.infoview').contains('You should use g now.', { timeout: 60000 })
+      cy.contains('You should use g now.', { timeout: 60000 }).should('be.visible')
 
       cy.focused().type('{uparrow}')
-      cy.get('.infoview').contains('x + x = y', { timeout: 60000 })
-      cy.get('.infoview').contains('You can either start using h or g.', { timeout: 60000 })
+      goalShouldContain('x + x = y', 60000)
+      cy.contains('You can either start using h or g.', { timeout: 60000 }).should('be.visible')
 
     })
   })
@@ -227,11 +225,13 @@ describe('Basic Lean4Game Features', () => {
     it('Should use player\'s hypothesis names in hints', () => {
       cy.visit('/#/g/test/TestGame/world/TestWorld/level/2')
       cy.contains('Assumptions:', { timeout: 60000 })
+      cy.get(".fa-code").click()
+      cy.get('.codeview', { timeout: 60000 }).should('be.visible')
 
-      cy.get('.typewriter-input .monaco-editor .view-lines').type('have myname : x + z = y + z := by rw [h]{enter}')
+      cy.get('.codeview').type('have myname : x + z = y + z := by rw [h]{enter}')
 
       // Check that the hint uses the player's hypothesis name `myname`
-      cy.contains('You should use myname now')
+      cy.contains('You should use myname now', { timeout: 60000 }).should('be.visible')
     })
   })
 

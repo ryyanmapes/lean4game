@@ -38,6 +38,7 @@ export async function saveState(state: any) {
 }
 
 const PREFERENCES_KEY = "preferences"
+const VISUAL_LIGHT_MODE_KEY = "visual_light_mode"
 
 /** Load from browser storage */
 export function loadPreferences() {
@@ -61,6 +62,26 @@ export function savePreferences(state: any) {
 export function removePreferences() {
   try {
     localStorage.removeItem(PREFERENCES_KEY);
+  } catch (e) {
+    // Ignore
+  }
+}
+
+export function loadVisualLightModePreference() {
+  try {
+    const serializedState = localStorage.getItem(VISUAL_LIGHT_MODE_KEY)
+    if (serializedState === null) return undefined
+
+    const parsedState = JSON.parse(serializedState)
+    return typeof parsedState === 'boolean' ? parsedState : undefined
+  } catch (e) {
+    return undefined
+  }
+}
+
+export function saveVisualLightModePreference(isVisualLightMode: boolean) {
+  try {
+    localStorage.setItem(VISUAL_LIGHT_MODE_KEY, JSON.stringify(isVisualLightMode))
   } catch (e) {
     // Ignore
   }

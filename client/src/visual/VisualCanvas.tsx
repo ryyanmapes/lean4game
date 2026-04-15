@@ -3142,8 +3142,6 @@ export function VisualCanvas({
               className="tr-controls"
               style={{
                 bottom: `calc(2rem + ${trayHeight}px)`,
-                left: 'calc(var(--proof-sidebar-width, 0px) + 2rem)',
-                zIndex: 20,
               }}
             >
               <button

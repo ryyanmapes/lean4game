@@ -106,7 +106,7 @@
     "start": "concurrently -n server,relay,client -c blue,yellow,green \"npm run build:server\" \"npm run start:relay\" \"npm run start:client\"",
     "start:win": "node scripts/start-win.cjs",
     "start:relay": "node scripts/start-relay.cjs",
-    "start:client": "cross-env NODE_ENV=development vite --host",
+    "start:client": "cross-env NODE_ENV=development vite --host --port 3000 --strictPort",
     "build": "node scripts/run-sequential.cjs build:server build:relay build:client build:test",
     "preview": "vite preview",
     "build:server": "node scripts/run-in-dir.cjs server lake -R build",

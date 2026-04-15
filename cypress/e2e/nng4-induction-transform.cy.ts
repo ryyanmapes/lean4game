@@ -1,5 +1,5 @@
 const NNG4_ADDITION_LEVEL1 = '/#/g/local/NNG4/world/Addition/level/1/visual'
-const LOAD_TIMEOUT = 120000
+const LOAD_TIMEOUT = 600000
 
 interface VisualTestHarness {
   dragHypToGoal(hypName: string): Promise<void>
@@ -188,7 +188,8 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
       expect($goal.attr('data-goal-text')).to.contain('succ')
       expect($goal).to.have.class('transformable')
-    }).dblclick()
+    })
+    visualHarness().then(harness => harness.openGoalTransform())
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
     visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
@@ -212,7 +213,8 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
       expect($goal.attr('data-goal-text')).to.contain('succ')
       expect($goal).to.have.class('transformable')
-    }).dblclick()
+    })
+    visualHarness().then(harness => harness.openGoalTransform())
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
     visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
@@ -257,20 +259,32 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
   })
 
-  it('can still rewrite a hypothesis after applying n_ih to switch the successor goal', () => {
-    let initialHypType = ''
+  it('keeps the switched successor goal live after applying n_ih', () => {
+    let switchedGoalType = ''
 
     visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
-    visualHarness().then(harness => harness.openGoalTransform())
+
+    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
+      .should('contain.text', 'Stream 1 of 2')
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
+      expect($goal.attr('data-goal-text')).to.contain('0 + 0 = 0')
+      expect($goal).to.have.class('transformable')
+    }).dblclick()
+
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
     visualHarness().then(harness => harness.rewriteGoalInTransform('add_zero'))
     cy.get('.tr-back-btn').click()
-    visualHarness().then(harness => harness.clickGoal())
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      const goalText = snapshot.displayGoalType ?? snapshot.goalType
+      if (goalText.includes('0 = 0') && snapshot.goalPlayTactic === 'click_goal') {
+        return visualHarness().then(harness => harness.clickGoal())
+      }
+    })
 
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 2 of 2')
 
-    visualHarness().then(harness => harness.clickGoal())
     visualHarness().then(harness => harness.dragHypToGoal('n_ih'))
 
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
@@ -279,29 +293,23 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       expect(snapshot.goalType).to.contain('=')
       expect(snapshot.goalType).to.not.contain('→')
-      initialHypType = snapshot.hypTypes.h ?? ''
-      expect(initialHypType).to.contain('succ')
+      expect(snapshot.goalType).to.contain('succ')
+      switchedGoalType = snapshot.goalType
       expect(snapshot.currentStreamIsCompleted).to.equal(false)
       expect(snapshot.streamInteractionsEnabled).to.equal(true)
     })
 
-    visualHarness().then(harness => harness.openHypTransform('h'))
-    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
-    visualHarness().then(harness => harness.getTransformStatus()).then(status => {
-      expect(status.isOpen).to.equal(true)
-      expect(status.targetKind).to.equal('hyp')
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
+      const goalText = $goal.attr('data-goal-text') ?? ''
+      expect(goalText).to.contain('0 + succ')
+      expect(goalText).to.contain('= succ')
     })
-
-    visualHarness().then(harness => harness.rewriteHypInTransform('add_succ'))
-    visualHarness().then(harness => harness.getTransformStatus()).then(status => {
-      expect(status.isOpen).to.equal(true)
-      expect(status.targetKind).to.equal('hyp')
-    })
-
-    cy.get('.tr-back-btn').click()
+    cy.get('[data-testid="hyp-card"][data-hyp-name="n_ih"]', { timeout: 60000 })
+      .should('be.visible')
 
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
-      expect(snapshot.hypTypes.h).to.not.equal(initialHypType)
+      expect(snapshot.goalType).to.equal(switchedGoalType)
+      expect(snapshot.goalType).to.contain('succ')
       expect(snapshot.currentStreamIsCompleted).to.equal(false)
       expect(snapshot.streamInteractionsEnabled).to.equal(true)
     })

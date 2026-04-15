@@ -73,10 +73,16 @@ const router = createHashRouter([
 
 const container = document.getElementById('root');
 const root = createRoot(container!);
+const app = (
+  <Provider store={store}>
+    <RouterProvider router={router} />
+  </Provider>
+)
+
+// React.StrictMode double-invokes effects in development, which can race the
+// exclusive Lean websocket/game startup and make Cypress boot much flakier.
 root.render(
-  <React.StrictMode>
-    <Provider store={store}>
-      <RouterProvider router={router} />
-    </Provider>
-  </React.StrictMode>
+  (globalThis as typeof globalThis & { Cypress?: unknown }).Cypress
+    ? app
+    : <React.StrictMode>{app}</React.StrictMode>
 );

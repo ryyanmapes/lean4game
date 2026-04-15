@@ -8,6 +8,12 @@ import { pathToFileURL } from 'url';
 
 type Tag = { owner: string; repo: string; };
 type ResolvedGame = Tag & { gameDir: string };
+const DEVELOPMENT_REPO_ALIASES: Record<string, string[]> = {
+  nng4: ['nng4'],
+  visualtest: ['visualtest'],
+  realanalysisgame: ['rng'],
+  rng: ['rng'],
+}
 export type GameSession = {
   process: ChildProcess,
   game: string,
@@ -509,6 +515,25 @@ export class GameManager {
     return null;
   }
 
+  private resolveDevelopmentLocalFallback(repo: string): ResolvedGame | null {
+    const localBaseDir = path.join(this.dir, '..', '..', '..', '..')
+    const fallbackRepos = DEVELOPMENT_REPO_ALIASES[repo] ?? [repo]
+
+    for (const fallbackRepo of fallbackRepos) {
+      const gameDir = this.resolveCaseInsensitiveDir(localBaseDir, fallbackRepo)
+      if (!gameDir || !this.isReadyGameDir(gameDir)) {
+        continue
+      }
+
+      console.warn(
+        `[${new Date()}] Falling back from installed game lookup to local/${fallbackRepo}`
+      )
+      return { owner: 'local', repo: fallbackRepo.toLowerCase(), gameDir }
+    }
+
+    return null
+  }
+
   private resolveGame(owner: string, repo: string): ResolvedGame | null {
     owner = owner.toLowerCase();
     repo = repo.toLowerCase();
@@ -531,7 +556,14 @@ export class GameManager {
       )
       console.debug(game_dir)
     } else {
-      return this.resolveInstalledGame(owner, repo);
+      const installedGame = this.resolveInstalledGame(owner, repo);
+      if (installedGame) {
+        return installedGame;
+      }
+      if (isDevelopment) {
+        return this.resolveDevelopmentLocalFallback(repo);
+      }
+      return null;
     }
 
     if (!game_dir || !fs.existsSync(game_dir)) {
