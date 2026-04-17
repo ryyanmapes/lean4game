@@ -12,6 +12,7 @@ import { PreferencesContext, WorldLevelIdContext} from './components/infoview/co
 import UsePreferences from "./state/hooks/use_preferences"
 import i18n from './i18n';
 import { Popup } from './components/popup/popup';
+import { VisualRpcProvider } from './visual/VisualRpcProvider'
 
 export const GameIdContext = React.createContext<string>(undefined);
 
@@ -57,10 +58,12 @@ function App() {
             setIsSuggestionsMobileMode,
             setIsVisualLightMode,
           }}>
-            <React.Suspense>
-              <Outlet />
-            </React.Suspense>
-            <Popup />
+            <VisualRpcProvider>
+              <React.Suspense>
+                <Outlet />
+              </React.Suspense>
+              <Popup />
+            </VisualRpcProvider>
           </PreferencesContext.Provider>
           </WorldLevelIdContext.Provider>
       </GameIdContext.Provider>

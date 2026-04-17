@@ -8,6 +8,13 @@ import { pathToFileURL } from 'url';
 
 type Tag = { owner: string; repo: string; };
 type ResolvedGame = Tag & { gameDir: string };
+type DirectLeanServerConfig = {
+  command: string
+  args: string[]
+  cwd: string
+  env: NodeJS.ProcessEnv
+}
+
 const DEVELOPMENT_REPO_ALIASES: Record<string, string[]> = {
   nng4: ['nng4'],
   visualtest: ['visualtest'],
@@ -128,12 +135,24 @@ export class GameManager {
   }
 
   getCustomLeanServer(gameDir: string) : string | null {
-    let binary = path.join(gameDir, ".lake", "packages", "GameServer", "server", ".lake", "build", "bin", "gameserver");
-    if (fs.existsSync(binary)) {
-      return binary
-    } else {
-      return null
+    const binaryNames = process.platform === 'win32'
+      ? ['gameserver.exe', 'gameserver']
+      : ['gameserver']
+    const candidateDirs = [
+      path.join(gameDir, '.lake', 'build', 'bin'),
+      path.join(gameDir, '.lake', 'packages', 'GameServer', 'server', '.lake', 'build', 'bin'),
+    ]
+
+    for (const dir of candidateDirs) {
+      for (const binaryName of binaryNames) {
+        const binary = path.join(dir, binaryName)
+        if (fs.existsSync(binary)) {
+          return binary
+        }
+      }
     }
+
+    return null
   }
 
   createGameProcess(game: ResolvedGame, customLeanServer: string | null) {
@@ -150,7 +169,20 @@ export class GameManager {
           { cwd: path.dirname(customLeanServer) }
         );
       } else {
-        serverProcess = cp.spawn("lake", ["env", "lean", "--server"], { cwd: game_dir });
+        const directLeanServer = this.getDirectLeanServer(game_dir)
+        if (directLeanServer) {
+          console.info(
+            `[${new Date()}] Starting prebuilt Lean server for ${game.owner}/${game.repo}` +
+            ` via ${directLeanServer.command}`
+          )
+          serverProcess = cp.spawn(
+            directLeanServer.command,
+            directLeanServer.args,
+            { cwd: directLeanServer.cwd, env: directLeanServer.env }
+          )
+        } else {
+          serverProcess = cp.spawn("lake", ["env", "lean", "--server"], { cwd: game_dir });
+        }
       }
     } else {
       let cmd = "../../scripts/bubblewrap.sh"
@@ -282,6 +314,109 @@ export class GameManager {
     return new Promise<void>(resolve => {
       process.once('exit', () => resolve())
     })
+  }
+
+  private getDirectLeanServer(gameDir: string): DirectLeanServerConfig | null {
+    const leanPathEntries = this.collectLeanPathEntries(gameDir)
+    if (leanPathEntries.length === 0) {
+      return null
+    }
+
+    const leanBinary = this.getLeanBinary(gameDir)
+    return {
+      command: leanBinary,
+      args: ['--server'],
+      cwd: gameDir,
+      env: {
+        ...process.env,
+        LEAN_PATH: leanPathEntries.join(path.delimiter),
+      },
+    }
+  }
+
+  private collectLeanPathEntries(projectDir: string) {
+    const seenProjects = new Set<string>()
+    const seenEntries = new Set<string>()
+    const entries: string[] = []
+
+    const addEntry = (entry: string) => {
+      const normalized = path.normalize(entry)
+      if (!fs.existsSync(normalized) || seenEntries.has(normalized)) {
+        return
+      }
+      seenEntries.add(normalized)
+      entries.push(normalized)
+    }
+
+    const visitProject = (currentDir: string) => {
+      const normalizedProjectDir = path.normalize(currentDir)
+      if (seenProjects.has(normalizedProjectDir)) {
+        return
+      }
+      seenProjects.add(normalizedProjectDir)
+
+      const manifestPath = path.join(currentDir, 'lake-manifest.json')
+      if (fs.existsSync(manifestPath)) {
+        try {
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+          const packages = Array.isArray(manifest?.packages) ? manifest.packages : []
+          for (const pkg of packages) {
+            if (!pkg || typeof pkg.name !== 'string') {
+              continue
+            }
+
+            if (pkg.type === 'path' && typeof pkg.dir === 'string') {
+              const depDir = path.resolve(currentDir, pkg.dir)
+              addEntry(path.join(depDir, '.lake', 'build', 'lib', 'lean'))
+              visitProject(depDir)
+              continue
+            }
+
+            addEntry(path.join(currentDir, '.lake', 'packages', pkg.name, '.lake', 'build', 'lib', 'lean'))
+          }
+        } catch (error) {
+          console.warn(
+            `[${new Date()}] Failed to read lake-manifest.json for ${currentDir}: ${error}`
+          )
+        }
+      }
+
+      addEntry(path.join(currentDir, '.lake', 'build', 'lib', 'lean'))
+    }
+
+    visitProject(projectDir)
+    return entries
+  }
+
+  private getLeanBinary(gameDir: string) {
+    const leanToolchainPath = path.join(gameDir, 'lean-toolchain')
+    if (!fs.existsSync(leanToolchainPath)) {
+      return 'lean'
+    }
+
+    const elanHome = process.env.ELAN_HOME
+      ?? (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '.elan') : null)
+      ?? (process.env.HOME ? path.join(process.env.HOME, '.elan') : null)
+    if (!elanHome) {
+      return 'lean'
+    }
+
+    const toolchainSpec = fs.readFileSync(leanToolchainPath, 'utf8').trim()
+    if (!toolchainSpec) {
+      return 'lean'
+    }
+
+    const toolchainDirName = toolchainSpec
+      .replace(/\//g, '--')
+      .replace(/:/g, '---')
+    const leanBinary = path.join(
+      elanHome,
+      'toolchains',
+      toolchainDirName,
+      'bin',
+      process.platform === 'win32' ? 'lean.exe' : 'lean',
+    )
+    return fs.existsSync(leanBinary) ? leanBinary : 'lean'
   }
 
   messageTranslation(

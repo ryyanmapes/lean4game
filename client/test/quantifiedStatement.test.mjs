@@ -10,6 +10,7 @@ const {
 const FORALL = '\u2200'
 const IMPLIES = '\u2192'
 const NAT = '\u2115'
+const RAT = '\u211A'
 const LE = '\u2264'
 const NAT_MOJIBAKE = '\u00e2\u201e\u00a2'
 const LE_MOJIBAKE = '\u00e2\u2030\u00a4'
@@ -54,6 +55,22 @@ test('order hypotheses still render as implication premises when theorem text is
 
   assert.equal(display.mainText, `x ${LE} y ${IMPLIES} y ${LE} z ${IMPLIES} x ${LE} z`)
   assert.equal(display.forallFooter, `${FORALL} (x : ${NAT}) (y : ${NAT}) (z : ${NAT})`)
+})
+
+test('function-valued binders stay in the forall footer instead of becoming implication premises', () => {
+  const display = buildPropositionTheoremDisplay(
+    `(ε : ${RAT}) (a : ${NAT} ${IMPLIES} ${RAT}) : ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
+  )
+
+  assert.equal(
+    display.mainText,
+    `ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
+  )
+  assert.equal(display.forallFooter, `${FORALL} (ε : ${RAT}) (a : ${NAT} ${IMPLIES} ${RAT})`)
+  assert.deepEqual(display.forallSpecification, {
+    varName: 'ε',
+    body: `${FORALL} (a : ${NAT} ${IMPLIES} ${RAT}), ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
+  })
 })
 
 test('workspace cards can reconstruct the next specification step from displayed text', () => {

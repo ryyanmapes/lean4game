@@ -74,6 +74,28 @@ open Lean Meta Elab Command
 
 /-! ## Statement string -/
 
+private def prettyExprString (e : Expr) : MetaM String := do
+  return (← ppExpr e).pretty.trimAscii.toString
+
+private def getDefinitionPropStatementString? (name : Name) : CommandElabM (Option String) := do
+  runTermElabM fun _ => do
+    let constInfo ← getConstInfo name
+    match constInfo with
+    | .defnInfo info =>
+        let constExpr := .const name (info.levelParams.map mkLevelParam)
+        let (args, _, resultType) ← forallMetaTelescopeReducing info.type
+        if !(← isProp resultType) then
+          return none
+        return some (← prettyExprString (mkAppN constExpr args))
+    | _ => return none
+
+private def replaceTrailingPropResult (statement body : String) : String :=
+  let trimmed := statement.trimAsciiEnd.toString
+  if trimmed.endsWith ": Prop" then
+    trimmed.dropEnd 6 |>.toString |>.append s!": {body}"
+  else
+    statement
+
 def getStatement (name : Name) : CommandElabM MessageData := do
   return ← addMessageContextPartial
     (.ofFormatWithInfosM <| GameServer.PrettyPrinter.ppSignature name)
@@ -85,8 +107,7 @@ def getStatement (name : Name) : CommandElabM MessageData := do
 Note: A statement like `theorem abc : ∀ x : Nat, x ≥ 0` would be turned into
 `theorem abc (x : Nat) : x ≥ 0` by `PrettyPrinter.ppSignature`. -/
 def getStatementString (name : Name) : CommandElabM String := do
-  --try
-    return ← (← getStatement name).toString
-  --catch
-  --| _ => throwError m!"Could not find {name} in context."
-  -- TODO: I think it would be nicer to unresolve Namespaces as much as possible.
+  let statement ← (← getStatement name).toString
+  match ← getDefinitionPropStatementString? name with
+  | some body => pure <| replaceTrailingPropResult statement body
+  | none => pure statement

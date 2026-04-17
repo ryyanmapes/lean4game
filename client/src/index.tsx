@@ -80,9 +80,14 @@ const app = (
 )
 
 // React.StrictMode double-invokes effects in development, which can race the
-// exclusive Lean websocket/game startup and make Cypress boot much flakier.
+// exclusive Lean websocket/game startup for local games. Keep production strict,
+// but avoid duplicate dev mounts that open overlapping Lean sessions.
+const shouldUseStrictMode =
+  !(globalThis as typeof globalThis & { Cypress?: unknown }).Cypress &&
+  !import.meta.env.DEV
+
 root.render(
-  (globalThis as typeof globalThis & { Cypress?: unknown }).Cypress
-    ? app
-    : <React.StrictMode>{app}</React.StrictMode>
+  shouldUseStrictMode
+    ? <React.StrictMode>{app}</React.StrictMode>
+    : app
 );

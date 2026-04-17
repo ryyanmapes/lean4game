@@ -1,11 +1,10 @@
 import * as React from 'react'
-import { useEffect, useState, useRef, useCallback, useContext } from 'react'
+import { useEffect, useState, useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
 import { useAppSelector, useAppDispatch } from '../hooks'
 import { selectCompleted, levelCompleted } from '../state/progress'
-import { LeanRpcClient } from './leanRpcClient'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
@@ -15,6 +14,7 @@ import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
+import { useVisualRpcClient } from './VisualRpcProvider'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert'])
@@ -146,9 +146,7 @@ export function VisualProofPage() {
   const [theoremEqualityHyps, setTheoremEqualityHyps] = useState<EqualityHyp[]>([])
   const [propositionTheorems, setPropositionTheorems] = useState<PropositionTheorem[]>([])
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
-
-  // Keep the client alive for the lifetime of the page
-  const clientRef = useRef<LeanRpcClient | null>(null)
+  const { getClient, disposeClient } = useVisualRpcClient()
 
   useEffect(() => {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
@@ -159,31 +157,27 @@ export function VisualProofPage() {
 
     const slowTimer = window.setTimeout(() => setLoadingSlow(true), 30000)
     let active = true
-    clientRef.current?.close()
-    clientRef.current = null
 
     void (async () => {
       let lastError: unknown = null
 
       for (let attempt = 0; attempt < INITIAL_PROOF_MAX_ATTEMPTS && active; attempt++) {
-        const client = new LeanRpcClient(gameId, worldId, levelId)
+        const client = getClient(worldId, levelId)
 
         try {
           const proof = await withTimeout(
-            client.getProofState(),
+            client.loadProofState(worldId, levelId),
             INITIAL_PROOF_ATTEMPT_TIMEOUT_MS,
             'Initial proof request timed out',
           )
           if (!active) {
-            client.close()
             return
           }
-          clientRef.current = client
           setCanvasState(proofStateToCanvas(proof))
           return
         } catch (err) {
           lastError = err
-          client.close()
+          disposeClient(client)
 
           if (attempt < INITIAL_PROOF_MAX_ATTEMPTS - 1 && active) {
             await delay(INITIAL_PROOF_RETRY_DELAY_MS * (attempt + 1))
@@ -199,16 +193,15 @@ export function VisualProofPage() {
     return () => {
       active = false
       window.clearTimeout(slowTimer)
-      clientRef.current?.close()
-      clientRef.current = null
     }
-  }, [gameId, worldId, levelId])
+  }, [disposeClient, gameId, getClient, worldId, levelId])
 
   // Callback passed to VisualCanvas: sends an updated proof body to Lean and
   // returns the new ProofState, or null on Lean error.
   const handleInteraction = useCallback(async (proofBody: string): Promise<ProofState | null> => {
-    return clientRef.current?.sendProofUpdate(proofBody) ?? null
-  }, [])
+    if (!worldId || !levelId) return null
+    return getClient(worldId, levelId).sendProofUpdate(proofBody)
+  }, [getClient, levelId, worldId])
 
   // Fetch the level JSON directly to get the lemma list (InventoryPanel is not mounted
   // on this standalone route, so the jotai atom would always be empty).

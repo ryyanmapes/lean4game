@@ -173,28 +173,47 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
     cy.get('.cn-done-btn', { timeout: 60000 }).click()
 
     goalCard().should('have.class', 'transformable').dblclick()
+    cy.get('.visual-page.tr-transformation-overlay .tr-back-btn', { timeout: 60000 }).should('be.visible')
 
     cy.get('body').then($body => {
+      const headerEl = $body.find('.visual-page.tr-transformation-overlay .visual-header').get(0)
       const mainAreaEl = $body.find('.visual-page.tr-transformation-overlay .tr-main-area').get(0)
+      const backEl = $body.find('.visual-page.tr-transformation-overlay .tr-back-btn').get(0)
       const undoEl = $body.find('.visual-page.tr-transformation-overlay .tr-controls .tr-ctrl-btn[title="Undo"]').get(0)
       const reverseEl = $body.find('.visual-page.tr-transformation-overlay .tr-side-controls .tr-ctrl-btn[title^="Mode:"]').get(0)
       const dockEl = $body.find('.visual-page.tr-transformation-overlay .tr-rule-dock').get(0)
 
+      expect(headerEl, 'transformation header').to.exist
       expect(mainAreaEl, 'transformation main area').to.exist
+      expect(backEl, 'back button').to.exist
       expect(undoEl, 'undo button').to.exist
       expect(reverseEl, 'reverse toggle').to.exist
       expect(dockEl, 'rule dock').to.exist
 
+      const doc = $body.get(0).ownerDocument
+      const headerRect = headerEl!.getBoundingClientRect()
       const mainAreaRect = mainAreaEl!.getBoundingClientRect()
+      const backRect = backEl!.getBoundingClientRect()
       const undoRect = undoEl!.getBoundingClientRect()
       const reverseRect = reverseEl!.getBoundingClientRect()
       const dockRect = dockEl!.getBoundingClientRect()
+      const backAtCenter = doc.elementFromPoint(backRect.left + backRect.width / 2, backRect.top + backRect.height / 2)
+      const undoAtCenter = doc.elementFromPoint(undoRect.left + undoRect.width / 2, undoRect.top + undoRect.height / 2)
+      const reverseAtCenter = doc.elementFromPoint(reverseRect.left + reverseRect.width / 2, reverseRect.top + reverseRect.height / 2)
 
+      expect(backRect.top, 'back button should sit inside the header').to.be.at.least(headerRect.top - 1)
+      expect(backRect.bottom, 'back button should stay inside the header').to.be.at.most(headerRect.bottom + 1)
+      expect(backRect.left, 'back button should stay near the left edge').to.be.lessThan(headerRect.left + 120)
+      expect(backEl!.contains(backAtCenter), 'back button should not be covered by the header').to.equal(true)
       expect(undoRect.width, 'undo button width').to.be.greaterThan(20)
       expect(reverseRect.width, 'reverse button width').to.be.greaterThan(20)
+      expect(undoRect.top, 'undo button should remain below the header').to.be.greaterThan(headerRect.bottom + 8)
+      expect(reverseRect.top, 'reverse button should remain below the header').to.be.greaterThan(headerRect.bottom + 8)
       expect(Math.abs(undoRect.top - reverseRect.top), 'undo and reverse should align vertically').to.be.lessThan(8)
       expect(undoRect.bottom, 'undo button should sit above the rule dock').to.be.at.most(dockRect.top + 6)
       expect(reverseRect.bottom, 'reverse button should sit above the rule dock').to.be.at.most(dockRect.top + 6)
+      expect(undoEl!.contains(undoAtCenter), 'undo button should not be hidden behind another layer').to.equal(true)
+      expect(reverseEl!.contains(reverseAtCenter), 'reverse button should not be hidden behind another layer').to.equal(true)
       expect(reverseRect.left, 'reverse should remain on the right side of the panel').to.be.greaterThan(undoRect.right + 120)
       expect(
         Math.abs((undoRect.left - mainAreaRect.left) - (mainAreaRect.right - reverseRect.right)),

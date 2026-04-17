@@ -4,6 +4,7 @@ import { getWebsocketUrl } from '../utils/url'
 const OPEN_TIMEOUT_MS = 15000
 const REQUEST_TIMEOUT_MS = 30000
 const FILE_READY_TIMEOUT_MS = 600000
+const INITIALIZE_TIMEOUT_MS = FILE_READY_TIMEOUT_MS
 const PROOF_STATE_MAX_ATTEMPTS = 5
 const PROOF_STATE_RETRY_DELAY_MS = 150
 
@@ -32,12 +33,11 @@ export class LeanRpcClient {
   private closed = false
   private sessionId: string | null = null
   private version = 1
+  private initialized = false
+  private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(gameId: string, worldId: string, levelId: number) {
-    this.worldId = worldId
-    this.levelId = levelId
-    const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    this.uri = `file:///${worldId}/${levelId}.lean?session=${encodeURIComponent(sessionId)}`
+    this.setDocumentContext(worldId, levelId)
     const wsUrl = getWebsocketUrl(gameId)
     this.ws = new WebSocket(wsUrl)
     this.ws.onmessage = (e) => this.onMessage(JSON.parse(e.data))
@@ -53,16 +53,44 @@ export class LeanRpcClient {
   /** Full sequence: connect → open doc → wait for Lean → get proof state.
    *  Stores the session id for use in subsequent sendProofUpdate calls. */
   async getProofState(): Promise<ProofState> {
-    await this.waitForOpen()
-    await this.initialize()
-    this.sendNotification('initialized', {})
-    const readyPromise = this.waitForFileReady()
-    this.sendNotification('textDocument/didOpen', {
-      textDocument: { uri: this.uri, languageId: 'lean4', version: this.version, text: '' }
+    return this.loadProofState(this.worldId, this.levelId)
+  }
+
+  /** Reuse the same websocket when switching between levels in one game. */
+  async loadProofState(worldId: string, levelId: number): Promise<ProofState> {
+    return this.enqueue(async () => {
+      if (this.closed) throw new Error('WebSocket closed')
+
+      const switchingDocument = this.initialized && (this.worldId !== worldId || this.levelId !== levelId)
+      if (switchingDocument) {
+        this.sendNotification('textDocument/didClose', {
+          textDocument: { uri: this.uri }
+        })
+      }
+
+      if (!this.initialized || switchingDocument) {
+        this.setDocumentContext(worldId, levelId)
+      }
+
+      await this.waitForOpen()
+      if (!this.initialized) {
+        await this.initialize()
+        this.sendNotification('initialized', {})
+        this.initialized = true
+      }
+
+      if (!switchingDocument && this.sessionId) {
+        return await this.rpcCallProofState()
+      }
+
+      const readyPromise = this.waitForFileReady()
+      this.sendNotification('textDocument/didOpen', {
+        textDocument: { uri: this.uri, languageId: 'lean4', version: this.version, text: '' }
+      })
+      await readyPromise
+      this.sessionId = await this.connectRpcSession()
+      return await this.rpcCallProofState()
     })
-    await readyPromise
-    this.sessionId = await this.connectRpcSession()
-    return await this.rpcCallProofState()
   }
 
   /** Replace the proof body and await the new ProofState.
@@ -104,7 +132,27 @@ export class LeanRpcClient {
 
   close() {
     this.closed = true
+    if (this.initialized && this.ws.readyState === WebSocket.OPEN) {
+      this.sendNotification('textDocument/didClose', {
+        textDocument: { uri: this.uri }
+      })
+    }
     this.ws.close()
+  }
+
+  private setDocumentContext(worldId: string, levelId: number) {
+    this.worldId = worldId
+    this.levelId = levelId
+    this.version = 1
+    this.sessionId = null
+    const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    this.uri = `file:///${worldId}/${levelId}.lean?session=${encodeURIComponent(sessionId)}`
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const nextOperation = this.operationQueue.then(operation, operation)
+    this.operationQueue = nextOperation.then(() => undefined, () => undefined)
+    return nextOperation
   }
 
   private async connectRpcSession(): Promise<string> {
@@ -188,7 +236,7 @@ export class LeanRpcClient {
         difficulty: 0,
         inventory: []
       }
-    })
+    }, INITIALIZE_TIMEOUT_MS)
   }
 
   private waitForFileReady(): Promise<void> {
@@ -219,13 +267,13 @@ export class LeanRpcClient {
     })
   }
 
-  private request(method: string, params: any): Promise<any> {
+  private request(method: string, params: any, timeoutMs = REQUEST_TIMEOUT_MS): Promise<any> {
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         this.pending.delete(id)
         reject(new Error(`${method} timed out`))
-      }, REQUEST_TIMEOUT_MS)
+      }, timeoutMs)
 
       this.pending.set(id, {
         resolve: value => {

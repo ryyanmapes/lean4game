@@ -246,7 +246,8 @@ export function WorldSelectionMenu() {
 
 export function computeWorldLayout(worlds) {
   let elements = []
-  for (let id in worlds.nodes) {
+  const sortedWorldIds = Object.keys(worlds.nodes).sort((a, b) => a.localeCompare(b))
+  for (const id of sortedWorldIds) {
     elements.push({ data: { id: id, title: worlds.nodes[id].title } })
   }
   for (let edge of worlds.edges) {

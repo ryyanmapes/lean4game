@@ -94,22 +94,40 @@ function stripOuterParens(statement: string): string {
   return current
 }
 
-function hasTopLevelImplication(statement: string): boolean {
+function splitTopLevelImplications(statement: string): string[] {
   statement = stripOuterParens(statement)
   let depth = 0
+  let segmentStart = 0
+  const segments: string[] = []
+
   for (let i = 0; i < statement.length; i++) {
     const ch = statement[i]
     if (ch === '(') depth += 1
     else if (ch === ')') depth -= 1
     else if (depth === 0) {
-      if (statement.slice(i, i + 1) === '\u2192') return true
-      if (statement.slice(i, i + 2) === '->') return true
-      if (statement.slice(i, i + 2) === '=>') return true
-      if (statement.slice(i, i + 3) === '\\to') return true
-      if (statement.slice(i, i + 8) === '\\implies') return true
+      let tokenLength = 0
+
+      if (statement.slice(i, i + 1) === '\u2192') tokenLength = 1
+      else if (statement.slice(i, i + 2) === '->') tokenLength = 2
+      else if (statement.slice(i, i + 2) === '=>') tokenLength = 2
+      else if (statement.slice(i, i + 3) === '\\to') tokenLength = 3
+      else if (statement.slice(i, i + 8) === '\\implies') tokenLength = 8
+
+      if (tokenLength > 0) {
+        segments.push(statement.slice(segmentStart, i).trim())
+        segmentStart = i + tokenLength
+        i += tokenLength - 1
+      }
     }
   }
-  return false
+
+  if (segments.length === 0) return [statement]
+  segments.push(statement.slice(segmentStart).trim())
+  return segments
+}
+
+function hasTopLevelImplication(statement: string): boolean {
+  return splitTopLevelImplications(statement).length > 1
 }
 
 function hasVisibleRelation(statement: string): boolean {
@@ -117,15 +135,35 @@ function hasVisibleRelation(statement: string): boolean {
   return /[=<>≠≤≥≡]/u.test(normalized)
 }
 
-function isPropositionBinderType(type: string): boolean {
-  const normalized = stripOuterParens(type.trim())
-  return hasVisibleRelation(normalized)
+function isSimplePropositionAtom(statement: string): boolean {
+  const normalized = stripOuterParens(statement.trim())
+  return normalized === 'Prop' || /^[A-Z]$/u.test(normalized)
+}
+
+function looksLikeProposition(statement: string): boolean {
+  const normalized = stripOuterParens(statement.trim())
+  if (!normalized) return false
+
+  if (hasVisibleRelation(normalized)
     || normalized.includes('\u2227')
     || normalized.includes('\u2228')
     || normalized.startsWith('\u00ac')
     || normalized === 'False'
     || normalized === 'True'
-    || hasTopLevelImplication(normalized)
+    || isSimplePropositionAtom(normalized)) {
+    return true
+  }
+
+  const implicationParts = splitTopLevelImplications(normalized)
+  if (implicationParts.length > 1) {
+    return looksLikeProposition(implicationParts[implicationParts.length - 1] ?? '')
+  }
+
+  return false
+}
+
+function isPropositionBinderType(type: string): boolean {
+  return looksLikeProposition(type)
 }
 
 function parseBinderNames(rawNames: string): string[] {
