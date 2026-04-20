@@ -2565,15 +2565,33 @@
   }
 
   .visual-page.tr-transformation-overlay .tr-main-area {
-    padding-top: 2.8rem;
+    padding-top: 3.3rem;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-static-group {
+    top: calc(50% - 0.35rem);
   }
 
   .visual-page.tr-transformation-overlay .tr-static-group:not(.static-right) {
     left: calc(env(safe-area-inset-left, 0px) + 3.25rem);
   }
 
-  .visual-page.tr-transformation-overlay .tr-static-group.pinned-top:not(.static-right) {
-    top: calc(52px + 3.35rem);
+  .visual-page.tr-transformation-overlay .tr-static-group.static-right {
+    right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
+  }
+
+  .visual-page.tr-transformation-overlay .tr-static-group.pinned-top {
+    top: calc(52px + 4.2rem);
+  }
+
+  .visual-page.tr-transformation-overlay .tr-static-label {
+    font-size: 0.78rem;
+    line-height: 1.15;
+    max-width: min(9rem, calc(38vw - 1.5rem));
+  }
+
+  .visual-page.tr-transformation-overlay .tr-expr-wrapper {
+    transform: scale(0.95);
   }
 
   .proof-sidebar-tab {

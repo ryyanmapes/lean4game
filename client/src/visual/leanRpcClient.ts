@@ -140,6 +140,10 @@ export class LeanRpcClient {
     this.ws.close()
   }
 
+  isClosed() {
+    return this.closed || this.ws.readyState === WebSocket.CLOSING || this.ws.readyState === WebSocket.CLOSED
+  }
+
   private setDocumentContext(worldId: string, levelId: number) {
     this.worldId = worldId
     this.levelId = levelId

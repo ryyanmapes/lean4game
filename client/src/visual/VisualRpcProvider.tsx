@@ -9,41 +9,84 @@ interface VisualRpcContextValue {
 }
 
 const VisualRpcContext = React.createContext<VisualRpcContextValue | null>(null)
+const SHARED_CLIENT_RELEASE_DELAY_MS = 60000
+
+type SharedClientEntry = {
+  client: LeanRpcClient
+  releaseTimer: number | null
+}
+
+const sharedClients = new Map<string, SharedClientEntry>()
+
+function cancelSharedClientRelease(gameId: string) {
+  const entry = sharedClients.get(gameId)
+  if (!entry || entry.releaseTimer === null) return
+  window.clearTimeout(entry.releaseTimer)
+  entry.releaseTimer = null
+}
+
+function closeSharedClient(gameId: string, expectedClient?: LeanRpcClient | null) {
+  const entry = sharedClients.get(gameId)
+  if (!entry) return
+  if (expectedClient && entry.client !== expectedClient) return
+  cancelSharedClientRelease(gameId)
+  entry.client.close()
+  sharedClients.delete(gameId)
+}
+
+function scheduleSharedClientRelease(gameId: string) {
+  const entry = sharedClients.get(gameId)
+  if (!entry || entry.releaseTimer !== null) return
+  entry.releaseTimer = window.setTimeout(() => {
+    const currentEntry = sharedClients.get(gameId)
+    if (currentEntry !== entry) return
+    closeSharedClient(gameId, entry.client)
+  }, SHARED_CLIENT_RELEASE_DELAY_MS)
+}
+
+function getOrCreateSharedClient(gameId: string, worldId: string, levelId: number) {
+  cancelSharedClientRelease(gameId)
+
+  let entry = sharedClients.get(gameId)
+  if (!entry || entry.client.isClosed()) {
+    entry?.client.close()
+    entry = {
+      client: new LeanRpcClient(gameId, worldId, levelId),
+      releaseTimer: null,
+    }
+    sharedClients.set(gameId, entry)
+  }
+
+  return entry.client
+}
 
 export function VisualRpcProvider({ children }: { children: React.ReactNode }) {
   const gameId = React.useContext(GameIdContext)
   const clientRef = React.useRef<LeanRpcClient | null>(null)
-  const clientGameIdRef = React.useRef<string | null>(null)
 
   const disposeClient = React.useCallback((client?: LeanRpcClient | null) => {
     const currentClient = clientRef.current
     if (!currentClient) return
     if (client && currentClient !== client) return
-    currentClient.close()
+    closeSharedClient(gameId, currentClient)
     clientRef.current = null
-    clientGameIdRef.current = null
-  }, [])
+  }, [gameId])
 
   const getClient = React.useCallback((worldId: string, levelId: number) => {
-    let client = clientRef.current
-    if (!client || clientGameIdRef.current !== gameId) {
-      client?.close()
-      client = new LeanRpcClient(gameId, worldId, levelId)
-      clientRef.current = client
-      clientGameIdRef.current = gameId
-    }
+    const client = getOrCreateSharedClient(gameId, worldId, levelId)
+    clientRef.current = client
     return client
   }, [gameId])
 
   React.useEffect(() => {
-    if (clientRef.current && clientGameIdRef.current !== gameId) {
-      disposeClient()
+    cancelSharedClientRelease(gameId)
+    return () => {
+      if (clientRef.current === sharedClients.get(gameId)?.client) {
+        clientRef.current = null
+      }
+      scheduleSharedClientRelease(gameId)
     }
-  }, [disposeClient, gameId])
-
-  React.useEffect(() => {
-    return () => disposeClient()
-  }, [disposeClient])
+  }, [gameId])
 
   const value = React.useMemo(
     () => ({ getClient, disposeClient }),
