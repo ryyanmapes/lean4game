@@ -1098,6 +1098,23 @@ function synthesizeSplitStreamsForInteraction(
   return synthesizeSplitStreams(focusedStream)
 }
 
+function mergeCardPositionsFromCanvas(streams: GoalStream[], canvas: CanvasState): GoalStream[] {
+  const cardPositionMap = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
+  for (const stream of canvas.streams) {
+    for (const card of stream.hyps) {
+      cardPositionMap.set(card.id, { position: card.position, userPlaced: card.userPlaced })
+    }
+  }
+  return streams.map(stream => ({
+    ...stream,
+    hyps: stream.hyps.map(card => {
+      const saved = cardPositionMap.get(card.id)
+      if (!saved) return card
+      return { ...card, position: saved.position, userPlaced: saved.userPlaced }
+    }),
+  }))
+}
+
 function findStableStreamMatch(
   before: GoalStream,
   afterStreams: GoalStream[],
@@ -1272,7 +1289,9 @@ export function reconcileProofTreeAfterInteraction(
     )
     return matchesFocusedBranch ? unmatchedExactFocusedStreams : undefined
   })()
-  const remaining = trustedFocusedStreams ?? remainingFromCanvas
+  const remaining = (trustedFocusedStreams
+    ? mergeCardPositionsFromCanvas(trustedFocusedStreams, effectiveAfterCanvas)
+    : null) ?? remainingFromCanvas
   const interactionRequiresFollowUp =
     streamSplit ||
     (playTactic?.startsWith('click_prop ') ?? false) ||

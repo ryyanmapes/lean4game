@@ -957,6 +957,7 @@ example (P Q : Prop) (h : Q) : P ∨ Q := by
   exact h
 
 example : 0 + 0 = 0 := by
+  fail_if_success click_goal
   drag_rw_lhs [Nat.add_zero]
   click_goal
 

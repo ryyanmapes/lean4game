@@ -245,10 +245,12 @@ private structure ParsedDragRwHyp where
 private structure ParsedDragTo where
   sourceName : Name
   targetName : Name
+  reverse : Bool
   source : String
 
 private structure ParsedDragGoal where
   hypName : Name
+  reverse : Bool
   source : String
 
 private structure ParsedDragApply where
@@ -261,11 +263,11 @@ private def parseDragApply? (src : String) : Option ParsedDragApply :=
   if !src.startsWith "drag_apply " then none
   else
     let rest := (src.drop 11).trimAscii.toString
-    let parts := rest.split (fun c => c.isWhitespace) |>.filter (fun s => !s.isEmpty)
+    let parts := rest.splitOn " " |>.filter (fun s => !s.isEmpty)
     match parts with
     | [fn, arg] =>
-      let parseName := fun s =>
-        (s : String).splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
+      let parseName := fun (s : String) =>
+        s.splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
       some { fnName := parseName fn, argName := parseName arg, source := src }
     | _ => none
 
@@ -278,11 +280,13 @@ private def parseDragTo? (src : String) : CoreM (Option ParsedDragTo) := do
     if !src.startsWith "drag_to " then
       return none
     let args := raw.getArgs
-    let sourceStx := args[1]!
-    let targetStx := args[2]!
+    -- args[0] = keyword, args[1] = optional ←, args[2] = source ident, args[3] = target ident
+    let sourceStx := args[2]!
+    let targetStx := args[3]!
     pure <| some {
       sourceName := (⟨sourceStx⟩ : Ident).getId
       targetName := (⟨targetStx⟩ : Ident).getId
+      reverse := !args[1]!.isNone
       source := src
     }
 
@@ -294,9 +298,12 @@ private def parseDragGoal? (src : String) : CoreM (Option ParsedDragGoal) := do
   | .ok raw =>
     if !src.startsWith "drag_goal " then
       return none
-    let hypStx := raw.getArgs[1]!
+    -- args[0] = keyword, args[1] = optional ←, args[2] = ident
+    let args := raw.getArgs
+    let hypStx := args[2]!
     pure <| some {
       hypName := (⟨hypStx⟩ : Ident).getId
+      reverse := !args[1]!.isNone
       source := src
     }
 
@@ -398,7 +405,110 @@ private partial def countPatternOccurrences (e pattern : Expr) : MetaM Nat := do
   | .mdata _ s =>
     return selfCount + (← countPatternOccurrences s pattern)
   | _ =>
-    return selfCount
+      return selfCount
+
+private partial def instantiatePatternFromFirstOccurrence (e pattern : Expr) : MetaM Bool := do
+  let savedMctx ← getMCtx
+  if ← isDefEq e pattern then
+    return true
+  setMCtx savedMctx
+  match e.consumeMData with
+  | .app f a =>
+      if ← instantiatePatternFromFirstOccurrence f pattern then
+        return true
+      instantiatePatternFromFirstOccurrence a pattern
+  | .lam _ t b _ =>
+      if ← instantiatePatternFromFirstOccurrence t pattern then
+        return true
+      instantiatePatternFromFirstOccurrence b pattern
+  | .forallE _ t b _ =>
+      if ← instantiatePatternFromFirstOccurrence t pattern then
+        return true
+      instantiatePatternFromFirstOccurrence b pattern
+  | .letE _ t v b _ =>
+      if ← instantiatePatternFromFirstOccurrence t pattern then
+        return true
+      if ← instantiatePatternFromFirstOccurrence v pattern then
+        return true
+      instantiatePatternFromFirstOccurrence b pattern
+  | .proj _ _ s =>
+      instantiatePatternFromFirstOccurrence s pattern
+  | .mdata _ s =>
+      instantiatePatternFromFirstOccurrence s pattern
+  | _ =>
+      pure false
+
+private def visibleChildren (e : Expr) : MetaM (Array Expr) := do
+  let e' ← withReducible (whnf e.consumeMData)
+  let flat := e'.getAppArgs
+  if flat.isEmpty then
+    return #[]
+  let visibleArity :=
+    match e'.getAppFn.constName? >>= visibleArityForConst with
+    | some v => min v flat.size
+    | none => 1
+  if visibleArity == 0 then
+    return #[]
+  pure <| flat.extract (flat.size - visibleArity) flat.size
+
+private partial def countVisiblePatternOccurrences (e pattern : Expr) : MetaM Nat := do
+  let savedMctx ← getMCtx
+  let isMatch ← isDefEq e pattern
+  setMCtx savedMctx
+  let selfCount := if isMatch then 1 else 0
+  let mut total := selfCount
+  for child in (← visibleChildren e) do
+    total := total + (← countVisiblePatternOccurrences child pattern)
+  pure total
+
+private partial def visibleOccurrenceIndexAtPath
+    (e pattern : Expr) (targetPath : List Nat) (currentPath : List Nat := []) (seen : Nat := 0) :
+    MetaM (Nat × Option Nat) := do
+  let savedMctx ← getMCtx
+  let isMatch ← isDefEq e pattern
+  setMCtx savedMctx
+  let seen := if isMatch then seen + 1 else seen
+  if isMatch && currentPath == targetPath then
+    return (seen, some seen)
+  let children ← visibleChildren e
+  let mut seenSoFar := seen
+  for idx in [:children.size] do
+    let childPath := currentPath ++ [idx + 1]
+    let (seenNext, hit?) ←
+      visibleOccurrenceIndexAtPath children[idx]! pattern targetPath childPath seenSoFar
+    seenSoFar := seenNext
+    if hit?.isSome then
+      return (seenSoFar, hit?)
+  pure (seenSoFar, none)
+
+private def rewriteOccurrenceIndexAtRelationPath?
+    (target pattern : Expr) (sideIsRhs : Bool) (path : Option (List Nat)) : MetaM (Option Nat) := do
+  let fullPath := [if sideIsRhs then 2 else 1] ++ path.getD []
+  let (_, hit?) ← visibleOccurrenceIndexAtPath target pattern fullPath
+  pure hit?
+
+private def matchRewriteBody? (body : Expr) : Option (Expr × Expr) :=
+  match body with
+  | .app (.app (.app (.const ``Eq _) _) lhs) rhs =>
+      some (lhs, rhs)
+  | .app (.app (.const ``Iff _) lhs) rhs =>
+      some (lhs, rhs)
+  | _ =>
+      none
+
+private def typeIsIff? (type : Expr) : MetaM Bool := do
+  let type ← whnf type
+  match type with
+  | .app (.app (.const ``Iff _) _) _ =>
+      pure true
+  | .forallE _ _ _ _ =>
+      forallTelescopeReducing type fun _ body => do
+        let body ← whnf body
+        match body with
+        | .app (.app (.const ``Iff _) _) _ => pure true
+        | _ => pure false
+  | _ =>
+      pure false
 
 private def formatRwArg (s : String) : String :=
   if s.any Char.isWhitespace || s.contains '(' || s.contains ')' || s.contains '+' || s.contains '*' ||
@@ -432,7 +542,7 @@ private def rwAnnotationForParsed? (rw : ParsedDragRw) (goal : MVarId) : MetaM (
       let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
       let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
       let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
-      let some (_, lhsPat, rhsPat) ← matchEq? body
+      let some (lhsPat, rhsPat) := matchRewriteBody? body
         | setMCtx savedMctx; return none
       let fromPat := if rw.reverse then rhsPat else lhsPat
       unless ← isDefEq selectedExpr fromPat do
@@ -448,24 +558,30 @@ private def rwAnnotationForParsed? (rw : ParsedDragRw) (goal : MVarId) : MetaM (
             setMCtx savedMctx; return none
           let argFmt ← ppExpr arg
           explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
-      setMCtx savedMctx
-      let occs ← countPatternOccurrences target fromPat
-      if occs != 1 then return none
       let theoremText :=
         let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
         if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
-      return some s!"rw [{theoremText}]"
+      setMCtx savedMctx
+      let visibleOccs ← countVisiblePatternOccurrences target fromPat
+      if visibleOccs == 1 then
+        return some s!"rw [{theoremText}]"
+      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
+        | return none
+      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}]"
     else
       -- Non-equality goal (e.g. ≤): use plain rw when the pattern occurs exactly once
       let (_, _, body) ← forallMetaTelescopeReducing theoremType
-      let some (_, lhsPat, rhsPat) ← matchEq? body
+      let some (lhsPat, rhsPat) := matchRewriteBody? body
         | setMCtx savedMctx; return none
       let fromPat := if rw.reverse then rhsPat else lhsPat
-      let occs ← countPatternOccurrences target fromPat
       setMCtx savedMctx
-      if occs != 1 then return none
       let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-      return some s!"rw [{theoremText}]"
+      let visibleOccs ← countVisiblePatternOccurrences target fromPat
+      if visibleOccs == 1 then
+        return some s!"rw [{theoremText}]"
+      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
+        | return none
+      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}]"
   catch _ =>
     setMCtx savedMctx
     return none
@@ -490,7 +606,7 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
       let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
       let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
       let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
-      let some (_, lhsPat, rhsPat) ← matchEq? body
+      let some (lhsPat, rhsPat) := matchRewriteBody? body
         | setMCtx savedMctx; return none
       let fromPat := if rw.reverse then rhsPat else lhsPat
       unless ← isDefEq selectedExpr fromPat do
@@ -506,24 +622,30 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
             setMCtx savedMctx; return none
           let argFmt ← ppExpr arg
           explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
-      setMCtx savedMctx
-      let occs ← countPatternOccurrences target fromPat
-      if occs != 1 then return none
       let theoremText :=
         let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
         if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
-      return some s!"rw [{theoremText}] at {rw.targetHypName}"
+      setMCtx savedMctx
+      let visibleOccs ← countVisiblePatternOccurrences target fromPat
+      if visibleOccs == 1 then
+        return some s!"rw [{theoremText}] at {rw.targetHypName}"
+      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
+        | return none
+      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}] at {rw.targetHypName}"
     else
       -- Non-equality hypothesis (e.g. ≤): use plain rw when the pattern occurs exactly once
       let (_, _, body) ← forallMetaTelescopeReducing theoremType
-      let some (_, lhsPat, rhsPat) ← matchEq? body
+      let some (lhsPat, rhsPat) := matchRewriteBody? body
         | setMCtx savedMctx; return none
       let fromPat := if rw.reverse then rhsPat else lhsPat
-      let occs ← countPatternOccurrences target fromPat
       setMCtx savedMctx
-      if occs != 1 then return none
       let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-      return some s!"rw [{theoremText}] at {rw.targetHypName}"
+      let visibleOccs ← countVisiblePatternOccurrences target fromPat
+      if visibleOccs == 1 then
+        return some s!"rw [{theoremText}] at {rw.targetHypName}"
+      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
+        | return none
+      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}] at {rw.targetHypName}"
   catch _ =>
     setMCtx savedMctx
     return none
@@ -558,6 +680,29 @@ private def dragToAnnotationForParsed? (drag : ParsedDragTo) (goal : MVarId) :
   if let some ann ← mkPremiseReplacement? drag.sourceName sourceExpr sourceType drag.targetName targetExpr targetType targetIsLocal then
     return some ann
 
+  -- Iff-rewrite fallback: if source is an iff (possibly forall-quantified), annotate as
+  -- `rw [source] at target` (mirroring drag_to's tryRewriteAt fallback).
+  let tryIffRewriteAnnotation := fun (iffName : Name) (targetName : Name) (iffTypeRaw : Expr) (rev : Bool) => do
+    let isIff ← do
+      let t ← whnf iffTypeRaw
+      match t with
+      | .app (.app (.const ``Iff _) _) _ => pure true
+      | .forallE _ _ _ _ =>
+        forallTelescopeReducing t fun _ body => do
+          let body ← whnf body
+          match body with
+          | .app (.app (.const ``Iff _) _) _ => pure true
+          | _ => pure false
+      | _ => pure false
+    if isIff then
+      let theoremText := if rev then s!"← {iffName}" else s!"{iffName}"
+      return some s!"rw [{theoremText}] at {targetName}"
+    return none
+  if let some ann ← tryIffRewriteAnnotation drag.sourceName drag.targetName sourceTypeRaw drag.reverse then
+    return some ann
+  if let some ann ← tryIffRewriteAnnotation drag.targetName drag.sourceName targetTypeRaw drag.reverse then
+    return some ann
+
   return none
 
 private def dragGoalAnnotationForParsed? (drag : ParsedDragGoal) (goal : MVarId) :
@@ -566,29 +711,70 @@ private def dragGoalAnnotationForParsed? (drag : ParsedDragGoal) (goal : MVarId)
     match (← getLCtx).findFromUserName? drag.hypName with
     | some decl => pure (some decl.type)
     | none =>
-      let some resolvedName ← resolveGlobalConstName? drag.hypName | return none
-      let constExpr ← mkConstWithFreshMVarLevels resolvedName
-      pure (some (← inferType constExpr))
+        let some resolvedName ← resolveGlobalConstName? drag.hypName | return none
+        let constExpr ← mkConstWithFreshMVarLevels resolvedName
+        pure (some (← inferType constExpr))
   let some hypTypeRaw := hypTypeRaw | return none
   let hypType ← whnf hypTypeRaw
   let goalType ← whnf (← goal.getType)
 
+  let rewriteAnnotation? := do
+    let savedMctx ← getMCtx
+    let tryDirection := fun (reverse : Bool) => do
+      setMCtx savedMctx
+      let (mvars, binderInfos, body) ← forallMetaTelescopeReducing hypTypeRaw
+      let some (lhsPat, rhsPat) := matchRewriteBody? body | return none
+      let fromPat := if reverse then rhsPat else lhsPat
+      unless ← instantiatePatternFromFirstOccurrence goalType fromPat do
+        return none
+      let fromPat ← instantiateMVars fromPat
+      if fromPat.hasMVar then
+        return none
+      let mut explicitArgs : Array String := #[]
+      for i in [:mvars.size] do
+        if binderInfos[i]!.isExplicit then
+          let arg ← instantiateMVars mvars[i]!
+          if arg.hasMVar then
+            return none
+          let argFmt ← ppExpr arg
+          explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
+      let occs ← countPatternOccurrences goalType fromPat
+      if occs == 0 then
+        return none
+      let theoremText :=
+        let base := if reverse then s!"← {drag.hypName}" else s!"{drag.hypName}"
+        if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
+      pure (some s!"rw [{theoremText}]")
+    match ← tryDirection drag.reverse with
+    | some ann =>
+        pure (some ann)
+    | none =>
+        tryDirection (!drag.reverse)
+
+  if hypType == .const ``False [] then
+    return some s!"exact False.elim {drag.hypName}"
+
+  if ← typeIsIff? hypTypeRaw then
+    if let some rewriteAnn ← rewriteAnnotation? then
+      return some rewriteAnn
+    if let .app (.app (.const ``Iff _) _) _ := hypType then
+      if drag.reverse then
+        return some s!"apply (Iff.mpr {drag.hypName})"
+      else
+        return some s!"apply (Iff.mp {drag.hypName})"
+
   if ← isDefEq hypType goalType then
     return some s!"exact {drag.hypName}"
 
-  if let .forallE _ _ body _ := hypType then
-    if ← isDefEq body goalType then
-      return some s!"apply {drag.hypName}"
-
   if let .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr := hypType then
     let lhsOccs ← countPatternOccurrences goalType lhsExpr
-    if lhsOccs == 1 then
+    if lhsOccs > 0 then
       return some s!"rw [{drag.hypName}]"
     let rhsOccs ← countPatternOccurrences goalType rhsExpr
-    if rhsOccs == 1 then
+    if rhsOccs > 0 then
       return some s!"rw [← {drag.hypName}]"
 
-  return none
+  return some s!"apply {drag.hypName}"
 
 private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarId) :
     MetaM (Option String) := goal.withContext do
@@ -675,9 +861,9 @@ private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal
         let hypName ← freshUserName hypBase.toString
         match binderName with
         | some binderName =>
-            pure <| some s!"intro {binderName}; intro {hypName}"
+            pure <| some s!"intro {binderName} {hypName}"
         | none =>
-            pure <| some s!"intro; intro {hypName}"
+            pure <| some s!"intro {hypName}"
       else
         match targetWhnf with
         | .forallE binderName domain _ _ =>
@@ -713,7 +899,7 @@ private def clickPropAnnotation? (goal : MVarId) (hypName : Name) : MetaM (Optio
           freshDerivedTheoremName "right"
         else
           freshUserName "right"
-      pure <| some s!"have {h1} := And.left {hypName}; have {h2} := And.right {hypName}; clear {hypName}"
+      pure <| some s!"have {h1} := And.left {hypName}\nhave {h2} := And.right {hypName}\nclear {hypName}"
   | .app (.app (.const ``Or _) _) _ =>
       pure <| some s!"cases {hypName}"
   | _ =>

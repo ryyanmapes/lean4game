@@ -192,7 +192,12 @@ function resolveCanvasStateCollisions(canvas: CanvasState, canvasBounds: CanvasB
 }
 
 /** Merge a freshly computed canvas state with the current one, preserving
- *  card positions for cards that still exist (matched by id/fvarId). */
+ *  card positions for cards that still exist (matched by id/fvarId).
+ *
+ *  Secondary lookup: when drag_to replaces a local theorem in-place, Lean's
+ *  MVarId.replace assigns a fresh fvarId while keeping the same userName.
+ *  For any theorem card in `current` whose fvarId is absent from `fresh`,
+ *  we index by display name so the replacement card inherits the position. */
 function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState {
   const cardMap = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
   for (const stream of current.streams) {
@@ -200,12 +205,25 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
       cardMap.set(card.id, { position: card.position, userPlaced: card.userPlaced })
     }
   }
+
+  // Name-based fallback for theorem cards that lost their fvarId (replaced in-place by Lean).
+  const freshFvarIds = new Set(fresh.streams.flatMap(s => s.hyps.map(c => c.id)))
+  const removedTheoremsByName = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
+  for (const stream of current.streams) {
+    for (const card of stream.hyps) {
+      if (card.isTheorem && !freshFvarIds.has(card.id)) {
+        const name = card.hyp.names[0]
+        if (name) removedTheoremsByName.set(name, { position: card.position, userPlaced: card.userPlaced })
+      }
+    }
+  }
+
   return {
     ...fresh,
     streams: fresh.streams.map(stream => ({
       ...stream,
       hyps: stream.hyps.map(card => {
-        const saved = cardMap.get(card.id)
+        const saved = cardMap.get(card.id) ?? removedTheoremsByName.get(card.hyp.names[0] ?? '')
         if (!saved) return card
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
       }),
@@ -293,8 +311,7 @@ interface PendingTransformSync {
   nextTree: ProofStreamTreeNode
   nextActiveId: string | null
   nextCanvas: CanvasState
-  celebrationCanvas?: CanvasState
-  finalDisplayCanvas?: CanvasState
+  completionCanvas?: CanvasState
   solvedGoalId?: string | null
   finalCompletion?: boolean
 }
@@ -458,9 +475,8 @@ function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTr
 }
 
 function goalIsReflexiveEquality(stream: GoalStream): boolean {
-  if (stream.equalityTree?.isRefl) return true
   const parsedGoal = parsedGoalEquality(stream)
-  return parsedGoal ? formulasMatch(parsedGoal.lhsStr, parsedGoal.rhsStr) : false
+  return parsedGoal ? formulasMatchLiterally(parsedGoal.lhsStr, parsedGoal.rhsStr) : false
 }
 
 function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
@@ -564,6 +580,10 @@ function formulasMatch(left: string, right: string): boolean {
   return canonicalFormula(left) === canonicalFormula(right)
 }
 
+function formulasMatchLiterally(left: string, right: string): boolean {
+  return stripOuterParens(left) === stripOuterParens(right)
+}
+
 function worldAllowsComparisonTransform(worldId: string): boolean {
   return worldId === 'Continuity'
 }
@@ -591,7 +611,7 @@ function synthesizeGoalRewriteContinuation(
 ): GoalStream {
   const nextGoalType = `${expectedGoal.lhsStr} ${expectedGoal.relation} ${expectedGoal.rhsStr}`
   const isDirectlyClickable =
-    expectedGoal.relation === '=' && formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+    expectedGoal.relation === '=' && formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
   const clickAction: ClickAction | undefined = isDirectlyClickable
     ? {
         playTactic: 'click_goal',
@@ -768,6 +788,31 @@ function splitEqualityText(text: string): [string, string] | null {
   return null
 }
 
+function splitIffText(text: string): [string, string] | null {
+  const normalized = stripOuterParens(text)
+  let depth = 0
+
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (depth === 0) {
+      if (normalized.startsWith('↔', i)) {
+        const left = stripOuterParens(normalized.slice(0, i))
+        const right = stripOuterParens(normalized.slice(i + 1))
+        return left && right ? [left, right] : null
+      }
+      if (normalized.startsWith('<->', i)) {
+        const left = stripOuterParens(normalized.slice(0, i))
+        const right = stripOuterParens(normalized.slice(i + 3))
+        return left && right ? [left, right] : null
+      }
+    }
+  }
+
+  return null
+}
+
 function isReflexiveEqualityImplicationText(text: string): boolean {
   const implication = splitImplicationText(text)
   if (!implication) return false
@@ -788,6 +833,15 @@ function findHypCardByName(stream: GoalStream | null, hypName: string): HypCardT
   return stream.hyps.find(card =>
     card.hyp.playName === hypName || card.hyp.names[0] === hypName,
   ) ?? null
+}
+
+function parseDragGoalPlayTactic(playTactic: string): { hypName: string; reverse: boolean } | null {
+  const trimmed = playTactic.trim()
+  const match = /^drag_goal\s+(←\s+)?(.+)$/.exec(trimmed)
+  if (!match) return null
+  const hypName = match[2]?.trim()
+  if (!hypName) return null
+  return { hypName, reverse: Boolean(match[1]) }
 }
 
 function inferLeanTacticFromVisualInteraction(
@@ -817,8 +871,9 @@ function inferLeanTacticFromVisualInteraction(
 
   if (playTactic.startsWith('induction ')) return playTactic
 
-  if (playTactic.startsWith('drag_goal ')) {
-    const hypName = playTactic.slice('drag_goal '.length).trim()
+  const parsedDragGoal = parseDragGoalPlayTactic(playTactic)
+  if (parsedDragGoal) {
+    const { hypName, reverse } = parsedDragGoal
     const hypCard = findHypCardByName(stream, hypName)
     if (!stream) return null
     if (!hypCard) {
@@ -832,6 +887,15 @@ function inferLeanTacticFromVisualInteraction(
       return `exfalso\nexact ${hypName}`
     }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
+    const iffSides = splitIffText(hypType)
+    if (iffSides) {
+      const [left, right] = iffSides
+      if (formulasMatch(left, goalType)) return `rw [${hypName}]`
+      if (formulasMatch(right, goalType)) return `rw [← ${hypName}]`
+      return reverse
+        ? `apply (Iff.mpr ${hypName})`
+        : `apply (Iff.mp ${hypName})`
+    }
     if (formulasMatch(hypType, goalType)) {
       return `exact ${hypName}`
     }
@@ -1202,9 +1266,11 @@ export function VisualCanvas({
     try { return (localStorage.getItem('visual-proof-view-mode') as 'lean' | 'play') || 'lean' } catch { return 'lean' }
   })
   const [goalChoiceMenu, setGoalChoiceMenu] = useState<GoalChoiceMenu | null>(null)
+  const [goalChoiceMenuViewportPos, setGoalChoiceMenuViewportPos] = useState<{ x: number; y: number } | null>(null)
   const [reductionTooltip, setReductionTooltip] = useState<ReductionTooltip | null>(null)
   // Keyed by card id (hyp id, theorem copy id, or theorem template id). Presence = reverse; absence = forward.
   const [iffDirections, setIffDirections] = useState<Record<string, true>>({})
+  const goalChoiceMenuRef = useRef<HTMLDivElement>(null)
   const reductionTooltipCloseTimerRef = useRef<number | null>(null)
   const visualTestStateRef = useRef<{
     canvasState: CanvasState
@@ -1354,6 +1420,35 @@ export function VisualCanvas({
     return () => { obs.disconnect(); window.removeEventListener('resize', update) }
   }, [proofTree])
 
+  useLayoutEffect(() => {
+    if (!goalChoiceMenu) {
+      setGoalChoiceMenuViewportPos(null)
+      return
+    }
+
+    const menu = goalChoiceMenuRef.current
+    if (!menu) {
+      setGoalChoiceMenuViewportPos(goalChoiceMenu.pos)
+      return
+    }
+
+    const margin = 16
+    const menuRect = menu.getBoundingClientRect()
+    const halfWidth = menuRect.width / 2
+    const minX = margin + halfWidth
+    const maxX = window.innerWidth - margin - halfWidth
+    const clampedX = minX <= maxX
+      ? Math.min(Math.max(goalChoiceMenu.pos.x, minX), maxX)
+      : window.innerWidth / 2
+    const nextPos = { x: clampedX, y: goalChoiceMenu.pos.y }
+
+    setGoalChoiceMenuViewportPos(prev =>
+      prev && prev.x === nextPos.x && prev.y === nextPos.y
+        ? prev
+        : nextPos
+    )
+  }, [goalChoiceMenu, layoutVersion])
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
@@ -1371,14 +1466,21 @@ export function VisualCanvas({
       return
     }
     if (activeStreamId && navigableIds.includes(activeStreamId)) return
+    const completedStreamId =
+      canvasState.completed &&
+      solvedGoalId &&
+      navigableIds.includes(solvedGoalId)
+        ? solvedGoalId
+        : null
     const nextId = liveIds.find(streamId =>
       canvasState.streams.some(stream => stream.id === streamId)
     )
+      ?? completedStreamId
       ?? canvasState.streams[0]?.id
       ?? navigableIds[0]
       ?? null
     if (nextId !== activeStreamId) setActiveStreamId(nextId)
-  }, [canvasState.streams, activeStreamId, proofTree])
+  }, [canvasState.completed, canvasState.streams, activeStreamId, proofTree, solvedGoalId])
 
   // ── Core interaction logic ──────────────────────────────────────────────────
 
@@ -1399,6 +1501,28 @@ export function VisualCanvas({
   function triggerTheoremCopyFailureFeedback(copyId: string) {
     setFailingTheoremCopyId(copyId)
     setTimeout(() => setFailingTheoremCopyId(null), 600)
+  }
+
+  function completedCanvasFrom(baseCanvas: CanvasState): CanvasState {
+    const sourceCanvas =
+      baseCanvas.streams.length > 0
+        ? baseCanvas
+        : (canvasState.streams.length > 0 ? canvasState : displayCanvasState)
+    return cloneCanvasState({ ...sourceCanvas, completed: true })
+  }
+
+  function freezeCompletedProof(baseCanvas: CanvasState, completedStreamId?: string | null) {
+    const completedCanvas = completedCanvasFrom(baseCanvas)
+    const preferredActiveId =
+      completedStreamId && completedCanvas.streams.some(stream => stream.id === completedStreamId)
+        ? completedStreamId
+        : activeStreamId && completedCanvas.streams.some(stream => stream.id === activeStreamId)
+          ? activeStreamId
+          : completedCanvas.streams[0]?.id ?? null
+    setSolvedGoalId(completedStreamId ?? null)
+    setActiveStreamId(preferredActiveId)
+    setDisplayCanvasState(completedCanvas)
+    setCanvasState(completedCanvas)
   }
 
   function consumeTheoremCopies(copyIds?: string[]) {
@@ -1551,10 +1675,7 @@ export function VisualCanvas({
       setActiveStreamId(nextActiveId)
 
       if (nextCanvas.completed && options?.solvedGoalId) {
-        setSolvedGoalId(options.solvedGoalId)
-        window.setTimeout(() => {
-          setCanvasState(nextCanvas)
-        }, 700)
+        freezeCompletedProof(canvasState, options.solvedGoalId)
         return
       }
 
@@ -1613,10 +1734,10 @@ export function VisualCanvas({
 
     if (leanCanvas.completed && options?.solvedGoalId) {
       if (options?.placementHint) clearPositionOverride(options.placementHint.hypId)
-      setSolvedGoalId(options.solvedGoalId)
-      window.setTimeout(() => {
-        setCanvasState(options?.placementHint ? placeHypNearAnchor(nextCanvas, options.placementHint) : nextCanvas)
-      }, 700)
+      const completionCanvas = options?.placementHint
+        ? placeHypNearAnchor(nextCanvas, options.placementHint)
+        : canvasState
+      freezeCompletedProof(completionCanvas, options.solvedGoalId)
       return
     }
 
@@ -1660,11 +1781,13 @@ export function VisualCanvas({
       ?? (newSteps.length === 0
         ? cloneCanvasState(initialState)
         : mergeCanvasState(proofStateToCanvas(result), canvasState))
+    const restoredCanvas = cloneCanvasState(nextCanvas)
 
     setProofSteps(newSteps)
     setProofTree(cloneProofTree(nextTree))
     setSolvedGoalId(null)
-    setCanvasState(cloneCanvasState(nextCanvas))
+    setDisplayCanvasState(cloneCanvasState(restoredCanvas))
+    setCanvasState(restoredCanvas)
 
     // Navigate to the mode where the undone step was taken.
     // If it was a rewrite (non-null snapshot), restore transformation mode.
@@ -2025,19 +2148,11 @@ export function VisualCanvas({
     return true
   }
 
-  function goalChoiceMenuPosition(goalId: string, optionCount: number): { x: number; y: number } {
+  function goalChoiceMenuPosition(goalId: string): { x: number; y: number } {
     const rect = document.getElementById(goalId)?.getBoundingClientRect()
-    const rawX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
-    const rawY = rect ? rect.bottom + 8 : window.innerHeight / 2
-    const estimatedWidth = Math.min(
-      440,
-      48 + optionCount * 180 + Math.max(0, optionCount - 1) * 24,
-    )
-    const margin = 16
-    const halfWidth = Math.min(estimatedWidth / 2, Math.max(0, window.innerWidth / 2 - margin))
     return {
-      x: Math.min(Math.max(rawX, margin + halfWidth), window.innerWidth - margin - halfWidth),
-      y: rawY,
+      x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      y: rect ? rect.bottom + 8 : window.innerHeight / 2,
     }
   }
 
@@ -2127,7 +2242,7 @@ export function VisualCanvas({
     if (clickAction.options.length > 0) {
       setGoalChoiceMenu({
         goalId: streamId,
-        pos: goalChoiceMenuPosition(streamId, clickAction.options.length),
+        pos: goalChoiceMenuPosition(streamId),
         options: clickAction.options,
       })
       return
@@ -2233,19 +2348,14 @@ export function VisualCanvas({
     }
 
     if (pendingSync.finalCompletion) {
-      if (pendingSync.solvedGoalId) setSolvedGoalId(pendingSync.solvedGoalId)
       setTransformTarget(null)
       setProofTree(pendingSync.nextTree)
       setActiveStreamId(pendingSync.nextActiveId)
-      // Use celebrationCanvas (shows post-rewrite goal e.g. "0 = 0") if available,
-      // so the display is correct during the 700ms celebration window.
-      setCanvasState(pendingSync.celebrationCanvas ?? { ...pendingSync.nextCanvas, completed: true })
-      window.setTimeout(() => {
-        setCanvasState({ ...pendingSync.nextCanvas, completed: true })
-        if (pendingSync.finalDisplayCanvas) {
-          setDisplayCanvasState(pendingSync.finalDisplayCanvas)
-        }
-      }, 700)
+      if (pendingSync.completionCanvas) {
+        freezeCompletedProof(pendingSync.completionCanvas, pendingSync.solvedGoalId)
+      } else {
+        freezeCompletedProof(pendingSync.nextCanvas, pendingSync.solvedGoalId)
+      }
       return
     }
 
@@ -2261,7 +2371,8 @@ export function VisualCanvas({
   }
 
   /** Called by ConstructionView when the player clicks Done ›.
-   *  Sends either `use <expr>` or `have h := source <expr>` to Lean and returns
+   *  Sends either a core existential-introduction step or
+   *  `have h := source <expr>` to Lean and returns
    *  whether it was accepted. */
   async function handleConstructionApply(exprStr: string): Promise<boolean> {
     if (isProcessing || !constructionTarget) return false
@@ -2269,7 +2380,9 @@ export function VisualCanvas({
     const focusedStream = canvasState.streams.find(s => s.id === target.streamId) ?? null
     if (!focusedStream) return false
 
-    let playTactic = `use ${exprStr}`
+    // Use a core Lean existential step rather than `use`, which may not be
+    // imported in smaller test games such as VisualTest.
+    let playTactic = `refine Exists.intro (${exprStr}) ?_`
     let placementHint: PlacementHint | undefined
     let consumedTheoremCopyIds: string[] | undefined
 
@@ -2353,11 +2466,10 @@ export function VisualCanvas({
     }
 
     if (leanCanvas.completed) {
-      setCanvasState(prev => ({ ...prev, completed: true }))
-      window.setTimeout(() => {
-        setCanvasState(nextCanvas)
-        setDisplayCanvasState(leanCanvas)
-      }, 700)
+      const completionCanvas = placementHint
+        ? updatePlacedHypPosition(canvasState, placementHint, placementHint.droppedPosition)
+        : canvasState
+      freezeCompletedProof(completionCanvas, focusedStream.id)
       return true
     }
 
@@ -2476,7 +2588,7 @@ export function VisualCanvas({
       focusedStream !== null &&
       expectedGoal !== undefined &&
       expectedGoal.relation === '=' &&
-      formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+      formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
     if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
       const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
       nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
@@ -2528,9 +2640,9 @@ export function VisualCanvas({
 
     if (shouldDeferGoalCompletionUntilClose) {
       // When the rewrite auto-completes the proof (e.g. rw [add_zero] closes "0 = 0" via rfl),
-      // build a celebration canvas that shows the post-rewrite goal so the display is correct
-      // during the 700ms celebration window instead of showing the pre-rewrite goal.
-      const celebrationCanvas: CanvasState | undefined =
+      // preserve the post-rewrite goal text in the frozen completed view instead of
+      // falling back to the pre-rewrite canvas.
+      const completionCanvas: CanvasState | undefined =
         leanCanvas.completed && focusedStream && expectedGoal
           ? {
               ...canvasState,
@@ -2548,13 +2660,12 @@ export function VisualCanvas({
                   : stream
               ),
             }
-          : undefined
+          : completedCanvasFrom(nextCanvas)
       setPendingTransformSync({
         nextTree,
         nextActiveId,
         nextCanvas,
-        celebrationCanvas,
-        finalDisplayCanvas: leanCanvas.completed ? leanCanvas : undefined,
+        completionCanvas,
         solvedGoalId: leanCanvas.completed ? transformTarget.streamId : null,
         finalCompletion: leanCanvas.completed,
       })
@@ -2565,13 +2676,30 @@ export function VisualCanvas({
     setActiveStreamId(nextActiveId)
 
     if (leanCanvas.completed && !shouldKeepReflexiveGoalUntilClick) {
-      if (transformTarget?.kind === 'goal') setSolvedGoalId(transformTarget.streamId)
-      setCanvasState(prev => ({ ...prev, completed: true }))
-      window.setTimeout(() => {
-        setCanvasState(nextCanvas)
-        setDisplayCanvasState(leanCanvas)
-        setTransformTarget(null)
-      }, 700)
+      const completionCanvas =
+        transformTarget?.kind === 'goal' && focusedStream && expectedGoal
+          ? {
+              ...canvasState,
+              completed: true,
+              streams: canvasState.streams.map(stream =>
+                stream.id === focusedStream.id
+                  ? {
+                      ...stream,
+                      goal: {
+                        ...stream.goal,
+                        type: { text: `${expectedGoal.lhsStr} ${expectedGoal.relation} ${expectedGoal.rhsStr}` },
+                        clickAction: undefined,
+                      },
+                    }
+                  : stream
+              ),
+            }
+          : canvasState
+      freezeCompletedProof(
+        completionCanvas,
+        transformTarget?.kind === 'goal' ? transformTarget.streamId : focusedStream?.id,
+      )
+      setTransformTarget(null)
       return { success: true, completed: true }
     }
 
@@ -3287,10 +3415,14 @@ export function VisualCanvas({
               <>
                 <div className="or-tooltip-backdrop" onClick={() => setGoalChoiceMenu(null)} />
                 <div
+                  ref={goalChoiceMenuRef}
                   className="or-tooltip"
                   data-testid="goal-choice-menu"
                   data-option-count={String(goalChoiceMenu.options.length)}
-                  style={{ left: goalChoiceMenu.pos.x, top: goalChoiceMenu.pos.y }}
+                  style={{
+                    left: goalChoiceMenuViewportPos?.x ?? goalChoiceMenu.pos.x,
+                    top: goalChoiceMenuViewportPos?.y ?? goalChoiceMenu.pos.y,
+                  }}
                 >
                   {goalChoiceMenu.options.map((option, index) => (
                     <React.Fragment key={option.playTactic}>
