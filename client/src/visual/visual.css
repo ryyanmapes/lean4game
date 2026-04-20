@@ -996,7 +996,8 @@
 }
 
 .visual-header-side {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
 }
@@ -1007,7 +1008,9 @@
 }
 
 .visual-header-center {
-  flex: 2;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(100%, 44rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1978,6 +1981,13 @@
   flex-shrink: 0;
 }
 
+.visual-map-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
 .visual-map-back-btn,
 .visual-map-menu-btn {
   background: var(--visual-glass-bg);
@@ -2002,7 +2012,9 @@
 }
 
 .visual-map-title {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(100%, 30rem);
   font-size: 1rem;
   font-weight: 600;
   color: var(--visual-text-primary);
@@ -2013,8 +2025,7 @@
 }
 
 .visual-map-actions {
-  display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -2119,6 +2130,10 @@
 
 .visual-map-svg {
   /* inherited from .world-selection in world_tree.css */
+}
+
+.visual-map-link {
+  cursor: pointer;
 }
 
 /* Level / world link colour overrides for dark theme */
@@ -2474,28 +2489,29 @@
   }
 
   .visual-page .tr-static-group {
-    left: 1rem;
-    top: calc(50% - 1.5rem);
+    left: calc(env(safe-area-inset-left, 0px) + 1rem);
+    top: calc(50% - 1rem);
   }
 
   .visual-page .tr-static-group.static-right {
-    right: 1rem;
-    top: calc(50% - 1.5rem);
+    right: calc(env(safe-area-inset-right, 0px) + 1rem);
+    top: calc(50% - 1rem);
   }
 
   .visual-page .tr-static-group.pinned-top {
-    top: calc(52px + 3rem);
+    top: calc(52px + 3.35rem);
   }
 
   .visual-page .tr-static-label {
-    font-size: 1rem;
-    max-width: calc(50vw - 5rem);
+    font-size: 0.92rem;
+    line-height: 1.2;
+    max-width: min(11rem, calc(50vw - 4rem));
     white-space: normal;
     word-break: break-word;
   }
 
   .visual-page .tr-expr-wrapper {
-    transform: scale(1.1);
+    transform: scale(1.02);
   }
 
   .visual-page .tr-controls,
@@ -2549,15 +2565,15 @@
   }
 
   .visual-page.tr-transformation-overlay .tr-main-area {
-    padding-top: 2.2rem;
+    padding-top: 2.8rem;
   }
 
   .visual-page.tr-transformation-overlay .tr-static-group:not(.static-right) {
-    left: 3.5rem;
+    left: calc(env(safe-area-inset-left, 0px) + 3.25rem);
   }
 
   .visual-page.tr-transformation-overlay .tr-static-group.pinned-top:not(.static-right) {
-    top: calc(52px + 2.45rem);
+    top: calc(52px + 3.35rem);
   }
 
   .proof-sidebar-tab {

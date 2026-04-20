@@ -264,7 +264,13 @@ footer .link {
 }
 
 .landing-page-dark .lp-title-area {
+  width: min(100%, 56rem);
+  margin: 0 auto;
   padding: 3rem 2rem 2.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
@@ -280,6 +286,7 @@ footer .link {
   font-size: 1.1rem;
   color: #94a3b8;
   margin: 0;
+  max-width: 36rem;
 }
 
 .landing-page-dark .lp-subtitle a {
@@ -294,6 +301,9 @@ footer .link {
 /* Visual mode section */
 .landing-page-dark .lp-visual-section {
   padding: 2rem 2rem 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
   background: rgba(139, 92, 246, 0.06);
   border-top: 1px solid rgba(139, 92, 246, 0.15);
@@ -311,11 +321,14 @@ footer .link {
   color: #94a3b8;
   font-size: 1rem;
   margin: 0 0 1.5rem;
+  max-width: 34rem;
 }
 
 .landing-page-dark .lp-visual-links {
   display: flex;
   flex-wrap: wrap;
+  width: min(100%, 44rem);
+  margin: 0 auto;
   gap: 1rem;
   justify-content: center;
 }
@@ -384,6 +397,7 @@ footer .link {
 
 @media (hover: none) and (orientation: landscape) {
   .landing-page-dark .lp-title-area {
+    width: min(100%, 48rem);
     padding: 2.25rem 1.25rem 1.75rem;
   }
 
@@ -397,6 +411,7 @@ footer .link {
 
   .landing-page-dark .lp-visual-links {
     width: min(100%, 34rem);
+    margin: 0 auto;
     gap: 0.75rem;
   }
 

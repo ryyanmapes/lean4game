@@ -3,7 +3,7 @@
  * All levels are always clickable and route to the /visual level page.
  */
 import * as React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
 import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -36,6 +36,7 @@ import { saveState } from '../state/local_storage'
 import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
+import { getWebsocketUrl } from '../utils/url'
 import './visual.css'
 
 const r = 16
@@ -95,6 +96,16 @@ function toIconProp(icon: unknown): IconProp {
   return icon as IconProp
 }
 
+function handleMapLinkKeyDown(
+  event: React.KeyboardEvent<SVGGElement>,
+  onActivate: () => void,
+) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    onActivate()
+  }
+}
+
 function VisualLevelIcon({ world, level, position, completed, unlocked, worldSize, palette }: {
   world: string
   level: number
@@ -105,6 +116,7 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
   palette: VisualMapPalette
 }) {
   const gameId = React.useContext(GameIdContext)
+  const navigate = useNavigate()
   const N = Math.max(worldSize, NMIN)
   const beta = 2 * Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
   let R = 1.1 * r / Math.sin(beta / 2)
@@ -124,7 +136,14 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
   const to = `/${gameId}/world/${world}/level/${level}/visual`
 
   return (
-    <Link to={to} className="level">
+    <g
+      className="level visual-map-link"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${world} level ${level}`}
+      onClick={() => navigate(to)}
+      onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
+    >
       <circle fill={fill} cx={x} cy={y} r={r} />
       <foreignObject
         className="level-title-wrapper"
@@ -140,7 +159,7 @@ function VisualLevelIcon({ world, level, position, completed, unlocked, worldSiz
           </p>
         </div>
       </foreignObject>
-    </Link>
+    </g>
   )
 }
 
@@ -153,6 +172,7 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
   palette: VisualMapPalette
 }) {
   const gameId = React.useContext(GameIdContext)
+  const navigate = useNavigate()
   const N = Math.max(worldSize, NMIN)
   const betaHalf = Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
   let R = 1.1 * r / Math.sin(betaHalf) - 1.2 * r
@@ -165,9 +185,17 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
 
   const fill = completed ? palette.completedWorld : unlocked ? palette.unlockedWorld : palette.lockedWorld
   const labelBg = completed ? palette.completedLabel : unlocked ? palette.unlockedLabel : palette.lockedLabel
+  const to = `/${gameId}/world/${world}/level/${nextLevel}/visual`
 
   return (
-    <Link to={`/${gameId}/world/${world}/level/${nextLevel}/visual`}>
+    <g
+      className="visual-map-link"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${title || world}`}
+      onClick={() => navigate(to)}
+      onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
+    >
       <circle className="world-circle" cx={s * position.x} cy={s * position.y} r={R} fill={fill} />
       <foreignObject
         x={s * position.x - 75}
@@ -182,7 +210,7 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
           </p>
         </div>
       </foreignObject>
-    </Link>
+    </g>
   )
 }
 
@@ -248,17 +276,19 @@ function VisualMapAppBar({
 
   return (
     <div className="visual-map-appbar">
-      <button
-        type="button"
-        className="visual-map-back-btn"
-        onClick={() => navigate('/')}
-        title={t('Home')}
-        aria-label={t('Home')}
-      >
-        <FontAwesomeIcon icon={toIconProp(faArrowLeft)} />
-      </button>
+      <div className="visual-map-side">
+        <button
+          type="button"
+          className="visual-map-back-btn"
+          onClick={() => navigate('/')}
+          title={t('Home')}
+          aria-label={t('Home')}
+        >
+          <FontAwesomeIcon icon={toIconProp(faArrowLeft)} />
+        </button>
+      </div>
       <span className="visual-map-title">{gameTitle}</span>
-      <div className="visual-map-actions">
+      <div className="visual-map-side visual-map-actions">
         <button
           type="button"
           className={`visual-map-theme-toggle${isLightMode ? ' active' : ''}`}
@@ -405,6 +435,34 @@ export function VisualWorldMap() {
       observer.disconnect()
     }
   }, [bounds, centerMapHorizontally])
+
+  React.useEffect(() => {
+    if (!gameInfo.data) return
+
+    const warmedKey = `visual-ws-auth-warmed:${gameId}`
+    if (window.sessionStorage.getItem(warmedKey) === '1') return
+
+    const controller = new AbortController()
+    const warmUrl = new URL(getWebsocketUrl(gameId))
+    warmUrl.protocol = window.location.protocol
+
+    void fetch(warmUrl.toString(), {
+      method: 'HEAD',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(() => {
+        if (!controller.signal.aborted) {
+          window.sessionStorage.setItem(warmedKey, '1')
+        }
+      })
+      .catch(() => {
+        // Ignore warm-up failures; the real websocket request still handles retries.
+      })
+
+    return () => controller.abort()
+  }, [gameId, gameInfo.data])
 
   if (!gameInfo.data) {
     return (
