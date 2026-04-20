@@ -43,6 +43,18 @@ export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props)
             />
           </div>
         </>
+      ) : node.type === 'app' && node.func === 'abs' ? (
+        <>
+          <span className="tr-node-content">|</span>
+          <div className="tr-child">
+            <ExprRenderer
+              node={node.arg}
+              isActive={isActive}
+              customIsValidDropTarget={customIsValidDropTarget}
+            />
+          </div>
+          <span className="tr-node-content">|</span>
+        </>
       ) : node.type === 'app' ? (
         <>
           <span className="tr-node-content">{node.func}(</span>

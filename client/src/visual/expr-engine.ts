@@ -16,6 +16,14 @@ const BINARY_OPS: Record<string, BinaryOpInfo> = {
   '+': { op: '+', precedence: 5, associativity: 'left' },
   '-': { op: '-', precedence: 5, associativity: 'left' },
   '=': { op: '=', precedence: 4, associativity: 'left' },
+  '<': { op: '<', precedence: 4, associativity: 'left' },
+  '>': { op: '>', precedence: 4, associativity: 'left' },
+  '≤': { op: '≤', precedence: 4, associativity: 'left' },
+  '>=': { op: '≥', precedence: 4, associativity: 'left' },
+  '\\geq': { op: '≥', precedence: 4, associativity: 'left' },
+  '≥': { op: '≥', precedence: 4, associativity: 'left' },
+  '<=': { op: '≤', precedence: 4, associativity: 'left' },
+  '\\leq': { op: '≤', precedence: 4, associativity: 'left' },
   '∧': { op: '∧', precedence: 3, associativity: 'left' },
   '\\land': { op: '∧', precedence: 3, associativity: 'left' },
   '∨': { op: '∨', precedence: 2, associativity: 'left' },
@@ -32,7 +40,7 @@ class Parser {
   private current = 0
 
   constructor(input: string) {
-    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|->|=>|[\p{L}][\p{L}\p{N}_']*|\d+|[+\-*/=()\[\]∧∨→]|\S)/gu) || []
+    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|\\leq|\\geq|<=|>=|->|=>|[\p{L}][\p{L}\p{N}_']*|\d+|[+\-*/=<>≤≥()\[\]∧∨→|]|\S)/gu) || []
   }
 
   private peek(): string | null {
@@ -53,6 +61,18 @@ class Parser {
       || (token !== null && /^\d+$/.test(token))
   }
 
+  private parsePrefix(): ExpressionNode {
+    if (this.peek() === '-') {
+      this.consume()
+      const arg = this.parsePrefix()
+      if (arg.type === 'constant') {
+        return { type: 'constant', value: -arg.value, id: uuidv4() }
+      }
+      return { type: 'app', func: 'neg', arg, id: uuidv4() }
+    }
+    return this.parseAtom()
+  }
+
   private parseAtom(): ExpressionNode {
     const token = this.peek()
 
@@ -61,6 +81,13 @@ class Parser {
       const expr = this.parseExpression()
       if (this.peek() === ')') this.consume()
       return expr
+    }
+
+    if (token === '|') {
+      this.consume()
+      const expr = this.parseExpression()
+      if (this.peek() === '|') this.consume()
+      return { type: 'app', func: 'abs', arg: expr, id: uuidv4() }
     }
 
     if (this.isIdentifier(token)) {
@@ -84,10 +111,10 @@ class Parser {
   }
 
   private parsePrimary(): ExpressionNode {
-    let expr = this.parseAtom()
+    let expr = this.parsePrefix()
     while (this.isPrimaryStart(this.peek())) {
       if (expr.type !== 'variable') break
-      const arg = this.parseAtom()
+      const arg = this.parsePrefix()
       expr = { type: 'app', func: expr.name, arg, id: uuidv4() }
     }
     return expr
@@ -180,6 +207,9 @@ export function exprTreeToNode(tree: ExprTree): ExpressionNode {
     if (op && flat.length === 7) {
       return { type: 'binary', op, left: exprTreeToNode(flat[5]), right: exprTreeToNode(flat[6]), id: uuidv4() }
     }
+    if (head.name === 'Neg.neg' && flat.length >= 2) {
+      return { type: 'app', func: 'neg', arg: exprTreeToNode(flat[flat.length - 1]), id: uuidv4() }
+    }
     // `@OfNat.ofNat α n inst` — the numeric literal `n` is at flat[2].
     // Normally caught by the Lean-side up-front check, but MData wrappers on
     // sub-expressions can prevent that, so we handle it defensively here too.
@@ -208,7 +238,14 @@ function isArithmeticOp(op: Op): boolean {
   return op === '+' || op === '-' || op === '*' || op === '/'
 }
 
+function isRelationOp(op: Op): boolean {
+  return op === '=' || op === '<' || op === '>' || op === '≤' || op === '≥'
+}
+
 function needsStructuralParens(child: ExpressionNode, parentOp: Op): boolean {
+  if (child.type === 'app' && child.func === 'neg') {
+    return parentOp === '+' || parentOp === '-'
+  }
   if (child.type !== 'binary') return false
   if (child.op === parentOp) return true
   if (opPrecedence(child.op) < opPrecedence(parentOp)) return true
@@ -220,13 +257,16 @@ function needsDisplayParens(
   parentOp: Op,
   side: 'left' | 'right',
 ): boolean {
+  if (child.type === 'app' && child.func === 'neg') {
+    return parentOp === '+' || parentOp === '-'
+  }
   if (child.type !== 'binary') return false
 
-  if (child.op === '=') {
+  if (isRelationOp(child.op)) {
     return needsStructuralParens(child, parentOp)
   }
 
-  if (isArithmeticOp(child.op) && (isArithmeticOp(parentOp) || parentOp === '=')) {
+  if (isArithmeticOp(child.op) && (isArithmeticOp(parentOp) || isRelationOp(parentOp))) {
     return needsStructuralParens(child, parentOp)
   }
 
@@ -239,7 +279,11 @@ function printExpressionWithParens(
 ): string {
   if (node.type === 'variable') return node.name
   if (node.type === 'constant') return node.value.toString()
-  if (node.type === 'app') return `${node.func}(${printExpressionWithParens(node.arg, needsParens)})`
+  if (node.type === 'app') {
+    if (node.func === 'abs') return `|${printExpressionWithParens(node.arg, needsParens)}|`
+    if (node.func === 'neg') return `-${printExpressionWithParens(node.arg, needsParens)}`
+    return `${node.func}(${printExpressionWithParens(node.arg, needsParens)})`
+  }
   if (node.type === 'binary') {
     const leftStr = printExpressionWithParens(node.left, needsParens)
     const rightStr = printExpressionWithParens(node.right, needsParens)
@@ -264,7 +308,7 @@ function isUnaryMinusStart(text: string, index: number): boolean {
   let cursor = index - 1
   while (cursor >= 0 && text[cursor] === ' ') cursor -= 1
   if (cursor < 0) return true
-  return '([=∧∨→,:+*/ᵢ'.includes(text[cursor] ?? '')
+  return '([=<>≤≥∧∨→,:+*/ᵢ'.includes(text[cursor] ?? '')
 }
 
 function skipSpaces(text: string, index: number): number {
@@ -287,6 +331,17 @@ function parseDisplayAtomEnd(text: string, index: number): number | null {
         depth -= 1
         if (depth === 0) return cursor + 1
       }
+    }
+    return null
+  }
+
+  if (first === '|') {
+    let parenDepth = 0
+    for (let cursor = start + 1; cursor < text.length; cursor += 1) {
+      const ch = text[cursor]
+      if (ch === '(') parenDepth += 1
+      else if (ch === ')' && parenDepth > 0) parenDepth -= 1
+      else if (ch === '|' && parenDepth === 0) return cursor + 1
     }
     return null
   }

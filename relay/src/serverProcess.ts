@@ -330,7 +330,8 @@ export class GameManager {
     let semanticTokenRequestIds = new Set<number>()
     let clientUri: string | null = null
 
-    const PROOF_START_LINE = 2
+    // We prepend two imports plus the `Runner ... := by` line before user tactics.
+    const PROOF_START_LINE = 3
     const metadataUri = pathToFileURL(path.join(gameDir, 'Game', 'Metadata.lean')).toString()
 
     const gameDataPath = path.join(gameDir, '.lake', 'gamedata', `game.json`)
@@ -385,7 +386,7 @@ export class GameManager {
 
         let content = message.params.textDocument.text;
         message.params.textDocument.text =
-          `import ${levelData.module} import GameServer.Runner \nRunner ` +
+          `import ${levelData.module}\nimport GameServer.Runner\nRunner ` +
           `${JSON.stringify(gameData.name)} ${JSON.stringify(worldId)} ${levelId} ` +
           `(difficulty := ${difficulty}) ` +
           `(inventory := [${inventory.map(s => JSON.stringify(s)).join(',')}]) ` +

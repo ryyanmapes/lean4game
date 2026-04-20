@@ -14,22 +14,29 @@ export type ConstructionTerm =
   | { kind: 'var';  name: string;  id: string }
   | { kind: 'succ'; arg: ConstructionTerm; id: string }
   | { kind: 'add';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'sub';  left: ConstructionTerm; right: ConstructionTerm; id: string }
   | { kind: 'mul';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'div';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'min';  left: ConstructionTerm; right: ConstructionTerm; id: string }
 
 function genId(): string { return Math.random().toString(36).slice(2, 10) }
-function makeSlot(): ConstructionTerm  { return { kind: 'slot', id: genId() } }
-function makeNum(v: number): ConstructionTerm { return { kind: 'num',  value: v, id: genId() } }
-function makeVar(n: string): ConstructionTerm  { return { kind: 'var',  name: n,  id: genId() } }
+export function makeSlot(): ConstructionTerm  { return { kind: 'slot', id: genId() } }
+export function makeNum(v: number): ConstructionTerm { return { kind: 'num',  value: v, id: genId() } }
+export function makeVar(n: string): ConstructionTerm  { return { kind: 'var',  name: n,  id: genId() } }
 function makeSucc(): ConstructionTerm { return { kind: 'succ', arg: makeSlot(), id: genId() } }
 function makeAdd():  ConstructionTerm { return { kind: 'add',  left: makeSlot(), right: makeSlot(), id: genId() } }
+function makeSub():  ConstructionTerm { return { kind: 'sub',  left: makeSlot(), right: makeSlot(), id: genId() } }
 function makeMul():  ConstructionTerm { return { kind: 'mul',  left: makeSlot(), right: makeSlot(), id: genId() } }
+function makeDiv():  ConstructionTerm { return { kind: 'div',  left: makeSlot(), right: makeSlot(), id: genId() } }
+function makeMin():  ConstructionTerm { return { kind: 'min',  left: makeSlot(), right: makeSlot(), id: genId() } }
 
 export function countSlots(t: ConstructionTerm): number {
   switch (t.kind) {
     case 'slot': return 1
     case 'num': case 'var': return 0
     case 'succ': return countSlots(t.arg)
-    case 'add': case 'mul': return countSlots(t.left) + countSlots(t.right)
+    case 'add': case 'sub': case 'mul': case 'div': case 'min':
+      return countSlots(t.left) + countSlots(t.right)
   }
 }
 
@@ -45,7 +52,8 @@ function findFirstSlotId(t: ConstructionTerm): string | null {
     case 'slot': return t.id
     case 'num': case 'var': return null
     case 'succ': return findFirstSlotId(t.arg)
-    case 'add': case 'mul': return findFirstSlotId(t.left) ?? findFirstSlotId(t.right)
+    case 'add': case 'sub': case 'mul': case 'div': case 'min':
+      return findFirstSlotId(t.left) ?? findFirstSlotId(t.right)
   }
 }
 
@@ -60,6 +68,19 @@ function isAtomTerm(t: ConstructionTerm): boolean {
   return t.kind === 'num' || t.kind === 'var'
 }
 
+// Precedence levels: higher = binds tighter
+const PREC: Record<ConstructionTerm['kind'], number> = {
+  slot: 100, num: 100, var: 100,
+  succ: 90, min: 90,      // function-application style
+  mul: 70,  div: 70,
+  add: 60,  sub: 60,
+}
+
+function parens(t: ConstructionTerm, outerPrec: number): string {
+  const s = termToLeanString(t)
+  return PREC[t.kind] < outerPrec ? `(${s})` : s
+}
+
 export function termToLeanString(t: ConstructionTerm): string {
   switch (t.kind) {
     case 'slot': return '_'
@@ -67,28 +88,45 @@ export function termToLeanString(t: ConstructionTerm): string {
     case 'var':  return t.name
     case 'succ': {
       const inner = termToLeanString(t.arg)
-      // Construction mode is currently used for the game's custom naturals
-      // (`MyNat`, printed with constructor `succ`), so emit the unqualified
-      // constructor form Lean expects in these levels.
+      // Emit unqualified constructor form expected in MyNat levels.
       return isAtomTerm(t.arg) ? `succ ${inner}` : `succ (${inner})`
     }
     case 'add': {
-      const l = termToLeanString(t.left)
-      // Parenthesize right-side add to make non-default associativity explicit
-      const r = t.right.kind === 'add'
+      const l = parens(t.left,  PREC.add)
+      // Right-associative right side needs parens for add/sub to be explicit
+      const r = (t.right.kind === 'add' || t.right.kind === 'sub')
         ? `(${termToLeanString(t.right)})`
-        : termToLeanString(t.right)
+        : parens(t.right, PREC.add)
       return `${l} + ${r}`
     }
-    case 'mul': {
-      // Parenthesize add sub-terms (lower precedence than *)
-      const l = t.left.kind === 'add'
-        ? `(${termToLeanString(t.left)})`
-        : termToLeanString(t.left)
-      const r = (t.right.kind === 'add' || t.right.kind === 'mul')
+    case 'sub': {
+      const l = parens(t.left, PREC.sub)
+      // Right side sub/add changes meaning without parens
+      const r = (t.right.kind === 'add' || t.right.kind === 'sub')
         ? `(${termToLeanString(t.right)})`
-        : termToLeanString(t.right)
+        : parens(t.right, PREC.sub)
+      return `${l} - ${r}`
+    }
+    case 'mul': {
+      const l = parens(t.left, PREC.mul)
+      const r = (t.right.kind === 'mul' || t.right.kind === 'div')
+        ? `(${termToLeanString(t.right)})`
+        : parens(t.right, PREC.mul)
       return `${l} * ${r}`
+    }
+    case 'div': {
+      const l = parens(t.left, PREC.div)
+      // Division is left-associative; right side div/mul changes meaning
+      const r = (t.right.kind === 'mul' || t.right.kind === 'div')
+        ? `(${termToLeanString(t.right)})`
+        : parens(t.right, PREC.div)
+      return `${l} / ${r}`
+    }
+    case 'min': {
+      // min is a prefix function; both args get parenthesised if non-atomic
+      const l = isAtomTerm(t.left) ? termToLeanString(t.left) : `(${termToLeanString(t.left)})`
+      const r = isAtomTerm(t.right) ? termToLeanString(t.right) : `(${termToLeanString(t.right)})`
+      return `min ${l} ${r}`
     }
   }
 }
@@ -133,11 +171,29 @@ function TermDisplay({ term, selectedSlotId, onSelectSlot }: TermDisplayProps): 
       </span>
     )
   }
-  // add or mul
+  if (term.kind === 'min') {
+    return (
+      <span className="cn-expr cn-app">
+        <span className="cn-func-name">min</span>
+        {/* cn-paren-vis is never hidden — keeps the two args delimited */}
+        <span className="cn-paren-vis">(</span>
+        <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+        <span className="cn-op">,</span>
+        <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+        <span className="cn-paren-vis">)</span>
+      </span>
+    )
+  }
+  // add, sub, mul, div — infix binary
+  const opSymbol =
+    term.kind === 'add' ? ' + ' :
+    term.kind === 'sub' ? ' − ' :
+    term.kind === 'mul' ? ' × ' :
+    ' ÷ '
   return (
     <span className="cn-expr cn-binary">
       <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
-      <span className="cn-op">{term.kind === 'add' ? ' + ' : ' × '}</span>
+      <span className="cn-op">{opSymbol}</span>
       <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
     </span>
   )
@@ -179,6 +235,10 @@ interface BrickDef {
   tab: CnTab
 }
 
+/** 'nat' — natural-number mode (succ, +, ×, nums 0–4).
+ *  'real' — real-number mode (+, −, ×, ÷, min, nums 0/1/2). */
+export type ConstructionMode = 'nat' | 'real'
+
 interface Props {
   varName: string
   goalBody: string
@@ -187,14 +247,18 @@ interface Props {
   onClose: () => void
   isProcessing: boolean
   promptMode?: 'propose' | 'specify'
+  mode?: ConstructionMode
   style?: React.CSSProperties
   headerSlot?: React.ReactNode
+  /** Pre-fill the construction term (e.g. when a hyp was dropped onto this theorem). */
+  initialTerm?: ConstructionTerm
 }
 
 export function ConstructionView({
-  varName, goalBody, contextVarNames, onApply, onClose, isProcessing, promptMode = 'propose', style, headerSlot,
+  varName, goalBody, contextVarNames, onApply, onClose, isProcessing,
+  promptMode = 'propose', mode = 'nat', style, headerSlot, initialTerm,
 }: Props) {
-  const [term, setTerm] = useState<ConstructionTerm>(() => makeSlot())
+  const [term, setTerm] = useState<ConstructionTerm>(() => initialTerm ?? makeSlot())
   const [history, setHistory] = useState<ConstructionTerm[]>([])
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<CnTab>('everything')
@@ -276,18 +340,29 @@ export function ConstructionView({
     fillSlot(brick.make, rawSlotId)
   }
 
-  // Build brick definitions
+  // Build brick definitions — two sets depending on mode
   const varBricks: BrickDef[] = contextVarNames.map(name => ({
     id: `var_${name}`, label: name, make: () => makeVar(name), tab: 'variables',
   }))
-  const numBricks: BrickDef[] = [0, 1, 2, 3, 4].map(n => ({
-    id: `num_${n}`, label: String(n), make: () => makeNum(n), tab: 'numbers',
-  }))
-  const fnBricks: BrickDef[] = [
-    { id: 'fn_succ', label: 'succ( _ )', make: makeSucc, tab: 'functions' },
-    { id: 'fn_add',  label: '_ + _',    make: makeAdd,  tab: 'functions' },
-    { id: 'fn_mul',  label: '_ × _',    make: makeMul,  tab: 'functions' },
-  ]
+
+  const numBricks: BrickDef[] = mode === 'real'
+    ? [0, 1, 2].map(n => ({ id: `num_${n}`, label: String(n), make: () => makeNum(n), tab: 'numbers' as CnTab }))
+    : [0, 1, 2, 3, 4].map(n => ({ id: `num_${n}`, label: String(n), make: () => makeNum(n), tab: 'numbers' as CnTab }))
+
+  const fnBricks: BrickDef[] = mode === 'real'
+    ? [
+        { id: 'fn_add', label: '_ + _',    make: makeAdd, tab: 'functions' as CnTab },
+        { id: 'fn_sub', label: '_ − _',    make: makeSub, tab: 'functions' as CnTab },
+        { id: 'fn_mul', label: '_ × _',    make: makeMul, tab: 'functions' as CnTab },
+        { id: 'fn_div', label: '_ ÷ _',    make: makeDiv, tab: 'functions' as CnTab },
+        { id: 'fn_min', label: 'min(_, _)', make: makeMin, tab: 'functions' as CnTab },
+      ]
+    : [
+        { id: 'fn_succ', label: 'succ( _ )', make: makeSucc, tab: 'functions' as CnTab },
+        { id: 'fn_add',  label: '_ + _',    make: makeAdd,  tab: 'functions' as CnTab },
+        { id: 'fn_mul',  label: '_ × _',    make: makeMul,  tab: 'functions' as CnTab },
+      ]
+
   const allBricks = [...varBricks, ...numBricks, ...fnBricks]
   const displayedBricks = selectedTab === 'everything'
     ? allBricks

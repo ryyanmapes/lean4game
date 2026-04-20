@@ -5,7 +5,11 @@ import type { ForallSpecificationInfo } from './quantifiedStatement'
 export interface HypCard {
   id: string                           // from fvarId[0] or crypto.randomUUID()
   hyp: InteractiveHypothesisBundle     // Lean native type, passed straight to renderer
+  isTheorem?: boolean
   position: { x: number; y: number }  // frontend-only, never sent to backend
+  /** True once the user has manually dragged this card; preserved across proof steps.
+   *  User-placed cards are treated as fixed obstacles during collision resolution. */
+  userPlaced?: boolean
 }
 
 /** One proof stream = one Lean subgoal (e.g. after a tactic that splits goals). */
@@ -42,6 +46,7 @@ export interface VisualTactic {
   id: string
   name: string
   label: string
+  activation?: 'drag' | 'goal_click'
 }
 
 /** A draggable canvas copy created from a proposition theorem template. */

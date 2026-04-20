@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { stripDerivedTheoremPrefixesInText } from './theoremNames'
 
 interface ProofStep {
   command: string
@@ -53,12 +54,16 @@ function shortenQualifiedNames(s: string): string {
   return s.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
 }
 
+function formatProofDisplayText(text: string): string {
+  return stripDerivedTheoremPrefixesInText(shortenQualifiedNames(text))
+}
+
 /** Return the lean tactic with its case path prepended, e.g. "case succ => rw [add_succ]". */
 function leanTacticDisplay(step: ProofStep): string | null {
   const leaf = stripCasePrefixes(step.leanTactic)
   if (!leaf) return null
   const casePath = getCasePath(step.command)
-  return shortenQualifiedNames(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
+  return formatProofDisplayText(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
 }
 
 export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelProps) {
@@ -97,10 +102,10 @@ export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelP
                 const isUnknown = !display && isVisualOnlyPlayTactic(step.playTactic)
                 return (
                   <tr key={i}>
-                    <td className="play-tactic">{step.playTactic}</td>
+                    <td className="play-tactic">{formatProofDisplayText(step.playTactic)}</td>
                     <td className="arrow-cell">→</td>
                     <td className={`lean-tactic${isUnknown ? ' unknown' : ''}`}>
-                      {display ?? (isUnknown ? `? (${step.playTactic})` : step.playTactic)}
+                      {display ?? formatProofDisplayText(isUnknown ? `? (${step.playTactic})` : step.playTactic)}
                     </td>
                   </tr>
                 )

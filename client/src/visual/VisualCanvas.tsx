@@ -11,15 +11,18 @@ import { HypCard } from './HypCard'
 import { GoalCard } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
-import { parseEqualityHyp, parseGoalEquality, TransformationView } from './TransformationView'
+import { parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
 import type { EqualityHyp } from './TransformationView'
+import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
+import type { ConstructionMode } from './ConstructionView'
 import { contextualizeExistsDisplay, contextualizeReductionForms } from './existsDisplay'
 import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
 import { buildForallSpecificationFromDisplay } from './quantifiedStatement'
+import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import {
@@ -34,6 +37,7 @@ import {
   type ProofStreamTreeNode,
 } from './proofTree'
 import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
+import { DERIVED_THEOREM_PREFIX, stripDerivedTheoremPrefixesInText } from './theoremNames'
 
 import './visual.css'
 
@@ -102,7 +106,7 @@ function resolveCollisions(
         height,
         hw: width / 2 + HITBOX_PADDING,
         hh: height / 2 + HITBOX_PADDING,
-        fixed: false,
+        fixed: Boolean(h.userPlaced),
       }
     })
 
@@ -190,20 +194,21 @@ function resolveCanvasStateCollisions(canvas: CanvasState, canvasBounds: CanvasB
 /** Merge a freshly computed canvas state with the current one, preserving
  *  card positions for cards that still exist (matched by id/fvarId). */
 function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState {
-  const posMap = new Map<string, { x: number; y: number }>()
+  const cardMap = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
   for (const stream of current.streams) {
     for (const card of stream.hyps) {
-      posMap.set(card.id, card.position)
+      cardMap.set(card.id, { position: card.position, userPlaced: card.userPlaced })
     }
   }
   return {
     ...fresh,
     streams: fresh.streams.map(stream => ({
       ...stream,
-      hyps: stream.hyps.map(card => ({
-        ...card,
-        position: posMap.get(card.id) ?? card.position,
-      })),
+      hyps: stream.hyps.map(card => {
+        const saved = cardMap.get(card.id)
+        if (!saved) return card
+        return { ...card, position: saved.position, userPlaced: saved.userPlaced }
+      }),
     })),
   }
 }
@@ -281,6 +286,7 @@ interface RewriteOutcome {
 interface ExpectedRewriteGoal {
   lhsStr: string
   rhsStr: string
+  relation: TransformRelation
 }
 
 interface PendingTransformSync {
@@ -439,15 +445,27 @@ function parsedHypEquality(card: HypCardType) {
   return parseEqualityHyp((card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim(), hypName, card.id)
 }
 
+function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): ParsedTransformTarget | null {
+  const parsed = parseTransformTarget(TaggedText_stripTags(stream.goal.type).trim())
+  if (!parsed) return null
+  return allowComparisons || parsed.relation === '=' ? parsed : null
+}
+
+function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTransformTarget | null {
+  const parsed = parseTransformTarget((card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim())
+  if (!parsed) return null
+  return allowComparisons || parsed.relation === '=' ? parsed : null
+}
+
 function goalIsReflexiveEquality(stream: GoalStream): boolean {
   if (stream.equalityTree?.isRefl) return true
   const parsedGoal = parsedGoalEquality(stream)
   return parsedGoal ? formulasMatch(parsedGoal.lhsStr, parsedGoal.rhsStr) : false
 }
 
-function goalIsTransformable(stream: GoalStream): boolean {
+function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
   if (goalIsReflexiveEquality(stream)) return false
-  return stream.equalityTree !== undefined || parsedGoalEquality(stream) !== null
+  return stream.equalityTree !== undefined || parsedGoalTarget(stream, allowComparisons) !== null
 }
 
 function goalIsConstructable(stream: GoalStream): boolean {
@@ -467,8 +485,8 @@ function hypIsConstructable(card: HypCardType): boolean {
   return hypForallSpecification(card) !== undefined
 }
 
-function hypIsTransformable(card: HypCardType): boolean {
-  return card.hyp.equalityTree !== undefined || parsedHypEquality(card) !== null
+function hypIsTransformable(card: HypCardType, allowComparisons: boolean): boolean {
+  return card.hyp.equalityTree !== undefined || parsedHypTarget(card, allowComparisons) !== null
 }
 
 function natContextVarNames(stream: GoalStream): string[] {
@@ -481,6 +499,20 @@ function natContextVarNames(stream: GoalStream): string[] {
     .filter((name): name is string => Boolean(name))
 }
 
+function realContextVarNames(stream: GoalStream): string[] {
+  return stream.hyps
+    .filter(card => {
+      const typeText = TaggedText_stripTags(card.hyp.type).trim()
+      return typeText === 'ℝ' || typeText === 'Real'
+    })
+    .map(card => card.hyp.names[0])
+    .filter((name): name is string => Boolean(name))
+}
+
+function streamConstructionMode(stream: GoalStream): ConstructionMode {
+  return realContextVarNames(stream).length > 0 ? 'real' : 'nat'
+}
+
 function nextFreshHypName(cards: HypCardType[], baseName: string): string {
   const existing = new Set(cards.map(card => card.hyp.names[0] ?? ''))
   if (!existing.has(baseName)) return baseName
@@ -488,10 +520,6 @@ function nextFreshHypName(cards: HypCardType[], baseName: string): string {
   let suffix = 2
   while (existing.has(`${baseName}${suffix}`)) suffix += 1
   return `${baseName}${suffix}`
-}
-
-function parenthesizedLeanArg(exprStr: string): string {
-  return `(${exprStr})`
 }
 
 function isVisualOnlyPlayTactic(playTactic: string): boolean {
@@ -536,6 +564,20 @@ function formulasMatch(left: string, right: string): boolean {
   return canonicalFormula(left) === canonicalFormula(right)
 }
 
+function worldAllowsComparisonTransform(worldId: string): boolean {
+  return worldId === 'Continuity'
+}
+
+function backendWorkingSideForRelation(
+  relation: TransformRelation,
+  workingSide: 'left' | 'right',
+): 'left' | 'right' {
+  if (relation === '>' || relation === '≥') {
+    return workingSide === 'left' ? 'right' : 'left'
+  }
+  return workingSide
+}
+
 function cloneHypCards(cards: HypCardType[]): HypCardType[] {
   return cards.map(card => ({
     ...card,
@@ -547,8 +589,9 @@ function synthesizeGoalRewriteContinuation(
   focusedStream: GoalStream,
   expectedGoal: ExpectedRewriteGoal,
 ): GoalStream {
-  const nextGoalType = `${expectedGoal.lhsStr} = ${expectedGoal.rhsStr}`
-  const isDirectlyClickable = formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+  const nextGoalType = `${expectedGoal.lhsStr} ${expectedGoal.relation} ${expectedGoal.rhsStr}`
+  const isDirectlyClickable =
+    expectedGoal.relation === '=' && formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
   const clickAction: ClickAction | undefined = isDirectlyClickable
     ? {
         playTactic: 'click_goal',
@@ -605,9 +648,11 @@ function resolveRewriteHyp(
     return { hyp: theoremHyp, isTheorem: true, rewriteRef: theoremHyp.id }
   }
 
-  const equalityHyp = equalityHyps.find(hyp => hyp.id === hypRef || hyp.label === hypRef)
+  const equalityHyp = equalityHyps.find(hyp =>
+    hyp.id === hypRef || hyp.label === hypRef || hyp.rewriteRef === hypRef,
+  )
   if (equalityHyp) {
-    return { hyp: equalityHyp, isTheorem: false, rewriteRef: equalityHyp.label }
+    return { hyp: equalityHyp, isTheorem: false, rewriteRef: equalityHyp.rewriteRef ?? equalityHyp.label }
   }
 
   return null
@@ -616,6 +661,7 @@ function resolveRewriteHyp(
 function expectedGoalForRewrite(
   goalLhsStr: string,
   goalRhsStr: string,
+  relation: TransformRelation,
   goalLhsNode: ExpressionNode | undefined,
   goalRhsNode: ExpressionNode | undefined,
   equalityHyps: EqualityHyp[],
@@ -640,8 +686,8 @@ function expectedGoalForRewrite(
     : applyEqualityRule(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
 
   return workingSide === 'right'
-    ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr) }
-    : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr }
+    ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr), relation }
+    : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr, relation }
 }
 
 function replaceFocusedStreamInCanvas(
@@ -739,7 +785,9 @@ function extractImplicationTarget(text: string): string | null {
 
 function findHypCardByName(stream: GoalStream | null, hypName: string): HypCardType | null {
   if (!stream) return null
-  return stream.hyps.find(card => card.hyp.names[0] === hypName) ?? null
+  return stream.hyps.find(card =>
+    card.hyp.playName === hypName || card.hyp.names[0] === hypName,
+  ) ?? null
 }
 
 function inferLeanTacticFromVisualInteraction(
@@ -755,7 +803,9 @@ function inferLeanTacticFromVisualInteraction(
     if (hypCard) {
       const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
       if (isConjunctionText(hypType)) {
-        return `have left := And.left ${hypName}; have right := And.right ${hypName}; clear ${hypName}`
+        const leftName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}left` : 'left'
+        const rightName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}right` : 'right'
+        return `have ${leftName} := And.left ${hypName}; have ${rightName} := And.right ${hypName}; clear ${hypName}`
       }
       if (isReflexiveEqualityImplicationText(hypType)) {
         return `specialize ${hypName} rfl`
@@ -797,6 +847,10 @@ function inferLeanTacticFromVisualInteraction(
 /** Strip capitalized namespace prefixes from Lean identifiers for display (e.g. MyNat.zero_ne_succ → zero_ne_succ). */
 function shortenQualifiedNames(tactic: string): string {
   return tactic.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
+}
+
+function formatProofDisplayText(tactic: string): string {
+  return stripDerivedTheoremPrefixesInText(shortenQualifiedNames(tactic))
 }
 
 function resolveLeanTactic(
@@ -880,7 +934,7 @@ function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
 
 type TransformTarget =
   | { kind: 'goal'; streamId: string }
-  | { kind: 'hyp'; streamId: string; hypId: string; hypName: string }
+  | { kind: 'hyp'; streamId: string; hypId: string; hypName: string; hypRef: string }
 
 type ConstructionTarget =
   | { kind: 'exists_goal'; streamId: string }
@@ -890,10 +944,7 @@ type ConstructionTarget =
       sourceKind: 'hyp' | 'theorem_copy' | 'theorem_template'
       sourceRef: string
       sourceId?: string
-      prompt: {
-        varName: string
-        body: string
-      }
+      prompt: ForallSpecificationInfo
     }
 
 interface VisualCanvasProps {
@@ -922,6 +973,7 @@ function TheoremTray({
   pageIndexByTab,
   onPageIndexChange,
   onTheoremDoubleClick,
+  onTacticClick,
   getTemplateIffDirection,
   onTemplateContextMenu,
 }: {
@@ -932,6 +984,7 @@ function TheoremTray({
   pageIndexByTab: Record<TrayTab, number>
   onPageIndexChange: (tab: TrayTab, pageIndex: number) => void
   onTheoremDoubleClick?: (theorem: PropositionTheorem) => void
+  onTacticClick?: (tactic: VisualTactic) => void
   getTemplateIffDirection: (templateId: string) => 'forward' | 'reverse'
   onTemplateContextMenu: (event: React.MouseEvent<HTMLDivElement>, templateId: string, theorem: PropositionTheorem) => void
 }) {
@@ -1022,7 +1075,14 @@ function TheoremTray({
             <div className="tr-rule-page-cards">
               {pageItems.map(item =>
                 visibleTab === 'tactics'
-                  ? <VisualTacticTemplateCard key={(item as VisualTactic).id} tactic={item as VisualTactic} />
+                  ? (
+                    <VisualTacticTemplateCard
+                      key={(item as VisualTactic).id}
+                      tactic={item as VisualTactic}
+                      onClick={onTacticClick ? () => onTacticClick(item as VisualTactic) : undefined}
+                      disabled={(item as VisualTactic).activation === 'goal_click' && !onTacticClick}
+                    />
+                  )
                   : (() => {
                       const theorem = item as PropositionTheorem
                       const templateId = `theorem_template_${theorem.id}`
@@ -1081,6 +1141,9 @@ export function VisualCanvas({
   onLevelCompleted
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
+  const proofTreePanelRef = useRef<HTMLDivElement>(null)
+  const goalsContainerRef = useRef<HTMLDivElement>(null)
+  const [goalsTopOverride, setGoalsTopOverride] = useState<number | null>(null)
   const [layoutVersion, setLayoutVersion] = useState(0)
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
@@ -1161,6 +1224,7 @@ export function VisualCanvas({
 
   // Stable game key for play log
   const logKey = `${worldId}/${levelId}`
+  const comparisonTransformEnabled = worldAllowsComparisonTransform(worldId)
 
   useEffect(() => {
     const html = document.documentElement
@@ -1266,6 +1330,29 @@ export function VisualCanvas({
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds))
   }, [canvasState.streams, showProofSidebar, layoutVersion])
+
+  useLayoutEffect(() => {
+    const panel = proofTreePanelRef.current
+    const goals = goalsContainerRef.current
+    if (!panel || !goals) { setGoalsTopOverride(null); return }
+
+    const update = () => {
+      const panelRect = panel.getBoundingClientRect()
+      const viewH = window.innerHeight
+      const goalsH = goals.offsetHeight
+      const naturalGoalTop = viewH / 2 - goalsH / 2
+      const BUFFER = 12
+      const desiredTop = panelRect.bottom + BUFFER
+      setGoalsTopOverride(desiredTop > naturalGoalTop ? desiredTop : null)
+    }
+
+    update()
+    const obs = new ResizeObserver(update)
+    obs.observe(panel)
+    obs.observe(goals)
+    window.addEventListener('resize', update)
+    return () => { obs.disconnect(); window.removeEventListener('resize', update) }
+  }, [proofTree])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -1594,9 +1681,17 @@ export function VisualCanvas({
         if (snapshot.kind === 'goal') {
           setTransformTarget({ kind: 'goal', streamId: nextStream.id })
         } else {
-          const nextHyp = nextStream.hyps.find(h => h.hyp.names[0] === snapshot.hypName)
+          const nextHyp = nextStream.hyps.find(h =>
+            interactionHypName(h) === snapshot.hypRef || h.hyp.names[0] === snapshot.hypName,
+          )
           if (nextHyp) {
-            setTransformTarget({ kind: 'hyp', streamId: nextStream.id, hypId: nextHyp.id, hypName: snapshot.hypName })
+            setTransformTarget({
+              kind: 'hyp',
+              streamId: nextStream.id,
+              hypId: nextHyp.id,
+              hypName: nextHyp.hyp.names[0] ?? snapshot.hypName,
+              hypRef: interactionHypName(nextHyp) ?? snapshot.hypRef,
+            })
           } else {
             setActiveStreamId(nextActiveId)
             setTransformTarget(null)
@@ -1749,6 +1844,13 @@ export function VisualCanvas({
       return
     }
 
+    if (sourceCard?.isTheorem && overId === THEOREM_TRAY_ID) {
+      const sourceName = interactionHypName(sourceCard)
+      if (!sourceName) return
+      applyInteraction(`delete_theorem ${sourceName}`, activeId)
+      return
+    }
+
     // If dropped on a different card or a goal, it's an interaction
     if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard) ?? sourceTheoremCopy?.theorem.theoremName
@@ -1771,21 +1873,55 @@ export function VisualCanvas({
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
         if (!targetName) return
 
+        // When dropping a hyp onto a constructable theorem copy, use drag_apply
+        // to partially apply the theorem to the hyp (pattern-matching its type
+        // against the theorem's prop arguments).  A new hypothesis is created
+        // for the partially-applied result; the source hyp is preserved.
+        if (sourceCard && targetTheoremCopy?.theorem.forallSpecification) {
+          const playTactic = interactionToPlayTactic({
+            type: 'drag_apply',
+            theoremName: targetTheoremCopy.theorem.theoremName,
+            hypName: sourceName,
+          })
+          applyInteraction(playTactic, activeId, {
+            consumedTheoremCopyIds: [targetTheoremCopy.id],
+          })
+          return
+        }
+
         let placementHint: PlacementHint | undefined
-        if (sourceCard && targetStream && sourceStream) {
+        if (targetStream) {
+          const sourceIsLocalTheorem = Boolean(sourceCard?.isTheorem)
+          const targetIsLocalTheorem = Boolean(targetCard?.isTheorem)
+          const localTheoremCount = Number(sourceIsLocalTheorem) + Number(targetIsLocalTheorem)
+          const anchorCard =
+            localTheoremCount === 1
+              ? (sourceIsLocalTheorem ? sourceCard : targetCard)
+              : undefined
+          const anchorStream =
+            anchorCard?.id === sourceCard?.id
+              ? sourceStream
+              : anchorCard?.id === targetCard?.id
+                ? targetStream
+                : undefined
+          const droppedPosition = anchorCard?.id === sourceCard?.id
+            ? {
+                x: sourceCard.position.x + delta.x,
+                y: sourceCard.position.y + delta.y,
+              }
+            : anchorCard?.position
+          if (anchorCard && anchorStream && droppedPosition) {
           placementHint = {
-            hypId: sourceCard.id,
-            streamId: targetStream.id,
-            hypName: sourceCard.hyp.names[0] ?? sourceName,
-            originalPosition: sourceCard.position,
-            droppedPosition: {
-              x: sourceCard.position.x + delta.x,
-              y: sourceCard.position.y + delta.y,
-            },
+            hypId: anchorCard.id,
+            streamId: anchorStream.id,
+            hypName: anchorCard.hyp.names[0] ?? interactionHypName(anchorCard) ?? '',
+            originalPosition: anchorCard.position,
+            droppedPosition,
           }
           flushSync(() => {
             setPositionOverrides(prev => ({ ...prev, [placementHint!.hypId]: placementHint!.droppedPosition }))
           })
+          }
         }
 
         const playTactic = interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
@@ -1819,6 +1955,7 @@ export function VisualCanvas({
           if (h.id !== activeId) return h
           return {
             ...h,
+            userPlaced: true,
             position: clampCanvasPosition(h.position.x + delta.x, h.position.y + delta.y, 250, 50),
           }
         })
@@ -2019,13 +2156,23 @@ export function VisualCanvas({
     })
   }
 
+  function handleTrayTacticClick(tactic: VisualTactic) {
+    if (tactic.activation !== 'goal_click') return
+    if (isProcessing || canvasState.completed || !currentStream || !streamInteractionsEnabled) return
+    closeReductionTooltip()
+    applyInteraction(tactic.name, `visual_tactic_${tactic.name}`, {
+      solvedGoalId: currentStream.id,
+      targetStreamId: currentStream.id,
+    })
+  }
+
   function handleHypDoubleClick(streamId: string, cardId: string) {
     if (isProcessing || canvasState.completed) return
     const stream = canvasState.streams.find(candidate => candidate.id === streamId)
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
     if (openHypConstruction(stream, card)) return
-    if (!hypIsTransformable(card)) return
+    if (!hypIsTransformable(card, comparisonTransformEnabled)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
     setPendingTransformSync(null)
@@ -2037,6 +2184,7 @@ export function VisualCanvas({
       streamId: stream.id,
       hypId: card.id,
       hypName: card.hyp.names[0] ?? '?',
+      hypRef: interactionHypName(card) ?? (card.hyp.names[0] ?? '?'),
     })
   }
 
@@ -2055,7 +2203,7 @@ export function VisualCanvas({
       return
     }
 
-    if (!goalIsTransformable(stream)) return
+    if (!goalIsTransformable(stream, comparisonTransformEnabled)) return
     setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
@@ -2129,7 +2277,8 @@ export function VisualCanvas({
       const baseName = target.sourceKind === 'hyp'
         ? nextFreshHypName(focusedStream.hyps, target.sourceRef)
         : nextFreshHypName(focusedStream.hyps, 'h')
-      playTactic = `have ${baseName} := ${target.sourceRef} ${parenthesizedLeanArg(exprStr)}`
+      const argExpr = `(${exprStr})`
+      playTactic = `specialize_forall_as ${baseName} ${target.sourceRef} ${target.prompt.varName} ${argExpr}`
 
       if (target.sourceKind === 'theorem_copy' && target.sourceId) {
         const copy = getTheoremCopyById(target.sourceId)
@@ -2231,15 +2380,30 @@ export function VisualCanvas({
     path?: number[],
     expectedGoal?: ExpectedRewriteGoal,
   ): Promise<RewriteOutcome> => {
+    if (isProcessing) return { success: false, completed: false }
     const playTactic = interactionToPlayTactic({
       type: 'drag_rw',
       theoremName: hypLabel,
       isReverse,
-      workingSide,
-      targetHypName: transformTarget?.kind === 'hyp' ? transformTarget.hypName : undefined,
+      workingSide: backendWorkingSideForRelation(
+        (() => {
+          const focusedStream = transformTarget
+            ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
+            : null
+          if (!focusedStream) return '=' as TransformRelation
+          if (transformTarget?.kind === 'goal') {
+            return parsedGoalTarget(focusedStream, comparisonTransformEnabled)?.relation ?? '='
+          }
+          const targetCard = focusedStream.hyps.find(card => card.id === transformTarget?.hypId)
+          return targetCard
+            ? (parsedHypTarget(targetCard, comparisonTransformEnabled)?.relation ?? '=')
+            : '='
+        })(),
+        workingSide,
+      ),
+      targetHypName: transformTarget?.kind === 'hyp' ? transformTarget.hypRef : undefined,
       path,
     })
-    if (isProcessing) return { success: false, completed: false }
     const focusedStream = transformTarget
       ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
       : null
@@ -2311,6 +2475,7 @@ export function VisualCanvas({
       leanCanvas.completed &&
       focusedStream !== null &&
       expectedGoal !== undefined &&
+      expectedGoal.relation === '=' &&
       formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
     if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
       const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
@@ -2376,7 +2541,7 @@ export function VisualCanvas({
                       ...stream,
                       goal: {
                         ...stream.goal,
-                        type: { text: `${expectedGoal.lhsStr} = ${expectedGoal.rhsStr}` },
+                        type: { text: `${expectedGoal.lhsStr} ${expectedGoal.relation} ${expectedGoal.rhsStr}` },
                         clickAction: undefined,
                       },
                     }
@@ -2415,13 +2580,16 @@ export function VisualCanvas({
       if (transformTarget?.kind === 'goal') {
         setTransformTarget({ kind: 'goal', streamId: nextStream.id })
       } else if (transformTarget?.kind === 'hyp') {
-        const nextHyp = nextStream.hyps.find(card => card.hyp.names[0] === transformTarget.hypName)
+        const nextHyp = nextStream.hyps.find(card =>
+          interactionHypName(card) === transformTarget.hypRef || card.hyp.names[0] === transformTarget.hypName,
+        )
         if (nextHyp) {
           setTransformTarget({
             kind: 'hyp',
             streamId: nextStream.id,
             hypId: nextHyp.id,
-            hypName: transformTarget.hypName,
+            hypName: nextHyp.hyp.names[0] ?? transformTarget.hypName,
+            hypRef: interactionHypName(nextHyp) ?? transformTarget.hypRef,
           })
         } else {
           setTransformTarget(null)
@@ -2435,7 +2603,7 @@ export function VisualCanvas({
     setTransformationVersion(v => v + 1)
 
     return { success: true, completed: false }
-  }, [activeStreamId, canvasState, isProcessing, logKey, onInteraction, proofTree, transformTarget])
+  }, [activeStreamId, canvasState, comparisonTransformEnabled, isProcessing, logKey, onInteraction, proofTree, transformTarget])
 
   // ── Build TransformationView props ──────────────────────────────────────────
 
@@ -2446,44 +2614,49 @@ export function VisualCanvas({
   const transformProps = (() => {
     if (!transformingStream) return null
 
+    let relation: TransformRelation
     let goalLhsStr: string
     let goalRhsStr: string
     let goalLhsNode: ReturnType<typeof exprTreeToNode> | undefined
     let goalRhsNode: ReturnType<typeof exprTreeToNode> | undefined
 
     if (transformTarget?.kind === 'goal') {
-      const goalTypeStr = TaggedText_stripTags(transformingStream.goal.type)
       if (transformingStream.equalityTree) {
-        goalLhsNode = exprTreeToNode(transformingStream.equalityTree.lhs)
-        goalRhsNode = exprTreeToNode(transformingStream.equalityTree.rhs)
-      }
-      const parsedGoal = parseGoalEquality(goalTypeStr)
-      if (parsedGoal) {
+        relation = '='
+        const lhs = exprTreeToNode(transformingStream.equalityTree.lhs)
+        const rhs = exprTreeToNode(transformingStream.equalityTree.rhs)
+        goalLhsNode = lhs
+        goalRhsNode = rhs
+        goalLhsStr = printExpression(lhs)
+        goalRhsStr = printExpression(rhs)
+      } else {
+        const parsedGoal = parsedGoalTarget(transformingStream, comparisonTransformEnabled)
+        if (!parsedGoal) return null
+        relation = parsedGoal.relation
         goalLhsStr = parsedGoal.lhsStr
         goalRhsStr = parsedGoal.rhsStr
-      } else if (transformingStream.equalityTree) {
-        goalLhsStr = printExpression(goalLhsNode!)
-        goalRhsStr = printExpression(goalRhsNode!)
-      } else {
-        return null
+        goalLhsNode = parsedGoal.lhs
+        goalRhsNode = parsedGoal.rhs
       }
     } else {
       const targetCard = transformingStream.hyps.find(card => card.id === transformTarget?.hypId)
       if (!targetCard) return null
-      const typeStr = TaggedText_stripTags(targetCard.hyp.type)
       if (targetCard.hyp.equalityTree) {
-        goalLhsNode = exprTreeToNode(targetCard.hyp.equalityTree.lhs)
-        goalRhsNode = exprTreeToNode(targetCard.hyp.equalityTree.rhs)
-      }
-      const parsedHyp = parsedHypEquality(targetCard)
-      if (parsedHyp) {
+        relation = '='
+        const lhs = exprTreeToNode(targetCard.hyp.equalityTree.lhs)
+        const rhs = exprTreeToNode(targetCard.hyp.equalityTree.rhs)
+        goalLhsNode = lhs
+        goalRhsNode = rhs
+        goalLhsStr = printExpression(lhs)
+        goalRhsStr = printExpression(rhs)
+      } else {
+        const parsedHyp = parsedHypTarget(targetCard, comparisonTransformEnabled)
+        if (!parsedHyp) return null
+        relation = parsedHyp.relation
         goalLhsStr = parsedHyp.lhsStr
         goalRhsStr = parsedHyp.rhsStr
-      } else if (targetCard.hyp.equalityTree) {
-        goalLhsStr = printExpression(goalLhsNode!)
-        goalRhsStr = printExpression(goalRhsNode!)
-      } else {
-        return null
+        goalLhsNode = parsedHyp.lhs
+        goalRhsNode = parsedHyp.rhs
       }
     }
 
@@ -2502,6 +2675,7 @@ export function VisualCanvas({
         return [{
           id: card.id,
           label: name,
+          rewriteRef: interactionHypName(card) ?? name,
           lhsStr: printExpression(lhs),
           rhsStr: printExpression(rhs),
           lhs,
@@ -2512,10 +2686,16 @@ export function VisualCanvas({
       const parsedHyp = parsedHypEquality(card)
       if (!parsedHyp) return []
       if (parsedHyp.lhsStr === parsedHyp.rhsStr) return []
-      return [{ ...parsedHyp, label: name, forallFooter: card.hyp.forallFooter } as EqualityHyp]
+      return [{
+        ...parsedHyp,
+        label: name,
+        rewriteRef: interactionHypName(card) ?? name,
+        forallFooter: card.hyp.forallFooter,
+      } as EqualityHyp]
     })
 
     return {
+      relation,
       goalLhsStr,
       goalRhsStr,
       goalLhsNode,
@@ -2531,6 +2711,8 @@ export function VisualCanvas({
     if (!constructionTarget) return null
     const stream = canvasState.streams.find(s => s.id === constructionTarget.streamId)
     if (!stream) return null
+    const cnMode = streamConstructionMode(stream)
+    const cnVarNames = cnMode === 'real' ? realContextVarNames(stream) : natContextVarNames(stream)
     if (constructionTarget.kind === 'exists_goal') {
       if (!stream.existsInfo) return null
       const existingHypNames = new Set(
@@ -2541,14 +2723,16 @@ export function VisualCanvas({
         promptMode: 'propose' as const,
         varName: displayExistsInfo.varName,
         goalBody: displayExistsInfo.body,
-        contextVarNames: natContextVarNames(stream),
+        contextVarNames: cnVarNames,
+        mode: cnMode,
       }
     }
     return {
       promptMode: 'specify' as const,
       varName: constructionTarget.prompt.varName,
       goalBody: constructionTarget.prompt.body,
-      contextVarNames: natContextVarNames(stream),
+      contextVarNames: cnVarNames,
+      mode: cnMode,
     }
   })()
 
@@ -2626,7 +2810,9 @@ export function VisualCanvas({
   }
 
   function requireHypCard(stream: GoalStream, hypName: string): HypCardType {
-    const card = stream.hyps.find(candidate => candidate.hyp.names[0] === hypName)
+    const card = stream.hyps.find(candidate =>
+      candidate.hyp.names[0] === hypName || candidate.hyp.playName === hypName
+    )
     if (!card) {
       throw new Error(`Could not find hypothesis "${hypName}" on stream ${stream.id}`)
     }
@@ -2768,6 +2954,7 @@ export function VisualCanvas({
       ? expectedGoalForRewrite(
           transformProps.goalLhsStr,
           transformProps.goalRhsStr,
+          transformProps.relation,
           transformProps.goalLhsNode,
           transformProps.goalRhsNode,
           transformProps.equalityHyps,
@@ -2967,7 +3154,7 @@ export function VisualCanvas({
           )}
 
           {totalLeafCount > 1 && (
-            <div className="proof-tree-panel">
+            <div className="proof-tree-panel" ref={proofTreePanelRef}>
               <ProofStreamGraph
                 tree={proofTree}
                 currentStreamId={currentStream?.id ?? null}
@@ -3012,7 +3199,7 @@ export function VisualCanvas({
               const clickAction = card.hyp.clickAction
               const isClickable = hasClickAction(clickAction)
               const isConstructable = hypIsConstructable(card)
-              const isTransformable = hypIsTransformable(card)
+              const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
               return (
                 <HypCard
                   key={card.id}
@@ -3050,7 +3237,12 @@ export function VisualCanvas({
                 onContextMenu={(event) => handleTheoremCardContextMenu(event, copy.id, copy.theorem)}
               />
             ))}
-            <div className="goals-container" data-testid="goals-container">
+            <div
+              className="goals-container"
+              data-testid="goals-container"
+              ref={goalsContainerRef}
+              style={goalsTopOverride != null ? { top: `${goalsTopOverride}px`, transform: 'none' } : undefined}
+            >
               {displayStream && (() => {
                 const stream = displayStream
                 const liveGoalStream =
@@ -3059,7 +3251,7 @@ export function VisualCanvas({
                     : stream
                 const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
                 const isClickable = hasClickAction(clickAction)
-                const isTransformable = goalIsTransformable(liveGoalStream)
+                const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
                 const isConstructable = goalIsConstructable(liveGoalStream)
                 return (
                   <GoalCard
@@ -3124,6 +3316,7 @@ export function VisualCanvas({
               tactics={visualTactics}
               activeTab={activeTrayTab}
               onTabChange={setActiveTrayTab}
+              onTacticClick={streamInteractionsEnabled && currentStream ? handleTrayTacticClick : undefined}
               onTheoremDoubleClick={streamInteractionsEnabled && currentStream
                 ? theorem => handleTheoremTemplateDoubleClick(theorem, currentStream.id)
                 : undefined}
@@ -3214,13 +3407,19 @@ export function VisualCanvas({
                           const fallback = isVisualOnlyPlayTactic(step.playTactic)
                             ? `? (${step.playTactic})`
                             : step.playTactic
-                          return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback)
+                          return formatProofDisplayText(
+                            casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback),
+                          )
                         }
-                        return shortenQualifiedNames(casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf))
+                        return formatProofDisplayText(
+                          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf),
+                        )
                       })()
                     : (() => {
                         const { casePath } = parseFocusedCommand(step.command)
-                        return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic)
+                        return formatProofDisplayText(
+                          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic),
+                        )
                       })()
                   const isUnknown = sideViewMode === 'lean' && !step.leanTactic && isVisualOnlyPlayTactic(step.playTactic)
                   return (
@@ -3244,6 +3443,7 @@ export function VisualCanvas({
           goalBody={constructionProps.goalBody}
           contextVarNames={constructionProps.contextVarNames}
           promptMode={constructionProps.promptMode}
+          mode={constructionProps.mode}
           onApply={handleConstructionApply}
           onClose={closeConstructionView}
           isProcessing={isProcessing}
@@ -3271,6 +3471,7 @@ export function VisualCanvas({
         <TransformationView
           key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}-${transformationVersion}`}
           style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
+          relation={transformProps.relation}
           goalLhsStr={transformProps.goalLhsStr}
           goalRhsStr={transformProps.goalRhsStr}
           goalLhsNode={transformProps.goalLhsNode}

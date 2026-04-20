@@ -12,12 +12,24 @@ import { ConnectionArrow } from './ConnectionArrow'
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
   label: string    // hypothesis name (e.g. "h") or theorem displayName
+  /** Lean-facing identifier to use when this local hypothesis is applied as a rewrite rule. */
+  rewriteRef?: string
   lhsStr: string
   rhsStr: string
   lhs: ExpressionNode
   rhs: ExpressionNode
   /** NNG4 inventory category (e.g. "+", "*", "^", "≤", "012", "Peano"). Absent for hyp cards. */
   category?: string
+}
+
+export type TransformRelation = '=' | '<' | '>' | '≤' | '≥'
+
+export interface ParsedTransformTarget {
+  lhsStr: string
+  rhsStr: string
+  lhs: ExpressionNode
+  rhs: ExpressionNode
+  relation: TransformRelation
 }
 
 interface RewriteOutcome {
@@ -28,27 +40,26 @@ interface RewriteOutcome {
 interface ExpectedRewriteGoal {
   lhsStr: string
   rhsStr: string
+  relation: TransformRelation
 }
 
 function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   // Theorem cards show friendly aliases, but Lean rewrites need the real declaration name.
-  return draggedId.startsWith('thm_') ? hyp.id : hyp.label
+  return draggedId.startsWith('thm_') ? hyp.id : (hyp.rewriteRef ?? hyp.label)
 }
 
-function parseTopLevelEquality(typeStr: string): {
-  lhsStr: string
-  rhsStr: string
-  lhs: ExpressionNode
-  rhs: ExpressionNode
-} | null {
+const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '≥'])
+
+export function parseTransformTarget(typeStr: string): ParsedTransformTarget | null {
   try {
     const parsed = parse(typeStr.trim())
-    if (parsed.type !== 'binary' || parsed.op !== '=') return null
+    if (parsed.type !== 'binary' || !TRANSFORM_RELATIONS.has(parsed.op as TransformRelation)) return null
     return {
       lhsStr: printExpression(parsed.left),
       rhsStr: printExpression(parsed.right),
       lhs: parsed.left,
       rhs: parsed.right,
+      relation: parsed.op as TransformRelation,
     }
   } catch {
     return null
@@ -57,14 +68,15 @@ function parseTopLevelEquality(typeStr: string): {
 
 /** Parse a goal equality string "lhs = rhs" into parts. Returns null if unparseable. */
 export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: string } | null {
-  const parsed = parseTopLevelEquality(typeStr)
+  const parsed = parseTransformTarget(typeStr)
+  if (!parsed || parsed.relation !== '=') return null
   return parsed ? { lhsStr: parsed.lhsStr, rhsStr: parsed.rhsStr } : null
 }
 
 /** Try to parse a hyp type string as "lhsStr = rhsStr". */
 export function parseEqualityHyp(typeStr: string, hypName: string, hypId: string): EqualityHyp | null {
-  const parsed = parseTopLevelEquality(typeStr)
-  if (!parsed) return null
+  const parsed = parseTransformTarget(typeStr)
+  if (!parsed || parsed.relation !== '=') return null
   return {
     id: hypId,
     label: hypName,
@@ -76,6 +88,7 @@ export function parseEqualityHyp(typeStr: string, hypName: string, hypId: string
 }
 
 interface Props {
+  relation: TransformRelation
   goalLhsStr: string
   goalRhsStr: string
   /** Pre-parsed nodes from Lean's ExprTree (preferred over parsing goalLhsStr). */
@@ -121,7 +134,7 @@ interface Props {
 }
 
 export function TransformationView({
-  goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
+  relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style
 }: Props) {
@@ -367,8 +380,8 @@ export function TransformationView({
       ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
       : applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
     const expectedGoal = workingSide === 'right'
-      ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr) }
-      : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr }
+      ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr), relation }
+      : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr, relation }
     const outcome = await onRewrite(rewriteReferenceForDrag(draggedId, hyp), isReverse, workingSide, path, expectedGoal)
     setIsProcessing(false)
 
@@ -429,7 +442,7 @@ export function TransformationView({
           {/* Static side label + swap button */}
           <div ref={staticGroupRef} className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}${isExprOverflowing ? ' pinned-top' : ''}`}>
             <span className="tr-static-label">
-              {workingSide === 'left' ? `= ${staticStr}` : `${staticStr} =`}
+              {workingSide === 'left' ? `${relation} ${staticStr}` : `${staticStr} ${relation}`}
             </span>
             <button
               className="tr-swap-btn"

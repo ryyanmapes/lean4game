@@ -1,4 +1,4 @@
-export type Op = '+' | '-' | '*' | '/' | '=' | '∧' | '∨' | '→'
+export type Op = '+' | '-' | '*' | '/' | '=' | '<' | '>' | '≤' | '≥' | '∧' | '∨' | '→'
 
 export type ExpressionNode =
   | { type: 'binary';   op: Op; left: ExpressionNode; right: ExpressionNode; id: string }

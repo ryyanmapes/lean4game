@@ -69,6 +69,7 @@ export function HypCard({
 
   const classes = [
     'statement-card',
+    card.isTheorem ? 'derived-theorem-card' : '',
     card.hyp.forallFooter ? 'has-forall-footer' : '',
     isDragging ? 'dragging' : '',
     isOver && !isDragging ? 'drop-target-active' : '',
@@ -85,6 +86,8 @@ export function HypCard({
       ? 'Double-click to specify an expression'
       : isTransformable
       ? 'Double-click to open transformation view'
+      : card.isTheorem
+      ? 'Drag onto another statement to use this theorem, or back to the theorem bar to delete it'
       : undefined
   const hypName = card.hyp.names[0] ?? ''
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))

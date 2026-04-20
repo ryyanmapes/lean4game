@@ -12,11 +12,14 @@ const {
 } = require('../../tmp-stream-tests/visual/proofTree.js')
 const { reconcileProofTreeAfterInteraction } = require('../../tmp-stream-tests/visual/streamReconciliation.js')
 
-function hyp(id, name, type) {
+function hyp(id, name, type, { isTheorem = false } = {}) {
+  const displayName = isTheorem && name.startsWith('THM_') ? name.slice(4) : name
   return {
     id,
+    isTheorem,
     hyp: {
-      names: [name],
+      names: [displayName],
+      ...(displayName !== name ? { playName: name } : {}),
       type: { text: type },
       reductionForms: [],
     },
@@ -134,7 +137,9 @@ function assertUniqueIds(ids) {
 }
 
 function hypTypeFor(stream, name) {
-  return stream.hyps.find(card => card.hyp.names[0] === name)?.hyp.type.text
+  return stream.hyps.find(card =>
+    card.hyp.names[0] === name || card.hyp.playName === name
+  )?.hyp.type.text
 }
 
 test('completing the middle branch updates the sibling C stream instead of duplicating it', () => {
@@ -644,7 +649,9 @@ test('the full nested conjunction proof can reconcile from A through final C com
   assert.equal(afterApplyH.focusedStreams.length, 1)
   const appliedH = afterApplyH.focusedStreams[0]
   assert.equal(appliedH.goal.type.text, 'C')
-  assert.equal(hypTypeFor(appliedH, 'h'), splitRightType.replace('A -> ', ''))
+  assert.equal(hypTypeFor(appliedH, 'h'), 'A')
+  assert.equal(hypTypeFor(appliedH, 'h1'), splitRightType.replace('A -> ', ''))
+  assert.equal(hypTypeFor(appliedH, 'right'), splitRightType)
   assert.equal(hypTypeFor(appliedH, 'left'), 'B')
   assert.equal(afterApplyH.nextCanvas.streams[0]?.id, appliedH.id)
   assert.equal(afterApplyH.nextActiveId, appliedH.id)
@@ -657,7 +664,7 @@ test('the full nested conjunction proof can reconcile from A through final C com
       completed: false,
     },
     appliedH,
-    'drag_to left h',
+    'drag_to left h1',
     false,
     afterApplyH.nextActiveId,
   )
@@ -665,8 +672,9 @@ test('the full nested conjunction proof can reconcile from A through final C com
   assert.equal(afterApplyB.focusedStreams.length, 1)
   const appliedB = afterApplyB.focusedStreams[0]
   assert.equal(appliedB.goal.type.text, 'C')
-  assert.equal(hypTypeFor(appliedB, 'h'), 'B -> C')
-  assert.equal(hypTypeFor(appliedB, 'left'), 'C')
+  assert.equal(hypTypeFor(appliedB, 'left'), 'B')
+  assert.equal(hypTypeFor(appliedB, 'h1'), 'B -> C')
+  assert.equal(hypTypeFor(appliedB, 'h2'), 'C')
   assert.equal(afterApplyB.nextCanvas.streams[0]?.id, appliedB.id)
   assert.equal(afterApplyB.nextActiveId, appliedB.id)
 
@@ -678,7 +686,7 @@ test('the full nested conjunction proof can reconcile from A through final C com
       completed: true,
     },
     appliedB,
-    'drag_goal left',
+    'drag_goal h2',
     false,
     afterApplyB.nextActiveId,
     [],
@@ -775,4 +783,221 @@ test('click_goal on an explicit forall goal introduces the bound variable before
   assert.equal(hypTypeFor(introducedStream, 'c'), 'ℕ')
   assert.equal(result.nextCanvas.streams.length, 1)
   assert.equal(result.nextCanvas.streams[0]?.id, introducedStream.id)
+})
+
+test('click_goal on a bounded comparison forall introduces the variable and assumption together', () => {
+  const focusedStream = stream('stream-bounded-forall', '∀ a > 0, P a', 'main', [])
+  const beforeTree = {
+    id: 'leaf-bounded-forall',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'click_goal',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  const introducedStream = result.focusedStreams[0]
+  assert.ok(introducedStream)
+  assert.equal(introducedStream.goal.type.text, 'P a')
+  assert.equal(introducedStream.goal.clickAction?.playTactic, undefined)
+  assert.equal(introducedStream.goal.clickAction?.tooltip, undefined)
+  assert.equal(hypTypeFor(introducedStream, 'a'), '…')
+  assert.equal(hypTypeFor(introducedStream, 'ha'), 'a > 0')
+  assert.equal(result.nextCanvas.streams.length, 1)
+  assert.equal(result.nextCanvas.streams[0]?.id, introducedStream.id)
+})
+
+test('drag_to keeps a local theorem card green and overwrites it regardless of drag direction', () => {
+  const focusedStream = stream('stream-thm-overwrite', 'Goal', 'main', [
+    hyp('hyp-theorem', 'THM_apply', 'P → Q', { isTheorem: true }),
+    hyp('hyp-p', 'hp', 'P'),
+  ])
+  const beforeTree = {
+    id: 'leaf-thm-overwrite',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const resultA = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'drag_to THM_apply hp',
+    false,
+    focusedStream.id,
+  )
+  const streamA = resultA.focusedStreams[0]
+  assert.ok(streamA)
+  assert.equal(hypTypeFor(streamA, 'THM_apply'), 'Q')
+  assert.equal(streamA.hyps.find(card => card.hyp.playName === 'THM_apply')?.isTheorem, true)
+  assert.equal(hypTypeFor(streamA, 'hp'), 'P')
+
+  const resultB = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'drag_to hp THM_apply',
+    false,
+    focusedStream.id,
+  )
+  const streamB = resultB.focusedStreams[0]
+  assert.ok(streamB)
+  assert.equal(hypTypeFor(streamB, 'THM_apply'), 'Q')
+  assert.equal(streamB.hyps.find(card => card.hyp.playName === 'THM_apply')?.isTheorem, true)
+  assert.equal(hypTypeFor(streamB, 'hp'), 'P')
+})
+
+test('drag_to keeps both theorem cards and adds a fresh theorem result card', () => {
+  const focusedStream = stream('stream-thm-fresh', 'Goal', 'main', [
+    hyp('hyp-theorem-f', 'THM_f', 'P → Q', { isTheorem: true }),
+    hyp('hyp-theorem-p', 'THM_p', 'P', { isTheorem: true }),
+  ])
+  const beforeTree = {
+    id: 'leaf-thm-fresh',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'drag_to THM_f THM_p',
+    false,
+    focusedStream.id,
+  )
+
+  const nextStream = result.focusedStreams[0]
+  assert.ok(nextStream)
+  assert.equal(nextStream.hyps.length, 3)
+  assert.equal(hypTypeFor(nextStream, 'THM_f'), 'P → Q')
+  assert.equal(hypTypeFor(nextStream, 'THM_p'), 'P')
+  assert.equal(hypTypeFor(nextStream, 'THM_f1'), 'Q')
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_f')?.isTheorem, true)
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_p')?.isTheorem, true)
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_f1')?.isTheorem, true)
+})
+
+test('click_prop keeps conjunction split children green when the source card is a theorem', () => {
+  const focusedStream = stream('stream-thm-and', 'Goal', 'main', [
+    hyp('hyp-theorem-and', 'THM_h', 'P ∧ Q', { isTheorem: true }),
+    hyp('hyp-r', 'hr', 'R'),
+  ])
+  const beforeTree = {
+    id: 'leaf-thm-and',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'click_prop THM_h',
+    false,
+    focusedStream.id,
+  )
+
+  const nextStream = result.focusedStreams[0]
+  assert.ok(nextStream)
+  assert.equal(hypTypeFor(nextStream, 'THM_left'), 'P')
+  assert.equal(hypTypeFor(nextStream, 'THM_right'), 'Q')
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_left')?.isTheorem, true)
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_right')?.isTheorem, true)
+  assert.equal(nextStream.hyps.find(card => card.hyp.playName === 'THM_h'), undefined)
+})
+
+test('click_prop keeps disjunction case hypotheses green when the source card is a theorem', () => {
+  const focusedStream = stream('stream-thm-or', 'Goal', 'main', [
+    hyp('hyp-theorem-or', 'THM_h', 'P ∨ Q', { isTheorem: true }),
+    hyp('hyp-r', 'hr', 'R'),
+  ])
+  const beforeTree = {
+    id: 'leaf-thm-or',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+  const beforeCanvas = {
+    streams: [focusedStream],
+    completed: false,
+  }
+  const afterCanvas = {
+    streams: [],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'click_prop THM_h',
+    true,
+    focusedStream.id,
+    [],
+  )
+
+  assert.equal(result.focusedStreams.length, 2)
+  const leftBranch = result.focusedStreams[0]
+  const rightBranch = result.focusedStreams[1]
+  assert.equal(hypTypeFor(leftBranch, 'THM_left'), 'P')
+  assert.equal(hypTypeFor(rightBranch, 'THM_right'), 'Q')
+  assert.equal(leftBranch.hyps.find(card => card.hyp.playName === 'THM_left')?.isTheorem, true)
+  assert.equal(rightBranch.hyps.find(card => card.hyp.playName === 'THM_right')?.isTheorem, true)
+  assert.equal(leftBranch.goal.userName, 'inl left')
+  assert.equal(rightBranch.goal.userName, 'inr right')
 })

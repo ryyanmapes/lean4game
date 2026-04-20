@@ -20,6 +20,7 @@ const NODE_RADIUS = 8
 const LEVEL_HEIGHT = 40
 const LEAF_SPACING = 36
 const PADDING = 20
+const MAX_DEPTH = 3
 
 function layoutTree(node: ProofStreamTreeNode, depth: number, leafCounter: { value: number }): LayoutNode {
   if (node.children.length === 0) {
@@ -67,6 +68,9 @@ export function ProofStreamGraph({ tree, currentStreamId, onNavigate }: Props) {
 
   const svgWidth = Math.max((totalLeaves - 1) * LEAF_SPACING, 0) + PADDING * 2
   const svgHeight = depth * LEVEL_HEIGHT + PADDING * 2
+  const scaleFactor = depth > MAX_DEPTH ? MAX_DEPTH / depth : 1
+  const displayWidth = Math.round(svgWidth * scaleFactor)
+  const displayHeight = Math.round(svgHeight * scaleFactor)
 
   function renderNodes(node: LayoutNode): ReactElement[] {
     const items: ReactElement[] = []
@@ -137,7 +141,7 @@ export function ProofStreamGraph({ tree, currentStreamId, onNavigate }: Props) {
 
   return (
     <div className="proof-tree-diagram" data-testid="proof-stream-graph">
-      <svg width={svgWidth} height={svgHeight}>
+      <svg width={displayWidth} height={displayHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
         {renderEdges(layout)}
         {renderNodes(layout)}
       </svg>

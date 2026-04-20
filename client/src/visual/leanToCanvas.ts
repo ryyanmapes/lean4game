@@ -1,8 +1,13 @@
 import type { InteractiveGoalWithHints, ProofState } from '../components/infoview/rpc_api'
 import type { CanvasState, GoalStream, HypCard } from './types'
+import {
+  isDerivedTheoremName,
+  isHiddenDerivedTheoremName,
+  stripDerivedTheoremPrefix,
+} from './theoremNames'
 
 function sanitizeHypDisplayName(name: string): string {
-  const sanitized = name.replace(/\u271d+$/giu, '')
+  const sanitized = stripDerivedTheoremPrefix(name.replace(/\u271d+$/giu, ''))
   return sanitized || name
 }
 
@@ -30,7 +35,9 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
       const filteredNames = hyp.names
         .map((name, nameIndex) => ({ name, nameIndex }))
         .filter(({ name }) => name !== '[anonymous]')
+        .filter(({ name }) => !isHiddenDerivedTheoremName(name))
       const cards = filteredNames.map(({ name, nameIndex }) => {
+        const isTheorem = isDerivedTheoremName(name)
         const displayBase = sanitizeHypDisplayName(name)
         let displayName = displayBase
         if (usedDisplayNames.has(displayName)) {
@@ -41,6 +48,7 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
         usedDisplayNames.add(displayName)
         return {
           id: hyp.fvarIds?.[nameIndex] ?? crypto.randomUUID(),
+          isTheorem,
           hyp: {
             ...hyp,
             names: [displayName],

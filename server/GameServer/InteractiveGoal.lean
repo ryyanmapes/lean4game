@@ -87,7 +87,7 @@ private partial def quantifiedTypeDisplay? (type : Expr) : MetaM (Option (String
     let e ← instantiateMVars e
     match e.consumeMData with
     | .forallE binderName domain body binderInfo =>
-        if ← isProp domain then
+        if binderInfo != .instImplicit && (← isProp domain) then
           if binders.isEmpty then
             return none
           else

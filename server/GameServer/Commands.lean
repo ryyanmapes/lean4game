@@ -19,14 +19,20 @@ def getTheoremKind (name : Name) : CommandElabM TheoremKind := do
     let constExpr ← mkConstWithFreshMVarLevels name
     let constType ← inferType constExpr
     let (args, _, body) ← forallMetaTelescopeReducing constType
+    let mut hasPropBinder := false
     for arg in args do
-      if ← isProp (← inferType arg) then
-        return .proposition
+      let argType ← instantiateMVars (← inferType arg)
+      if ← isProp argType then
+        hasPropBinder := true
     if let some (_, lhs, rhs) ← matchEq? body then
       -- A theorem whose body is `a = a` (lhs and rhs syntactically equal)
       -- is reflexivity-like and not useful as a rewrite rule; surface it in
       -- the proposition menu instead.
       if lhs == rhs then
+        pure .proposition
+      else if hasPropBinder then
+        -- Equalities that still require proposition premises are more useful as
+        -- combining-mode theorems so the user can discharge the premises first.
         pure .proposition
       else
         pure .equality

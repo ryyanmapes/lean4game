@@ -9,6 +9,10 @@ import {
   replaceLeafStream,
   type ProofStreamTreeNode,
 } from './proofTree'
+import {
+  DERIVED_THEOREM_PREFIX,
+  stripDerivedTheoremPrefix,
+} from './theoremNames'
 
 export interface ReconciledTreeState {
   nextTree: ProofStreamTreeNode
@@ -126,7 +130,7 @@ function hypShape(card: HypCardType): string {
   const name = card.hyp.names[0] ?? '?'
   const type = stripTaggedText(card.hyp.type).trim()
   const value = card.hyp.val ? ` := ${stripTaggedText(card.hyp.val).trim()}` : ''
-  return `${name}: ${type}${value}`
+  return `${card.isTheorem ? '[thm]' : '[asm]'} ${name}: ${type}${value}`
 }
 
 function hypContextShape(stream: GoalStream): string {
@@ -311,6 +315,34 @@ function splitLeadingForallTargetForRuntime(
   return { varName, domain, body }
 }
 
+function parseGoalIntroForallTargetForRuntime(
+  text: string,
+): { varName: string; domain: string; body: string; assumption?: string } | null {
+  const explicit = splitLeadingForallTargetForRuntime(text)
+  if (explicit) return explicit
+
+  const forallSymbol = String.fromCharCode(0x2200)
+  let rest = stripTaggedText(text).trim()
+  if (!rest.startsWith(forallSymbol)) return null
+  rest = rest.slice(forallSymbol.length).trimStart()
+
+  const commaIndex = rest.indexOf(',')
+  if (commaIndex === -1 || rest.startsWith('(')) return null
+
+  const binderHead = rest.slice(0, commaIndex).trim()
+  const bodyAfterComma = rest.slice(commaIndex + 1).trim()
+  const shorthandMatch = binderHead.match(/^([^\s(),]+)\s*(<=|>=|<|>|≤|≥)\s+(.+)$/u)
+  if (!shorthandMatch) return null
+
+  const [, varName, relation, rhs] = shorthandMatch
+  return {
+    varName,
+    domain: '…',
+    body: bodyAfterComma,
+    assumption: `${varName} ${relation} ${rhs.trim()}`,
+  }
+}
+
 function splitReflexiveEqualityImplicationTargetForRuntime(text: string): [string, string] | null {
   const implication = splitImplicationTargetForRuntime(text)
   if (!implication) return null
@@ -379,6 +411,53 @@ function cloneHypCards(cards: HypCardType[]): HypCardType[] {
   }))
 }
 
+function rawHypName(card: HypCardType): string {
+  return card.hyp.playName ?? card.hyp.names[0] ?? ''
+}
+
+function displayNameForRawHyp(rawName: string): string {
+  return stripDerivedTheoremPrefix(rawName)
+}
+
+function theoremBaseForCard(card: HypCardType): string {
+  return displayNameForRawHyp(rawHypName(card)) || (card.hyp.names[0] ?? 'theorem')
+}
+
+function nextFreshName(existing: Set<string>, baseName: string, firstSuffix: number): string {
+  if (!existing.has(baseName)) return baseName
+
+  let suffix = firstSuffix
+  while (existing.has(`${baseName}${suffix}`)) suffix += 1
+  return `${baseName}${suffix}`
+}
+
+function nextFreshRawHypName(cards: HypCardType[], baseName: string): string {
+  return nextFreshName(new Set(cards.map(rawHypName)), baseName, 1)
+}
+
+function buildDerivedTheoremRawName(cards: HypCardType[], baseName: string): string {
+  const normalizedBase = baseName || 'theorem'
+  return nextFreshRawHypName(cards, `${DERIVED_THEOREM_PREFIX}${normalizedBase}`)
+}
+
+function buildNamedHyp(card: HypCardType, rawName: string, typeText: string, isTheorem: boolean): HypCardType {
+  const displayName = displayNameForRawHyp(rawName)
+  return {
+    ...card,
+    isTheorem,
+    hyp: {
+      ...card.hyp,
+      names: [displayName],
+      ...(displayName !== rawName ? { playName: rawName } : { playName: undefined }),
+      fvarIds: undefined,
+      type: { text: typeText },
+      val: undefined,
+      clickAction: undefined,
+      reductionForms: [],
+    },
+  }
+}
+
 function synthesizeSplitStreams(focusedStream: GoalStream): GoalStream[] {
   const target = stripTaggedText(focusedStream.goal.type).trim()
   const splitTarget = splitConjunctionTargetForRuntime(target)
@@ -416,23 +495,22 @@ function synthesizeHypSplitStream(
   const nextHyps = focusedStream.hyps.filter((_, index) => index !== targetIndex)
   const basePos = targetCard.position
   const splitNames = ['left', 'right']
-  const splitCards: HypCardType[] = splitTarget.map((typeText, index) => ({
-    ...targetCard,
-    id: uuidv4(),
-    hyp: {
-      ...targetCard.hyp,
-      names: [splitNames[index] ?? `${hypName}_${index + 1}`],
-      fvarIds: undefined,
-      type: { text: typeText },
-      val: undefined,
-      clickAction: undefined,
-      reductionForms: [],
-    },
-    position: {
-      x: basePos.x,
-      y: basePos.y + index * 88,
-    },
-  }))
+  const existingRawNames = new Set(nextHyps.map(rawHypName))
+  const splitCards: HypCardType[] = splitTarget.map((typeText, index) => {
+    const baseName = splitNames[index] ?? `${hypName}_${index + 1}`
+    const rawName = targetCard.isTheorem
+      ? nextFreshName(existingRawNames, `${DERIVED_THEOREM_PREFIX}${baseName}`, 1)
+      : nextFreshName(existingRawNames, baseName, 1)
+    existingRawNames.add(rawName)
+    return {
+      ...buildNamedHyp(targetCard, rawName, typeText, Boolean(targetCard.isTheorem)),
+      id: uuidv4(),
+      position: {
+        x: basePos.x,
+        y: basePos.y + index * 88,
+      },
+    }
+  })
 
   nextHyps.splice(targetIndex, 0, ...splitCards)
   return {
@@ -484,7 +562,9 @@ function synthesizeHypCaseSplitStreams(
   focusedStream: GoalStream,
   hypName: string,
 ): GoalStream[] {
-  const targetIndex = focusedStream.hyps.findIndex(card => card.hyp.names[0] === hypName)
+  const targetIndex = focusedStream.hyps.findIndex(card =>
+    card.hyp.playName === hypName || card.hyp.names[0] === hypName,
+  )
   if (targetIndex === -1) return []
 
   const targetCard = focusedStream.hyps[targetIndex]
@@ -494,21 +574,17 @@ function synthesizeHypCaseSplitStreams(
   const baseHyps = focusedStream.hyps.filter((_, index) => index !== targetIndex)
   const splitNames = ['left', 'right']
   const branchLabels = ['inl', 'inr']
+  const baseRawNames = new Set(baseHyps.map(rawHypName))
   return splitTarget.map((typeText, index) => {
-    const branchName = splitNames[index] ?? `${hypName}_${index + 1}`
+    const baseName = splitNames[index] ?? `${hypName}_${index + 1}`
+    const branchRawName = targetCard.isTheorem
+      ? nextFreshName(baseRawNames, `${DERIVED_THEOREM_PREFIX}${baseName}`, 1)
+      : nextFreshName(baseRawNames, baseName, 1)
+    const branchName = displayNameForRawHyp(branchRawName)
     const branchHyps = cloneHypCards(baseHyps)
     branchHyps.splice(targetIndex, 0, {
-      ...targetCard,
+      ...buildNamedHyp(targetCard, branchRawName, typeText, Boolean(targetCard.isTheorem)),
       id: uuidv4(),
-      hyp: {
-        ...targetCard.hyp,
-        names: [branchName],
-        fvarIds: undefined,
-        type: { text: typeText },
-        val: undefined,
-        clickAction: buildHypClickAction(typeText, branchName),
-        reductionForms: [],
-      },
       position: { ...targetCard.position },
     })
 
@@ -535,35 +611,67 @@ function synthesizeDragToStream(
   sourceName: string,
   targetName: string,
 ): GoalStream | null {
-  const sourceCard = focusedStream.hyps.find(card => card.hyp.names[0] === sourceName)
-  const targetCard = focusedStream.hyps.find(card => card.hyp.names[0] === targetName)
+  const sourceCard = findHypCardByInteractionName(focusedStream, sourceName)
+  const targetCard = findHypCardByInteractionName(focusedStream, targetName)
   if (!sourceCard || !targetCard) return null
 
   const sourceType = stripTaggedText(sourceCard.hyp.type).trim()
   const targetType = stripTaggedText(targetCard.hyp.type).trim()
+  const sourceIndex = focusedStream.hyps.findIndex(card => card.id === sourceCard.id)
+  const targetIndex = focusedStream.hyps.findIndex(card => card.id === targetCard.id)
+
+  const applyResult = (resultType: string, implicationCard: HypCardType): GoalStream => {
+    const sourceIsTheorem = Boolean(sourceCard.isTheorem)
+    const targetIsTheorem = Boolean(targetCard.isTheorem)
+
+    if (!sourceIsTheorem && !targetIsTheorem) {
+      const rawName = nextFreshRawHypName(focusedStream.hyps, 'h')
+      const insertionIndex = Math.max(sourceIndex, targetIndex) + 1
+      const nextCard: HypCardType = {
+        ...buildNamedHyp(sourceCard, rawName, resultType, false),
+        id: uuidv4(),
+        position: synthesizedCardPosition(focusedStream.hyps.length),
+      }
+      const nextHyps = cloneHypCards(focusedStream.hyps)
+      nextHyps.splice(insertionIndex, 0, nextCard)
+      return {
+        ...focusedStream,
+        hyps: nextHyps,
+      }
+    }
+
+    if (sourceIsTheorem !== targetIsTheorem) {
+      const theoremCard = sourceIsTheorem ? sourceCard : targetCard
+      return {
+        ...focusedStream,
+        hyps: focusedStream.hyps.map(card =>
+          card.id === theoremCard.id
+            ? buildNamedHyp(card, rawHypName(theoremCard), resultType, true)
+            : card,
+        ),
+      }
+    }
+
+    const rawName = buildDerivedTheoremRawName(focusedStream.hyps, theoremBaseForCard(implicationCard))
+    const nextCard: HypCardType = {
+      ...buildNamedHyp(implicationCard, rawName, resultType, true),
+      id: uuidv4(),
+      position: { ...implicationCard.position },
+    }
+    const nextHyps = cloneHypCards(focusedStream.hyps)
+    nextHyps.splice(Math.max(sourceIndex, targetIndex) + 1, 0, nextCard)
+    return {
+      ...focusedStream,
+      hyps: nextHyps,
+    }
+  }
+
   const targetImplication = splitImplicationTargetForRuntime(targetType)
   if (
     targetImplication &&
     normalizePropositionText(targetImplication[0]) === normalizePropositionText(sourceType)
   ) {
-    return {
-      ...focusedStream,
-      hyps: focusedStream.hyps.map(card =>
-        card.id === sourceCard.id
-          ? {
-              ...card,
-              hyp: {
-                ...card.hyp,
-                fvarIds: undefined,
-                type: { text: targetImplication[1] },
-                val: undefined,
-                clickAction: undefined,
-                reductionForms: [],
-              },
-            }
-          : card,
-      ),
-    }
+    return applyResult(targetImplication[1], targetCard)
   }
 
   const sourceImplication = splitImplicationTargetForRuntime(sourceType)
@@ -571,36 +679,14 @@ function synthesizeDragToStream(
     sourceImplication &&
     normalizePropositionText(sourceImplication[0]) === normalizePropositionText(targetType)
   ) {
-    return {
-      ...focusedStream,
-      hyps: focusedStream.hyps.map(card =>
-        card.id === targetCard.id
-          ? {
-              ...card,
-              hyp: {
-                ...card.hyp,
-                fvarIds: undefined,
-                type: { text: sourceImplication[1] },
-                val: undefined,
-                clickAction: undefined,
-                reductionForms: [],
-              },
-            }
-          : card,
-      ),
-    }
+    return applyResult(sourceImplication[1], sourceCard)
   }
 
   return null
 }
 
 function nextFreshHypName(cards: HypCardType[], baseName: string): string {
-  const existing = new Set(cards.map(card => card.hyp.names[0] ?? ''))
-  if (!existing.has(baseName)) return baseName
-
-  let suffix = 2
-  while (existing.has(`${baseName}${suffix}`)) suffix += 1
-  return `${baseName}${suffix}`
+  return nextFreshName(new Set(cards.map(card => card.hyp.names[0] ?? '')), baseName, 2)
 }
 
 function synthesizedCardPosition(cardIndex: number): { x: number; y: number } {
@@ -614,10 +700,13 @@ function synthesizedCardPosition(cardIndex: number): { x: number; y: number } {
 
 function buildGoalClickAction(typeText: string) {
   const raw = stripTaggedText(typeText).trim()
-  if (splitLeadingForallTargetForRuntime(raw)) {
+  const forallIntro = parseGoalIntroForallTargetForRuntime(raw)
+  if (forallIntro) {
     return {
       playTactic: 'click_goal',
-      tooltip: 'Click to introduce variable',
+      tooltip: forallIntro.assumption
+        ? 'Click to introduce variable and assumption'
+        : 'Click to introduce variable',
       options: [],
     }
   }
@@ -740,7 +829,7 @@ function normalizeCanvasInteractivity(canvas: CanvasState): CanvasState {
 }
 
 function synthesizeGoalIntroStream(focusedStream: GoalStream): GoalStream | null {
-  const explicitForall = splitLeadingForallTargetForRuntime(goalDisplayText(focusedStream))
+  const explicitForall = parseGoalIntroForallTargetForRuntime(goalDisplayText(focusedStream))
   if (explicitForall) {
     const nextHyps = cloneHypCards(focusedStream.hyps)
     nextHyps.push({
@@ -748,13 +837,26 @@ function synthesizeGoalIntroStream(focusedStream: GoalStream): GoalStream | null
       hyp: {
         names: [explicitForall.varName],
         type: { text: explicitForall.domain },
-        clickAction: explicitForall.domain
+        clickAction: explicitForall.domain && explicitForall.domain !== '…'
           ? buildHypClickAction(explicitForall.domain, explicitForall.varName)
           : undefined,
         reductionForms: [],
       },
       position: synthesizedCardPosition(nextHyps.length),
     })
+    if (explicitForall.assumption) {
+      const hypName = nextFreshHypName(nextHyps, `h${explicitForall.varName}`)
+      nextHyps.push({
+        id: uuidv4(),
+        hyp: {
+          names: [hypName],
+          type: { text: explicitForall.assumption },
+          clickAction: buildHypClickAction(explicitForall.assumption, hypName),
+          reductionForms: [],
+        },
+        position: synthesizedCardPosition(nextHyps.length),
+      })
+    }
 
     return {
       ...focusedStream,

@@ -251,6 +251,24 @@ private structure ParsedDragGoal where
   hypName : Name
   source : String
 
+private structure ParsedDragApply where
+  fnName : Name
+  argName : Name
+  source : String
+
+private def parseDragApply? (src : String) : Option ParsedDragApply :=
+  let src := src.trimAscii.toString
+  if !src.startsWith "drag_apply " then none
+  else
+    let rest := (src.drop 11).trimAscii.toString
+    let parts := rest.split (fun c => c.isWhitespace) |>.filter (fun s => !s.isEmpty)
+    match parts with
+    | [fn, arg] =>
+      let parseName := fun s =>
+        (s : String).splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
+      some { fnName := parseName fn, argName := parseName arg, source := src }
+    | _ => none
+
 private def parseDragTo? (src : String) : CoreM (Option ParsedDragTo) := do
   let src := src.trimAscii.toString
   let env ← getEnv
@@ -399,9 +417,6 @@ private def rwAnnotationForParsed? (rw : ParsedDragRw) (goal : MVarId) : MetaM (
   let savedMctx ← getMCtx
   try
     let target ← goal.getType
-    let some (_, lhsExpr, rhsExpr) ← matchEq? target | return none
-    let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
-    let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
 
     let theoremType ←
       match (← getLCtx).findFromUserName? rw.theoremName with
@@ -412,38 +427,45 @@ private def rwAnnotationForParsed? (rw : ParsedDragRw) (goal : MVarId) : MetaM (
         let constExpr ← mkConstWithFreshMVarLevels resolvedName
         inferType constExpr
 
-    let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
-    let some (_, lhsPat, rhsPat) ← matchEq? body
-      | setMCtx savedMctx
-        return none
-    let fromPat := if rw.reverse then rhsPat else lhsPat
-    unless ← isDefEq selectedExpr fromPat do
+    if let some (_, lhsExpr, rhsExpr) ← matchEq? target then
+      -- Equality goal: navigate to the selected subterm and verify the pattern matches
+      let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
+      let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
+      let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
+      let some (_, lhsPat, rhsPat) ← matchEq? body
+        | setMCtx savedMctx; return none
+      let fromPat := if rw.reverse then rhsPat else lhsPat
+      unless ← isDefEq selectedExpr fromPat do
+        setMCtx savedMctx; return none
+      let fromPat ← instantiateMVars fromPat
+      if fromPat.hasMVar then
+        setMCtx savedMctx; return none
+      let mut explicitArgs : Array String := #[]
+      for i in [:mvars.size] do
+        if binderInfos[i]!.isExplicit then
+          let arg ← instantiateMVars mvars[i]!
+          if arg.hasMVar then
+            setMCtx savedMctx; return none
+          let argFmt ← ppExpr arg
+          explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
       setMCtx savedMctx
-      return none
-    let fromPat ← instantiateMVars fromPat
-    if fromPat.hasMVar then
+      let occs ← countPatternOccurrences target fromPat
+      if occs != 1 then return none
+      let theoremText :=
+        let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
+        if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
+      return some s!"rw [{theoremText}]"
+    else
+      -- Non-equality goal (e.g. ≤): use plain rw when the pattern occurs exactly once
+      let (_, _, body) ← forallMetaTelescopeReducing theoremType
+      let some (_, lhsPat, rhsPat) ← matchEq? body
+        | setMCtx savedMctx; return none
+      let fromPat := if rw.reverse then rhsPat else lhsPat
+      let occs ← countPatternOccurrences target fromPat
       setMCtx savedMctx
-      return none
-
-    let mut explicitArgs : Array String := #[]
-    for i in [:mvars.size] do
-      if binderInfos[i]!.isExplicit then
-        let arg ← instantiateMVars mvars[i]!
-        if arg.hasMVar then
-          setMCtx savedMctx
-          return none
-        let argFmt ← ppExpr arg
-        explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
-
-    setMCtx savedMctx
-    let occs ← countPatternOccurrences target fromPat
-    if occs != 1 then
-      return none
-
-    let theoremText :=
-      let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-      if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
-    return some s!"rw [{theoremText}]"
+      if occs != 1 then return none
+      let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
+      return some s!"rw [{theoremText}]"
   catch _ =>
     setMCtx savedMctx
     return none
@@ -453,9 +475,6 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
   try
     let some decl := (← getLCtx).findFromUserName? rw.targetHypName | return none
     let target := decl.type
-    let some (_, lhsExpr, rhsExpr) ← matchEq? target | return none
-    let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
-    let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
 
     let theoremType ←
       match (← getLCtx).findFromUserName? rw.theoremName with
@@ -466,38 +485,45 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
         let constExpr ← mkConstWithFreshMVarLevels resolvedName
         inferType constExpr
 
-    let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
-    let some (_, lhsPat, rhsPat) ← matchEq? body
-      | setMCtx savedMctx
-        return none
-    let fromPat := if rw.reverse then rhsPat else lhsPat
-    unless ← isDefEq selectedExpr fromPat do
+    if let some (_, lhsExpr, rhsExpr) ← matchEq? target then
+      -- Equality hypothesis: navigate to the selected subterm and verify the pattern matches
+      let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
+      let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
+      let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
+      let some (_, lhsPat, rhsPat) ← matchEq? body
+        | setMCtx savedMctx; return none
+      let fromPat := if rw.reverse then rhsPat else lhsPat
+      unless ← isDefEq selectedExpr fromPat do
+        setMCtx savedMctx; return none
+      let fromPat ← instantiateMVars fromPat
+      if fromPat.hasMVar then
+        setMCtx savedMctx; return none
+      let mut explicitArgs : Array String := #[]
+      for i in [:mvars.size] do
+        if binderInfos[i]!.isExplicit then
+          let arg ← instantiateMVars mvars[i]!
+          if arg.hasMVar then
+            setMCtx savedMctx; return none
+          let argFmt ← ppExpr arg
+          explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
       setMCtx savedMctx
-      return none
-    let fromPat ← instantiateMVars fromPat
-    if fromPat.hasMVar then
+      let occs ← countPatternOccurrences target fromPat
+      if occs != 1 then return none
+      let theoremText :=
+        let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
+        if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
+      return some s!"rw [{theoremText}] at {rw.targetHypName}"
+    else
+      -- Non-equality hypothesis (e.g. ≤): use plain rw when the pattern occurs exactly once
+      let (_, _, body) ← forallMetaTelescopeReducing theoremType
+      let some (_, lhsPat, rhsPat) ← matchEq? body
+        | setMCtx savedMctx; return none
+      let fromPat := if rw.reverse then rhsPat else lhsPat
+      let occs ← countPatternOccurrences target fromPat
       setMCtx savedMctx
-      return none
-
-    let mut explicitArgs : Array String := #[]
-    for i in [:mvars.size] do
-      if binderInfos[i]!.isExplicit then
-        let arg ← instantiateMVars mvars[i]!
-        if arg.hasMVar then
-          setMCtx savedMctx
-          return none
-        let argFmt ← ppExpr arg
-        explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
-
-    setMCtx savedMctx
-    let occs ← countPatternOccurrences target fromPat
-    if occs != 1 then
-      return none
-
-    let theoremText :=
-      let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-      if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
-    return some s!"rw [{theoremText}] at {rw.targetHypName}"
+      if occs != 1 then return none
+      let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
+      return some s!"rw [{theoremText}] at {rw.targetHypName}"
   catch _ =>
     setMCtx savedMctx
     return none
@@ -564,6 +590,25 @@ private def dragGoalAnnotationForParsed? (drag : ParsedDragGoal) (goal : MVarId)
 
   return none
 
+private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarId) :
+    MetaM (Option String) := goal.withContext do
+  let resolveExprAndType? : Name → MetaM (Option (Expr × Expr)) := fun name => do
+    match (← getLCtx).findFromUserName? name with
+    | some decl => pure (some (mkFVar decl.fvarId, decl.type))
+    | none =>
+      let some resolvedName ← resolveGlobalConstName? name | return none
+      let constExpr ← mkConstWithFreshMVarLevels resolvedName
+      pure (some (constExpr, (← inferType constExpr)))
+  let some (fnExpr, fnType) ← resolveExprAndType? drag.fnName | return none
+  let some (argExpr, argType) ← resolveExprAndType? drag.argName | return none
+  if let some applied ← GameServer.mkPremiseApplication? fnExpr fnType argExpr argType then
+    let appText ← ppExpr applied
+    return some s!"have := {appText.pretty}"
+  if let some applied ← GameServer.mkPremiseApplication? argExpr argType fnExpr fnType then
+    let appText ← ppExpr applied
+    return some s!"have := {appText.pretty}"
+  return none
+
 /-- Extract the first payload between `[` and `]` after splitting on `[`. -/
 private def bracketPayload? (part : String) : Option String :=
   match part.splitOn "]" with
@@ -592,9 +637,9 @@ private def convAnnotationForDragRw? (src : String) : Option String :=
       | _, _ => none
     | _ => none
   else if src.startsWith "drag_rw_rhs [" && src.endsWith "]" then
-    mkRw (s!"{(src.drop 13).dropRight 1}")
+    mkRw ((src.drop 13).dropEnd 1 |>.toString)
   else if src.startsWith "drag_rw_lhs [" && src.endsWith "]" then
-    mkRw (s!"{(src.drop 13).dropRight 1}")
+    mkRw ((src.drop 13).dropEnd 1 |>.toString)
   else
     none
 
@@ -607,6 +652,15 @@ private def freshUserName (base : String) : MetaM Name := do
     candidate := Name.mkSimple s!"{base}{idx}"
   pure candidate
 
+private def derivedTheoremPrefix : String := "THM_"
+
+private def isDerivedTheoremName (name : Name) : Bool :=
+  name.toString.startsWith derivedTheoremPrefix
+
+private def freshDerivedTheoremName (base : String) : MetaM Name := do
+  let base := if base.isEmpty then "theorem" else base
+  freshUserName s!"{derivedTheoremPrefix}{base}"
+
 private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal.withContext do
   let target ← goal.getType
   let targetWhnf ← withReducible (whnf target)
@@ -614,17 +668,28 @@ private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal
   | some .completeByRfl =>
       pure (some "rfl")
   | some .introVar =>
-      match targetWhnf with
-      | .forallE binderName domain _ _ =>
-          if ← isProp domain then
+      if let some (binderBase, hypBase) ← boundedComparisonIntroInfo? target then
+        let binderName ←
+          if binderBase.isAnonymous then pure none
+          else some <$> freshUserName binderBase.toString
+        let hypName ← freshUserName hypBase.toString
+        match binderName with
+        | some binderName =>
+            pure <| some s!"intro {binderName}; intro {hypName}"
+        | none =>
+            pure <| some s!"intro; intro {hypName}"
+      else
+        match targetWhnf with
+        | .forallE binderName domain _ _ =>
+            if ← isProp domain then
+              pure (some "intro")
+            else if binderName.isAnonymous then
+              pure (some "intro")
+            else
+              let nextName ← freshUserName binderName.toString
+              pure <| some s!"intro {nextName}"
+        | _ =>
             pure (some "intro")
-          else if binderName.isAnonymous then
-            pure (some "intro")
-          else
-            let nextName ← freshUserName binderName.toString
-            pure <| some s!"intro {nextName}"
-      | _ =>
-          pure (some "intro")
   | some .introProp =>
       let hName ← freshUserName "h"
       pure <| some s!"intro {hName}"
@@ -638,8 +703,16 @@ private def clickPropAnnotation? (goal : MVarId) (hypName : Name) : MetaM (Optio
   let hypType ← withReducible (whnf decl.type)
   match hypType with
   | .app (.app (.const ``And _) _) _ =>
-      let h1 ← freshUserName "left"
-      let h2 ← freshUserName "right"
+      let h1 ←
+        if isDerivedTheoremName decl.userName then
+          freshDerivedTheoremName "left"
+        else
+          freshUserName "left"
+      let h2 ←
+        if isDerivedTheoremName decl.userName then
+          freshDerivedTheoremName "right"
+        else
+          freshUserName "right"
       pure <| some s!"have {h1} := And.left {hypName}; have {h2} := And.right {hypName}; clear {hypName}"
   | .app (.app (.const ``Or _) _) _ =>
       pure <| some s!"cases {hypName}"
@@ -661,10 +734,13 @@ private def annotateFromSourceSimple (source : String) : Option StepAnnotation :
     some { playTactic := src, leanTactic := none }
   -- Simple rewrite: drag_rw [h] or drag_rw [← h]
   else if src.startsWith "drag_rw [" && src.endsWith "]" then
-    let inner := (src.drop 9).dropRight 1   -- content between the brackets, e.g. "h" or "← h"
+    let inner := (src.drop 9).dropEnd 1 |>.toString   -- content between the brackets, e.g. "h" or "← h"
     some { playTactic := src, leanTactic := some s!"rw [{inner}]" }
   else if src.startsWith "drag_" then
     some { playTactic := src, leanTactic := none }
+  else if src.startsWith "delete_theorem " then
+    let hypName := (src.drop 15).trimAscii.toString
+    some { playTactic := src, leanTactic := some s!"clear {hypName}" }
   else if src == "click_goal_left" then
     some { playTactic := src, leanTactic := some "left" }
   else if src == "click_goal_right" then
@@ -756,6 +832,12 @@ private def annotateFromSource (source : String) (goalBefore? : Option MVarId :=
         else if let some drag := (← parseDragGoal? innerSource) then
           let leanTactic? ← dragGoalAnnotationForParsed? drag goal
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
+        else if let some drag := parseDragApply? innerSource then
+          let leanTactic? ← dragApplyAnnotationForParsed? drag goal
+          pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
+        else if innerSource.startsWith "delete_theorem " then
+          let hypName := (innerSource.drop 15).trimAscii.toString
+          pure <| some { playTactic := innerSource, leanTactic := some s!"clear {hypName}" }
         else if innerSource == "click_goal" then
           let leanTactic? ← clickGoalAnnotation? goal
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
@@ -939,7 +1021,10 @@ private def goalClickAction? (goal : MVarId) : MetaM (Option ClickAction) := goa
   | some .completeByRfl =>
       pure <| some (directClickAction "click_goal" "Click to complete")
   | some .introVar =>
-      pure <| some (directClickAction "click_goal" "Click to introduce variable")
+      if (← boundedComparisonIntroInfo? target).isSome then
+        pure <| some (directClickAction "click_goal" "Click to introduce variable and assumption")
+      else
+        pure <| some (directClickAction "click_goal" "Click to introduce variable")
   | some .introProp =>
       pure <| some (directClickAction "click_goal" "Click to introduce assumption")
   | some .splitAnd =>
@@ -1093,8 +1178,9 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
       let positionsWithSource : Array ProofLineSource := Id.run do
         let mut res := #[]
         for i in [0:text.positions.size] do
-          --TODO(ALEX): Generalize for other start positions
-          let PROOF_START_LINE := 2
+          -- TODO(ALEX): Generalize for other start positions.
+          -- The relay prepends two imports plus `Runner ... := by` before user tactics.
+          let PROOF_START_LINE := 3
           if i < PROOF_START_LINE then continue -- skip problem statement
           -- for some reason, the client expects an empty tactic in the beginning
           if i == PROOF_START_LINE then

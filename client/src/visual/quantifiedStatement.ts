@@ -233,17 +233,23 @@ function buildForallSpecification(
   const [firstBinder, ...remainingBinders] = binders
   if (!firstBinder?.name) return undefined
 
+  const t = firstBinder.text
+  const isImplicit = t.startsWith('{') || t.startsWith('[') || t.startsWith('⦃')
+
   return {
     varName: firstBinder.name,
     body: remainingBinders.length > 0
       ? `\u2200 ${remainingBinders.map(binder => binder.text).join(' ')}, ${mainText}`
       : mainText,
+    isImplicit,
   }
 }
 
 export interface ForallSpecificationInfo {
   varName: string
   body: string
+  /** True when the binder uses `{...}` or `[...]` syntax (implicit/instance). */
+  isImplicit: boolean
 }
 
 export interface QuantifiedStatementDisplay {

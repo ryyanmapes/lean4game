@@ -11,7 +11,9 @@ const FORALL = '\u2200'
 const IMPLIES = '\u2192'
 const NAT = '\u2115'
 const RAT = '\u211A'
+const REAL = '\u211D'
 const LE = '\u2264'
+const NE = '\u2260'
 const NAT_MOJIBAKE = '\u00e2\u201e\u00a2'
 const LE_MOJIBAKE = '\u00e2\u2030\u00a4'
 
@@ -70,6 +72,22 @@ test('function-valued binders stay in the forall footer instead of becoming impl
   assert.deepEqual(display.forallSpecification, {
     varName: 'ε',
     body: `${FORALL} (a : ${NAT} ${IMPLIES} ${RAT}), ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
+  })
+})
+
+test('proposition theorems can end in equalities while keeping value binders in the footer', () => {
+  const display = buildPropositionTheoremDisplay(
+    `(x y : ${REAL}) : x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
+  )
+
+  assert.equal(
+    display.mainText,
+    `x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
+  )
+  assert.equal(display.forallFooter, `${FORALL} (x : ${REAL}) (y : ${REAL})`)
+  assert.deepEqual(display.forallSpecification, {
+    varName: 'x',
+    body: `${FORALL} (y : ${REAL}), x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
   })
 })
 

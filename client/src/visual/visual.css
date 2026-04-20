@@ -206,6 +206,9 @@
   --visual-map-toggle-border: rgba(148, 163, 184, 0.28);
   --visual-map-toggle-text: #475569;
   --visual-map-toggle-active-text: #3730a3;
+  /* Construction view: function-app boxes in light mode use a solid blue tint */
+  --cn-app-bg: rgba(37, 99, 235, 0.07);
+  --cn-app-border: rgba(37, 99, 235, 0.28);
 }
 
 .visual-page {
@@ -454,7 +457,8 @@
 }
 
 .visual-page .statement-card.theorem-copy-card,
-.visual-page .statement-card.theorem-tray-card {
+.visual-page .statement-card.theorem-tray-card,
+.visual-page .statement-card.derived-theorem-card {
   border-color: rgba(52, 211, 153, 0.4);
   background: rgba(52, 211, 153, 0.08);
   max-width: min(640px, calc(100vw - 6rem));
@@ -464,7 +468,8 @@
 }
 
 .visual-page .statement-card.theorem-copy-card:hover,
-.visual-page .statement-card.theorem-tray-card:hover {
+.visual-page .statement-card.theorem-tray-card:hover,
+.visual-page .statement-card.derived-theorem-card:hover {
   background: rgba(52, 211, 153, 0.14);
 }
 
@@ -494,6 +499,37 @@
 
 .visual-page .statement-card.tactic-tray-card:hover {
   background: var(--visual-danger-bg);
+}
+
+.visual-page .statement-card.tactic-tray-card.tactic-diamond-card {
+  width: 5.25rem;
+  min-width: 5.25rem;
+  max-width: 5.25rem;
+  min-height: 5.25rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(45deg);
+  border-radius: 1.15rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.visual-page .statement-card.tactic-tray-card.tactic-diamond-card:hover {
+  background: color-mix(in srgb, var(--visual-danger-bg) 88%, white 12%);
+}
+
+.visual-page .statement-card.tactic-tray-card.tactic-diamond-card .tactic-label {
+  transform: rotate(-45deg);
+  text-align: center;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+}
+
+.visual-page .statement-card.tactic-tray-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .visual-page .statement-card.fly-in {
@@ -830,7 +866,7 @@
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   font-size: 0.9rem;
   text-align: left;
-  min-width: 11rem;
+  min-width: min-content;
   max-width: 16rem;
 }
 
@@ -2218,15 +2254,21 @@
   gap: 0.35rem;
   padding: 0.3rem 0.45rem;
   border-radius: 0.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--visual-glass-border);
+  background: var(--visual-glass-bg);
 }
 .visual-page .cn-expr.cn-app {
-  background: rgba(96, 165, 250, 0.08);
-  border-color: rgba(96, 165, 250, 0.22);
+  background: var(--cn-app-bg, rgba(96, 165, 250, 0.08));
+  border-color: var(--cn-app-border, rgba(96, 165, 250, 0.22));
 }
-/* Hide the explicit parens for `succ(...)` since the box now delimits the argument. */
+/* Hide the explicit parens for `succ(...)` since the box already delimits the argument. */
+/* .cn-paren-vis is used for parens that must always show (e.g. min's argument list). */
 .visual-page .cn-expr.cn-app > .cn-paren { display: none; }
+.visual-page .cn-paren-vis {
+  color: var(--visual-text-muted, var(--text-secondary));
+  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
+  font-size: 1.1rem;
+}
 
 .visual-page .cn-func-name {
   color: var(--visual-function-text);
@@ -2348,8 +2390,15 @@
     max-width: min(14rem, calc(100vw - 3rem));
   }
 
+  .visual-page .statement-card.tactic-tray-card.tactic-diamond-card {
+    width: 4.5rem;
+    min-width: 4.5rem;
+    max-width: 4.5rem;
+    min-height: 4.5rem;
+  }
+
   .visual-page .statement-card.goal {
-    max-width: min(16.5rem, calc(100vw - 1.5rem));
+    max-width: calc(100vw - 4rem);
   }
 
   .visual-page .goals-container {
@@ -2426,10 +2475,12 @@
 
   .visual-page .tr-static-group {
     left: 1rem;
+    top: calc(50% - 1.5rem);
   }
 
   .visual-page .tr-static-group.static-right {
     right: 1rem;
+    top: calc(50% - 1.5rem);
   }
 
   .visual-page .tr-static-group.pinned-top {
@@ -2437,7 +2488,10 @@
   }
 
   .visual-page .tr-static-label {
-    font-size: 1.25rem;
+    font-size: 1rem;
+    max-width: calc(50vw - 5rem);
+    white-space: normal;
+    word-break: break-word;
   }
 
   .visual-page .tr-expr-wrapper {
@@ -2446,7 +2500,7 @@
 
   .visual-page .tr-controls,
   .visual-page .tr-side-controls {
-    bottom: 1rem;
+    bottom: 0.5rem;
   }
 
   .visual-page .tr-rule-card {
@@ -2504,6 +2558,11 @@
 
   .visual-page.tr-transformation-overlay .tr-static-group.pinned-top:not(.static-right) {
     top: calc(52px + 2.45rem);
+  }
+
+  .proof-sidebar-tab {
+    width: 28px;
+    right: -28px;
   }
 }
 

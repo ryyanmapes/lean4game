@@ -12,6 +12,33 @@ namespace GameServer
 
 open Lean Meta Elab Tactic
 
+private def derivedTheoremPrefix : String := "THM_"
+private def hiddenDerivedTheoremPrefix : String := "__hidden_THM_"
+
+private def isDerivedTheoremName (name : Name) : Bool :=
+  name.toString.startsWith derivedTheoremPrefix
+
+private def isHiddenDerivedTheoremName (name : Name) : Bool :=
+  name.toString.startsWith hiddenDerivedTheoremPrefix
+
+private def theoremBaseFromName (name : Name) : String :=
+  match name with
+  | .str _ s =>
+      if s.startsWith derivedTheoremPrefix then
+        (s.drop derivedTheoremPrefix.length).toString
+      else if s.startsWith hiddenDerivedTheoremPrefix then
+        (s.drop hiddenDerivedTheoremPrefix.length).toString
+      else
+        s
+  | _ =>
+      let raw := name.toString
+      if raw.startsWith derivedTheoremPrefix then
+        (raw.drop derivedTheoremPrefix.length).toString
+      else if raw.startsWith hiddenDerivedTheoremPrefix then
+        (raw.drop hiddenDerivedTheoremPrefix.length).toString
+      else
+        raw
+
 private def tryTactic (stx : TSyntax `tactic) : TacticM Bool := do
   let savedState ← saveState
   try
@@ -55,6 +82,13 @@ private def typeIsIff (type : Expr) : MetaM Bool := do
       | _ => pure false
   | _ => pure false
 
+private def resolveGlobalConstName? (name : Name) : MetaM (Option Name) := do
+  try
+    let resolvedNames ← resolveGlobalConst (mkIdent name)
+    pure resolvedNames[0]?
+  catch _ =>
+    pure none
+
 private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
   withMainContext do
     match (← getLCtx).findFromUserName? id.getId with
@@ -68,6 +102,23 @@ private def resolveNamedExprAndType (id : Ident) : TacticM (Expr × Expr) := do
         let exprType ← inferType expr
         pure (expr, exprType)
 
+private def resolveNamedExprAndTypePreservingForalls (id : Ident) : TacticM (Expr × Expr) := do
+  withMainContext do
+    match (← getLCtx).findFromUserName? id.getId with
+    | some decl =>
+      pure (mkFVar decl.fvarId, decl.type)
+    | none =>
+      if let some resolvedName ← resolveGlobalConstName? id.getId then
+        let expr ← mkConstWithFreshMVarLevels resolvedName
+        pure (expr, (← inferType expr))
+      else
+        Term.withSynthesize do
+          let expr ← Term.elabTerm id.raw none true
+          if expr.hasSyntheticSorry then
+            throwAbortTactic
+          let exprType ← inferType expr
+          pure (expr, exprType)
+
 private def replaceNamedExprWithProof (id : Ident) (proof : Expr) : TacticM Unit := do
   withMainContext do
     let mvarId ← getMainGoal
@@ -78,6 +129,134 @@ private def replaceNamedExprWithProof (id : Ident) (proof : Expr) : TacticM Unit
     | none =>
       let (_, mvarId) ← mvarId.note id.getId proof
       replaceMainGoal [mvarId]
+
+private def freshUserName (base : String) : TacticM Name := withMainContext do
+  let lctx ← getLCtx
+  let mut idx := 0
+  let mut candidate := Name.mkSimple base
+  while lctx.findFromUserName? candidate |>.isSome do
+    idx := idx + 1
+    candidate := Name.mkSimple s!"{base}{idx}"
+  pure candidate
+
+private def freshDerivedTheoremName (base : String) : TacticM Name := do
+  let base := if base.isEmpty then "theorem" else base
+  freshUserName s!"{derivedTheoremPrefix}{base}"
+
+private def freshHiddenDerivedTheoremName (base : String) : TacticM Name := do
+  let base := if base.isEmpty then "theorem" else base
+  freshUserName s!"{hiddenDerivedTheoremPrefix}{base}"
+
+private def freshSplitResultName (decl : LocalDecl) (base : String) : TacticM Name := do
+  if isDerivedTheoremName decl.userName then
+    freshDerivedTheoremName base
+  else
+    freshUserName base
+
+private inductive VisualStatementKind where
+  | provided
+  | theorem
+  deriving DecidableEq
+
+private structure ResolvedVisualOperand where
+  ident : Ident
+  expr : Expr
+  type : Expr
+  rawType : Expr
+  localDecl? : Option LocalDecl
+  kind : VisualStatementKind
+  theoremBase : String
+
+private structure PremiseApplicationResult where
+  proof : Expr
+  functionOperand : ResolvedVisualOperand
+  argumentOperand : ResolvedVisualOperand
+
+private def resolveVisualOperand (id : Ident) (preserveForalls : Bool := false) :
+    TacticM ResolvedVisualOperand := withMainContext do
+  let localDecl? := (← getLCtx).findFromUserName? id.getId
+  let (expr, rawType) ←
+    if preserveForalls then
+      resolveNamedExprAndTypePreservingForalls id
+    else
+      resolveNamedExprAndType id
+  let kind :=
+    match localDecl? with
+    | some decl =>
+        if isDerivedTheoremName decl.userName then
+          .theorem
+        else
+          .provided
+    | none =>
+        .theorem
+  pure {
+    ident := id
+    expr
+    type := rawType
+    rawType
+    localDecl?
+    kind
+    theoremBase := theoremBaseFromName id.getId
+  }
+
+private def premiseApplicationBetween?
+    (a b : ResolvedVisualOperand) : TacticM (Option PremiseApplicationResult) := do
+  if let some proof ← mkPremiseApplication? a.expr a.type b.expr b.type then
+    return some { proof, functionOperand := a, argumentOperand := b }
+  if let some proof ← mkPremiseApplication? b.expr b.type a.expr a.type then
+    return some { proof, functionOperand := b, argumentOperand := a }
+  pure none
+
+private def theoremOperandForKind
+    (a b : ResolvedVisualOperand) : Option ResolvedVisualOperand :=
+  if a.kind == .theorem then
+    some a
+  else if b.kind == .theorem then
+    some b
+  else
+    none
+
+private def theoremResultBase
+    (result : PremiseApplicationResult) (a b : ResolvedVisualOperand) : String :=
+  if result.functionOperand.kind == .theorem then
+    result.functionOperand.theoremBase
+  else
+    match theoremOperandForKind a b with
+    | some operand => operand.theoremBase
+    | none => theoremBaseFromName result.functionOperand.ident.getId
+
+private def hideDerivedTheoremIfLocal (id : Ident) : TacticM Unit := withMainContext do
+  let some decl := (← getLCtx).findFromUserName? id.getId
+    | return
+  if !isDerivedTheoremName decl.userName || isHiddenDerivedTheoremName decl.userName then
+    return
+  let mvarId ← getMainGoal
+  let hiddenName ← freshHiddenDerivedTheoremName (theoremBaseFromName decl.userName)
+  let mvarId ← mvarId.rename decl.fvarId hiddenName
+  replaceMainGoal [mvarId]
+
+private def applyPremiseApplicationPolicy
+    (a b : ResolvedVisualOperand) (result : PremiseApplicationResult) : TacticM Unit := do
+  match a.kind, b.kind with
+  | .provided, .provided =>
+      let freshName ← freshUserName "h"
+      replaceNamedExprWithProof (mkIdent freshName) result.proof
+  | .theorem, .provided
+  | .provided, .theorem =>
+      match theoremOperandForKind a b with
+      | some theoremOperand =>
+          match theoremOperand.localDecl? with
+          | some _ =>
+              replaceNamedExprWithProof theoremOperand.ident result.proof
+          | none =>
+              let freshName ← freshDerivedTheoremName (theoremResultBase result a b)
+              replaceNamedExprWithProof (mkIdent freshName) result.proof
+      | none =>
+          let freshName ← freshUserName "h"
+          replaceNamedExprWithProof (mkIdent freshName) result.proof
+  | .theorem, .theorem =>
+      let freshName ← freshDerivedTheoremName (theoremResultBase result a b)
+      replaceNamedExprWithProof (mkIdent freshName) result.proof
 
 /-- If `type` is `A ↔ B`, project `expr : A ↔ B` through `.mp` or `.mpr` to
     produce a function of type `A → B` (forward) or `B → A` (reverse). Returns
@@ -95,6 +274,15 @@ private def iffProject? (expr type : Expr) (isReverse : Bool) : MetaM (Option (E
     pure (some (fn, fnType))
   | _ => pure none
 
+private def projectIffOperand (operand : ResolvedVisualOperand) (isReverse : Bool) :
+    TacticM ResolvedVisualOperand := do
+  let operandTypeWhnf ← whnf operand.rawType
+  match (← iffProject? operand.expr operandTypeWhnf isReverse) with
+  | some (expr, projectedType) =>
+      pure { operand with expr, type := projectedType }
+  | none =>
+      pure operand
+
 syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
 
 @[tactic drag_to] def evalDragTo : Tactic := fun stx => do
@@ -102,40 +290,82 @@ syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
   let a : Ident := ⟨stx[2]⟩
   let b : Ident := ⟨stx[3]⟩
   withMainContext do
-    let (aExprRaw, aTypeRaw) ← resolveNamedExprAndType a
-    let (bExprRaw, bTypeRaw) ← resolveNamedExprAndType b
-    let aTypeW ← whnf aTypeRaw
-    let bTypeW ← whnf bTypeRaw
+    let aRaw ← resolveVisualOperand a
+    let bRaw ← resolveVisualOperand b
+    let aProjected ← projectIffOperand aRaw isRev
+    let bProjected ← projectIffOperand bRaw isRev
 
-    -- If either side is an Iff, project through `.mp`/`.mpr` based on isRev.
-    let (aExpr, aType) ←
-      match (← iffProject? aExprRaw aTypeW isRev) with
-      | some (e, t) => pure (e, t)
-      | none => pure (aExprRaw, aTypeRaw)
-    let (bExpr, bType) ←
-      match (← iffProject? bExprRaw bTypeW isRev) with
-      | some (e, t) => pure (e, t)
-      | none => pure (bExprRaw, bTypeRaw)
-
-    if let some proof ← mkPremiseApplication? bExpr bType aExpr aType then
-      replaceNamedExprWithProof a proof
-      return
-
-    if let some proof ← mkPremiseApplication? aExpr aType bExpr bType then
-      replaceNamedExprWithProof b proof
+    if let some result ← premiseApplicationBetween? aProjected bProjected then
+      applyPremiseApplicationPolicy aRaw bRaw result
       return
 
     -- Rewrite fallback: if either side is an iff (possibly forall-quantified),
     -- try using it to rewrite the other hypothesis.
-    if ← typeIsIff aTypeRaw then
+    if ← typeIsIff aRaw.rawType then
       if ← tryRewriteAt b a isRev then return
       if ← tryRewriteAt b a (!isRev) then return
-    if ← typeIsIff bTypeRaw then
+    if ← typeIsIff bRaw.rawType then
       if ← tryRewriteAt a b isRev then return
       if ← tryRewriteAt a b (!isRev) then return
 
     throwError "drag_to: cannot combine '{a.getId}' and '{b.getId}'\n\
-      {a.getId} : {aTypeRaw}\n  {b.getId} : {bTypeRaw}"
+      {a.getId} : {aRaw.rawType}\n  {b.getId} : {bRaw.rawType}"
+
+/-- `drag_apply fn arg` — apply theorem/hypothesis `fn` to hypothesis `arg` as a
+    prop premise. The visual result is chosen by statement kind rather than drag
+    direction, so theorem-vs-assumption interactions behave the same whichever
+    card the player drags first. -/
+syntax (name := drag_apply) "drag_apply" ident ident : tactic
+
+@[tactic drag_apply] def evalDragApply : Tactic := fun stx => do
+  let fn  : Ident := ⟨stx[1]⟩
+  let arg : Ident := ⟨stx[2]⟩
+  withMainContext do
+    let fnOperand ← resolveVisualOperand fn true
+    let argOperand ← resolveVisualOperand arg
+    if let some result ← premiseApplicationBetween? fnOperand argOperand then
+      applyPremiseApplicationPolicy fnOperand argOperand result
+      return
+    throwError "drag_apply: '{fn.getId}' has no prop argument matching '{arg.getId}'\n\
+      {fn.getId} : {fnOperand.rawType}\n  {arg.getId} : {argOperand.rawType}"
+
+syntax (name := delete_theorem) "delete_theorem" ident : tactic
+
+@[tactic delete_theorem] def evalDeleteTheorem : Tactic := fun stx => do
+  let h : Ident := ⟨stx[1]⟩
+  withMainContext do
+    let some decl := (← getLCtx).findFromUserName? h.getId
+      | throwError "delete_theorem: '{h.getId}' is not a local theorem"
+    if !isDerivedTheoremName decl.userName || isHiddenDerivedTheoremName decl.userName then
+      throwError "delete_theorem: '{h.getId}' is not a visible derived theorem"
+    hideDerivedTheoremIfLocal h
+
+/-- `specialize_forall_as newName src binder value` partially applies the theorem or
+    hypothesis `src` at the named binder `binder := value`, preserving any remaining
+    binders in the resulting proof and introducing it as `newName`. -/
+syntax (name := specialize_forall_as) "specialize_forall_as" ident ident ident term : tactic
+
+@[tactic specialize_forall_as] def evalSpecializeForallAs : Tactic := fun stx => do
+  let newName : Ident := ⟨stx[1]⟩
+  let src : Ident := ⟨stx[2]⟩
+  let binder : Ident := ⟨stx[3]⟩
+  let valueStx := stx[4]
+  withMainContext do
+    let (srcExpr, srcType) ← resolveNamedExprAndTypePreservingForalls src
+    let some binderDomain ← binderDomainByName? srcType binder.getId
+      | throwError "specialize_forall_as: '{src.getId}' has no binder named '{binder.getId}'\n\
+          {src.getId} : {srcType}"
+    let valueExpr ← Term.withSynthesize do
+      let valueExpr ← Term.elabTerm valueStx (some binderDomain) true
+      if valueExpr.hasSyntheticSorry then
+        throwAbortTactic
+      pure valueExpr
+    let valueType ← inferType valueExpr
+    if let some proof ← mkNamedBinderApplication? srcExpr srcType binder.getId valueExpr valueType then
+      replaceNamedExprWithProof newName proof
+      return
+    throwError "specialize_forall_as: cannot specialize '{src.getId}' at '{binder.getId}' with {valueExpr}\n\
+      {src.getId} : {srcType}"
 
 syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
 
@@ -223,15 +453,6 @@ private def evalTacticString (src : String) : TacticM Unit := do
   | .error err =>
     throwError "{err}"
 
-private def freshUserName (base : String) : TacticM Name := withMainContext do
-  let lctx ← getLCtx
-  let mut idx := 0
-  let mut candidate := Name.mkSimple base
-  while lctx.findFromUserName? candidate |>.isSome do
-    idx := idx + 1
-    candidate := Name.mkSimple s!"{base}{idx}"
-  pure candidate
-
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
   let mut ids : Std.HashSet FVarId := {}
   for localDecl in lctx do
@@ -316,6 +537,23 @@ private structure EqualitySideRewriteResult where
   eqProof : Expr
   mvarIds : List MVarId
 
+private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array Expr × Nat × Nat)) := do
+  let target := target.consumeMData
+  let fn := target.getAppFn
+  let args := target.getAppArgs
+  let some headName := fn.constName? | return none
+  let visibleArity? :=
+    match headName with
+    | ``Eq => some 2
+    | ``LT.lt => some 2
+    | ``LE.le => some 2
+    | _ => none
+  let some visibleArity := visibleArity? | return none
+  if args.size < visibleArity then return none
+  let lhsIdx := args.size - visibleArity
+  let rhsIdx := lhsIdx + 1
+  return some (fn, args, lhsIdx, rhsIdx)
+
 private def replaceGoalPreservingTarget (mvarId : MVarId) (targetNew eqProof : Expr)
     (extraGoals : List MVarId) : TacticM Unit := do
   let goalNew ← mvarId.replaceTargetEq targetNew eqProof
@@ -360,38 +598,31 @@ private partial def focusedRewriteExpr
     else
       throwError "drag_rw: path position {k} out of range (node has {va} visible children)"
 
-private def rewriteEqualitySide
+private def rewriteTargetRelationSide
     (mvarId : MVarId) (target : Expr) (h : Ident) (symm : Bool)
     (sideIsRhs : Bool) (path : List Nat) : TacticM EqualitySideRewriteResult := withMainContext do
-  match target with
-  | .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr =>
-    if sideIsRhs then
-      let rwRes ← focusedRewriteExpr mvarId rhsExpr path h symm
-      let α ← inferType rhsExpr
-      let motive ← withLocalDeclD `_ α fun x => do
-        let body ← mkEq lhsExpr x
-        mkLambdaFVars #[x] body
-      let targetNew ← mkEq lhsExpr rwRes.eNew
-      let eqProof ← mkCongrArg motive rwRes.eqProof
-      pure { targetNew, eqProof, mvarIds := rwRes.mvarIds }
-    else
-      let rwRes ← focusedRewriteExpr mvarId lhsExpr path h symm
-      let α ← inferType lhsExpr
-      let motive ← withLocalDeclD `_ α fun x => do
-        let body ← mkEq x rhsExpr
-        mkLambdaFVars #[x] body
-      let targetNew ← mkEq rwRes.eNew rhsExpr
-      let eqProof ← mkCongrArg motive rwRes.eqProof
-      pure { targetNew, eqProof, mvarIds := rwRes.mvarIds }
-  | _ =>
-    throwError "drag_rw: selected target is not an equality"
+  let some (fn, args, lhsIdx, rhsIdx) ← binaryRelationInfo? target
+    | throwError "drag_rw: selected target is not a supported binary relation"
+  let lhsExpr := args[lhsIdx]!
+  let rhsExpr := args[rhsIdx]!
+  let focusIdx := if sideIsRhs then rhsIdx else lhsIdx
+  let focusExpr := if sideIsRhs then rhsExpr else lhsExpr
+  let rwRes ← focusedRewriteExpr mvarId focusExpr path h symm
+  let α ← inferType focusExpr
+  let targetNewArgs := args.set! focusIdx rwRes.eNew
+  let targetNew := mkAppN fn targetNewArgs
+  let motive ← withLocalDeclD `_ α fun x => do
+    let body := mkAppN fn (args.set! focusIdx x)
+    mkLambdaFVars #[x] body
+  let eqProof ← mkCongrArg motive rwRes.eqProof
+  pure { targetNew, eqProof, mvarIds := rwRes.mvarIds }
 
 private def tryFocusedRewrite (h : Ident) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : TacticM Bool := do
   let savedState ← saveState
   try
     let mvarId ← getMainGoal
     let target ← mvarId.getType
-    let rwRes ← rewriteEqualitySide mvarId target h symm sideIsRhs path
+    let rwRes ← rewriteTargetRelationSide mvarId target h symm sideIsRhs path
     replaceGoalPreservingTarget mvarId rwRes.targetNew rwRes.eqProof rwRes.mvarIds
     pure true
   catch _ =>
@@ -413,7 +644,7 @@ private def tryFocusedRewriteHyp
     withMainContext do
       let targetDecl ← ((← getLCtx).findFromUserName? targetHyp.getId).getDM
         (throwError "drag_rw: unknown identifier '{targetHyp.getId}'")
-      let rwRes ← rewriteEqualitySide mvarId targetDecl.type h symm sideIsRhs path
+      let rwRes ← rewriteTargetRelationSide mvarId targetDecl.type h symm sideIsRhs path
       replaceHypPreservingTarget mvarId targetDecl.fvarId rwRes.targetNew rwRes.eqProof rwRes.mvarIds
       pure true
   catch _ =>
@@ -461,7 +692,7 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
     if (src.splitOn " at [").length > 1 then
       let tail := src.splitOn " at ["
       match tail.reverse with
-      | last :: _ => some <| (s!"{last.dropRight 1}").splitOn "," |>.filterMap String.toNat?
+      | last :: _ => some <| (last.dropEnd 1).toString.splitOn "," |>.filterMap String.toNat?
       | _ => none
     else
       none
@@ -546,17 +777,30 @@ syntax (name := click_goal) "click_goal" : tactic
         mvarId.refl
         pure []
   | some .introVar =>
-      match goalWhnf with
-      | .forallE binderName domain _ _ =>
-          if ← isProp domain then
+      if let some (binderBase, hypBase) ← boundedComparisonIntroInfo? goal then
+        let binderName ←
+          if binderBase.isAnonymous then pure none
+          else some <$> freshUserName binderBase.toString
+        let hypName ← freshUserName hypBase.toString
+        match binderName with
+        | some binderName =>
+            evalTacticString s!"intro {binderName}"
+            evalTacticString s!"intro {hypName}"
+        | none =>
             evalTacticString "intro"
-          else if binderName.isAnonymous then
+            evalTacticString s!"intro {hypName}"
+      else
+        match goalWhnf with
+        | .forallE binderName domain _ _ =>
+            if ← isProp domain then
+              evalTacticString "intro"
+            else if binderName.isAnonymous then
+              evalTacticString "intro"
+            else
+              let nextName ← freshUserName binderName.toString
+              evalTacticString s!"intro {nextName}"
+        | _ =>
             evalTacticString "intro"
-          else
-            let nextName ← freshUserName binderName.toString
-            evalTacticString s!"intro {nextName}"
-      | _ =>
-          evalTacticString "intro"
   | some .introProp =>
       let hName ← freshUserName "h"
       evalTacticString s!"intro {hName}"
@@ -619,15 +863,15 @@ syntax (name := click_prop) "click_prop" ident : tactic
     let hType ← whnf hDecl.type
     match hType with
     | .app (.app (.const ``And _) _) _ =>
-      let h1 : Ident := mkIdent (← freshUserName "left")
-      let h2 : Ident := mkIdent (← freshUserName "right")
+      let h1 : Ident := mkIdent (← freshSplitResultName hDecl "left")
+      let h2 : Ident := mkIdent (← freshSplitResultName hDecl "right")
       evalTactic (← `(tactic| have $h1 := And.left $h))
       evalTactic (← `(tactic| have $h2 := And.right $h))
       evalTactic (← `(tactic| clear $h))
     | .app (.app (.const ``Or _) _) _ =>
       let originalFVarIds := visibleFVarIds (← getLCtx)
-      let h1 : Ident := mkIdent (← freshUserName "left")
-      let h2 : Ident := mkIdent (← freshUserName "right")
+      let h1 : Ident := mkIdent (← freshSplitResultName hDecl "left")
+      let h2 : Ident := mkIdent (← freshSplitResultName hDecl "right")
       evalTacticString s!"cases {h.getId}"
       match ← getGoals with
       | goalLeft :: goalRight :: rest =>
@@ -682,6 +926,10 @@ example (P : Prop) : P → P := by
   click_goal
   exact h
 
+example (P : Nat → Prop) (h : ∀ a > 0, P a) : ∀ a > 0, P a := by
+  click_goal
+  exact h a ha
+
 example (P Q : Prop) (h : P ∧ Q) : P := by
   click_prop h
   exact left
@@ -732,7 +980,7 @@ private theorem flipEqLocal (x y : Nat) : x = y → y = x := by
 
 example (x y : Nat) (h : x = y) : y = x := by
   drag_to flipEqLocal h
-  exact h
+  exact THM_flipEqLocal
 
 private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
   intro _
@@ -740,7 +988,63 @@ private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
 
 example (x y : Nat) (h : x + y = x) : y = y := by
   drag_to addEqSelfLocal h
+  exact THM_addEqSelfLocal
+
+example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
+  drag_to hpq hp
   exact h
+
+private theorem propBinderLocal {a b : Nat} : a = a → b = b → True := by
+  intro _ _
+  trivial
+
+example (x y : Nat) (hx : x = x) (hy : y = y) : True := by
+  drag_apply propBinderLocal hx
+  exact THM_propBinderLocal hy
+
+example (x y : Nat) (hx : x = x) (hy : y = y) : True := by
+  specialize_forall_as h propBinderLocal a x
+  exact h hx hy
+
+example (src : ∀ {a b : Nat}, a = a → b = b → True) (x y : Nat)
+    (hx : x = x) (hy : y = y) : True := by
+  specialize_forall_as h src a x
+  exact h hx hy
+
+private theorem instChainLocal [Inhabited Nat] {a : Nat} : a = a → 0 = 0 := by
+  intro _
+  rfl
+
+private theorem zeroEqToTrueLocal : 0 = 0 → True := by
+  intro _
+  trivial
+
+private theorem propCollisionLocal {a b : Nat} : a = a → b = 0 → True := by
+  intro _ _
+  trivial
+
+example (x : Nat) (hx : x = x) : True := by
+  drag_apply instChainLocal hx
+  drag_apply zeroEqToTrueLocal THM_instChainLocal
+  exact THM_zeroEqToTrueLocal
+
+example (x y : Nat) (hy : y = y) : True := by
+  have hx : x = x := rfl
+  have hy' : y = y := hy
+  drag_apply propCollisionLocal hx
+  drag_apply propCollisionLocal hy'
+  exact THM_propCollisionLocal1 rfl
+
+example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
+  have THM_local : P → Q := hpq
+  drag_to hp THM_local
+  exact THM_local
+
+example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
+  have THM_f : P → Q := hpq
+  have THM_p : P := hp
+  drag_to THM_f THM_p
+  exact THM_f1
 
 example (y : Nat) : 0 <= y ∨ True := by
   click_goal_left
@@ -757,11 +1061,11 @@ example (P Q : Prop) (h : P ↔ Q) (hq : Q) : P := by
 
 example (P Q : Prop) (h : P ↔ Q) (hp : P) : Q := by
   drag_to h hp
-  exact hp
+  exact h1
 
 example (P Q : Prop) (h : P ↔ Q) (hq : Q) : P := by
   drag_to ← h hq
-  exact hq
+  exact h1
 
 -- Forall-quantified iff theorem: use `rw` path.
 private theorem iffThmLocal (a b : Nat) : a + 0 = b ↔ a = b := by
@@ -775,6 +1079,12 @@ example (a b : Nat) : a = b → a + 0 = b := by
 example (a b : Nat) (h : a + 0 = b) : a = b := by
   drag_to iffThmLocal h
   exact h
+
+example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
+  have THM_keep : P → Q := hpq
+  drag_to THM_keep hp
+  delete_theorem THM_keep
+  exact hpq hp
 
 end Regression
 

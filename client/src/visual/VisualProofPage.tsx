@@ -17,7 +17,7 @@ import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity'])
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1
@@ -115,6 +115,10 @@ function withVisualOnlyTactics(
   }
 
   return nextTactics
+}
+
+function visualTacticActivation(name: string): VisualTactic['activation'] {
+  return name === 'positivity' ? 'goal_click' : 'drag'
 }
 
 export function VisualProofPage() {
@@ -278,6 +282,7 @@ export function VisualProofPage() {
             id: tactic.name,
             name: tactic.name,
             label: tactic.displayName || tactic.name,
+            activation: visualTacticActivation(tactic.name),
           }))
 
         setVisualTactics(availableTactics)
