@@ -3,11 +3,10 @@ import type { CanvasState, GoalStream, HypCard } from './types'
 import {
   isDerivedTheoremName,
   isHiddenDerivedTheoremName,
-  stripDerivedTheoremPrefix,
 } from './theoremNames'
 
 function sanitizeHypDisplayName(name: string): string {
-  const sanitized = stripDerivedTheoremPrefix(name.replace(/\u271d+$/giu, ''))
+  const sanitized = name.replace(/\u271d+$/giu, '')
   return sanitized || name
 }
 

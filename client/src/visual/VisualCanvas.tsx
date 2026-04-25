@@ -37,7 +37,7 @@ import {
   type ProofStreamTreeNode,
 } from './proofTree'
 import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
-import { DERIVED_THEOREM_PREFIX, stripDerivedTheoremPrefixesInText } from './theoremNames'
+import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 
 import './visual.css'
 
@@ -844,6 +844,26 @@ function parseDragGoalPlayTactic(playTactic: string): { hypName: string; reverse
   return { hypName, reverse: Boolean(match[1]) }
 }
 
+function parseExistsIntroPlayTactic(playTactic: string): string | null {
+  const trimmed = playTactic.trim()
+  const prefix = 'refine Exists.intro '
+  const suffix = ' ?_'
+  if (!trimmed.startsWith(prefix) || !trimmed.endsWith(suffix)) return null
+  const witness = trimmed.slice(prefix.length, -suffix.length).trim()
+  return witness || null
+}
+
+function parseSpecializeForallAsPlayTactic(
+  playTactic: string,
+): { newName: string; source: string; binder: string; value: string } | null {
+  const match = /^specialize_forall_as\s+(\S+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/.exec(playTactic.trim())
+  if (!match) return null
+  const [, newName, source, binder, value] = match
+  const trimmedValue = value.trim()
+  if (!trimmedValue) return null
+  return { newName, source, binder, value: trimmedValue }
+}
+
 function inferLeanTacticFromVisualInteraction(
   playTactic: string,
   stream: GoalStream | null,
@@ -870,6 +890,19 @@ function inferLeanTacticFromVisualInteraction(
   }
 
   if (playTactic.startsWith('induction ')) return playTactic
+
+  const existsWitness = parseExistsIntroPlayTactic(playTactic)
+  if (existsWitness) {
+    return `use ${existsWitness}`
+  }
+
+  const forallSpecialization = parseSpecializeForallAsPlayTactic(playTactic)
+  if (forallSpecialization) {
+    if (forallSpecialization.newName === forallSpecialization.source) {
+      return `specialize ${forallSpecialization.source} ${forallSpecialization.value}`
+    }
+    return `have ${forallSpecialization.newName} := ${forallSpecialization.source} (${forallSpecialization.binder} := ${forallSpecialization.value})`
+  }
 
   const parsedDragGoal = parseDragGoalPlayTactic(playTactic)
   if (parsedDragGoal) {
@@ -914,7 +947,7 @@ function shortenQualifiedNames(tactic: string): string {
 }
 
 function formatProofDisplayText(tactic: string): string {
-  return stripDerivedTheoremPrefixesInText(shortenQualifiedNames(tactic))
+  return shortenQualifiedNames(tactic)
 }
 
 function resolveLeanTactic(

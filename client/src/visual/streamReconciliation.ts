@@ -416,11 +416,11 @@ function rawHypName(card: HypCardType): string {
 }
 
 function displayNameForRawHyp(rawName: string): string {
-  return stripDerivedTheoremPrefix(rawName)
+  return rawName
 }
 
 function theoremBaseForCard(card: HypCardType): string {
-  return displayNameForRawHyp(rawHypName(card)) || (card.hyp.names[0] ?? 'theorem')
+  return stripDerivedTheoremPrefix(rawHypName(card)) || (card.hyp.names[0] ?? 'theorem')
 }
 
 function nextFreshName(existing: Set<string>, baseName: string, firstSuffix: number): string {

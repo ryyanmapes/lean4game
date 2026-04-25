@@ -55,7 +55,7 @@ export function VisualTacticTemplateCard({
       data-tactic-name={tactic.name}
       data-tactic-activation={tactic.activation ?? 'drag'}
       style={style}
-      className={`statement-card tactic-tray-card${clickOnly ? ' tactic-diamond-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}`}
+      className={`statement-card tactic-tray-card${clickOnly ? ' tactic-ellipse-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}`}
       onClick={clickOnly && !disabled ? onClick : undefined}
       {...(!clickOnly && !disabled ? listeners : {})}
       {...(!clickOnly && !disabled ? attributes : {})}

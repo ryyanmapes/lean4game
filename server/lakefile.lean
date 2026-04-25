@@ -10,7 +10,7 @@ require "leanprover-community" / batteries @ git leanVersion
 require "hhu-adam" / i18n @ git leanVersion
 
 -- dev dependency
-require "leanprover-community" / importGraph @ git leanVersion
+require importGraph from git "https://github.com/leanprover-community/import-graph" @ leanVersion
 
 @[default_target]
 lean_lib GameServer

@@ -198,9 +198,47 @@ def completionDiagnostics (goalCount : Nat) (prevGoalCount : Nat) (completed : B
 private def trimStr (s : String) : String :=
   if s.startsWith " " then s!"{s.drop 1}" else s
 
+private def derivedTheoremPrefix : String := "thm_"
+private def hiddenDerivedTheoremPrefix : String := "__hidden_thm_"
+
+private def isDerivedTheoremName (name : Name) : Bool :=
+  name.toString.startsWith derivedTheoremPrefix
+
+private def theoremBaseFromName (name : Name) : String :=
+  match name with
+  | .str _ s =>
+      if s.startsWith derivedTheoremPrefix then
+        (s.drop derivedTheoremPrefix.length).toString
+      else if s.startsWith hiddenDerivedTheoremPrefix then
+        (s.drop hiddenDerivedTheoremPrefix.length).toString
+      else
+        s
+  | _ =>
+      let raw := name.toString
+      if raw.startsWith derivedTheoremPrefix then
+        (raw.drop derivedTheoremPrefix.length).toString
+      else if raw.startsWith hiddenDerivedTheoremPrefix then
+        (raw.drop hiddenDerivedTheoremPrefix.length).toString
+      else
+        raw
+
+private def freshUserName (base : String) : MetaM Name := do
+  let lctx ← getLCtx
+  let mut idx := 0
+  let mut candidate := Name.mkSimple base
+  while lctx.findFromUserName? candidate |>.isSome do
+    idx := idx + 1
+    candidate := Name.mkSimple s!"{base}{idx}"
+  pure candidate
+
+private def freshDerivedTheoremName (base : String) : MetaM Name := do
+  let base := if base.isEmpty then "theorem" else base
+  freshUserName s!"{derivedTheoremPrefix}{base}"
+
 private def visibleArityForConst (name : Name) : Option Nat :=
   match name with
   | ``HAdd.hAdd | ``HMul.hMul | ``HSub.hSub | ``HDiv.hDiv => some 2
+  | ``LE.le | ``LT.lt | ``GE.ge | ``GT.gt => some 2
   | _ => none
 
 private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
@@ -258,6 +296,45 @@ private structure ParsedDragApply where
   argName : Name
   source : String
 
+private structure ParsedSpecializeForallAs where
+  newName : String
+  srcName : String
+  binderName : String
+  value : String
+
+private def parseDottedName (s : String) : Name :=
+  s.splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
+
+private def parseExistsIntroRefine? (src : String) : Option String :=
+  let src := src.trimAscii.toString
+  let prefixText := "refine Exists.intro "
+  let suffix := " ?_"
+  if src.startsWith prefixText && src.endsWith suffix then
+    some ((src.drop prefixText.length).dropEnd suffix.length |>.trimAscii.toString)
+  else
+    none
+
+private def parseSpecializeForallAs? (src : String) : Option ParsedSpecializeForallAs :=
+  let src := src.trimAscii.toString
+  if !src.startsWith "specialize_forall_as " then none
+  else
+    let rest := (src.drop "specialize_forall_as ".length).trimAscii.toString
+    let parts := rest.splitOn " " |>.filter (fun s => !s.isEmpty)
+    match parts with
+    | newName :: srcName :: binderName :: valueParts =>
+        let value := String.intercalate " " valueParts |>.trimAscii.toString
+        if value.isEmpty then
+          none
+        else
+          some { newName, srcName, binderName, value }
+    | _ => none
+
+private def specializeForallAsAnnotation (spec : ParsedSpecializeForallAs) : String :=
+  if spec.newName == spec.srcName then
+    s!"specialize {spec.srcName} {spec.value}"
+  else
+    s!"have {spec.newName} := {spec.srcName} ({spec.binderName} := {spec.value})"
+
 private def parseDragApply? (src : String) : Option ParsedDragApply :=
   let src := src.trimAscii.toString
   if !src.startsWith "drag_apply " then none
@@ -266,9 +343,7 @@ private def parseDragApply? (src : String) : Option ParsedDragApply :=
     let parts := rest.splitOn " " |>.filter (fun s => !s.isEmpty)
     match parts with
     | [fn, arg] =>
-      let parseName := fun (s : String) =>
-        s.splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
-      some { fnName := parseName fn, argName := parseName arg, source := src }
+      some { fnName := parseDottedName fn, argName := parseDottedName arg, source := src }
     | _ => none
 
 private def parseDragTo? (src : String) : CoreM (Option ParsedDragTo) := do
@@ -376,11 +451,11 @@ private def convAnnotationForParsed (rw : ParsedDragRw) : String :=
 
 private def annotationForParsedHyp (rw : ParsedDragRwHyp) : String :=
   let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
+  let side := if rw.sideIsRhs then "rhs" else "lhs"
   match rw.path with
   | none =>
-    s!"rw [{theoremText}] at {rw.targetHypName}"
+    String.intercalate "\n" [s!"conv at {rw.targetHypName} =>", s!"  {side}", s!"  rw [{theoremText}]"]
   | some path =>
-    let side := if rw.sideIsRhs then "rhs" else "lhs"
     let pathLines := path.map (fun step => s!"  arg {step}")
     let lines :=
       [s!"conv at {rw.targetHypName} =>", s!"  {side}"] ++ pathLines ++ [s!"  rw [{theoremText}]"]
@@ -516,12 +591,127 @@ private def formatRwArg (s : String) : String :=
   then s!"({s})"
   else s
 
+private def rewriteTheoremTextWithArgs
+    (theoremName : Name) (reverse : Bool) (mvars : Array Expr) (binderInfos : Array BinderInfo) :
+    MetaM (Option String) := do
+  let mut explicitArgs : Array String := #[]
+  for i in [:mvars.size] do
+    if binderInfos[i]!.isExplicit then
+      let arg ← instantiateMVars mvars[i]!
+      if arg.hasMVar then
+        return none
+      let argFmt ← ppExpr arg
+      explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
+  let base := if reverse then s!"← {theoremName}" else s!"{theoremName}"
+  if explicitArgs.isEmpty then
+    return some base
+  return some (base ++ " " ++ String.intercalate " " explicitArgs.toList)
+
+private def sideConvLines (side : String) (path : Option (List Nat)) (theoremText : String) : List String :=
+  [s!"  {side}"] ++ (path.getD []).map (fun step => s!"  arg {step}") ++ [s!"  rw [{theoremText}]"]
+
+private def convAtHypAnnotation
+    (hypName : Name) (sideIsRhs : Bool) (path : Option (List Nat)) (theoremText : String) : String :=
+  let side := if sideIsRhs then "rhs" else "lhs"
+  String.intercalate "\n" ([s!"conv at {hypName} =>"] ++ sideConvLines side path theoremText)
+
 private def resolveGlobalConstName? (name : Name) : MetaM (Option Name) := do
   try
     let resolvedNames ← resolveGlobalConst (mkIdent name)
     pure resolvedNames[0]?
   catch _ =>
     pure none
+
+private inductive RpcAnnotationStatementKind where
+  | provided
+  | theorem
+  deriving DecidableEq
+
+private structure ResolvedAnnotationOperand where
+  name : Name
+  expr : Expr
+  type : Expr
+  localDecl? : Option LocalDecl
+  kind : RpcAnnotationStatementKind
+  theoremBase : String
+
+private structure AnnotationPremiseApplicationResult where
+  proof : Expr
+  functionOperand : ResolvedAnnotationOperand
+  argumentOperand : ResolvedAnnotationOperand
+
+private def resolveAnnotationOperand? (name : Name) : MetaM (Option ResolvedAnnotationOperand) := do
+  match (← getLCtx).findFromUserName? name with
+  | some decl =>
+      pure <| some {
+        name
+        expr := mkFVar decl.fvarId
+        type := decl.type
+        localDecl? := some decl
+        kind := if isDerivedTheoremName decl.userName then .theorem else .provided
+        theoremBase := theoremBaseFromName decl.userName
+      }
+  | none =>
+      let some resolvedName ← resolveGlobalConstName? name | return none
+      let constExpr ← mkConstWithFreshMVarLevels resolvedName
+      pure <| some {
+        name
+        expr := constExpr
+        type := ← inferType constExpr
+        localDecl? := none
+        kind := .theorem
+        theoremBase := theoremBaseFromName name
+      }
+
+private def annotationPremiseApplicationBetween?
+    (a b : ResolvedAnnotationOperand) : MetaM (Option AnnotationPremiseApplicationResult) := do
+  if let some proof ← GameServer.mkPremiseApplication? a.expr a.type b.expr b.type then
+    return some { proof, functionOperand := a, argumentOperand := b }
+  if let some proof ← GameServer.mkPremiseApplication? b.expr b.type a.expr a.type then
+    return some { proof, functionOperand := b, argumentOperand := a }
+  pure none
+
+private def annotationTheoremOperand?
+    (a b : ResolvedAnnotationOperand) : Option ResolvedAnnotationOperand :=
+  if a.kind == .theorem then
+    some a
+  else if b.kind == .theorem then
+    some b
+  else
+    none
+
+private def annotationTheoremResultBase
+    (result : AnnotationPremiseApplicationResult) (a b : ResolvedAnnotationOperand) : String :=
+  if result.functionOperand.kind == .theorem then
+    result.functionOperand.theoremBase
+  else
+    match annotationTheoremOperand? a b with
+    | some operand => operand.theoremBase
+    | none => theoremBaseFromName result.functionOperand.name
+
+private def annotationResultName
+    (a b : ResolvedAnnotationOperand) (result : AnnotationPremiseApplicationResult) : MetaM Name := do
+  match a.kind, b.kind with
+  | .provided, .provided =>
+      freshUserName "h"
+  | .theorem, .provided
+  | .provided, .theorem =>
+      match annotationTheoremOperand? a b with
+      | some theoremOperand =>
+          match theoremOperand.localDecl? with
+          | some _ => pure theoremOperand.name
+          | none => freshDerivedTheoremName (annotationTheoremResultBase result a b)
+      | none =>
+          freshUserName "h"
+  | .theorem, .theorem =>
+      freshDerivedTheoremName (annotationTheoremResultBase result a b)
+
+private def premiseApplicationAnnotationFor?
+    (a b : ResolvedAnnotationOperand) : MetaM (Option String) := do
+  let some result ← annotationPremiseApplicationBetween? a b | return none
+  let resultName ← annotationResultName a b result
+  let appText ← ppExpr result.proof
+  return some s!"have {resultName} := {appText.pretty}"
 
 private def rwAnnotationForParsed? (rw : ParsedDragRw) (goal : MVarId) : MetaM (Option String) := goal.withContext do
   let savedMctx ← getMCtx
@@ -601,83 +791,38 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
         let constExpr ← mkConstWithFreshMVarLevels resolvedName
         inferType constExpr
 
-    if let some (_, lhsExpr, rhsExpr) ← matchEq? target then
-      -- Equality hypothesis: navigate to the selected subterm and verify the pattern matches
-      let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
-      let selectedExpr ← navigateToSubterm sideExpr (rw.path.getD [])
-      let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
-      let some (lhsPat, rhsPat) := matchRewriteBody? body
-        | setMCtx savedMctx; return none
-      let fromPat := if rw.reverse then rhsPat else lhsPat
-      unless ← isDefEq selectedExpr fromPat do
-        setMCtx savedMctx; return none
-      let fromPat ← instantiateMVars fromPat
-      if fromPat.hasMVar then
-        setMCtx savedMctx; return none
-      let mut explicitArgs : Array String := #[]
-      for i in [:mvars.size] do
-        if binderInfos[i]!.isExplicit then
-          let arg ← instantiateMVars mvars[i]!
-          if arg.hasMVar then
-            setMCtx savedMctx; return none
-          let argFmt ← ppExpr arg
-          explicitArgs := explicitArgs.push (formatRwArg argFmt.pretty)
-      let theoremText :=
-        let base := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-        if explicitArgs.isEmpty then base else base ++ " " ++ String.intercalate " " explicitArgs.toList
-      setMCtx savedMctx
-      let visibleOccs ← countVisiblePatternOccurrences target fromPat
-      if visibleOccs == 1 then
-        return some s!"rw [{theoremText}] at {rw.targetHypName}"
-      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
-        | return none
-      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}] at {rw.targetHypName}"
-    else
-      -- Non-equality hypothesis (e.g. ≤): use plain rw when the pattern occurs exactly once
-      let (_, _, body) ← forallMetaTelescopeReducing theoremType
-      let some (lhsPat, rhsPat) := matchRewriteBody? body
-        | setMCtx savedMctx; return none
-      let fromPat := if rw.reverse then rhsPat else lhsPat
-      setMCtx savedMctx
-      let theoremText := if rw.reverse then s!"← {rw.theoremName}" else s!"{rw.theoremName}"
-      let visibleOccs ← countVisiblePatternOccurrences target fromPat
-      if visibleOccs == 1 then
-        return some s!"rw [{theoremText}] at {rw.targetHypName}"
-      let some occIdx ← rewriteOccurrenceIndexAtRelationPath? target fromPat rw.sideIsRhs rw.path
-        | return none
-      return some s!"rw (occs := .pos [{occIdx}]) [{theoremText}] at {rw.targetHypName}"
+    let selectedExpr ←
+      match (← matchEq? target) with
+      | some (_, lhsExpr, rhsExpr) =>
+          let sideExpr := if rw.sideIsRhs then rhsExpr else lhsExpr
+          navigateToSubterm sideExpr (rw.path.getD [])
+      | none =>
+          let relationPath := [if rw.sideIsRhs then 2 else 1] ++ rw.path.getD []
+          navigateToSubterm target relationPath
+
+    let (mvars, binderInfos, body) ← forallMetaTelescopeReducing theoremType
+    let some (lhsPat, rhsPat) := matchRewriteBody? body
+      | setMCtx savedMctx; return none
+    let fromPat := if rw.reverse then rhsPat else lhsPat
+    unless ← isDefEq selectedExpr fromPat do
+      setMCtx savedMctx; return none
+    let fromPat ← instantiateMVars fromPat
+    if fromPat.hasMVar then
+      setMCtx savedMctx; return none
+    let some theoremText ← rewriteTheoremTextWithArgs rw.theoremName rw.reverse mvars binderInfos
+      | setMCtx savedMctx; return none
+    setMCtx savedMctx
+    return some (convAtHypAnnotation rw.targetHypName rw.sideIsRhs rw.path theoremText)
   catch _ =>
     setMCtx savedMctx
     return none
 
 private def dragToAnnotationForParsed? (drag : ParsedDragTo) (goal : MVarId) :
     MetaM (Option String) := goal.withContext do
-  let resolveNamedExprAndType? := fun name => do
-    match (← getLCtx).findFromUserName? name with
-    | some decl => pure (some (mkFVar decl.fvarId, decl.type, true))
-    | none =>
-      let some resolvedName ← resolveGlobalConstName? name | return none
-      let constExpr ← mkConstWithFreshMVarLevels resolvedName
-      pure (some (constExpr, (← inferType constExpr), false))
-  let some (sourceExpr, sourceTypeRaw, sourceIsLocal) ← resolveNamedExprAndType? drag.sourceName | return none
-  let some (targetExpr, targetTypeRaw, targetIsLocal) ← resolveNamedExprAndType? drag.targetName | return none
-  let sourceType ← whnf sourceTypeRaw
-  let targetType ← whnf targetTypeRaw
+  let some sourceOperand ← resolveAnnotationOperand? drag.sourceName | return none
+  let some targetOperand ← resolveAnnotationOperand? drag.targetName | return none
 
-  let mkPremiseReplacement? := fun _ implicationExpr implicationType premiseName premiseExpr premiseType premiseIsLocal => do
-    let some applied ← GameServer.mkPremiseApplication? implicationExpr implicationType premiseExpr premiseType
-      | return none
-    let appText ← ppExpr applied
-    if premiseIsLocal then
-      -- Lean 4 no longer supports `apply ... at ...`; shadow the premise name instead.
-      return some s!"have {premiseName} := {appText.pretty}"
-    else
-      return some s!"have := {appText.pretty}"
-
-  if let some ann ← mkPremiseReplacement? drag.targetName targetExpr targetType drag.sourceName sourceExpr sourceType sourceIsLocal then
-    return some ann
-
-  if let some ann ← mkPremiseReplacement? drag.sourceName sourceExpr sourceType drag.targetName targetExpr targetType targetIsLocal then
+  if let some ann ← premiseApplicationAnnotationFor? sourceOperand targetOperand then
     return some ann
 
   -- Iff-rewrite fallback: if source is an iff (possibly forall-quantified), annotate as
@@ -698,9 +843,9 @@ private def dragToAnnotationForParsed? (drag : ParsedDragTo) (goal : MVarId) :
       let theoremText := if rev then s!"← {iffName}" else s!"{iffName}"
       return some s!"rw [{theoremText}] at {targetName}"
     return none
-  if let some ann ← tryIffRewriteAnnotation drag.sourceName drag.targetName sourceTypeRaw drag.reverse then
+  if let some ann ← tryIffRewriteAnnotation drag.sourceName drag.targetName sourceOperand.type drag.reverse then
     return some ann
-  if let some ann ← tryIffRewriteAnnotation drag.targetName drag.sourceName targetTypeRaw drag.reverse then
+  if let some ann ← tryIffRewriteAnnotation drag.targetName drag.sourceName targetOperand.type drag.reverse then
     return some ann
 
   return none
@@ -778,22 +923,9 @@ private def dragGoalAnnotationForParsed? (drag : ParsedDragGoal) (goal : MVarId)
 
 private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarId) :
     MetaM (Option String) := goal.withContext do
-  let resolveExprAndType? : Name → MetaM (Option (Expr × Expr)) := fun name => do
-    match (← getLCtx).findFromUserName? name with
-    | some decl => pure (some (mkFVar decl.fvarId, decl.type))
-    | none =>
-      let some resolvedName ← resolveGlobalConstName? name | return none
-      let constExpr ← mkConstWithFreshMVarLevels resolvedName
-      pure (some (constExpr, (← inferType constExpr)))
-  let some (fnExpr, fnType) ← resolveExprAndType? drag.fnName | return none
-  let some (argExpr, argType) ← resolveExprAndType? drag.argName | return none
-  if let some applied ← GameServer.mkPremiseApplication? fnExpr fnType argExpr argType then
-    let appText ← ppExpr applied
-    return some s!"have := {appText.pretty}"
-  if let some applied ← GameServer.mkPremiseApplication? argExpr argType fnExpr fnType then
-    let appText ← ppExpr applied
-    return some s!"have := {appText.pretty}"
-  return none
+  let some fnOperand ← resolveAnnotationOperand? drag.fnName | return none
+  let some argOperand ← resolveAnnotationOperand? drag.argName | return none
+  premiseApplicationAnnotationFor? fnOperand argOperand
 
 /-- Extract the first payload between `[` and `]` after splitting on `[`. -/
 private def bracketPayload? (part : String) : Option String :=
@@ -828,24 +960,6 @@ private def convAnnotationForDragRw? (src : String) : Option String :=
     mkRw ((src.drop 13).dropEnd 1 |>.toString)
   else
     none
-
-private def freshUserName (base : String) : MetaM Name := do
-  let lctx ← getLCtx
-  let mut idx := 0
-  let mut candidate := Name.mkSimple base
-  while lctx.findFromUserName? candidate |>.isSome do
-    idx := idx + 1
-    candidate := Name.mkSimple s!"{base}{idx}"
-  pure candidate
-
-private def derivedTheoremPrefix : String := "THM_"
-
-private def isDerivedTheoremName (name : Name) : Bool :=
-  name.toString.startsWith derivedTheoremPrefix
-
-private def freshDerivedTheoremName (base : String) : MetaM Name := do
-  let base := if base.isEmpty then "theorem" else base
-  freshUserName s!"{derivedTheoremPrefix}{base}"
 
 private def clickGoalAnnotation? (goal : MVarId) : MetaM (Option String) := goal.withContext do
   let target ← goal.getType
@@ -913,7 +1027,11 @@ private def clickPropAnnotation? (goal : MVarId) (hypName : Name) : MetaM (Optio
     - anything else                    → no annotation -/
 private def annotateFromSourceSimple (source : String) : Option StepAnnotation :=
   let src := source.trimAscii.toString
-  if let some convSrc := convAnnotationForDragRw? src then
+  if let some witness := parseExistsIntroRefine? src then
+    some { playTactic := src, leanTactic := some s!"use {witness}" }
+  else if let some spec := parseSpecializeForallAs? src then
+    some { playTactic := src, leanTactic := some (specializeForallAsAnnotation spec) }
+  else if let some convSrc := convAnnotationForDragRw? src then
     some { playTactic := src, leanTactic := some convSrc }
   -- Legacy path-based rewrite without explicit side — leanTactic deferred
   else if src.startsWith "drag_rw [" && (src.splitOn "] at [").length > 1 then
@@ -994,23 +1112,15 @@ private def annotateFromSource (source : String) (goalBefore? : Option MVarId :=
       | some goal =>
         if let some rw := (← parseDragRw? innerSource) then
           let leanTactic? ←
-            match rw.path with
-            | some _ =>
-              match ← rwAnnotationForParsed? rw goal with
-              | some rwSrc => pure (some rwSrc)
-              | none => pure (some (convAnnotationForParsed rw))
-            | none =>
-              pure (some (convAnnotationForParsed rw))
+            match ← rwAnnotationForParsed? rw goal with
+            | some rwSrc => pure (some rwSrc)
+            | none => pure (some (convAnnotationForParsed rw))
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
         else if let some rw := (← parseDragRwHyp? innerSource) then
           let leanTactic? ←
-            match rw.path with
-            | some _ =>
-              match ← rwAnnotationForParsedHyp? rw goal with
-              | some rwSrc => pure (some rwSrc)
-              | none => pure (some (annotationForParsedHyp rw))
-            | none =>
-              pure (some (annotationForParsedHyp rw))
+            match ← rwAnnotationForParsedHyp? rw goal with
+            | some rwSrc => pure (some rwSrc)
+            | none => pure (some (annotationForParsedHyp rw))
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
         else if let some drag := (← parseDragTo? innerSource) then
           let leanTactic? ← dragToAnnotationForParsed? drag goal

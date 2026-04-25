@@ -501,27 +501,27 @@
   background: var(--visual-danger-bg);
 }
 
-.visual-page .statement-card.tactic-tray-card.tactic-diamond-card {
-  width: 5.25rem;
-  min-width: 5.25rem;
-  max-width: 5.25rem;
-  min-height: 5.25rem;
-  padding: 0;
+.visual-page .statement-card.tactic-tray-card.tactic-ellipse-card {
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
+  height: 3.25rem;
+  min-height: 3.25rem;
+  padding: 0 1.1rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transform: rotate(45deg);
-  border-radius: 1.15rem;
+  border-radius: 999px;
+  box-sizing: border-box;
   cursor: pointer;
   touch-action: manipulation;
 }
 
-.visual-page .statement-card.tactic-tray-card.tactic-diamond-card:hover {
+.visual-page .statement-card.tactic-tray-card.tactic-ellipse-card:hover {
   background: color-mix(in srgb, var(--visual-danger-bg) 88%, white 12%);
 }
 
-.visual-page .statement-card.tactic-tray-card.tactic-diamond-card .tactic-label {
-  transform: rotate(-45deg);
+.visual-page .statement-card.tactic-tray-card.tactic-ellipse-card .tactic-label {
   text-align: center;
   line-height: 1.05;
   letter-spacing: 0.03em;
@@ -2405,11 +2405,12 @@
     max-width: min(14rem, calc(100vw - 3rem));
   }
 
-  .visual-page .statement-card.tactic-tray-card.tactic-diamond-card {
-    width: 4.5rem;
-    min-width: 4.5rem;
-    max-width: 4.5rem;
-    min-height: 4.5rem;
+  .visual-page .statement-card.tactic-tray-card.tactic-ellipse-card {
+    width: 6.4rem;
+    min-width: 6.4rem;
+    max-width: 6.4rem;
+    height: 2.85rem;
+    min-height: 2.85rem;
   }
 
   .visual-page .statement-card.goal {

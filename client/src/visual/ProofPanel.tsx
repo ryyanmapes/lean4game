@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { stripDerivedTheoremPrefixesInText } from './theoremNames'
 
 interface ProofStep {
   command: string
@@ -55,7 +54,7 @@ function shortenQualifiedNames(s: string): string {
 }
 
 function formatProofDisplayText(text: string): string {
-  return stripDerivedTheoremPrefixesInText(shortenQualifiedNames(text))
+  return shortenQualifiedNames(text)
 }
 
 /** Return the lean tactic with its case path prepended, e.g. "case succ => rw [add_succ]". */

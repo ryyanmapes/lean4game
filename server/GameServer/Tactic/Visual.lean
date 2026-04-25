@@ -12,8 +12,8 @@ namespace GameServer
 
 open Lean Meta Elab Tactic
 
-private def derivedTheoremPrefix : String := "THM_"
-private def hiddenDerivedTheoremPrefix : String := "__hidden_THM_"
+private def derivedTheoremPrefix : String := "thm_"
+private def hiddenDerivedTheoremPrefix : String := "__hidden_thm_"
 
 private def isDerivedTheoremName (name : Name) : Bool :=
   name.toString.startsWith derivedTheoremPrefix
@@ -981,7 +981,7 @@ private theorem flipEqLocal (x y : Nat) : x = y → y = x := by
 
 example (x y : Nat) (h : x = y) : y = x := by
   drag_to flipEqLocal h
-  exact THM_flipEqLocal
+  exact thm_flipEqLocal
 
 private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
   intro _
@@ -989,7 +989,7 @@ private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
 
 example (x y : Nat) (h : x + y = x) : y = y := by
   drag_to addEqSelfLocal h
-  exact THM_addEqSelfLocal
+  exact thm_addEqSelfLocal
 
 example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
   drag_to hpq hp
@@ -1001,7 +1001,7 @@ private theorem propBinderLocal {a b : Nat} : a = a → b = b → True := by
 
 example (x y : Nat) (hx : x = x) (hy : y = y) : True := by
   drag_apply propBinderLocal hx
-  exact THM_propBinderLocal hy
+  exact thm_propBinderLocal hy
 
 example (x y : Nat) (hx : x = x) (hy : y = y) : True := by
   specialize_forall_as h propBinderLocal a x
@@ -1026,26 +1026,26 @@ private theorem propCollisionLocal {a b : Nat} : a = a → b = 0 → True := by
 
 example (x : Nat) (hx : x = x) : True := by
   drag_apply instChainLocal hx
-  drag_apply zeroEqToTrueLocal THM_instChainLocal
-  exact THM_zeroEqToTrueLocal
+  drag_apply zeroEqToTrueLocal thm_instChainLocal
+  exact thm_zeroEqToTrueLocal
 
 example (x y : Nat) (hy : y = y) : True := by
   have hx : x = x := rfl
   have hy' : y = y := hy
   drag_apply propCollisionLocal hx
   drag_apply propCollisionLocal hy'
-  exact THM_propCollisionLocal1 rfl
+  exact thm_propCollisionLocal1 rfl
 
 example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
-  have THM_local : P → Q := hpq
-  drag_to hp THM_local
-  exact THM_local
+  have thm_local : P → Q := hpq
+  drag_to hp thm_local
+  exact thm_local
 
 example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
-  have THM_f : P → Q := hpq
-  have THM_p : P := hp
-  drag_to THM_f THM_p
-  exact THM_f1
+  have thm_f : P → Q := hpq
+  have thm_p : P := hp
+  drag_to thm_f thm_p
+  exact thm_f1
 
 example (y : Nat) : 0 <= y ∨ True := by
   click_goal_left
@@ -1082,9 +1082,9 @@ example (a b : Nat) (h : a + 0 = b) : a = b := by
   exact h
 
 example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
-  have THM_keep : P → Q := hpq
-  drag_to THM_keep hp
-  delete_theorem THM_keep
+  have thm_keep : P → Q := hpq
+  drag_to thm_keep hp
+  delete_theorem thm_keep
   exact hpq hp
 
 end Regression
