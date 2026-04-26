@@ -131,12 +131,15 @@ interface Props {
   headerSlot?: React.ReactNode
   /** Applied to the overlay root div (e.g. for sidebar-offset positioning). */
   style?: React.CSSProperties
+  /** Names of equality-rewriting theorems to highlight with a soft glow. */
+  emphasizeItems?: string[]
 }
 
 export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
-  selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style
+  selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
+  emphasizeItems,
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -273,6 +276,32 @@ export function TransformationView({
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+
+  // Emphasis: glow on matching cards; direct page/tab buttons toward emphasized items.
+  const isEmphasizedRule = (rule: { id: string }) =>
+    emphasizeItems != null && emphasizeItems.includes(rule.id)
+  const emphIndexesInTab = tabRules.reduce<number[]>((acc, rule, i) => {
+    if (isEmphasizedRule(rule)) acc.push(i)
+    return acc
+  }, [])
+  const emphVisibleNow = pageItems.some(r => isEmphasizedRule(r))
+  const emphOnPrevPage = !emphVisibleNow && emphIndexesInTab.some(i => i < clampedPage * itemsPerPage)
+  const emphOnNextPage = !emphVisibleNow && emphIndexesInTab.some(i => i >= (clampedPage + 1) * itemsPerPage)
+  // Per-tab glow: never light up 'all' or the current tab.
+  // When in a specific tab, suppress hints if the item is already on screen.
+  // When in 'all', always show which category tab the item belongs to (as a hint).
+  const emphByTabId: Record<string, boolean> = {}
+  tabs.forEach(tab => {
+    if (tab.id === 'all' || tab.id === selectedTab) { emphByTabId[tab.id] = false; return }
+    if (selectedTab !== 'all' && emphVisibleNow) { emphByTabId[tab.id] = false; return }
+    const tabItems = allRules.filter(r => {
+      if (tab.id === 'hyps') return r.dragId.startsWith('hyp_')
+      if (tab.id === 'other') return r.dragId.startsWith('thm_') && !r.category
+      return r.dragId.startsWith('thm_') && r.category === tab.id
+    })
+    emphByTabId[tab.id] = tabItems.some(r => isEmphasizedRule(r))
+  })
+
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
   const staticStr = formatFormulaText(rawStaticStr)
@@ -491,7 +520,7 @@ export function TransformationView({
           {/* Cards row */}
           <div className="tr-dock-cards">
             <button
-              className="tr-nav-btn"
+              className={`tr-nav-btn${emphOnPrevPage ? ' visual-emphasize-btn' : ''}`}
               onClick={() => { onPageIndexChange(selectedTab, Math.max(0, clampedPage - 1)); setHoveredId(null) }}
               disabled={clampedPage === 0 || !hasRules || isProcessing}
               aria-label="Previous rule"
@@ -513,6 +542,7 @@ export function TransformationView({
                         forallFooter={(rule as EqualityHyp & { forallFooter?: string }).forallFooter}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
+                        emphasized={isEmphasizedRule(rule)}
                         onMouseEnter={() => setHoveredId(rule.dragId)}
                         onMouseLeave={() => setHoveredId(null)}
                       />
@@ -529,7 +559,7 @@ export function TransformationView({
             </div>
 
             <button
-              className="tr-nav-btn"
+              className={`tr-nav-btn${emphOnNextPage ? ' visual-emphasize-btn' : ''}`}
               onClick={() => { onPageIndexChange(selectedTab, Math.min(totalPages - 1, clampedPage + 1)); setHoveredId(null) }}
               disabled={clampedPage >= totalPages - 1 || !hasRules || isProcessing}
               aria-label="Next rule"
@@ -542,7 +572,7 @@ export function TransformationView({
               {tabs.map(tab => (
                 <button
                   key={tab.id}
-                  className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
+                  className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}${emphByTabId[tab.id] ? ' visual-emphasize-btn' : ''}`}
                   onClick={() => { onSelectedTabChange(tab.id); setHoveredId(null) }}
                 >
                   {tab.label}

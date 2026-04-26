@@ -13,6 +13,7 @@ interface EqualityHypCardProps {
   forallFooter?: string
   isReverse: boolean
   isFailing?: boolean
+  emphasized?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
@@ -36,6 +37,7 @@ export function EqualityHypCard({
   forallFooter,
   isReverse,
   isFailing = false,
+  emphasized = false,
   onMouseEnter,
   onMouseLeave,
 }: EqualityHypCardProps) {
@@ -58,7 +60,7 @@ export function EqualityHypCard({
       title={tooltip}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}`}
+      className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
     >
       <h3>{label}</h3>
       <div className="tr-symbol">{symbol}</div>

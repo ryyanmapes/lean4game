@@ -482,6 +482,17 @@
   background: rgba(96, 165, 250, 0.14);
 }
 
+/* Visual Lean emphasis — soft glow on highlighted inventory items and nav buttons */
+.visual-emphasize {
+  box-shadow: 0 0 10px 2px rgba(167, 139, 250, 0.38);
+  transition: box-shadow 0.2s ease;
+}
+
+.visual-emphasize-btn {
+  box-shadow: 0 0 7px 2px rgba(167, 139, 250, 0.45);
+  transition: box-shadow 0.2s ease;
+}
+
 /* Integer notation symbols rendered in blue */
 .int-op {
   color: #60a5fa;
@@ -1444,7 +1455,9 @@
   justify-content: center;
   flex-wrap: nowrap;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
+  padding-block: 6px;
+  margin-block: -6px;
 }
 
 .visual-page.tr-overlay .tr-rule-page-cards {

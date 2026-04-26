@@ -57,9 +57,10 @@ interface PropositionTheoremTemplateCardProps {
   iffDirection?: IffDirection
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
+  emphasized?: boolean
 }
 
-export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDoubleClick, onContextMenu }: PropositionTheoremTemplateCardProps) {
+export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDoubleClick, onContextMenu, emphasized = false }: PropositionTheoremTemplateCardProps) {
   const dragId = `theorem_template_${theorem.id}`
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dragId,
@@ -77,7 +78,7 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDouble
       data-testid="theorem-tray-card"
       data-theorem-name={theorem.theoremName}
       style={style}
-      className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}`}
+      className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${emphasized ? ' visual-emphasize' : ''}`}
       onDoubleClick={!isDragging ? onDoubleClick : undefined}
       onContextMenu={onContextMenu}
       {...listeners}

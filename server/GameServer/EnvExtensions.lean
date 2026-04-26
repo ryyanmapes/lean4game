@@ -291,6 +291,10 @@ structure GameLevel where
   image : String := default
   /-- A sequence of tactics the game automatically executes before the first step. -/
   preamble : TSyntax `Lean.Parser.Tactic.tacticSeq := default
+  /-- When true, Visual Lean hides this level from navigation and the world map. -/
+  visualSkipLevel : Bool := false
+  /-- Names of tactics/theorems to highlight in the Visual Lean inventory tray. -/
+  visualEmphasize : Array Name := #[]
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -314,6 +318,8 @@ structure LevelInfo where
   statementName : Option String
   template : Option String
   image: Option String
+  visualSkipLevel : Bool := false
+  visualEmphasize : Array String := #[]
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -345,6 +351,8 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
         -- lemma doc must exist.
     template := lvl.template
     image := lvl.image
+    visualSkipLevel := lvl.visualSkipLevel
+    visualEmphasize := lvl.visualEmphasize.map (·.toString)
   }
 
 /-! ## World -/
@@ -439,7 +447,16 @@ def getGameJson (game : «Game») : Json := Id.run do
   let gameJson : Json := toJson game
   -- Add world sizes to Json object
   let worldSize := game.worlds.nodes.toList.map (fun (n, w) => (n.toString, w.levels.size))
-  let gameJson := gameJson.mergeObj (Json.mkObj [("worldSize", Json.mkObj worldSize)])
+  -- Add per-world arrays of skipped level indices (for Visual Lean)
+  let skippedLevels := game.worlds.nodes.toList.map (fun (n, w) =>
+    let skipped : List Nat := w.levels.toList
+      |>.filter (fun (_, lvl) => lvl.visualSkipLevel)
+      |>.map (fun (i, _) => i)
+    (n.toString, toJson skipped))
+  let gameJson := gameJson.mergeObj (Json.mkObj [
+    ("worldSize", Json.mkObj worldSize),
+    ("skippedLevels", Json.mkObj skippedLevels),
+  ])
   return gameJson
 
 /-! ## Game environment extension -/

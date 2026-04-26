@@ -34,10 +34,12 @@ export function VisualTacticTemplateCard({
   tactic,
   onClick,
   disabled = false,
+  emphasized = false,
 }: {
   tactic: VisualTactic
   onClick?: () => void
   disabled?: boolean
+  emphasized?: boolean
 }) {
   const dragId = `visual_tactic_${tactic.id}`
   const clickOnly = isClickOnlyTactic(tactic)
@@ -55,7 +57,7 @@ export function VisualTacticTemplateCard({
       data-tactic-name={tactic.name}
       data-tactic-activation={tactic.activation ?? 'drag'}
       style={style}
-      className={`statement-card tactic-tray-card${clickOnly ? ' tactic-ellipse-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}`}
+      className={`statement-card tactic-tray-card${clickOnly ? ' tactic-ellipse-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}${emphasized ? ' visual-emphasize' : ''}`}
       onClick={clickOnly && !disabled ? onClick : undefined}
       {...(!clickOnly && !disabled ? listeners : {})}
       {...(!clickOnly && !disabled ? attributes : {})}

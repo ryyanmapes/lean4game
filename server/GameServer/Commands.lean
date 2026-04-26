@@ -156,6 +156,16 @@ elab "CoverImage" t:str : command => do
   modifyCurGame fun game => pure {game with
     tile := {game.tile with image := file}}
 
+/-- Hide this level from the Visual Lean interface. Navigation buttons and the world map
+skip it; players can still reach it by entering the URL directly. -/
+elab "VisualSkipLevel" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualSkipLevel := true }
+
+/-- Highlight a tactic or theorem in the Visual Lean inventory tray with a soft glow.
+Can be used multiple times to highlight multiple items. Example: `VisualEmphasize exact` -/
+elab "VisualEmphasize" name:ident : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualEmphasize := lvl.visualEmphasize.push name.getId }
+
 -- Note: the syntax to add multiple is `(&"anotherOption" <|> &"unbundleHyps")`
 syntax settingsArg := atomic(" (" (&"unbundleHyps") " := " withoutPosition(term) ")")
 

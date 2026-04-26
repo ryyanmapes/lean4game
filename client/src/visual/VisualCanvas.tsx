@@ -1049,6 +1049,8 @@ interface VisualCanvasProps {
   theoremEqualityHyps: EqualityHyp[]
   propositionTheorems: PropositionTheorem[]
   visualTactics: VisualTactic[]
+  /** Names of tactics/theorems to highlight with a soft glow in the inventory tray. */
+  emphasizeItems?: string[]
   worldId: string
   levelId: number
   onInteraction: (proofBody: string) => Promise<ProofState | null>
@@ -1058,6 +1060,8 @@ interface VisualCanvasProps {
   levelTitle?: string | null
   worldTitle?: string | null
   worldSize?: number | null
+  /** Level indices skipped in Visual Lean (for skip-aware header nav). */
+  skippedLevels?: number[]
   previouslyCompleted?: boolean
   onLevelCompleted?: () => void
 }
@@ -1073,6 +1077,7 @@ function TheoremTray({
   onTacticClick,
   getTemplateIffDirection,
   onTemplateContextMenu,
+  emphasizeItems,
 }: {
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
@@ -1084,6 +1089,7 @@ function TheoremTray({
   onTacticClick?: (tactic: VisualTactic) => void
   getTemplateIffDirection: (templateId: string) => 'forward' | 'reverse'
   onTemplateContextMenu: (event: React.MouseEvent<HTMLDivElement>, templateId: string, theorem: PropositionTheorem) => void
+  emphasizeItems?: string[]
 }) {
   // Compute derived values before hooks so they can be used in deps
   const availableTabs: TrayTab[] = []
@@ -1150,6 +1156,25 @@ function TheoremTray({
   const clampedPage = Math.min(desiredPage, totalPages - 1)
   const pageItems = items.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
 
+  // Emphasis: find which items are highlighted and where they live.
+  const isEmphasized = (item: PropositionTheorem | VisualTactic) =>
+    emphasizeItems != null && emphasizeItems.includes(item.id)
+  const emphIndexes = items.reduce<number[]>((acc, item, i) => {
+    if (isEmphasized(item)) acc.push(i)
+    return acc
+  }, [])
+  const emphVisibleNow = pageItems.some(item => isEmphasized(item))
+  const emphOnPrevPage = !emphVisibleNow && emphIndexes.some(i => i < clampedPage * itemsPerPage)
+  const emphOnNextPage = !emphVisibleNow && emphIndexes.some(i => i >= (clampedPage + 1) * itemsPerPage)
+  // Per-tab glow: only light up the specific tab(s) that contain an emphasized item,
+  // and only when the item isn't already visible on the current page.
+  const emphByTab: Partial<Record<TrayTab, boolean>> = {}
+  availableTabs.forEach(tab => {
+    if (tab === visibleTab) { emphByTab[tab] = false; return }
+    const tabItems = tab === 'tactics' ? tactics : theorems
+    emphByTab[tab] = !emphVisibleNow && tabItems.some(item => isEmphasized(item))
+  })
+
   return (
     <div
       id={THEOREM_TRAY_ID}
@@ -1159,7 +1184,7 @@ function TheoremTray({
       {hasTray && (
         <div className="tr-dock-cards" ref={dockCardsRef}>
           <button
-            className="tr-nav-btn"
+            className={`tr-nav-btn${emphOnPrevPage ? ' visual-emphasize-btn' : ''}`}
             onClick={() => {
               if (!visibleTab) return
               onPageIndexChange(visibleTab, Math.max(0, clampedPage - 1))
@@ -1178,6 +1203,7 @@ function TheoremTray({
                       tactic={item as VisualTactic}
                       onClick={onTacticClick ? () => onTacticClick(item as VisualTactic) : undefined}
                       disabled={(item as VisualTactic).activation === 'goal_click' && !onTacticClick}
+                      emphasized={isEmphasized(item)}
                     />
                   )
                   : (() => {
@@ -1192,6 +1218,7 @@ function TheoremTray({
                             ? () => onTheoremDoubleClick(theorem)
                             : undefined}
                           onContextMenu={(event) => onTemplateContextMenu(event, templateId, theorem)}
+                          emphasized={isEmphasized(item)}
                         />
                       )
                     })()
@@ -1201,7 +1228,7 @@ function TheoremTray({
           </div>
 
           <button
-            className="tr-nav-btn"
+            className={`tr-nav-btn${emphOnNextPage ? ' visual-emphasize-btn' : ''}`}
             onClick={() => {
               if (!visibleTab) return
               onPageIndexChange(visibleTab, Math.min(totalPages - 1, clampedPage + 1))
@@ -1218,7 +1245,7 @@ function TheoremTray({
             <button
               key={tab}
               type="button"
-              className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}`}
+              className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}${emphByTab[tab] ? ' visual-emphasize-btn' : ''}`}
               onClick={() => onTabChange(tab)}
             >
               {tab === 'tactics' ? 'Tactics' : 'Theorems'}
@@ -1233,8 +1260,8 @@ function TheoremTray({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VisualCanvas({
-  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, worldId, levelId,
-  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, previouslyCompleted,
+  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, worldId, levelId,
+  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
@@ -3300,8 +3327,8 @@ export function VisualCanvas({
             worldTitle={worldTitle ?? undefined}
             levelId={levelId}
             levelTitle={levelTitle}
-            hasPrev={levelId > 1}
-            hasNext={worldSize == null || levelId < worldSize}
+            hasPrev={!!onPreviousLevel}
+            hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
             isCompleted={canvasState.completed}
             previouslyCompleted={previouslyCompleted ?? false}
             onPrev={onPreviousLevel ?? (() => {})}
@@ -3493,6 +3520,7 @@ export function VisualCanvas({
                   prev[tab] === pageIndex ? prev : { ...prev, [tab]: pageIndex }
                 )
               }}
+              emphasizeItems={emphasizeItems}
             />
           </div>
           {proofSteps.length > 0 && (
@@ -3643,6 +3671,7 @@ export function VisualCanvas({
           goalRhsNode={transformProps.goalRhsNode}
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
+          emphasizeItems={emphasizeItems}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
           canUndo={proofSteps.length > 0}
