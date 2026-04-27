@@ -55,6 +55,8 @@ export function EqualityHypCard({
     <div
       ref={setNodeRef}
       id={dragId}
+      data-rule-id={dragId}
+      data-rule-label={label}
       {...listeners}
       {...attributes}
       title={tooltip}

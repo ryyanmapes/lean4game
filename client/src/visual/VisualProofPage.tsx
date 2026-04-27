@@ -8,7 +8,7 @@ import { selectCompleted, levelCompleted } from '../state/progress'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
-import type { CanvasState, PropositionTheorem, VisualTactic } from './types'
+import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualTactic, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
@@ -30,6 +30,10 @@ const LEVEL_DATA_RETRY_DELAY_MS = 1000
 
 function delay(ms: number) {
   return new Promise<void>(resolve => window.setTimeout(resolve, ms))
+}
+
+function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
+  return levelId - skippedLevels.filter(skipped => skipped > 0 && skipped < levelId).length
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -143,6 +147,8 @@ export function VisualProofPage() {
   const [worldSize, setWorldSize] = useState<number | null>(null)
   const [skippedLevels, setSkippedLevels] = useState<number[]>([])
   const [emphasizeItems, setEmphasizeItems] = useState<string[]>([])
+  const [visualGoalInfos, setVisualGoalInfos] = useState<VisualGoalInfo[]>([])
+  const [visualTransformInfos, setVisualTransformInfos] = useState<VisualTransformInfo[]>([])
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
   const handleNextLevel = useCallback(() => {
     let next = levelId + 1
@@ -225,6 +231,8 @@ export function VisualProofPage() {
     setWorldSize(null)
     setSkippedLevels([])
     setEmphasizeItems([])
+    setVisualGoalInfos([])
+    setVisualTransformInfos([])
     if (!worldId || !levelId) return
     let active = true
     const baseUrl = getDataBaseUrl().replace(/\/$/, '')
@@ -235,12 +243,16 @@ export function VisualProofPage() {
         lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
         tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
         visualEmphasize?: string[]
+        visualGoalInfos?: VisualGoalInfo[]
+        visualTransformInfos?: VisualTransformInfo[]
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
         if (!active || !levelData) return
         if (levelData.title) setLevelTitle(levelData.title)
         if (levelData.visualEmphasize?.length) setEmphasizeItems(levelData.visualEmphasize)
+        if (levelData.visualGoalInfos?.length) setVisualGoalInfos(levelData.visualGoalInfos)
+        if (levelData.visualTransformInfos?.length) setVisualTransformInfos(levelData.visualTransformInfos)
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         if (gameData?.skippedLevels?.[worldId]) setSkippedLevels(gameData.skippedLevels[worldId])
         const rawWorldTitle = gameData?.worlds?.nodes?.[worldId]?.title
@@ -352,6 +364,7 @@ export function VisualProofPage() {
   // Skip-aware prev/next: find closest non-skipped neighbour.
   const hasPrev = (() => { let p = levelId - 1; while (skippedLevels.includes(p) && p >= 1) p--; return p >= 1 })()
   const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
+  const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
 
   if (!canvasState) {
     return (
@@ -360,6 +373,7 @@ export function VisualProofPage() {
           worldId={worldId}
           worldTitle={worldTitle ?? undefined}
           levelId={levelId}
+          displayLevelId={displayLevelId}
           levelTitle={levelTitle}
           hasPrev={hasPrev}
           hasNext={hasNext}
@@ -395,8 +409,11 @@ export function VisualProofPage() {
       propositionTheorems={propositionTheorems}
       visualTactics={visualTactics}
       emphasizeItems={emphasizeItems}
+      visualGoalInfos={visualGoalInfos}
+      visualTransformInfos={visualTransformInfos}
       worldId={worldId}
       levelId={levelId}
+      displayLevelId={displayLevelId}
       onInteraction={handleInteraction}
       onNextLevel={handleNextLevel}
       onPreviousLevel={hasPrev ? handlePreviousLevel : undefined}

@@ -23,6 +23,7 @@ interface VisualHeaderProps {
   worldId?: string
   worldTitle?: string
   levelId: number
+  displayLevelId?: number
   levelTitle?: string | null
   hasPrev: boolean
   hasNext: boolean
@@ -39,6 +40,7 @@ export function VisualHeader({
   worldId,
   worldTitle,
   levelId,
+  displayLevelId,
   levelTitle,
   hasPrev,
   hasNext,
@@ -50,6 +52,7 @@ export function VisualHeader({
   hideNav,
 }: VisualHeaderProps) {
   const emphasizeMap = isCompleted && !hasNext
+  const shownLevelId = displayLevelId ?? levelId
 
   return (
     <div className={`visual-header${isCompleted ? ' completed' : ''}`}>
@@ -66,7 +69,7 @@ export function VisualHeader({
       <div className="visual-header-center">
         {previouslyCompleted && <span className="visual-header-check">✓</span>}
         <span className="visual-header-level">
-          {(worldTitle ?? worldId) ? `${worldTitle ?? worldId} - ${levelId}` : `Level ${levelId}`}
+          {(worldTitle ?? worldId) ? `${worldTitle ?? worldId} - ${shownLevelId}` : `Level ${shownLevelId}`}
         </span>
         {levelTitle && (
           <span className="visual-header-title">: {titleCaseLevel(levelTitle)}</span>

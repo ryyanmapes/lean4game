@@ -137,9 +137,11 @@ interface LevelTooltipInfo {
   isRight: boolean
 }
 
-function VisualLevelIcon({ world, level, visualIndex, position, completed, unlocked, worldSize, palette, title, onHoverChange }: {
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, unlocked, worldSize, palette, title, onHoverChange }: {
   world: string
   level: number
+  /** Display index after Visual Lean-only skipped levels are removed. */
+  displayLevel: number
   /** Ring position index (1-based, counts only non-skipped levels). */
   visualIndex: number
   position: cytoscape.Position
@@ -176,10 +178,10 @@ function VisualLevelIcon({ world, level, visualIndex, position, completed, unloc
       className="level visual-map-link"
       role="link"
       tabIndex={0}
-      aria-label={`Open ${world} level ${level}`}
+      aria-label={`Open ${world} level ${displayLevel}`}
       onClick={() => navigate(to)}
       onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
-      onMouseEnter={() => onHoverChange?.({ x, y, title: title ?? `Level ${level}`, isRight })}
+      onMouseEnter={() => onHoverChange?.({ x, y, title: title ?? `Level ${displayLevel}`, isRight })}
       onMouseLeave={() => onHoverChange?.(null)}
     >
       <circle fill={fill} cx={x} cy={y} r={r} />
@@ -193,7 +195,7 @@ function VisualLevelIcon({ world, level, visualIndex, position, completed, unloc
       >
         <div>
           <p className="level-title" style={{ fontSize: `${Math.floor(r)}px` }}>
-            {level}
+            {displayLevel}
           </p>
         </div>
       </foreignObject>
@@ -503,6 +505,7 @@ export function VisualWorldMap() {
             key={`level-${worldId}-${i}`}
             world={worldId}
             level={i}
+            displayLevel={visualIndex}
             visualIndex={visualIndex}
             position={position}
             completed={completed[worldId][i]}

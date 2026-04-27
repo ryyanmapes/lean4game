@@ -166,6 +166,102 @@ Can be used multiple times to highlight multiple items. Example: `VisualEmphasiz
 elab "VisualEmphasize" name:ident : command => do
   modifyCurLevel fun lvl => pure { lvl with visualEmphasize := lvl.visualEmphasize.push name.getId }
 
+syntax visualBool := &"true" <|> &"false"
+
+def mkVisualGoalInfo (position : String) (arrow : Bool) (goal : Option String) (text : String) :
+    VisualGoalInfo :=
+  { position := position, arrow := arrow, goal := goal, text := text }
+
+def mkVisualTransformSideInfo (side : String) (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "side", side := some side, goal := goal, text := text }
+
+def mkVisualTransformRewriteInfo (source target : String) (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "rewrite", source := source, target := target, goal := goal, text := text }
+
+def mkVisualTransformBackInfo (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "back", goal := goal, text := text }
+
+def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "reverse", goal := goal, text := text }
+
+/-- Add Visual Lean-only instructional text near the goal card.
+Usage: `VisualGoalInfo below true "message"` or `VisualGoalInfo above false "message"`. -/
+elab "VisualGoalInfo " pos:ident arrow:visualBool text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfo position must be `above` or `below`"
+  let arrowBool :=
+    match arrow with
+    | `(visualBool| true) => true
+    | `(visualBool| false) => false
+    | _ => false
+  let info := mkVisualGoalInfo position arrowBool none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
+/-- Add Visual Lean-only instructional text near the goal card, only while the current
+goal matches the supplied display text. -/
+elab "VisualGoalInfoOnGoal " pos:ident &"true" goalText:str &"show" text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfoOnGoal position must be `above` or `below`"
+  let info := mkVisualGoalInfo position true (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
+/-- Add Visual Lean-only instructional text near the goal card, only while the current
+goal matches the supplied display text. -/
+elab "VisualGoalInfoOnGoal " pos:ident &"false" goalText:str &"show" text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfoOnGoal position must be `above` or `below`"
+  let info := mkVisualGoalInfo position false (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance for switching equation sides.
+Usage: `VisualTransformSideInfo left "message"` or `VisualTransformSideInfo right "message"`. -/
+elab "VisualTransformSideInfo " side:ident text:str : command => do
+  let sideStr := side.getId.toString
+  unless sideStr == "left" || sideStr == "right" do
+    throwErrorAt side "VisualTransformSideInfo side must be `left` or `right`"
+  let info := mkVisualTransformSideInfo sideStr none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance for switching equation sides, only
+while the current goal matches the supplied display text. -/
+elab "VisualTransformSideInfoOnGoal " side:ident goalText:str &"show" text:str : command => do
+  let sideStr := side.getId.toString
+  unless sideStr == "left" || sideStr == "right" do
+    throwErrorAt side "VisualTransformSideInfoOnGoal side must be `left` or `right`"
+  let info := mkVisualTransformSideInfo sideStr (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance linking a rule card to a subexpression.
+Usage: `VisualTransformRewriteInfo h "y" "message"`. -/
+elab "VisualTransformRewriteInfo " source:ident target:str text:str : command => do
+  let info := mkVisualTransformRewriteInfo source.getId.toString target.getString none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance linking a rule card to a subexpression,
+only while the current goal matches the supplied display text. -/
+elab "VisualTransformRewriteInfoOnGoal " source:ident target:str goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformRewriteInfo source.getId.toString target.getString (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance pointing to the Back button, only
+while the current goal matches the supplied display text. -/
+elab "VisualTransformBackInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformBackInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance pointing to the rewrite-direction
+button, only while the current goal matches the supplied display text. -/
+elab "VisualTransformReverseInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformReverseInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
 -- Note: the syntax to add multiple is `(&"anotherOption" <|> &"unbundleHyps")`
 syntax settingsArg := atomic(" (" (&"unbundleHyps") " := " withoutPosition(term) ")")
 

@@ -8,6 +8,8 @@ import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
+import { VisualInfoText } from './VisualInfoText'
+import type { VisualTransformInfo } from './types'
 
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
@@ -43,9 +45,75 @@ interface ExpectedRewriteGoal {
   relation: TransformRelation
 }
 
+interface GuideArrow {
+  start: { x: number; y: number }
+  end: { x: number; y: number }
+  startPadding?: number
+  endPadding?: number
+  arc?: 'up' | 'down'
+}
+
 function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   // Theorem cards show friendly aliases, but Lean rewrites need the real declaration name.
   return draggedId.startsWith('thm_') ? hyp.id : (hyp.rewriteRef ?? hyp.label)
+}
+
+function InstructionGuideArrow({ arrow }: { arrow: GuideArrow }) {
+  const dx = arrow.end.x - arrow.start.x
+  const dy = arrow.end.y - arrow.start.y
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const startPad = arrow.startPadding ?? 44
+  const endPad = arrow.endPadding ?? 64
+  const start = {
+    x: arrow.start.x + (dx / len) * startPad,
+    y: arrow.start.y + (dy / len) * startPad,
+  }
+  const end = {
+    x: arrow.end.x - (dx / len) * endPad,
+    y: arrow.end.y - (dy / len) * endPad,
+  }
+  const curveDx = end.x - start.x
+  const curveDy = end.y - start.y
+  const curveLen = Math.sqrt(curveDx * curveDx + curveDy * curveDy) || 1
+  const sag = Math.min(110, Math.max(44, curveLen * 0.14)) * (arrow.arc === 'up' ? -1 : 1)
+  const cp1 = {
+    x: start.x + curveDx * 0.28,
+    y: start.y + curveDy * 0.18 + sag,
+  }
+  const cp2 = {
+    x: start.x + curveDx * 0.76,
+    y: start.y + curveDy * 0.82 + sag,
+  }
+  const headDx = end.x - cp2.x
+  const headDy = end.y - cp2.y
+  const headLen = Math.sqrt(headDx * headDx + headDy * headDy) || 1
+  const ux = headDx / headLen
+  const uy = headDy / headLen
+  const px = -uy
+  const py = ux
+  const headLength = 18
+  const headHalfWidth = 8
+  const base = {
+    x: end.x - ux * headLength,
+    y: end.y - uy * headLength,
+  }
+  const shaftEnd = {
+    x: base.x + ux * 4,
+    y: base.y + uy * 4,
+  }
+  const path = `M ${start.x} ${start.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${shaftEnd.x} ${shaftEnd.y}`
+  const arrowHeadPoints = [
+    `${end.x},${end.y}`,
+    `${base.x + px * headHalfWidth},${base.y + py * headHalfWidth}`,
+    `${base.x - px * headHalfWidth},${base.y - py * headHalfWidth}`,
+  ].join(' ')
+
+  return (
+    <svg className="visual-instruction-arrow" aria-hidden="true">
+      <path d={path} />
+      <polygon points={arrowHeadPoints} />
+    </svg>
+  )
 }
 
 const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '≥'])
@@ -133,13 +201,14 @@ interface Props {
   style?: React.CSSProperties
   /** Names of equality-rewriting theorems to highlight with a soft glow. */
   emphasizeItems?: string[]
+  visualInfos?: VisualTransformInfo[]
 }
 
 export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
-  emphasizeItems,
+  emphasizeItems, visualInfos = [],
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -167,7 +236,20 @@ export function TransformationView({
   const exprWrapperRef = useRef<HTMLDivElement>(null)
   const staticGroupRef = useRef<HTMLDivElement>(null)
   const ruleDockRef = useRef<HTMLDivElement>(null)
+  const sideInfoRef = useRef<HTMLDivElement>(null)
+  const backButtonRef = useRef<HTMLButtonElement>(null)
+  const backInfoRef = useRef<HTMLDivElement>(null)
+  const reverseButtonRef = useRef<HTMLButtonElement>(null)
+  const reverseInfoRef = useRef<HTMLDivElement>(null)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
+  const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
+  const [backArrow, setBackArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
+  const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
+  const [rewriteGuide, setRewriteGuide] = useState<{
+    info: VisualTransformInfo
+    style: React.CSSProperties
+    arrow: GuideArrow
+  } | null>(null)
 
   useEffect(() => {
     const el = pageRef.current
@@ -305,6 +387,133 @@ export function TransformationView({
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
   const staticStr = formatFormulaText(rawStaticStr)
+  const currentGoalText = formatFormulaText(`${printExpression(lhs)} ${relation} ${printExpression(rhs)}`)
+  const activeVisualInfos = useMemo(
+    () => visualInfos.filter(info => !info.goal || formatFormulaText(info.goal) === currentGoalText),
+    [currentGoalText, visualInfos],
+  )
+  const sideInfo = activeVisualInfos.find(info =>
+    info.kind === 'side' && (info.side === 'left' || info.side === 'right') && info.side !== workingSide
+  )
+  const backInfo = activeVisualInfos.find(info => info.kind === 'back' && info.text)
+  const reverseInfo = activeVisualInfos.find(info => info.kind === 'reverse' && info.text)
+  const rewriteInfos = useMemo(
+    () => activeVisualInfos.filter(info => info.kind === 'rewrite' && info.text),
+    [activeVisualInfos],
+  )
+
+  const cssEscape = (value: string) => {
+    const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
+    return escapeFn ? escapeFn(value) : value.replace(/["\\]/g, '\\$&')
+  }
+
+  useLayoutEffect(() => {
+    const updateGuides = () => {
+      if (sideInfo && sideInfoRef.current) {
+        const infoRect = sideInfoRef.current.getBoundingClientRect()
+        const swapRect = mainAreaRef.current?.querySelector<HTMLElement>('.tr-swap-btn')?.getBoundingClientRect()
+        const swapCenter = swapRect ? {
+          x: swapRect.left + swapRect.width / 2,
+          y: swapRect.top + swapRect.height / 2,
+        } : null
+        const infoCenterX = infoRect.left + infoRect.width / 2
+        const startsFromLeft = swapCenter != null && swapCenter.x < infoCenterX
+        setSideArrow(swapRect ? {
+          start: {
+            x: startsFromLeft ? infoRect.left : infoRect.right,
+            y: infoRect.top + infoRect.height / 2,
+          },
+          end: swapCenter!,
+        } : null)
+      } else {
+        setSideArrow(null)
+      }
+
+      if (backInfo && backInfoRef.current && backButtonRef.current) {
+        const infoRect = backInfoRef.current.getBoundingClientRect()
+        const backRect = backButtonRef.current.getBoundingClientRect()
+        setBackArrow({
+          start: {
+            x: infoRect.left,
+            y: infoRect.top + infoRect.height / 2,
+          },
+          end: {
+            x: backRect.left + backRect.width / 2,
+            y: backRect.top + backRect.height / 2,
+          },
+        })
+      } else {
+        setBackArrow(null)
+      }
+
+      if (reverseInfo && reverseInfoRef.current && reverseButtonRef.current) {
+        const infoRect = reverseInfoRef.current.getBoundingClientRect()
+        const reverseRect = reverseButtonRef.current.getBoundingClientRect()
+        setReverseArrow({
+          start: {
+            x: infoRect.right,
+            y: infoRect.top + infoRect.height / 2,
+          },
+          end: {
+            x: reverseRect.left + reverseRect.width / 2,
+            y: reverseRect.top + reverseRect.height / 2,
+          },
+        })
+      } else {
+        setReverseArrow(null)
+      }
+
+      const page = pageRef.current
+      let nextRewriteGuide: {
+        info: VisualTransformInfo
+        style: React.CSSProperties
+        arrow: { start: { x: number; y: number }; end: { x: number; y: number } }
+      } | null = null
+      if (page) {
+        for (const info of rewriteInfos) {
+          const source = info.source?.trim()
+          const target = info.target?.trim()
+          if (!source || !target) continue
+          const sourceEl = page.querySelector<HTMLElement>(`[data-rule-label="${cssEscape(source)}"]`)
+          const targetEls = Array.from(mainAreaRef.current?.querySelectorAll<HTMLElement>(`[data-expr-text="${cssEscape(target)}"]`) ?? [])
+          const targetEl = targetEls
+            .sort((a, b) => {
+              const ar = a.getBoundingClientRect()
+              const br = b.getBoundingClientRect()
+              return (ar.width * ar.height) - (br.width * br.height)
+            })[0]
+          if (!sourceEl || !targetEl) continue
+          const sourceRect = sourceEl.getBoundingClientRect()
+          const targetRect = targetEl.getBoundingClientRect()
+          const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
+          const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
+          const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+          const guideWidth = 360
+          const lineMinX = Math.min(start.x, end.x)
+          nextRewriteGuide = {
+            info,
+            style: {
+              left: Math.max(16, lineMinX - guideWidth - 34),
+              top: midpoint.y,
+              transform: 'translateY(-50%)',
+              width: guideWidth,
+            },
+            arrow: { start, end, startPadding: 48, endPadding: 60 },
+          }
+          break
+        }
+      }
+      setRewriteGuide(nextRewriteGuide)
+    }
+
+    updateGuides()
+    window.addEventListener('resize', updateGuides)
+    window.addEventListener('scroll', updateGuides, true)
+    return () => {
+      window.removeEventListener('resize', updateGuides)
+      window.removeEventListener('scroll', updateGuides, true)
+    }
+  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight])
 
   useEffect(() => {
     if (!activeId) return
@@ -459,7 +668,7 @@ export function TransformationView({
         onDragEnd={handleDragEnd}
       >
         {/* Back button */}
-        <button className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
+        <button ref={backButtonRef} className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
           ← Back
         </button>
 
@@ -489,6 +698,24 @@ export function TransformationView({
             />
           </div>
 
+          {sideInfo && (
+            <div ref={sideInfoRef} className="visual-info-callout transform-info side-info">
+              <VisualInfoText text={sideInfo.text} />
+            </div>
+          )}
+
+          {backInfo && (
+            <div ref={backInfoRef} className="visual-info-callout transform-info side-info">
+              <VisualInfoText text={backInfo.text} />
+            </div>
+          )}
+
+          {reverseInfo && (
+            <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info">
+              <VisualInfoText text={reverseInfo.text} />
+            </div>
+          )}
+
           {/* Undo */}
           <div className="tr-controls">
             <button
@@ -502,6 +729,7 @@ export function TransformationView({
           {/* Reverse */}
           <div className="tr-side-controls">
             <button
+              ref={reverseButtonRef}
               onClick={() => onIsReverseChange(!isReverse)}
               disabled={isProcessing}
               className={`tr-ctrl-btn${isReverse ? ' active-reverse' : ''}`}
@@ -585,6 +813,17 @@ export function TransformationView({
         {/* Connection arrow */}
         {activeId && arrowStart && arrowEnd && (
           <ConnectionArrow start={arrowStart} end={arrowEnd} />
+        )}
+        {sideArrow && <InstructionGuideArrow arrow={sideArrow} />}
+        {backArrow && <InstructionGuideArrow arrow={{ ...backArrow, startPadding: 28, endPadding: 42 }} />}
+        {reverseArrow && <InstructionGuideArrow arrow={{ ...reverseArrow, startPadding: 28, endPadding: 42, arc: 'up' }} />}
+        {rewriteGuide && (
+          <>
+            <InstructionGuideArrow arrow={rewriteGuide.arrow} />
+            <div className="visual-info-callout transform-info rewrite-info" style={rewriteGuide.style}>
+              <VisualInfoText text={rewriteGuide.info.text} />
+            </div>
+          </>
         )}
 
         <DragOverlay dropAnimation={null}>

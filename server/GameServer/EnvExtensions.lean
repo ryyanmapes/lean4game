@@ -257,6 +257,21 @@ def getCurLevelId [MonadError m] : m LevelId := do
 /-- Instance to make GameLevel Repr work -/
 instance : Repr Elab.Command.Scope := ⟨fun s _ => repr s.currNamespace⟩
 
+structure VisualGoalInfo where
+  position : String
+  arrow : Bool
+  goal : Option String := none
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
+
+structure VisualTransformInfo where
+  kind : String
+  side : Option String := none
+  source : String := ""
+  target : String := ""
+  goal : Option String := none
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
 
 structure GameLevel where
   index: Nat
@@ -295,6 +310,10 @@ structure GameLevel where
   visualSkipLevel : Bool := false
   /-- Names of tactics/theorems to highlight in the Visual Lean inventory tray. -/
   visualEmphasize : Array Name := #[]
+  /-- Visual Lean instructional callouts attached to the proof goal card. -/
+  visualGoalInfos : Array VisualGoalInfo := #[]
+  /-- Visual Lean instructional callouts attached to transformation mode. -/
+  visualTransformInfos : Array VisualTransformInfo := #[]
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -320,6 +339,8 @@ structure LevelInfo where
   image: Option String
   visualSkipLevel : Bool := false
   visualEmphasize : Array String := #[]
+  visualGoalInfos : Array VisualGoalInfo := #[]
+  visualTransformInfos : Array VisualTransformInfo := #[]
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -353,6 +374,8 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     image := lvl.image
     visualSkipLevel := lvl.visualSkipLevel
     visualEmphasize := lvl.visualEmphasize.map (·.toString)
+    visualGoalInfos := lvl.visualGoalInfos
+    visualTransformInfos := lvl.visualTransformInfos
   }
 
 /-! ## World -/

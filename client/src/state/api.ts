@@ -62,7 +62,9 @@ export interface LevelInfo {
   statementName: null|string,
   displayName: null|string,
   template: null|string,
-  image: null|string
+  image: null|string,
+  visualGoalInfos?: Array<{ position: 'above' | 'below'; arrow: boolean; goal?: string | null; text: string }>,
+  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>
 }
 
 /** Used to display the inventory on the welcome page */

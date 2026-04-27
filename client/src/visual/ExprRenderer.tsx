@@ -1,6 +1,7 @@
 import * as React from 'react'
 import type { ExpressionNode } from './expr-types'
 import { useDroppable } from '@dnd-kit/core'
+import { printExpression } from './expr-engine'
 
 interface Props {
   node: ExpressionNode
@@ -23,8 +24,15 @@ export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props)
     showHover && !isPotentialTarget ? 'droppable-invalid' : '',
   ].filter(Boolean).join(' ')
 
+  const expressionText = printExpression(node)
+
   return (
-    <div ref={setNodeRef} className={classes}>
+    <div
+      ref={setNodeRef}
+      className={classes}
+      data-expr-id={node.id}
+      data-expr-text={expressionText}
+    >
       {node.type === 'binary' ? (
         <>
           <div className="tr-child">

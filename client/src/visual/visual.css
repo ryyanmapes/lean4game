@@ -562,10 +562,81 @@
   z-index: 15;
 }
 
+.visual-page .goal-card-with-info {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  isolation: isolate;
+}
+
 .visual-page .statement-card.goal {
+  position: relative;
+  z-index: 20;
   cursor: default;
   box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
   border-color: #eab308;
+}
+
+.visual-page .visual-info-callout {
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--visual-info-border);
+  border-radius: 8px;
+  background: var(--visual-surface-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 28px var(--visual-shadow-strong);
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  white-space: normal;
+  user-select: text;
+  cursor: default;
+  text-align: left;
+}
+
+.visual-page .goal-info {
+  position: relative;
+  z-index: 30;
+  align-self: stretch;
+  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(96, 165, 250, 0.18);
+}
+
+.visual-page .goal-info.below {
+  margin-top: 0.3rem;
+}
+
+.visual-page .goal-info.above {
+  margin-bottom: -0.2rem;
+}
+
+.visual-page .visual-info-math {
+  font-size: 1em;
+}
+
+.visual-page .goal-info-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 35;
+}
+
+.visual-page .goal-info-arrow path {
+  stroke: #5a6370;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+
+.visual-page .goal-info-arrow polygon {
+  fill: #5a6370;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
 
 .visual-page .stream-navigator {
@@ -1269,6 +1340,48 @@
 /* Working expression — scaled up like prototype */
 .visual-page .tr-expr-wrapper {
   transform: scale(1.5);
+}
+
+.visual-page .transform-info {
+  position: fixed;
+  z-index: 95;
+  pointer-events: none;
+}
+
+.visual-page .transform-info.side-info {
+  left: calc(var(--proof-sidebar-width, 0px) + (100vw - var(--proof-sidebar-width, 0px)) / 2);
+  top: calc(50% + 5rem);
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.visual-page .transform-info.rewrite-info {
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 2rem));
+}
+
+.visual-page .visual-instruction-arrow {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 18;
+}
+
+.visual-page .visual-instruction-arrow path {
+  stroke: #5a6370;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+}
+
+.visual-page .visual-instruction-arrow polygon {
+  fill: #5a6370;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
 
 /* Undo / Reset controls — bottom-left */

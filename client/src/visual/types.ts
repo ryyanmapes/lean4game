@@ -49,6 +49,22 @@ export interface VisualTactic {
   activation?: 'drag' | 'goal_click'
 }
 
+export interface VisualGoalInfo {
+  position: 'above' | 'below'
+  arrow: boolean
+  goal?: string | null
+  text: string
+}
+
+export interface VisualTransformInfo {
+  kind: 'side' | 'rewrite' | 'back' | 'reverse'
+  side?: 'left' | 'right' | null
+  source?: string
+  target?: string
+  goal?: string | null
+  text: string
+}
+
 /** A draggable canvas copy created from a proposition theorem template. */
 export interface PropositionTheoremCopy {
   id: string

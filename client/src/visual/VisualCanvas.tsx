@@ -5,7 +5,7 @@ import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
-import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualTactic } from './types'
+import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualTactic, VisualTransformInfo } from './types'
 import type { ClickAction, ClickActionOption, ProofState } from '../components/infoview/rpc_api'
 import { HypCard } from './HypCard'
 import { GoalCard } from './GoalCard'
@@ -1051,8 +1051,12 @@ interface VisualCanvasProps {
   visualTactics: VisualTactic[]
   /** Names of tactics/theorems to highlight with a soft glow in the inventory tray. */
   emphasizeItems?: string[]
+  visualGoalInfos?: VisualGoalInfo[]
+  visualTransformInfos?: VisualTransformInfo[]
   worldId: string
   levelId: number
+  /** Display index after Visual Lean-only skipped levels are removed. */
+  displayLevelId?: number
   onInteraction: (proofBody: string) => Promise<ProofState | null>
   onNextLevel?: () => void
   onPreviousLevel?: () => void
@@ -1166,14 +1170,6 @@ function TheoremTray({
   const emphVisibleNow = pageItems.some(item => isEmphasized(item))
   const emphOnPrevPage = !emphVisibleNow && emphIndexes.some(i => i < clampedPage * itemsPerPage)
   const emphOnNextPage = !emphVisibleNow && emphIndexes.some(i => i >= (clampedPage + 1) * itemsPerPage)
-  // Per-tab glow: only light up the specific tab(s) that contain an emphasized item,
-  // and only when the item isn't already visible on the current page.
-  const emphByTab: Partial<Record<TrayTab, boolean>> = {}
-  availableTabs.forEach(tab => {
-    if (tab === visibleTab) { emphByTab[tab] = false; return }
-    const tabItems = tab === 'tactics' ? tactics : theorems
-    emphByTab[tab] = !emphVisibleNow && tabItems.some(item => isEmphasized(item))
-  })
 
   return (
     <div
@@ -1245,7 +1241,7 @@ function TheoremTray({
             <button
               key={tab}
               type="button"
-              className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}${emphByTab[tab] ? ' visual-emphasize-btn' : ''}`}
+              className={`tr-tab-btn${visibleTab === tab ? ' active' : ''}`}
               onClick={() => onTabChange(tab)}
             >
               {tab === 'tactics' ? 'Tactics' : 'Theorems'}
@@ -1260,8 +1256,8 @@ function TheoremTray({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VisualCanvas({
-  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, worldId, levelId,
-  onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
+  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos, worldId, levelId,
+  displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
@@ -3326,6 +3322,7 @@ export function VisualCanvas({
             worldId={worldId}
             worldTitle={worldTitle ?? undefined}
             levelId={levelId}
+            displayLevelId={displayLevelId}
             levelTitle={levelTitle}
             hasPrev={!!onPreviousLevel}
             hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
@@ -3452,6 +3449,7 @@ export function VisualCanvas({
                     isClickable={streamInteractionsEnabled && isClickable}
                     clickTooltip={clickAction?.tooltip}
                     isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
+                    visualInfos={visualGoalInfos}
                     onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
                     onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
                     onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms, streamHypNames(liveGoalStream))}
@@ -3645,6 +3643,7 @@ export function VisualCanvas({
               worldId={worldId}
               worldTitle={worldTitle ?? undefined}
               levelId={levelId}
+              displayLevelId={displayLevelId}
               levelTitle={levelTitle}
               hasPrev={levelId > 1}
               hasNext={worldSize == null || levelId < worldSize}
@@ -3672,6 +3671,7 @@ export function VisualCanvas({
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           emphasizeItems={emphasizeItems}
+          visualInfos={transformTarget?.kind === 'goal' ? visualTransformInfos : undefined}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
           canUndo={proofSteps.length > 0}
@@ -3694,6 +3694,7 @@ export function VisualCanvas({
               worldId={worldId}
               worldTitle={worldTitle ?? undefined}
               levelId={levelId}
+              displayLevelId={displayLevelId}
               levelTitle={levelTitle}
               hasPrev={levelId > 1}
               hasNext={worldSize == null || levelId < worldSize}
