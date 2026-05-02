@@ -5,17 +5,35 @@ const ALWAYS_LOWERCASE = new Set(['rfl', 'rw'])
 // Lowercase in the middle of a title, but capitalize as first word
 const SMALL_WORDS = new Set(['of', 'the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'with', 'and', 'but', 'or', 'nor'])
 
-function titleCaseLevel(title: string): string {
-  return title.split(' ').map((word, index) => {
+export function titleCaseLevel(title: string): string {
+  let capitalizeNext = true
+
+  return title.split(' ').map((word) => {
     const lower = word.toLowerCase()
-    // Identifiers with underscores stay as-is
-    if (word.includes('_')) return word
-    // Strip surrounding punctuation to get the bare word for lookup
     const alpha = lower.replace(/[^a-z]/g, '')
-    if (ALWAYS_LOWERCASE.has(alpha)) return lower
-    if (index > 0 && SMALL_WORDS.has(alpha)) return lower
-    // Capitalize first alphabetic character (handles leading punctuation like '(')
-    return lower.replace(/[a-z]/, c => c.toUpperCase())
+    const startsQuotedIdentifier =
+      word.startsWith('`') ||
+      word.startsWith("'") ||
+      word.startsWith('"')
+    const endsSegment = /[:.!?]$/.test(word)
+    let formatted: string
+
+    // Identifiers with underscores stay as-is
+    if (word.includes('_') || startsQuotedIdentifier) {
+      formatted = word
+    } else if (ALWAYS_LOWERCASE.has(alpha)) {
+      formatted = lower
+    } else if (!capitalizeNext && SMALL_WORDS.has(alpha)) {
+      formatted = lower
+    } else {
+      // Capitalize first alphabetic character (handles leading punctuation like '(')
+      formatted = lower.replace(/[a-z]/, c => c.toUpperCase())
+    }
+
+    if (alpha.length > 0) capitalizeNext = false
+    if (endsSegment) capitalizeNext = true
+
+    return formatted
   }).join(' ')
 }
 

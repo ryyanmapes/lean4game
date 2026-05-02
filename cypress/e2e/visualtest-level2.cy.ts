@@ -186,6 +186,23 @@ describe('VisualTest Level 2', () => {
     })
   })
 
+  it('shows named Lean intros in the Core proof view after clicking a goal', () => {
+    clickGoal()
+    hypCard('h').should('be.visible')
+
+    playLogEntries().then(entries => {
+      expect(entries.at(-1)?.playTactic).to.equal('click_goal')
+      expect(entries.at(-1)?.leanTactic).to.equal('intro h')
+      expect(entries.at(-1)?.succeeded).to.equal(true)
+    })
+
+    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
+    cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+    cy.get('.proof-sidebar-step').should('have.length', 1)
+    cy.get('.proof-sidebar-step-text').should('have.text', 'intro h')
+  })
+
   it('keeps the three proof streams in the expected order', () => {
     buildThreeStreams()
 
@@ -300,21 +317,21 @@ describe('VisualTest Level 2', () => {
     lastPlayTacticShouldBe('drag_to h right')
     streamLabelShouldBe(3, 3)
     goalTextShouldContain('C')
-    hypTypeShouldContain('h', 'B')
-    hypTypeShouldContain('h', 'C')
+    hypTypeShouldContain('h1', 'B')
+    hypTypeShouldContain('h1', 'C')
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
 
-    dragHypToHyp('left', 'h')
-    lastPlayTacticShouldBe('drag_to left h')
+    dragHypToHyp('left', 'h1')
+    lastPlayTacticShouldBe('drag_to left h1')
     streamLabelShouldBe(3, 3)
     goalTextShouldContain('C')
-    hypTypeShouldContain('left', 'C')
+    hypTypeShouldContain('h2', 'C')
     proofTreeShouldHaveUniqueStreamIds()
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
 
-    dragHypToGoal('left')
-    lastPlayTacticShouldBe('drag_goal left')
+    dragHypToGoal('h2')
+    lastPlayTacticShouldBe('drag_goal h2')
 
     cy.get('.visual-header.completed', { timeout: 60000 }).should('be.visible')
     cy.get('[data-testid="proof-stream-leaf"][data-completed="true"]', { timeout: 60000 })
@@ -332,8 +349,8 @@ describe('VisualTest Level 2', () => {
         'drag_goal left',
         'click_prop h1',
         'drag_to h right',
-        'drag_to left h',
-        'drag_goal left',
+        'drag_to left h1',
+        'drag_goal h2',
       ])
       expect(entries.every(entry => entry.succeeded === true)).to.equal(true)
     })

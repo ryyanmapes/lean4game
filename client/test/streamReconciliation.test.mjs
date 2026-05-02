@@ -707,6 +707,80 @@ test('the full nested conjunction proof can reconcile from A through final C com
   assert.equal(findLeafForStream(afterCComplete.nextTree, appliedB.id)?.completed, true)
 })
 
+test('final drag_goal completes the tree when Lean returns an empty incomplete canvas', () => {
+  const streamA = stream('fallback-stream-a', 'A', 'left', [
+    hyp('fallback-hyp-h', 'h', 'A'),
+  ])
+  const splitB = stream('fallback-stream-b', 'B', 'left', [
+    hyp('fallback-hyp-h', 'h', 'A'),
+    hyp('fallback-hyp-left', 'left', 'B'),
+  ])
+  const streamC = stream('fallback-stream-c', 'C', 'right', [
+    hyp('fallback-hyp-h', 'h', 'A'),
+    hyp('fallback-hyp-left', 'left', 'B'),
+    hyp('fallback-hyp-h2', 'h2', 'C'),
+  ])
+  const beforeTree = {
+    id: 'fallback-root',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      {
+        id: 'fallback-leaf-a',
+        streamId: streamA.id,
+        label: streamA.goal.userName,
+        completed: true,
+        children: [],
+      },
+      {
+        id: 'fallback-branch-right',
+        streamId: null,
+        label: 'right',
+        completed: false,
+        children: [
+          {
+            id: 'fallback-leaf-b',
+            streamId: splitB.id,
+            label: splitB.goal.userName,
+            completed: true,
+            children: [],
+          },
+          {
+            id: 'fallback-leaf-c',
+            streamId: streamC.id,
+            label: streamC.goal.userName,
+            completed: false,
+            children: [],
+          },
+        ],
+      },
+    ],
+  }
+  const beforeCanvas = {
+    streams: [streamA, splitB, streamC],
+    completed: false,
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    {
+      streams: [],
+      completed: false,
+    },
+    streamC,
+    'drag_goal h2',
+    false,
+    streamC.id,
+    [],
+  )
+
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [])
+  assert.equal(result.nextCanvas.completed, true)
+  assert.equal(findLeafForStream(result.nextTree, streamC.id)?.completed, true)
+})
+
 test('click_prop specializes a reflexive-equality implication hypothesis in place', () => {
   const focusedStream = stream('stream-rfl', 'Goal', 'main', [
     hyp('hyp-rfl', 'h', 'a = a → B'),

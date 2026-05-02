@@ -161,6 +161,18 @@ skip it; players can still reach it by entering the URL directly. -/
 elab "VisualSkipLevel" : command => do
   modifyCurLevel fun lvl => pure { lvl with visualSkipLevel := true }
 
+/-- Override the Visual Lean map label for special levels, e.g. `VisualLevelNumber "Boss"`. -/
+elab "VisualLevelNumber" label:str : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualLevelNumber? := some label.getString }
+
+/-- Attach a named Visual Lean color scheme to the current level. -/
+elab "VisualColorScheme" color:ident : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualColorScheme? := some color.getId.toString }
+
+/-- Mark the current level as having a dramatic Visual Lean opening. -/
+elab "VisualDramaticStart" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualDramaticStart := true }
+
 /-- Highlight a tactic or theorem in the Visual Lean inventory tray with a soft glow.
 Can be used multiple times to highlight multiple items. Example: `VisualEmphasize exact` -/
 elab "VisualEmphasize" name:ident : command => do
@@ -187,6 +199,14 @@ def mkVisualTransformBackInfo (goal : Option String) (text : String) :
 def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
     VisualTransformInfo :=
   { kind := "reverse", goal := goal, text := text }
+
+def mkVisualTacticHypInfo (tactic hyp : String) (goal : Option String) (text : String) :
+    VisualTacticHypInfo :=
+  { tactic := tactic, hyp := hyp, goal := goal, text := text }
+
+def mkVisualProofGraphInfo (goal : Option String) (text : String) :
+    VisualProofGraphInfo :=
+  { goal := goal, text := text }
 
 /-- Add Visual Lean-only instructional text near the goal card.
 Usage: `VisualGoalInfo below true "message"` or `VisualGoalInfo above false "message"`. -/
@@ -261,6 +281,30 @@ button, only while the current goal matches the supplied display text. -/
 elab "VisualTransformReverseInfoOnGoal " goalText:str &"show" text:str : command => do
   let info := mkVisualTransformReverseInfo (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only guidance linking a tactic card to a hypothesis card.
+Usage: `VisualTacticHypInfo induction n "message"`. -/
+elab "VisualTacticHypInfo " tactic:ident hyp:ident text:str : command => do
+  let info := mkVisualTacticHypInfo tactic.getId.toString hyp.getId.toString none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTacticHypInfos := lvl.visualTacticHypInfos.push info }
+
+/-- Add Visual Lean-only guidance linking a tactic card to a hypothesis card, only
+while the current goal matches the supplied display text. -/
+elab "VisualTacticHypInfoOnGoal " tactic:ident hyp:ident goalText:str &"show" text:str : command => do
+  let info := mkVisualTacticHypInfo tactic.getId.toString hyp.getId.toString (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTacticHypInfos := lvl.visualTacticHypInfos.push info }
+
+/-- Add Visual Lean-only instructional text to the left of the proof-stream graph.
+Usage: `VisualProofGraphInfo "message"`. -/
+elab "VisualProofGraphInfo " text:str : command => do
+  let info := mkVisualProofGraphInfo none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualProofGraphInfos := lvl.visualProofGraphInfos.push info }
+
+/-- Add Visual Lean-only instructional text to the left of the proof-stream graph,
+only while the current goal matches the supplied display text. -/
+elab "VisualProofGraphInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualProofGraphInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualProofGraphInfos := lvl.visualProofGraphInfos.push info }
 
 -- Note: the syntax to add multiple is `(&"anotherOption" <|> &"unbundleHyps")`
 syntax settingsArg := atomic(" (" (&"unbundleHyps") " := " withoutPosition(term) ")")

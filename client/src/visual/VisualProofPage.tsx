@@ -8,7 +8,7 @@ import { selectCompleted, levelCompleted } from '../state/progress'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
-import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualTactic, VisualTransformInfo } from './types'
+import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
@@ -141,7 +141,6 @@ export function VisualProofPage() {
   }, [dispatch, gameId, worldId, levelId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loadingSlow, setLoadingSlow] = useState(false)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
   const [worldTitle, setWorldTitle] = useState<string | null>(null)
   const [worldSize, setWorldSize] = useState<number | null>(null)
@@ -149,6 +148,8 @@ export function VisualProofPage() {
   const [emphasizeItems, setEmphasizeItems] = useState<string[]>([])
   const [visualGoalInfos, setVisualGoalInfos] = useState<VisualGoalInfo[]>([])
   const [visualTransformInfos, setVisualTransformInfos] = useState<VisualTransformInfo[]>([])
+  const [visualTacticHypInfos, setVisualTacticHypInfos] = useState<VisualTacticHypInfo[]>([])
+  const [visualProofGraphInfos, setVisualProofGraphInfos] = useState<VisualProofGraphInfo[]>([])
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
   const handleNextLevel = useCallback(() => {
     let next = levelId + 1
@@ -169,10 +170,8 @@ export function VisualProofPage() {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
     setCanvasState(null)
     setError(null)
-    setLoadingSlow(false)
     if (!worldId || !levelId) return
 
-    const slowTimer = window.setTimeout(() => setLoadingSlow(true), 30000)
     let active = true
 
     void (async () => {
@@ -209,7 +208,6 @@ export function VisualProofPage() {
 
     return () => {
       active = false
-      window.clearTimeout(slowTimer)
     }
   }, [disposeClient, gameId, getClient, worldId, levelId])
 
@@ -233,6 +231,8 @@ export function VisualProofPage() {
     setEmphasizeItems([])
     setVisualGoalInfos([])
     setVisualTransformInfos([])
+    setVisualTacticHypInfos([])
+    setVisualProofGraphInfos([])
     if (!worldId || !levelId) return
     let active = true
     const baseUrl = getDataBaseUrl().replace(/\/$/, '')
@@ -245,6 +245,8 @@ export function VisualProofPage() {
         visualEmphasize?: string[]
         visualGoalInfos?: VisualGoalInfo[]
         visualTransformInfos?: VisualTransformInfo[]
+        visualTacticHypInfos?: VisualTacticHypInfo[]
+        visualProofGraphInfos?: VisualProofGraphInfo[]
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
@@ -253,6 +255,8 @@ export function VisualProofPage() {
         if (levelData.visualEmphasize?.length) setEmphasizeItems(levelData.visualEmphasize)
         if (levelData.visualGoalInfos?.length) setVisualGoalInfos(levelData.visualGoalInfos)
         if (levelData.visualTransformInfos?.length) setVisualTransformInfos(levelData.visualTransformInfos)
+        if (levelData.visualTacticHypInfos?.length) setVisualTacticHypInfos(levelData.visualTacticHypInfos)
+        if (levelData.visualProofGraphInfos?.length) setVisualProofGraphInfos(levelData.visualProofGraphInfos)
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         if (gameData?.skippedLevels?.[worldId]) setSkippedLevels(gameData.skippedLevels[worldId])
         const rawWorldTitle = gameData?.worlds?.nodes?.[worldId]?.title
@@ -393,11 +397,6 @@ export function VisualProofPage() {
           </div>
         </div>
         <p className="visual-loading-text">Connecting to Lean…</p>
-        {loadingSlow && (
-          <p className="visual-loading-slow">
-            Still loading — Lean may take a few minutes to start up for large games.
-          </p>
-        )}
       </div>
     )
   }
@@ -411,6 +410,8 @@ export function VisualProofPage() {
       emphasizeItems={emphasizeItems}
       visualGoalInfos={visualGoalInfos}
       visualTransformInfos={visualTransformInfos}
+      visualTacticHypInfos={visualTacticHypInfos}
+      visualProofGraphInfos={visualProofGraphInfos}
       worldId={worldId}
       levelId={levelId}
       displayLevelId={displayLevelId}

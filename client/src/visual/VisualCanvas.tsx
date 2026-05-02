@@ -5,19 +5,19 @@ import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
-import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualTactic, VisualTransformInfo } from './types'
-import type { ClickAction, ClickActionOption, ProofState } from '../components/infoview/rpc_api'
+import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
+import type { ClickAction, ClickActionOption, InteractiveGoalsWithHints, ProofState } from '../components/infoview/rpc_api'
 import { HypCard } from './HypCard'
 import { GoalCard } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
-import { parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
-import type { EqualityHyp } from './TransformationView'
+import { InstructionGuideArrow, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
+import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
 import type { ConstructionMode } from './ConstructionView'
 import { contextualizeExistsDisplay, contextualizeReductionForms } from './existsDisplay'
-import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, parse, printExpression } from './expr-engine'
+import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaText, parse, printExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
@@ -25,6 +25,7 @@ import { buildForallSpecificationFromDisplay } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
+import { VisualInfoText } from './VisualInfoText'
 import {
   casePathForStream,
   cloneProofTree,
@@ -249,6 +250,23 @@ function streamHypNames(stream?: GoalStream | null): string[] {
   return stream.hyps.flatMap(card => card.hyp.names).filter((name): name is string => Boolean(name))
 }
 
+function cssEscape(value: string) {
+  const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
+  return escapeFn ? escapeFn(value) : value.replace(/["\\]/g, '\\$&')
+}
+
+function clampViewportValue(value: number, min: number, max: number) {
+  if (max < min) return min
+  return Math.min(Math.max(value, min), max)
+}
+
+function rectCenter(rect: DOMRect) {
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ProofStepRecord {
@@ -299,6 +317,12 @@ interface ReductionTooltip {
 interface RewriteOutcome {
   success: boolean
   completed: boolean
+}
+
+interface TacticHypGuide {
+  info: VisualTacticHypInfo
+  style: React.CSSProperties
+  arrow: GuideArrow
 }
 
 interface ExpectedRewriteGoal {
@@ -864,12 +888,102 @@ function parseSpecializeForallAsPlayTactic(
   return { newName, source, binder, value: trimmedValue }
 }
 
+function inferClickGoalIntroNames(
+  stream: GoalStream,
+  resultStep: InteractiveGoalsWithHints,
+): string | null {
+  // focusedGoals is more specific; fall back to goals if empty
+  const goalArr = (resultStep.focusedGoals && resultStep.focusedGoals.length > 0)
+    ? resultStep.focusedGoals
+    : resultStep.goals
+  if (!goalArr || goalArr.length === 0) return null
+  const beforeNames = new Set(stream.hyps.flatMap(c => c.hyp.names))
+  // Collect new hypothesis names from the first goal after the step, in order
+  const newNames = goalArr[0].goal.hyps
+    .flatMap(b => b.names)
+    .filter(n => n !== '[anonymous]' && !beforeNames.has(n))
+  if (newNames.length === 0) return null
+  return `intro ${newNames.join(' ')}`
+}
+
+function nextLeanIntroName(stream: GoalStream, baseName: string): string {
+  const existing = new Set(
+    stream.hyps.flatMap(card => [
+      ...card.hyp.names,
+      ...(card.hyp.playName ? [card.hyp.playName] : []),
+    ]),
+  )
+  if (!existing.has(baseName)) return baseName
+  let suffix = 1
+  while (existing.has(`${baseName}${suffix}`)) suffix += 1
+  return `${baseName}${suffix}`
+}
+
+function inferForallIntroNamesFromGoalText(stream: GoalStream, goalText: string): string[] | null {
+  const forallSymbol = String.fromCharCode(0x2200)
+  const leSymbol = String.fromCharCode(0x2264)
+  const geSymbol = String.fromCharCode(0x2265)
+  let rest = stripOuterParens(goalText)
+  if (!rest.startsWith(forallSymbol)) return null
+  rest = rest.slice(forallSymbol.length).trimStart()
+
+  const comparisonPattern = new RegExp(`^([^\\s(),]+)\\s*(?:<=|>=|<|>|${leSymbol}|${geSymbol})\\s+.+,`, 'u')
+  const comparisonMatch = comparisonPattern.exec(rest)
+  if (comparisonMatch?.[1]) {
+    const varName = nextLeanIntroName(stream, comparisonMatch[1])
+    return [varName, nextLeanIntroName(stream, `h${comparisonMatch[1]}`)]
+  }
+
+  if (rest.startsWith('(')) {
+    let depth = 0
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '(') depth += 1
+      else if (rest[i] === ')') {
+        depth -= 1
+        if (depth === 0) {
+          const binder = rest.slice(1, i).trim()
+          const namesText = binder.includes(':') ? binder.slice(0, binder.lastIndexOf(':')).trim() : binder
+          const firstName = namesText.split(/\s+/).find(Boolean)
+          return firstName ? [nextLeanIntroName(stream, firstName)] : null
+        }
+      }
+    }
+  }
+
+  const shorthandName = rest.split(/[,\s]/).find(Boolean)
+  return shorthandName ? [nextLeanIntroName(stream, shorthandName)] : null
+}
+
+function inferClickGoalIntroFromStream(stream: GoalStream): string | null {
+  const goalText = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
+  const forallNames = inferForallIntroNamesFromGoalText(stream, goalText)
+  if (forallNames && forallNames.length > 0) return `intro ${forallNames.join(' ')}`
+  if (splitImplicationText(goalText)) return `intro ${nextLeanIntroName(stream, 'h')}`
+  return null
+}
+
 function inferLeanTacticFromVisualInteraction(
   playTactic: string,
   stream: GoalStream | null,
+  resultStep?: InteractiveGoalsWithHints,
 ): string | null {
   if (playTactic === 'click_goal_left') return 'left'
   if (playTactic === 'click_goal_right') return 'right'
+
+  if (playTactic === 'click_goal') {
+    if (!stream) return null
+    const clickAction = stream.goal.clickAction
+    // Fast-path for constructor and rfl (no name needed)
+    if (clickAction?.streamSplit) return 'constructor'
+    if (clickAction?.tooltip?.includes('complete')) return 'rfl'
+    // For intro: derive exact name from the result step
+    if (resultStep) {
+      const fromResult = inferClickGoalIntroNames(stream, resultStep)
+      if (fromResult) return fromResult
+    }
+    if (!clickAction?.playTactic) return null
+    return inferClickGoalIntroFromStream(stream) ?? 'intro'
+  }
 
   if (playTactic.startsWith('click_prop ')) {
     const hypName = playTactic.slice('click_prop '.length).trim()
@@ -955,9 +1069,15 @@ function resolveLeanTactic(
   command: string,
   playTactic: string,
   stream: GoalStream | null,
+  resultStep?: InteractiveGoalsWithHints,
 ): string | null {
-  if (annotationLeanTactic) return annotationLeanTactic
-  const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream)
+  const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream, resultStep)
+  const annotationLeaf = stripCasePrefixes(annotationLeanTactic)
+  const shouldPreferNamedIntro =
+    playTactic === 'click_goal' &&
+    annotationLeaf === 'intro' &&
+    (inferredLeanTactic?.startsWith('intro ') ?? false)
+  if (annotationLeanTactic && !shouldPreferNamedIntro) return annotationLeanTactic
   if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
   if (!isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
   return null
@@ -1053,6 +1173,8 @@ interface VisualCanvasProps {
   emphasizeItems?: string[]
   visualGoalInfos?: VisualGoalInfo[]
   visualTransformInfos?: VisualTransformInfo[]
+  visualTacticHypInfos?: VisualTacticHypInfo[]
+  visualProofGraphInfos?: VisualProofGraphInfo[]
   worldId: string
   levelId: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -1256,7 +1378,8 @@ function TheoremTray({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VisualCanvas({
-  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos, worldId, levelId,
+  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
+  visualTacticHypInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted
 }: VisualCanvasProps) {
@@ -1265,6 +1388,7 @@ export function VisualCanvas({
   const goalsContainerRef = useRef<HTMLDivElement>(null)
   const [goalsTopOverride, setGoalsTopOverride] = useState<number | null>(null)
   const [layoutVersion, setLayoutVersion] = useState(0)
+  const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -1328,6 +1452,7 @@ export function VisualCanvas({
   const [iffDirections, setIffDirections] = useState<Record<string, true>>({})
   const goalChoiceMenuRef = useRef<HTMLDivElement>(null)
   const reductionTooltipCloseTimerRef = useRef<number | null>(null)
+  const tacticHypGuideOpenedTrayRef = useRef(false)
   const visualTestStateRef = useRef<{
     canvasState: CanvasState
     currentStream: GoalStream | null
@@ -1705,7 +1830,7 @@ export function VisualCanvas({
     const leanTactic = handledBySyntheticReflexiveClick
       ? 'rfl'
       : result
-      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream)
+      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream, lastStep)
       : null
 
     // Log the attempt regardless of outcome
@@ -1788,7 +1913,7 @@ export function VisualCanvas({
     }])
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
-    if (leanCanvas.completed && options?.solvedGoalId) {
+    if ((leanCanvas.completed || nextCanvas.completed) && options?.solvedGoalId) {
       if (options?.placementHint) clearPositionOverride(options.placementHint.hypId)
       const completionCanvas = options?.placementHint
         ? placeHypNearAnchor(nextCanvas, options.placementHint)
@@ -2474,7 +2599,7 @@ export function VisualCanvas({
 
     const lastStep = result?.steps.at(-1)
     const leanTactic = result
-      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream)
+      ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream, lastStep)
       : null
 
     appendPlayLog(logKey, {
@@ -2586,7 +2711,7 @@ export function VisualCanvas({
     const lastStep = result?.steps.at(-1)
     const annotationLeanTactic = lastStep?.annotation?.leanTactic ?? null
     const leanTactic = result
-      ? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream)
+      ? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream, lastStep)
       : null
     appendPlayLog(logKey, {
       timestamp: Date.now(),
@@ -2966,6 +3091,125 @@ export function VisualCanvas({
   const totalLeafCount = leafCount(proofTree)
   const visibleHyps = displayStream?.hyps ?? []
   const streamInteractionsEnabled = currentStreamIsLive && !currentStreamIsCompleted && !canvasState.completed
+  const proofGraphVisible = totalLeafCount > 1
+  const displayGoalText = displayStream
+    ? formatFormulaText(TaggedText_stripTags(displayStream.goal.type))
+    : null
+  const activeTacticHypInfos = React.useMemo(
+    () => (visualTacticHypInfos ?? []).filter(info =>
+      !proofGraphVisible && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
+    ),
+    [displayGoalText, proofGraphVisible, visualTacticHypInfos],
+  )
+  const activeProofGraphInfos = React.useMemo(
+    () => proofGraphVisible
+      ? (visualProofGraphInfos ?? []).filter(info =>
+          !info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText)
+        )
+      : [],
+    [displayGoalText, proofGraphVisible, visualProofGraphInfos],
+  )
+
+  useEffect(() => {
+    if (tacticHypGuideOpenedTrayRef.current || proofSteps.length > 0 || activeTacticHypInfos.length === 0) return
+    const guideTactics = new Set(activeTacticHypInfos.map(info => info.tactic))
+    if (!visualTactics.some(tactic => guideTactics.has(tactic.name))) return
+    tacticHypGuideOpenedTrayRef.current = true
+    setActiveTrayTab('tactics')
+  }, [activeTacticHypInfos, proofSteps.length, visualTactics])
+
+  useLayoutEffect(() => {
+    const updateGuides = () => {
+      if (activeTacticHypInfos.length === 0) {
+        setTacticHypGuides([])
+        return
+      }
+
+      const nextGuides: TacticHypGuide[] = []
+      for (const info of activeTacticHypInfos) {
+        const sourceEl = document.querySelector<HTMLElement>(
+          `[data-tactic-name="${cssEscape(info.tactic)}"]`,
+        )
+        const targetCard = visibleHyps.find(card =>
+          card.hyp.names.includes(info.hyp) || card.hyp.playName === info.hyp
+        )
+        const targetEl = targetCard ? document.getElementById(targetCard.id) : null
+        if (!sourceEl || !targetEl) continue
+
+        const sourceRect = sourceEl.getBoundingClientRect()
+        const targetRect = targetEl.getBoundingClientRect()
+        const trayRect = document.getElementById(THEOREM_TRAY_ID)?.getBoundingClientRect()
+        const canvasRect = combiningCanvasRef.current?.getBoundingClientRect()
+        const goalCardEl = goalsContainerRef.current?.querySelector<HTMLElement>('[data-testid="goal-card"]')
+        const goalStatementRect = goalCardEl?.querySelector<HTMLElement>('.proposition')?.getBoundingClientRect()
+        const sourceCenter = rectCenter(sourceRect)
+        const start = {
+          x: sourceCenter.x,
+          y: trayRect ? Math.max(72, trayRect.top - 8) : sourceRect.top,
+        }
+        const end = {
+          x: targetRect.right + 14,
+          y: targetRect.top + targetRect.height / 2,
+        }
+        const midpoint = {
+          x: (start.x + end.x) / 2,
+          y: (start.y + end.y) / 2,
+        }
+        const guideWidth = Math.min(380, Math.max(280, window.innerWidth - 32))
+        const lineMaxX = Math.max(start.x, end.x)
+        const minLeft = (canvasRect?.left ?? 0) + 16
+        const maxLeft = Math.min(
+          window.innerWidth - guideWidth - 16,
+          (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
+        )
+        const minCenterY = (canvasRect?.top ?? 0) + 96
+        const maxCenterY = (trayRect?.top ?? window.innerHeight - trayHeight) - 72
+        const goalCenterY = goalStatementRect
+          ? rectCenter(goalStatementRect).y
+          : goalCardEl
+            ? rectCenter(goalCardEl.getBoundingClientRect()).y
+            : midpoint.y
+        const left = clampViewportValue(lineMaxX + 34, minLeft, maxLeft)
+        const top = clampViewportValue(goalCenterY, minCenterY, maxCenterY)
+
+        nextGuides.push({
+          info,
+          style: {
+            left,
+            top,
+            transform: 'translateY(-50%)',
+            width: guideWidth,
+          },
+          arrow: {
+            start,
+            end,
+            startPadding: 0,
+            endPadding: 0,
+            arc: start.y > end.y ? 'up' : 'down',
+          },
+        })
+      }
+      setTacticHypGuides(nextGuides)
+    }
+
+    updateGuides()
+    const tray = document.getElementById(THEOREM_TRAY_ID)
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateGuides)
+    if (observer) {
+      if (combiningCanvasRef.current) observer.observe(combiningCanvasRef.current)
+      if (tray) observer.observe(tray)
+    }
+    window.addEventListener('resize', updateGuides)
+    window.addEventListener('scroll', updateGuides, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updateGuides)
+      window.removeEventListener('scroll', updateGuides, true)
+    }
+  }, [activeTacticHypInfos, activeTrayTab, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
+
   visualTestStateRef.current = {
     canvasState,
     currentStream,
@@ -3338,42 +3582,55 @@ export function VisualCanvas({
             <div className="visual-thinking-label">Thinking…</div>
           )}
 
-          {totalLeafCount > 1 && (
+          {proofGraphVisible && (
             <div className="proof-tree-panel" ref={proofTreePanelRef}>
-              <ProofStreamGraph
-                tree={proofTree}
-                currentStreamId={currentStream?.id ?? null}
-                onNavigate={navigateToStream}
-              />
-              {currentStream && (
-                <div className="stream-navigator" data-testid="stream-navigator">
-                  <button
-                    className="stream-nav-btn"
-                    data-testid="stream-nav-prev"
-                    onClick={goLeft}
-                    disabled={currentStreamIndex <= 0}
-                  >
-                    &lt;
-                  </button>
-                  <div
-                    className="stream-label"
-                    data-testid="stream-nav-label"
-                    data-current-stream-index={String(currentStreamIndex + 1)}
-                    data-total-streams={String(activeStreamIds.length)}
-                    data-current-stream-id={currentStream.id}
-                  >
-                    Stream {currentStreamIndex + 1} of {activeStreamIds.length}
+              <div className="proof-tree-with-info">
+                {activeProofGraphInfos.length > 0 && (
+                  <div className="proof-graph-info-stack">
+                    {activeProofGraphInfos.map((info, index) => (
+                      <div key={index} className="visual-info-callout proof-graph-info">
+                        <VisualInfoText text={info.text} />
+                      </div>
+                    ))}
                   </div>
-                  <button
-                    className="stream-nav-btn"
-                    data-testid="stream-nav-next"
-                    onClick={goRight}
-                    disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
-                  >
-                    &gt;
-                  </button>
+                )}
+                <div className="proof-tree-main">
+                  <ProofStreamGraph
+                    tree={proofTree}
+                    currentStreamId={currentStream?.id ?? null}
+                    onNavigate={navigateToStream}
+                  />
+                  {currentStream && (
+                    <div className="stream-navigator" data-testid="stream-navigator">
+                      <button
+                        className="stream-nav-btn"
+                        data-testid="stream-nav-prev"
+                        onClick={goLeft}
+                        disabled={currentStreamIndex <= 0}
+                      >
+                        &lt;
+                      </button>
+                      <div
+                        className="stream-label"
+                        data-testid="stream-nav-label"
+                        data-current-stream-index={String(currentStreamIndex + 1)}
+                        data-total-streams={String(activeStreamIds.length)}
+                        data-current-stream-id={currentStream.id}
+                      >
+                        Stream {currentStreamIndex + 1} of {activeStreamIds.length}
+                      </div>
+                      <button
+                        className="stream-nav-btn"
+                        data-testid="stream-nav-next"
+                        onClick={goRight}
+                        disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
+                      >
+                        &gt;
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -3520,6 +3777,14 @@ export function VisualCanvas({
               }}
               emphasizeItems={emphasizeItems}
             />
+            {tacticHypGuides.map((guide, index) => (
+              <React.Fragment key={`${guide.info.tactic}-${guide.info.hyp}-${index}`}>
+                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
+                <div className="visual-info-callout combining-info tactic-hyp-info" style={guide.style}>
+                  <VisualInfoText text={guide.info.text} />
+                </div>
+              </React.Fragment>
+            ))}
           </div>
           {proofSteps.length > 0 && (
             <div

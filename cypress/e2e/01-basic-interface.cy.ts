@@ -7,26 +7,24 @@ describe('Basic Lean4game Interface', () => {
       cy.visit('/#/not-found')
       cy.get('#error-page').should('be.visible')
     })
-    it('contains a valid link', () => {
-      cy.get('#error-page a')
-        .should('have.attr', 'target', '_blank')
-        .then($a => {
-          const href = $a.prop('href')
-          cy.request(href).its('status').should('eq', 200)
-        })
+    it('shows only the centered error', () => {
+      cy.get('#error-page').should($page => {
+        expect($page).to.have.css('display', 'flex')
+        expect($page).to.have.css('align-items', 'center')
+        expect($page).to.have.css('justify-content', 'center')
+      })
+
+      cy.get('#error-page .error-message')
+        .should('be.visible')
+        .and('contain', '404 Not Found')
+
+      cy.get('#error-page a').should('not.exist')
+      cy.get('#error-page h1').should('not.exist')
     })
-    it('background image exists', () => {
+    it('does not use the old illustrated background', () => {
       cy.get('#error-page')
         .should('have.css', 'background-image')
-        .and('not.eq', 'none')
-        .then((bg: any) => {
-          const urlMatch = bg.match(/url\(["']?(.*?)["']?\)/)
-          expect(urlMatch).to.not.be.null
-          const imageUrl = urlMatch[1]
-          // If the imageUrl is relative, convert to absolute
-          const absoluteUrl = imageUrl.startsWith('http') ? imageUrl : `${Cypress.config().baseUrl}${imageUrl}`
-          cy.request(absoluteUrl).its('status').should('eq', 200)
-        })
+        .and('not.include', 'RoboSurprised')
     })
   })
   describe('Popup', () => {

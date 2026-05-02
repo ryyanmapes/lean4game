@@ -876,7 +876,7 @@ function synthesizeGoalIntroStream(focusedStream: GoalStream): GoalStream | null
   if (!implication) return null
 
   const [domain, codomain] = implication
-  const hypName = nextFreshHypName(focusedStream.hyps, 'h')
+  const hypName = nextFreshRawHypName(focusedStream.hyps, 'h')
   const nextHyps = cloneHypCards(focusedStream.hyps)
   nextHyps.push({
     id: uuidv4(),
@@ -1319,8 +1319,8 @@ export function reconcileProofTreeAfterInteraction(
     shouldTreatAsSplit && remaining.length === 0 && !globallyCompleted && trustedFocusedStreams === undefined
       ? synthesizeSplitStreamsForInteraction(focusedStream, playTactic)
       : []
-  const buildNextCanvas = (nextFocusedStreams: GoalStream[]) =>
-    normalizeCanvasInteractivity(
+  const buildNextCanvas = (nextFocusedStreams: GoalStream[]) => {
+    const nextCanvas = normalizeCanvasInteractivity(
       orderCanvasStreamsByTree(
         nextTree,
         buildReconciledCanvasState(
@@ -1333,6 +1333,10 @@ export function reconcileProofTreeAfterInteraction(
         ),
       ),
     )
+    return collectLiveStreamIds(nextTree).length === 0
+      ? { ...nextCanvas, completed: true }
+      : nextCanvas
+  }
 
   if (shouldTreatAsSplit) {
     const splitStreams = remaining.length >= 2 ? remaining : synthesizedSplitStreams

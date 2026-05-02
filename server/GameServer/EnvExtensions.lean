@@ -273,6 +273,18 @@ structure VisualTransformInfo where
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
+structure VisualTacticHypInfo where
+  tactic : String
+  hyp : String
+  goal : Option String := none
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
+
+structure VisualProofGraphInfo where
+  goal : Option String := none
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
+
 structure GameLevel where
   index: Nat
   /-- The title of the level. -/
@@ -308,12 +320,22 @@ structure GameLevel where
   preamble : TSyntax `Lean.Parser.Tactic.tacticSeq := default
   /-- When true, Visual Lean hides this level from navigation and the world map. -/
   visualSkipLevel : Bool := false
+  /-- Optional Visual Lean label overriding the numeric display for special levels. -/
+  visualLevelNumber? : Option String := none
+  /-- Optional Visual Lean color scheme name for special level styling. -/
+  visualColorScheme? : Option String := none
+  /-- Whether Visual Lean should treat this level as a dramatic/boss-style opening. -/
+  visualDramaticStart : Bool := false
   /-- Names of tactics/theorems to highlight in the Visual Lean inventory tray. -/
   visualEmphasize : Array Name := #[]
   /-- Visual Lean instructional callouts attached to the proof goal card. -/
   visualGoalInfos : Array VisualGoalInfo := #[]
   /-- Visual Lean instructional callouts attached to transformation mode. -/
   visualTransformInfos : Array VisualTransformInfo := #[]
+  /-- Visual Lean instructional callouts linking a tactic card to a hypothesis card. -/
+  visualTacticHypInfos : Array VisualTacticHypInfo := #[]
+  /-- Visual Lean instructional callouts attached to the proof-stream graph. -/
+  visualProofGraphInfos : Array VisualProofGraphInfo := #[]
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -338,9 +360,14 @@ structure LevelInfo where
   template : Option String
   image: Option String
   visualSkipLevel : Bool := false
+  visualLevelNumber? : Option String := none
+  visualColorScheme? : Option String := none
+  visualDramaticStart : Bool := false
   visualEmphasize : Array String := #[]
   visualGoalInfos : Array VisualGoalInfo := #[]
   visualTransformInfos : Array VisualTransformInfo := #[]
+  visualTacticHypInfos : Array VisualTacticHypInfo := #[]
+  visualProofGraphInfos : Array VisualProofGraphInfo := #[]
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -373,9 +400,14 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     template := lvl.template
     image := lvl.image
     visualSkipLevel := lvl.visualSkipLevel
+    visualLevelNumber? := lvl.visualLevelNumber?
+    visualColorScheme? := lvl.visualColorScheme?
+    visualDramaticStart := lvl.visualDramaticStart
     visualEmphasize := lvl.visualEmphasize.map (·.toString)
     visualGoalInfos := lvl.visualGoalInfos
     visualTransformInfos := lvl.visualTransformInfos
+    visualTacticHypInfos := lvl.visualTacticHypInfos
+    visualProofGraphInfos := lvl.visualProofGraphInfos
   }
 
 /-! ## World -/

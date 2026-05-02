@@ -45,7 +45,7 @@ interface ExpectedRewriteGoal {
   relation: TransformRelation
 }
 
-interface GuideArrow {
+export interface GuideArrow {
   start: { x: number; y: number }
   end: { x: number; y: number }
   startPadding?: number
@@ -58,7 +58,7 @@ function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   return draggedId.startsWith('thm_') ? hyp.id : (hyp.rewriteRef ?? hyp.label)
 }
 
-function InstructionGuideArrow({ arrow }: { arrow: GuideArrow }) {
+export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideArrow; className?: string }) {
   const dx = arrow.end.x - arrow.start.x
   const dy = arrow.end.y - arrow.start.y
   const len = Math.sqrt(dx * dx + dy * dy) || 1
@@ -109,7 +109,7 @@ function InstructionGuideArrow({ arrow }: { arrow: GuideArrow }) {
   ].join(' ')
 
   return (
-    <svg className="visual-instruction-arrow" aria-hidden="true">
+    <svg className={`visual-instruction-arrow${className ? ` ${className}` : ''}`} aria-hidden="true">
       <path d={path} />
       <polygon points={arrowHeadPoints} />
     </svg>

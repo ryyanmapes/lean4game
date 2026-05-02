@@ -408,12 +408,6 @@
   margin: 0;
 }
 
-.visual-loading-slow {
-  color: var(--visual-text-secondary);
-  font-size: 0.85rem;
-  margin: 0.5rem 0 0;
-}
-
 /* ── Canvas: free-form absolute-position workspace ── */
 .visual-page .combining-canvas {
   position: relative;
@@ -615,6 +609,18 @@
   font-size: 1em;
 }
 
+.visual-page .combining-info {
+  position: fixed;
+  z-index: 36;
+  pointer-events: none;
+}
+
+.visual-page .tactic-hyp-info {
+  display: flex;
+  align-items: center;
+  max-width: min(24rem, calc(100vw - 2rem));
+}
+
 .visual-page .goal-info-arrow {
   position: absolute;
   inset: 0;
@@ -686,6 +692,32 @@
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
+}
+
+.visual-page .proof-tree-with-info {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.visual-page .proof-tree-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.visual-page .proof-graph-info-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: min(24rem, calc(100vw - 9rem));
+}
+
+.visual-page .proof-graph-info {
+  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(96, 165, 250, 0.18);
 }
 
 .visual-page .proof-tree-diagram {
@@ -1368,6 +1400,10 @@
   overflow: visible;
   pointer-events: none;
   z-index: 18;
+}
+
+.visual-page .visual-instruction-arrow.combining-instruction-arrow {
+  z-index: 35;
 }
 
 .visual-page .visual-instruction-arrow path {

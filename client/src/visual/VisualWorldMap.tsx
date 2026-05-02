@@ -37,6 +37,7 @@ import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
 import { getWebsocketUrl } from '../utils/url'
+import { titleCaseLevel } from './VisualHeader'
 import './visual.css'
 
 const r = 16
@@ -399,7 +400,7 @@ export function VisualWorldMap() {
         const level = i + 1
         return fetch(`/data/${gameId}/level__${worldId}__${level}.json`)
           .then(r => r.json())
-          .then((d: { title?: string }) => ({ worldId, level, title: d.title ?? `Level ${level}` }))
+          .then((d: { title?: string }) => ({ worldId, level, title: d.title ? titleCaseLevel(d.title) : `Level ${level}` }))
           .catch(() => ({ worldId, level, title: `Level ${level}` }))
       })
     )

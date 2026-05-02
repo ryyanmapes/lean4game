@@ -65,6 +65,18 @@ export interface VisualTransformInfo {
   text: string
 }
 
+export interface VisualTacticHypInfo {
+  tactic: string
+  hyp: string
+  goal?: string | null
+  text: string
+}
+
+export interface VisualProofGraphInfo {
+  goal?: string | null
+  text: string
+}
+
 /** A draggable canvas copy created from a proposition theorem template. */
 export interface PropositionTheoremCopy {
   id: string

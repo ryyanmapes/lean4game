@@ -165,8 +165,7 @@ deriving RpcEncodable
 structure StepAnnotation where
   /-- The play tactic as sent by the frontend, e.g. `"drag_to h h2"`. -/
   playTactic : String
-  /-- The standard Lean tactic that was actually executed, e.g. `"specialize h2 h"`.
-      Currently always `none`; reserved for a future annotation pass. -/
+  /-- The standard Lean tactic that was actually executed, e.g. `"specialize h2 h"`. -/
   leanTactic : Option String := none
 deriving FromJson, ToJson
 

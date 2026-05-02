@@ -117,7 +117,7 @@ export interface InteractiveGoalWithHints {
 
 export interface StepAnnotation {
   playTactic: string;    // e.g. "drag_to h h2"
-  leanTactic?: string;   // e.g. "specialize h2 h" — resolved by Lean (currently always absent)
+  leanTactic?: string;   // e.g. "specialize h2 h" — resolved by Lean when annotation pass runs
 }
 
 export interface InteractiveGoalsWithHints {
