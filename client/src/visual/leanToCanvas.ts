@@ -82,15 +82,30 @@ function isCompactLandscapeViewport(): boolean {
   return window.innerWidth > window.innerHeight && window.innerHeight <= 500
 }
 
+function isPhonePortraitViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth <= 720 && window.innerHeight >= window.innerWidth
+}
+
 function gridPosition(streamIndex: number, cardIndex: number): { x: number; y: number } {
   const compactLandscape = isCompactLandscapeViewport()
-  const COL_W = compactLandscape ? 180 : 280
-  const ROW_H = compactLandscape ? 92 : 110
-  const START_X = compactLandscape ? 28 : 80
-  const START_Y = compactLandscape ? 96 : 130
-  const cols = compactLandscape
-    ? (window.innerWidth >= 760 ? 3 : 2)
-    : 3
+  const phonePortrait = isPhonePortraitViewport()
+  const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth
+  const phoneCols = viewportWidth >= 360 ? 2 : 1
+  const phoneGap = 16
+  const phoneStartX = 20
+  const phoneColW = phoneCols === 1
+    ? 0
+    : Math.max(156, (viewportWidth - phoneStartX * 2 - phoneGap) / phoneCols)
+  const COL_W = phonePortrait ? phoneColW : compactLandscape ? 180 : 280
+  const ROW_H = phonePortrait ? 96 : compactLandscape ? 92 : 110
+  const START_X = phonePortrait ? phoneStartX : compactLandscape ? 28 : 80
+  const START_Y = phonePortrait ? 116 : compactLandscape ? 96 : 130
+  const cols = phonePortrait
+    ? phoneCols
+    : compactLandscape
+      ? (viewportWidth >= 760 ? 3 : 2)
+      : 3
   const col = cardIndex % cols
   const row = Math.floor(cardIndex / cols)
   void streamIndex

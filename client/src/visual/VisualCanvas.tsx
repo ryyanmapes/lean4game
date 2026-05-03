@@ -75,6 +75,10 @@ interface CanvasBounds {
   top: number
   width: number
   height: number
+  minX?: number
+  minY?: number
+  maxX?: number
+  maxY?: number
 }
 
 function resolveCollisions(
@@ -150,10 +154,12 @@ function resolveCollisions(
 
   for (const item of items) {
     if (!item.fixed) {
-      const minX = item.hw + COLLISION_EDGE_MARGIN
-      const maxX = Math.max(minX, canvasBounds.width - item.hw - COLLISION_EDGE_MARGIN)
-      const minY = item.hh + COLLISION_EDGE_MARGIN
-      const maxY = Math.max(minY, canvasBounds.height - item.hh - COLLISION_EDGE_MARGIN)
+      const minX = (canvasBounds.minX ?? 0) + item.hw + COLLISION_EDGE_MARGIN
+      const maxXLimit = canvasBounds.maxX ?? canvasBounds.width
+      const maxX = Math.max(minX, maxXLimit - item.hw - COLLISION_EDGE_MARGIN)
+      const minY = (canvasBounds.minY ?? 0) + item.hh + COLLISION_EDGE_MARGIN
+      const maxYLimit = canvasBounds.maxY ?? canvasBounds.height
+      const maxY = Math.max(minY, maxYLimit - item.hh - COLLISION_EDGE_MARGIN)
       item.cx = Math.max(minX, Math.min(maxX, item.cx))
       item.cy = Math.max(minY, Math.min(maxY, item.cy))
     }
@@ -260,6 +266,12 @@ function clampViewportValue(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
+function isPhonePortraitViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia?.('(max-width: 720px) and (orientation: portrait)').matches
+    ?? (window.innerWidth <= 720 && window.innerHeight >= window.innerWidth)
+}
+
 function rectCenter(rect: DOMRect) {
   return {
     x: rect.left + rect.width / 2,
@@ -313,6 +325,8 @@ interface ReductionTooltip {
   forms: string[]
   isClosing?: boolean
 }
+
+type MobilePage = 'proof' | 'main' | 'graph'
 
 interface RewriteOutcome {
   success: boolean
@@ -1394,7 +1408,10 @@ export function VisualCanvas({
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
   const goalsContainerRef = useRef<HTMLDivElement>(null)
   const [goalsTopOverride, setGoalsTopOverride] = useState<number | null>(null)
+  const [goalStackHeight, setGoalStackHeight] = useState(0)
   const [layoutVersion, setLayoutVersion] = useState(0)
+  const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
+  const [mobilePage, setMobilePage] = useState<MobilePage>('main')
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
@@ -1461,6 +1478,7 @@ export function VisualCanvas({
   const goalChoiceMenuRef = useRef<HTMLDivElement>(null)
   const reductionTooltipCloseTimerRef = useRef<number | null>(null)
   const tacticHypGuideOpenedTrayRef = useRef(false)
+  const mobileTouchStartRef = useRef<{ x: number; y: number } | null>(null)
   const visualTestStateRef = useRef<{
     canvasState: CanvasState
     currentStream: GoalStream | null
@@ -1494,7 +1512,10 @@ export function VisualCanvas({
     html.style.overscrollBehavior = 'none'
     body.style.overscrollBehavior = 'none'
 
-    const handleResize = () => setLayoutVersion(version => version + 1)
+    const handleResize = () => {
+      setLayoutVersion(version => version + 1)
+      setIsPhonePortrait(isPhonePortraitViewport())
+    }
     window.addEventListener('resize', handleResize)
 
     return () => {
@@ -1552,18 +1573,24 @@ export function VisualCanvas({
   function getCombiningCanvasBounds(): CanvasBounds {
     const rect = combiningCanvasRef.current?.getBoundingClientRect()
     if (!rect) {
+      const bottomReserved = isPhonePortrait ? trayHeight + goalStackHeight + 28 : 0
       return {
         left: 0,
         top: 0,
         width: window.innerWidth,
         height: window.innerHeight,
+        minY: isPhonePortrait ? 104 : undefined,
+        maxY: isPhonePortrait ? Math.max(176, window.innerHeight - bottomReserved) : undefined,
       }
     }
+    const bottomReserved = isPhonePortrait ? trayHeight + goalStackHeight + 28 : 0
     return {
       left: rect.left,
       top: rect.top,
       width: rect.width,
       height: rect.height,
+      minY: isPhonePortrait ? 104 : undefined,
+      maxY: isPhonePortrait ? Math.max(176, rect.height - bottomReserved) : undefined,
     }
   }
 
@@ -1575,22 +1602,27 @@ export function VisualCanvas({
     margin = COLLISION_EDGE_MARGIN,
   ): { x: number; y: number } {
     const bounds = getCombiningCanvasBounds()
-    const maxX = Math.max(margin, bounds.width - maxWidth - margin)
-    const maxY = Math.max(margin, bounds.height - maxHeight - margin)
+    const minX = (bounds.minX ?? 0) + margin
+    const minY = (bounds.minY ?? 0) + margin
+    const maxXLimit = bounds.maxX ?? bounds.width
+    const maxYLimit = bounds.maxY ?? bounds.height
+    const maxX = Math.max(minX, maxXLimit - maxWidth - margin)
+    const maxY = Math.max(minY, maxYLimit - maxHeight - margin)
     return {
-      x: Math.max(margin, Math.min(maxX, x)),
-      y: Math.max(margin, Math.min(maxY, y)),
+      x: Math.max(minX, Math.min(maxX, x)),
+      y: Math.max(minY, Math.min(maxY, y)),
     }
   }
 
   useLayoutEffect(() => {
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds))
-  }, [canvasState.streams, showProofSidebar, layoutVersion])
+  }, [canvasState.streams, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current
     const goals = goalsContainerRef.current
+    if (isPhonePortrait) { setGoalsTopOverride(null); return }
     if (!panel || !goals) { setGoalsTopOverride(null); return }
 
     const update = () => {
@@ -1609,7 +1641,27 @@ export function VisualCanvas({
     obs.observe(goals)
     window.addEventListener('resize', update)
     return () => { obs.disconnect(); window.removeEventListener('resize', update) }
-  }, [proofTree])
+  }, [isPhonePortrait, proofTree])
+
+  useLayoutEffect(() => {
+    const goals = goalsContainerRef.current
+    if (!goals) {
+      setGoalStackHeight(0)
+      return
+    }
+
+    const update = () => setGoalStackHeight(goals.offsetHeight)
+    update()
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(update)
+    observer?.observe(goals)
+    window.addEventListener('resize', update)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [isPhonePortrait, layoutVersion, visualGoalInfos])
 
   useLayoutEffect(() => {
     if (!goalChoiceMenu) {
@@ -3102,20 +3154,21 @@ export function VisualCanvas({
   const visibleHyps = displayStream?.hyps ?? []
   const streamInteractionsEnabled = currentStreamIsLive && !currentStreamIsCompleted && !canvasState.completed
   const proofGraphVisible = totalLeafCount > 1
+  const proofGraphOccupiesMainView = proofGraphVisible && !isPhonePortrait
   const displayGoalText = displayStream
     ? formatFormulaText(TaggedText_stripTags(displayStream.goal.type))
     : null
   const activeTacticHypInfos = React.useMemo(
     () => (visualTacticHypInfos ?? []).filter(info =>
-      !proofGraphVisible && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
+      !proofGraphOccupiesMainView && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
     ),
-    [displayGoalText, proofGraphVisible, visualTacticHypInfos],
+    [displayGoalText, proofGraphOccupiesMainView, visualTacticHypInfos],
   )
   const activeHypGoalInfos = React.useMemo(
     () => (visualHypGoalInfos ?? []).filter(info =>
-      !proofGraphVisible && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
+      !proofGraphOccupiesMainView && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
     ),
-    [displayGoalText, proofGraphVisible, visualHypGoalInfos],
+    [displayGoalText, proofGraphOccupiesMainView, visualHypGoalInfos],
   )
   const activeProofGraphInfos = React.useMemo(
     () => proofGraphVisible
@@ -3125,6 +3178,16 @@ export function VisualCanvas({
       : [],
     [displayGoalText, proofGraphVisible, visualProofGraphInfos],
   )
+
+  useEffect(() => {
+    if (!isPhonePortrait && mobilePage !== 'main') {
+      setMobilePage('main')
+      return
+    }
+    if (!proofGraphVisible && mobilePage === 'graph') {
+      setMobilePage('main')
+    }
+  }, [isPhonePortrait, mobilePage, proofGraphVisible])
 
   useEffect(() => {
     if (tacticHypGuideOpenedTrayRef.current || proofSteps.length > 0 || activeTacticHypInfos.length === 0) return
@@ -3641,6 +3704,215 @@ export function VisualCanvas({
     navigateToStream(activeStreamIds[currentStreamIndex + 1]!)
   }
 
+  const proofSidebarWidth = !isPhonePortrait && showProofSidebar ? 280 : 0
+  const visualPageStyle = {
+    '--proof-sidebar-width': `${proofSidebarWidth}px`,
+    '--tray-height': `${trayHeight}px`,
+    '--mobile-goal-stack-height': `${goalStackHeight}px`,
+  } as React.CSSProperties
+
+  function setProofSidebarOpen(next: boolean) {
+    setShowProofSidebar(next)
+    try { localStorage.setItem('visual-proof-sidebar-open', String(next)) } catch {}
+  }
+
+  function setProofViewMode(mode: 'lean' | 'play') {
+    setSideViewMode(mode)
+    try { localStorage.setItem('visual-proof-view-mode', mode) } catch {}
+  }
+
+  function copyDisplayedProof() {
+    const text = sideViewMode === 'lean'
+      ? buildStructuredLeanProof(proofSteps)
+      : proofSteps.map(s => s.playTactic).join('\n')
+    navigator.clipboard.writeText(text).catch(() => {})
+  }
+
+  function proofStepDisplay(step: ProofStepRecord) {
+    if (sideViewMode === 'lean') {
+      const { casePath } = parseFocusedCommand(step.command)
+      const leaf = stripCasePrefixes(step.leanTactic)
+      if (!leaf) {
+        const fallback = isVisualOnlyPlayTactic(step.playTactic)
+          ? `? (${step.playTactic})`
+          : step.playTactic
+        return formatProofDisplayText(
+          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback),
+        )
+      }
+      return formatProofDisplayText(
+        casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf),
+      )
+    }
+
+    const { casePath } = parseFocusedCommand(step.command)
+    return formatProofDisplayText(
+      casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic),
+    )
+  }
+
+  function renderProofToolbar() {
+    return (
+      <div className="proof-sidebar-header">
+        <button
+          className={`proof-sidebar-mode-btn${sideViewMode === 'lean' ? ' active' : ''}`}
+          onClick={() => setProofViewMode('lean')}
+        >Core</button>
+        <button
+          className={`proof-sidebar-mode-btn${sideViewMode === 'play' ? ' active' : ''}`}
+          onClick={() => setProofViewMode('play')}
+        >Interactive</button>
+        <button
+          className="proof-sidebar-copy-btn"
+          onClick={copyDisplayedProof}
+          title="Copy to clipboard"
+        >Copy</button>
+      </div>
+    )
+  }
+
+  function renderProofStepList() {
+    return (
+      <div className="proof-sidebar-steps">
+        {proofSteps.length === 0
+          ? <div className="proof-sidebar-empty">No proof steps yet.</div>
+          : proofSteps.map((step, i) => {
+              const display = proofStepDisplay(step)
+              const isUnknown = sideViewMode === 'lean' && !step.leanTactic && isVisualOnlyPlayTactic(step.playTactic)
+              return (
+                <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
+                  <span className="proof-sidebar-step-num">{i + 1}</span>
+                  <span className="proof-sidebar-step-text">{display}</span>
+                </div>
+              )
+            })
+        }
+      </div>
+    )
+  }
+
+  function renderProofGraphContent() {
+    return (
+      <div className="proof-tree-with-info">
+        {activeProofGraphInfos.length > 0 && (
+          <div className="proof-graph-info-stack">
+            {activeProofGraphInfos.map((info, index) => (
+              <div key={index} className="visual-info-callout proof-graph-info">
+                <VisualInfoText text={info.text} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="proof-tree-main">
+          <ProofStreamGraph
+            tree={proofTree}
+            currentStreamId={currentStream?.id ?? null}
+            onNavigate={navigateToStream}
+          />
+          {currentStream && (
+            <div className="stream-navigator" data-testid="stream-navigator">
+              <button
+                className="stream-nav-btn"
+                data-testid="stream-nav-prev"
+                onClick={goLeft}
+                disabled={currentStreamIndex <= 0}
+              >
+                &lt;
+              </button>
+              <div
+                className="stream-label"
+                data-testid="stream-nav-label"
+                data-current-stream-index={String(currentStreamIndex + 1)}
+                data-total-streams={String(activeStreamIds.length)}
+                data-current-stream-id={currentStream.id}
+              >
+                Stream {currentStreamIndex + 1} of {activeStreamIds.length}
+              </div>
+              <button
+                className="stream-nav-btn"
+                data-testid="stream-nav-next"
+                onClick={goRight}
+                disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
+              >
+                &gt;
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function renderHypCard(card: HypCardType) {
+    const clickAction = card.hyp.clickAction
+    const isClickable = hasClickAction(clickAction)
+    const isConstructable = hypIsConstructable(card)
+    const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
+    return (
+      <HypCard
+        key={card.id}
+        card={card}
+        streamId={displayStream?.id}
+        positionOverride={positionOverrides[card.id]}
+        animateMove={animatedHyps.some(marker =>
+          marker.hypId === card.id || marker.hypName === (card.hyp.names[0] ?? '')
+        )}
+        isInteractive={streamInteractionsEnabled}
+        isFailing={failingCardId === card.id}
+        isClickable={streamInteractionsEnabled && isClickable}
+        clickTooltip={clickAction?.tooltip}
+        isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
+        isConstructable={streamInteractionsEnabled && isConstructable}
+        onClickAction={streamInteractionsEnabled && isClickable && displayStream ? () => handleHypClick(displayStream.id, card.id, clickAction) : undefined}
+        onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
+          ? () => handleHypDoubleClick(displayStream.id, card.id)
+          : undefined}
+        onContextMenu={(event) => handleHypContextMenu(event, card, streamHypNames(displayStream))}
+        onMouseLeave={() => handleReductionMouseLeave(card.id)}
+        iffDirection={getIffDirection(card.id)}
+      />
+    )
+  }
+
+  function shouldIgnoreMobileSwipe(target: EventTarget | null) {
+    return target instanceof HTMLElement && Boolean(target.closest(
+      'button, a, input, textarea, select, [role="button"], .statement-card, .theorem-tray-panel, .or-tooltip, .defeq-tooltip, .tr-controls',
+    ))
+  }
+
+  function handleMobileTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    if (!isPhonePortrait || event.touches.length !== 1 || shouldIgnoreMobileSwipe(event.target)) {
+      mobileTouchStartRef.current = null
+      return
+    }
+    const touch = event.touches[0]!
+    mobileTouchStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  function handleMobileTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    const start = mobileTouchStartRef.current
+    mobileTouchStartRef.current = null
+    if (!isPhonePortrait || !start || event.changedTouches.length === 0) return
+
+    const touch = event.changedTouches[0]!
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < 52 || Math.abs(dx) < Math.abs(dy) * 1.15) return
+
+    if (mobilePage !== 'main') {
+      setMobilePage('main')
+      return
+    }
+
+    if (dx > 0) {
+      setMobilePage('proof')
+    } else if (proofGraphVisible) {
+      setMobilePage('graph')
+    } else {
+      setMobilePage('proof')
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -3658,11 +3930,14 @@ export function VisualCanvas({
         }}
       >
         <div
-          className="visual-page"
+          className={`visual-page${isPhonePortrait ? ' phone-portrait' : ''}`}
           data-testid="visual-proof-page"
           data-world-id={worldId}
           data-level-id={String(levelId)}
-          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
+          data-mobile-page={mobilePage}
+          style={visualPageStyle}
+          onTouchStart={handleMobileTouchStart}
+          onTouchEnd={handleMobileTouchEnd}
         >
           <VisualHeader
             worldId={worldId}
@@ -3684,7 +3959,30 @@ export function VisualCanvas({
             <div className="visual-thinking-label">Thinking…</div>
           )}
 
-          {proofGraphVisible && (
+          <div className="mobile-page-links" aria-hidden={!isPhonePortrait}>
+            <button
+              type="button"
+              className="mobile-page-link proof-link"
+              onClick={() => setMobilePage('proof')}
+              title="Open proof"
+            >
+              <span>&lt;</span>
+              <span>Proof</span>
+            </button>
+            {proofGraphVisible && (
+              <button
+                type="button"
+                className="mobile-page-link graph-link"
+                onClick={() => setMobilePage('graph')}
+                title="Open proof graph"
+              >
+                <span>Graph</span>
+                <span>&gt;</span>
+              </button>
+            )}
+          </div>
+
+          {proofGraphVisible && !isPhonePortrait && (
             <div className="proof-tree-panel" ref={proofTreePanelRef}>
               <div className="proof-tree-with-info">
                 {activeProofGraphInfos.length > 0 && (
@@ -3739,36 +4037,7 @@ export function VisualCanvas({
 
 
           <div className="combining-canvas" data-testid="combining-canvas" ref={combiningCanvasRef}>
-            {visibleHyps.map(card => {
-              const clickAction = card.hyp.clickAction
-              const isClickable = hasClickAction(clickAction)
-              const isConstructable = hypIsConstructable(card)
-              const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
-              return (
-                <HypCard
-                  key={card.id}
-                  card={card}
-                  streamId={displayStream?.id}
-                  positionOverride={positionOverrides[card.id]}
-                  animateMove={animatedHyps.some(marker =>
-                    marker.hypId === card.id || marker.hypName === (card.hyp.names[0] ?? '')
-                  )}
-                  isInteractive={streamInteractionsEnabled}
-                  isFailing={failingCardId === card.id}
-                  isClickable={streamInteractionsEnabled && isClickable}
-                  clickTooltip={clickAction?.tooltip}
-                  isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
-                  isConstructable={streamInteractionsEnabled && isConstructable}
-                  onClickAction={streamInteractionsEnabled && isClickable && displayStream ? () => handleHypClick(displayStream.id, card.id, clickAction) : undefined}
-                  onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
-                    ? () => handleHypDoubleClick(displayStream.id, card.id)
-                    : undefined}
-                  onContextMenu={(event) => handleHypContextMenu(event, card, streamHypNames(displayStream))}
-                  onMouseLeave={() => handleReductionMouseLeave(card.id)}
-                  iffDirection={getIffDirection(card.id)}
-                />
-              )
-            })}
+            {visibleHyps.map(renderHypCard)}
             {theoremCopies.map(copy => (
               <PropositionTheoremCopyCard
                 key={copy.id}
@@ -3911,6 +4180,53 @@ export function VisualCanvas({
               >↩</button>
             </div>
           )}
+          {isPhonePortrait && (
+            <section
+              className={`mobile-side-page mobile-proof-page${mobilePage === 'proof' ? ' open' : ''}`}
+              aria-hidden={mobilePage !== 'proof'}
+            >
+              <div className="mobile-side-page-top">
+                <div>
+                  <div className="mobile-side-page-kicker">Proof</div>
+                  <h2>Lean proof</h2>
+                </div>
+                <button
+                  type="button"
+                  className="mobile-side-close"
+                  onClick={() => setMobilePage('main')}
+                >
+                  Back
+                </button>
+              </div>
+              <div className="mobile-side-page-body proof-page-body">
+                {renderProofToolbar()}
+                {renderProofStepList()}
+              </div>
+            </section>
+          )}
+          {isPhonePortrait && proofGraphVisible && (
+            <section
+              className={`mobile-side-page mobile-graph-page${mobilePage === 'graph' ? ' open' : ''}`}
+              aria-hidden={mobilePage !== 'graph'}
+            >
+              <div className="mobile-side-page-top">
+                <div>
+                  <div className="mobile-side-page-kicker">Graph</div>
+                  <h2>Proof graph</h2>
+                </div>
+                <button
+                  type="button"
+                  className="mobile-side-close"
+                  onClick={() => setMobilePage('main')}
+                >
+                  Back
+                </button>
+              </div>
+              <div className="mobile-side-page-body graph-page-body">
+                {renderProofGraphContent()}
+              </div>
+            </section>
+          )}
           <DragOverlay dropAnimation={null}>
             {activeDraggedTheorem
               ? <PropositionTheoremPreviewCard theorem={activeDraggedTheorem} iffDirection={getIffDirection(activeDraggedTheoremSourceId ?? `theorem_template_${activeDraggedTheorem.id}`)} />
@@ -3922,13 +4238,13 @@ export function VisualCanvas({
       </DndContext>
 
       {/* Proof sidebar — outside DndContext so it stays above the transformation overlay */}
+      {!isPhonePortrait && (
       <div className={`proof-sidebar${showProofSidebar ? ' open' : ''}`}>
         <button
           className="proof-sidebar-tab"
           onClick={() => {
             const next = !showProofSidebar
-            setShowProofSidebar(next)
-            try { localStorage.setItem('visual-proof-sidebar-open', String(next)) } catch {}
+            setProofSidebarOpen(next)
           }}
           title={showProofSidebar ? 'Close proof view' : 'Open proof view'}
         >
@@ -3999,12 +4315,13 @@ export function VisualCanvas({
           </div>
         </div>
       </div>
+      )}
 
       {/* Construction overlay — outside the canvas DndContext, same as transformation overlay */}
       {constructionProps && (
         <ConstructionView
           key={constructionTargetKey}
-          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
+          style={visualPageStyle}
           varName={constructionProps.varName}
           goalBody={constructionProps.goalBody}
           contextVarNames={constructionProps.contextVarNames}
@@ -4037,7 +4354,7 @@ export function VisualCanvas({
       {transformProps && (
         <TransformationView
           key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}-${transformationVersion}`}
-          style={{ '--proof-sidebar-width': showProofSidebar ? '280px' : '0px' } as React.CSSProperties}
+          style={visualPageStyle}
           relation={transformProps.relation}
           goalLhsStr={transformProps.goalLhsStr}
           goalRhsStr={transformProps.goalRhsStr}
