@@ -9,6 +9,7 @@ import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
+import { useSwipePaging } from './useSwipePaging'
 import type { VisualTransformInfo } from './types'
 
 export interface EqualityHyp {
@@ -199,6 +200,7 @@ interface Props {
   headerSlot?: React.ReactNode
   /** Applied to the overlay root div (e.g. for sidebar-offset positioning). */
   style?: React.CSSProperties
+  isPhonePortrait?: boolean
   /** Names of equality-rewriting theorems to highlight with a soft glow. */
   emphasizeItems?: string[]
   visualInfos?: VisualTransformInfo[]
@@ -208,7 +210,7 @@ export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
-  emphasizeItems, visualInfos = [],
+  isPhonePortrait = false, emphasizeItems, visualInfos = [],
 }: Props) {
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
@@ -358,6 +360,15 @@ export function TransformationView({
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
   const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageSwipeHandlers = useSwipePaging({
+    currentPage: clampedPage,
+    totalPages,
+    disabled: !hasRules || isProcessing,
+    onPageChange: page => {
+      onPageIndexChange(selectedTab, page)
+      setHoveredId(null)
+    },
+  })
 
   // Emphasis: glow on matching cards; direct page/tab buttons toward emphasized items.
   const isEmphasizedRule = (rule: { id: string }) =>
@@ -654,7 +665,7 @@ export function TransformationView({
 
   return (
     <div
-      className="visual-page tr-overlay tr-transformation-overlay"
+      className={`visual-page tr-overlay tr-transformation-overlay${isPhonePortrait ? ' phone-portrait' : ''}`}
       style={{
         ...(style ?? {}),
         '--tr-rule-dock-height': `${ruleDockHeight}px`,
@@ -754,7 +765,11 @@ export function TransformationView({
               aria-label="Previous rule"
             >‹</button>
 
-            <div className={`tr-rule-page${hasRules ? '' : ' empty'}`} ref={pageRef}>
+            <div
+              className={`tr-rule-page${hasRules ? '' : ' empty'}`}
+              ref={pageRef}
+              {...pageSwipeHandlers}
+            >
               {hasRules ? (
                 <>
                   <div className="tr-rule-page-cards">

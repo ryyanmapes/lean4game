@@ -26,6 +26,7 @@ import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
+import { useSwipePaging } from './useSwipePaging'
 import {
   casePathForStream,
   cloneProofTree,
@@ -69,6 +70,11 @@ const HITBOX_PADDING = 16
 const DEFAULT_WIDTH = 200
 const DEFAULT_HEIGHT = 50
 const COLLISION_EDGE_MARGIN = 24
+const PHONE_GOAL_TOP_PX = 108
+const PHONE_GOAL_FALLBACK_HEIGHT_PX = 92
+const PHONE_HYP_TOP_GAP_PX = 18
+const PHONE_HYP_BOTTOM_GAP_PX = 24
+const PHONE_MIN_MIDDLE_HEIGHT_PX = 132
 
 interface CanvasBounds {
   left: number
@@ -1291,17 +1297,26 @@ function TheoremTray({
     })
   }, [items, visibleTab])
 
-  if (!hasTray) return null
-
   const GAP_PX = 12
   const maxCardPx = visibleTab ? (maxCardPxByTab[visibleTab] ?? 0) : 0
   const itemsPerPage = pageWidth > 0 && maxCardPx > 0
     ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
-    : items.length
+    : Math.max(1, items.length)
   const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage))
   const desiredPage = visibleTab ? (pageIndexByTab[visibleTab] ?? 0) : 0
-  const clampedPage = Math.min(desiredPage, totalPages - 1)
+  const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
   const pageItems = items.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageSwipeHandlers = useSwipePaging({
+    currentPage: clampedPage,
+    totalPages,
+    disabled: !visibleTab || items.length === 0,
+    onPageChange: page => {
+      if (!visibleTab) return
+      onPageIndexChange(visibleTab, page)
+    },
+  })
+
+  if (!hasTray) return null
 
   // Emphasis: find which items are highlighted and where they live.
   const isEmphasized = (item: PropositionTheorem | VisualTactic) =>
@@ -1332,7 +1347,7 @@ function TheoremTray({
             aria-label="Previous"
           >‹</button>
 
-          <div className="tr-rule-page" ref={pageRef}>
+          <div className="tr-rule-page" ref={pageRef} {...pageSwipeHandlers}>
             <div className="tr-rule-page-cards">
               {pageItems.map(item =>
                 visibleTab === 'tactics'
@@ -1571,26 +1586,41 @@ export function VisualCanvas({
   }, [propositionTheorems.length, visualTactics.length])
 
   function getCombiningCanvasBounds(): CanvasBounds {
+    const phoneMiddleBounds = (height: number) => {
+      const maxY = Math.max(176, height - trayHeight - PHONE_HYP_BOTTOM_GAP_PX)
+      const desiredMinY =
+        PHONE_GOAL_TOP_PX +
+        (goalStackHeight || PHONE_GOAL_FALLBACK_HEIGHT_PX) +
+        PHONE_HYP_TOP_GAP_PX
+      const minY = Math.min(
+        desiredMinY,
+        Math.max(104, maxY - PHONE_MIN_MIDDLE_HEIGHT_PX),
+      )
+      return { minY, maxY }
+    }
+
     const rect = combiningCanvasRef.current?.getBoundingClientRect()
     if (!rect) {
-      const bottomReserved = isPhonePortrait ? trayHeight + goalStackHeight + 28 : 0
+      const phoneBounds: { minY?: number; maxY?: number } =
+        isPhonePortrait ? phoneMiddleBounds(window.innerHeight) : {}
       return {
         left: 0,
         top: 0,
         width: window.innerWidth,
         height: window.innerHeight,
-        minY: isPhonePortrait ? 104 : undefined,
-        maxY: isPhonePortrait ? Math.max(176, window.innerHeight - bottomReserved) : undefined,
+        minY: isPhonePortrait ? phoneBounds.minY : undefined,
+        maxY: isPhonePortrait ? phoneBounds.maxY : undefined,
       }
     }
-    const bottomReserved = isPhonePortrait ? trayHeight + goalStackHeight + 28 : 0
+    const phoneBounds: { minY?: number; maxY?: number } =
+      isPhonePortrait ? phoneMiddleBounds(rect.height) : {}
     return {
       left: rect.left,
       top: rect.top,
       width: rect.width,
       height: rect.height,
-      minY: isPhonePortrait ? 104 : undefined,
-      maxY: isPhonePortrait ? Math.max(176, rect.height - bottomReserved) : undefined,
+      minY: isPhonePortrait ? phoneBounds.minY : undefined,
+      maxY: isPhonePortrait ? phoneBounds.maxY : undefined,
     }
   }
 
@@ -3248,8 +3278,9 @@ export function VisualCanvas({
           : goalCardEl
             ? rectCenter(goalCardEl.getBoundingClientRect()).y
             : midpoint.y
+        const guideCenterY = isPhonePortrait ? midpoint.y : goalCenterY
         const left = clampViewportValue(lineMaxX + 34, minLeft, maxLeft)
-        const top = clampViewportValue(goalCenterY, minCenterY, maxCenterY)
+        const top = clampViewportValue(guideCenterY, minCenterY, maxCenterY)
 
         nextGuides.push({
           info,
@@ -3287,7 +3318,7 @@ export function VisualCanvas({
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
     }
-  }, [activeTacticHypInfos, activeTrayTab, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
+  }, [activeTacticHypInfos, activeTrayTab, isPhonePortrait, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
 
   useLayoutEffect(() => {
     const updateGuides = () => {
@@ -3323,18 +3354,31 @@ export function VisualCanvas({
         if (!sourceEl) continue
 
         const sourceRect = sourceEl.getBoundingClientRect()
-        const start = {
-          x: sourceRect.right + 14,
-          y: sourceRect.top + sourceRect.height / 2,
-        }
-        const end = {
-          x: goalRect.left - 14,
-          y: goalRect.top + goalRect.height / 2,
-        }
+        const start = isPhonePortrait
+          ? {
+              x: sourceRect.left + sourceRect.width / 2,
+              y: sourceRect.top - 12,
+            }
+          : {
+              x: sourceRect.right + 14,
+              y: sourceRect.top + sourceRect.height / 2,
+            }
+        const end = isPhonePortrait
+          ? {
+              x: goalRect.left + goalRect.width / 2,
+              y: goalRect.bottom + 12,
+            }
+          : {
+              x: goalRect.left - 14,
+              y: goalRect.top + goalRect.height / 2,
+            }
         const lineCenterX = (start.x + end.x) / 2
+        const lineCenterY = (start.y + end.y) / 2
         const lineTop = Math.min(start.y, end.y)
         const left = clampViewportValue(lineCenterX - guideWidth / 2, minLeft, maxLeft)
-        const top = clampViewportValue(lineTop - 92, minTop, maxTop)
+        const top = isPhonePortrait
+          ? clampViewportValue(lineCenterY, minTop, maxTop)
+          : clampViewportValue(lineTop - 92, minTop, maxTop)
 
         nextGuides.push({
           info,
@@ -3342,6 +3386,7 @@ export function VisualCanvas({
             left,
             top,
             width: guideWidth,
+            ...(isPhonePortrait ? { transform: 'translateY(-50%)' } : {}),
           },
           arrow: {
             start,
@@ -3373,7 +3418,7 @@ export function VisualCanvas({
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
     }
-  }, [activeHypGoalInfos, layoutVersion, trayHeight, visibleHyps])
+  }, [activeHypGoalInfos, isPhonePortrait, layoutVersion, trayHeight, visibleHyps])
 
   visualTestStateRef.current = {
     canvasState,
@@ -4327,6 +4372,7 @@ export function VisualCanvas({
           contextVarNames={constructionProps.contextVarNames}
           promptMode={constructionProps.promptMode}
           mode={constructionProps.mode}
+          isPhonePortrait={isPhonePortrait}
           onApply={handleConstructionApply}
           onClose={closeConstructionView}
           isProcessing={isProcessing}
@@ -4369,6 +4415,7 @@ export function VisualCanvas({
           canUndo={proofSteps.length > 0}
           onClose={closeTransformationView}
           rewriteStepCount={transformationVersion}
+          isPhonePortrait={isPhonePortrait}
           isReverse={isTransformReverse}
           onIsReverseChange={setIsTransformReverse}
           workingSide={transformWorkingSide}

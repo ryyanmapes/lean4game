@@ -49,7 +49,9 @@ RUN lake update
 RUN lake build
 
 # ── Stage 2: Build Node.js relay and client ────────────────────────────────
-FROM node:25-slim AS node-builder
+# Match the runtime Node major version (22, installed via nodesource in stage 3)
+# so native modules like better-sqlite3 ship a binary with the correct ABI.
+FROM node:22-slim AS node-builder
 
 WORKDIR /app
 

@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { formatFormulaText } from './expr-engine'
+import { useSwipePaging } from './useSwipePaging'
 
 // ── Construction term types ───────────────────────────────────────────────────
 
@@ -250,13 +251,14 @@ interface Props {
   mode?: ConstructionMode
   style?: React.CSSProperties
   headerSlot?: React.ReactNode
+  isPhonePortrait?: boolean
   /** Pre-fill the construction term (e.g. when a hyp was dropped onto this theorem). */
   initialTerm?: ConstructionTerm
 }
 
 export function ConstructionView({
   varName, goalBody, contextVarNames, onApply, onClose, isProcessing,
-  promptMode = 'propose', mode = 'nat', style, headerSlot, initialTerm,
+  promptMode = 'propose', mode = 'nat', style, headerSlot, isPhonePortrait = false, initialTerm,
 }: Props) {
   const [term, setTerm] = useState<ConstructionTerm>(() => initialTerm ?? makeSlot())
   const [history, setHistory] = useState<ConstructionTerm[]>([])
@@ -265,6 +267,10 @@ export function ConstructionView({
   const [isDoneProcessing, setIsDoneProcessing] = useState(false)
   const [doneError, setDoneError] = useState(false)
   const [activeBrickId, setActiveBrickId] = useState<string | null>(null)
+  const [pageWidth, setPageWidth] = useState(0)
+  const [maxBrickWidthsByTab, setMaxBrickWidthsByTab] = useState<Partial<Record<CnTab, number>>>({})
+  const [pageIndexByTab, setPageIndexByTab] = useState<Partial<Record<CnTab, number>>>({})
+  const pageRef = useRef<HTMLDivElement>(null)
   const formattedGoalBody = formatFormulaText(goalBody)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -368,6 +374,59 @@ export function ConstructionView({
     ? allBricks
     : allBricks.filter(b => b.tab === selectedTab)
 
+  useEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+
+    const updateWidth = () => setPageWidth(el.getBoundingClientRect().width)
+    updateWidth()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth)
+      return () => window.removeEventListener('resize', updateWidth)
+    }
+
+    const observer = new ResizeObserver(entries => setPageWidth(entries[0].contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = pageRef.current
+    if (!el) return
+    const bricks = Array.from(el.querySelectorAll<HTMLElement>('.cn-brick'))
+    if (!bricks.length) return
+    const max = bricks.reduce((widest, brick) => Math.max(widest, brick.offsetWidth), 0)
+    setMaxBrickWidthsByTab(prev => {
+      const prevMax = prev[selectedTab] ?? 0
+      const nextMax = Math.max(prevMax, max)
+      if (Math.abs(nextMax - prevMax) <= 0.5) return prev
+      return { ...prev, [selectedTab]: nextMax }
+    })
+  }, [displayedBricks, selectedTab, pageWidth, pageIndexByTab])
+
+  const BRICK_GAP_PX = 12
+  const maxBrickPx = maxBrickWidthsByTab[selectedTab] ?? 0
+  const hasBricks = displayedBricks.length > 0
+  const itemsPerPage = (pageWidth > 0 && maxBrickPx > 0)
+    ? Math.max(1, Math.floor((pageWidth + BRICK_GAP_PX) / (maxBrickPx + BRICK_GAP_PX)))
+    : Math.max(1, displayedBricks.length)
+  const desiredPage = pageIndexByTab[selectedTab] ?? 0
+  const totalPages = Math.max(1, Math.ceil(displayedBricks.length / itemsPerPage))
+  const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
+  const pageBricks = displayedBricks.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+
+  function setCurrentPage(page: number) {
+    setPageIndexByTab(prev => prev[selectedTab] === page ? prev : { ...prev, [selectedTab]: page })
+  }
+
+  const pageSwipeHandlers = useSwipePaging({
+    currentPage: clampedPage,
+    totalPages,
+    disabled: busy || !hasBricks,
+    onPageChange: setCurrentPage,
+  })
+
   const TABS: { id: CnTab; label: string; disabled?: boolean }[] = [
     { id: 'everything', label: 'Everything' },
     { id: 'variables',  label: 'Variables', disabled: varBricks.length === 0 },
@@ -379,7 +438,7 @@ export function ConstructionView({
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveBrickId(null)}>
-      <div className="visual-page tr-overlay tr-construction-overlay" style={style}>
+      <div className={`visual-page tr-overlay tr-construction-overlay${isPhonePortrait ? ' phone-portrait' : ''}`} style={style}>
         {headerSlot}
 
         {/* Back button */}
@@ -402,8 +461,9 @@ export function ConstructionView({
                 <span className="cn-propose-var">{varName}</span>
                 {' '}
                 <span className="cn-propose-keyword">for which you'll have</span>
-                {' '}
-                <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+                <span className="cn-propose-body-line">
+                  <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+                </span>
               </>
             ) : (
               <>
@@ -451,27 +511,54 @@ export function ConstructionView({
         {/* Brick dock */}
         <div className="tr-rule-dock">
           <div className="tr-dock-cards cn-dock-cards">
-            {displayedBricks.length > 0 ? (
-              displayedBricks.map(brick => {
-                const brickSlots = countSlots(brick.make())
-                // net new slots = brickSlots - 1 (we're replacing one slot with the brick)
-                const newTotal = slotCount - 1 + brickSlots
-                const disabled = slotCount === 0 || newTotal > MAX_SLOTS || busy
-                return (
-                  <BrickCard
-                    key={brick.id}
-                    brickId={brick.id}
-                    label={brick.label}
-                    disabled={disabled}
-                    onClick={() => handleBrick(brick.make)}
-                  />
-                )
-              })
-            ) : (
-              <span className="tr-no-rules">No items available</span>
-            )}
+            <button
+              className="tr-nav-btn"
+              onClick={() => setCurrentPage(Math.max(0, clampedPage - 1))}
+              disabled={clampedPage === 0 || !hasBricks || busy}
+              aria-label="Previous construction item"
+            >‹</button>
+
+            <div
+              className={`tr-rule-page cn-rule-page${hasBricks ? '' : ' empty'}`}
+              ref={pageRef}
+              {...pageSwipeHandlers}
+            >
+              {hasBricks ? (
+                <>
+                  <div className="tr-rule-page-cards cn-rule-page-cards">
+                    {pageBricks.map(brick => {
+                      const brickSlots = countSlots(brick.make())
+                      // net new slots = brickSlots - 1 (we're replacing one slot with the brick)
+                      const newTotal = slotCount - 1 + brickSlots
+                      const disabled = slotCount === 0 || newTotal > MAX_SLOTS || busy
+                      return (
+                        <BrickCard
+                          key={brick.id}
+                          brickId={brick.id}
+                          label={brick.label}
+                          disabled={disabled}
+                          onClick={() => handleBrick(brick.make)}
+                        />
+                      )
+                    })}
+                  </div>
+                  <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
+                </>
+              ) : (
+                <div className="tr-rule-page-empty">
+                  <span className="tr-no-rules">No items available</span>
+                  <span className="tr-page-indicator">Page {clampedPage + 1} of {totalPages}</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              className="tr-nav-btn"
+              onClick={() => setCurrentPage(Math.min(totalPages - 1, clampedPage + 1))}
+              disabled={clampedPage >= totalPages - 1 || !hasBricks || busy}
+              aria-label="Next construction item"
+            >›</button>
           </div>
-          <div className="tr-page-indicator">Page 1 of 1</div>
 
           <div className="tr-dock-tabs">
             {TABS.map(tab => (

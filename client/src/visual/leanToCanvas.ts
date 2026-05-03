@@ -100,7 +100,7 @@ function gridPosition(streamIndex: number, cardIndex: number): { x: number; y: n
   const COL_W = phonePortrait ? phoneColW : compactLandscape ? 180 : 280
   const ROW_H = phonePortrait ? 96 : compactLandscape ? 92 : 110
   const START_X = phonePortrait ? phoneStartX : compactLandscape ? 28 : 80
-  const START_Y = phonePortrait ? 116 : compactLandscape ? 96 : 130
+  const START_Y = phonePortrait ? 228 : compactLandscape ? 96 : 130
   const cols = phonePortrait
     ? phoneCols
     : compactLandscape

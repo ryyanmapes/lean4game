@@ -77,7 +77,7 @@ export function VisualHeader({
       <div className="visual-header-side">
         {!hideNav && (
           <button
-            className={`visual-header-nav-btn${emphasizeMap ? ' emphasized' : ''}`}
+            className={`visual-header-nav-btn visual-header-map-btn${emphasizeMap ? ' emphasized' : ''}`}
             onClick={onWorldMap}
           >
             ← Back to map
@@ -95,13 +95,13 @@ export function VisualHeader({
       </div>
       <div className="visual-header-side right">
         {!hideNav && hasPrev && (
-          <button className="visual-header-nav-btn" onClick={onPrev}>
+          <button className="visual-header-nav-btn visual-header-prev-btn" onClick={onPrev}>
             ← Previous level
           </button>
         )}
         {!hideNav && hasNext && (
           <button
-            className={`visual-header-nav-btn${isCompleted ? ' emphasized' : ''}`}
+            className={`visual-header-nav-btn visual-header-next-btn${isCompleted ? ' emphasized' : ''}`}
             onClick={onNext}
           >
             Next level →
