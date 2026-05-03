@@ -37,6 +37,12 @@ function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
   return levelId - skippedLevels.filter(skipped => skipped > 0 && skipped < levelId).length
 }
 
+function isPhonePortraitViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia?.('(max-width: 720px) and (orientation: portrait)').matches
+    ?? (window.innerWidth <= 720 && window.innerHeight >= window.innerWidth)
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
@@ -148,7 +154,19 @@ export function VisualProofPage() {
   const [theoremEqualityHyps, setTheoremEqualityHyps] = useState<EqualityHyp[]>([])
   const [propositionTheorems, setPropositionTheorems] = useState<PropositionTheorem[]>([])
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
+  const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
   const { getClient, disposeClient } = useVisualRpcClient()
+
+  useEffect(() => {
+    const updatePhonePortrait = () => setIsPhonePortrait(isPhonePortraitViewport())
+    updatePhonePortrait()
+    window.addEventListener('resize', updatePhonePortrait)
+    window.addEventListener('orientationchange', updatePhonePortrait)
+    return () => {
+      window.removeEventListener('resize', updatePhonePortrait)
+      window.removeEventListener('orientationchange', updatePhonePortrait)
+    }
+  }, [])
   const startEventSentRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -373,7 +391,7 @@ export function VisualProofPage() {
   }, [gameId, worldId, levelId])
 
   if (error) {
-    return <div className="visual-loading" style={{ color: 'var(--visual-error-text)' }}>Error: {error}</div>
+    return <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} style={{ color: 'var(--visual-error-text)' }}>Error: {error}</div>
   }
 
   // Skip-aware prev/next: find closest non-skipped neighbour.
@@ -383,7 +401,7 @@ export function VisualProofPage() {
 
   if (!canvasState) {
     return (
-      <div className="visual-loading">
+      <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`}>
         <VisualHeader
           worldId={worldId}
           worldTitle={worldTitle ?? undefined}

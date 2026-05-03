@@ -4230,17 +4230,29 @@ export function VisualCanvas({
               className={`mobile-side-page mobile-proof-page${mobilePage === 'proof' ? ' open' : ''}`}
               aria-hidden={mobilePage !== 'proof'}
             >
-              <div className="mobile-side-page-top">
-                <div>
-                  <div className="mobile-side-page-kicker">Proof</div>
-                  <h2>Lean proof</h2>
-                </div>
+              <VisualHeader
+                worldId={worldId}
+                worldTitle={worldTitle ?? undefined}
+                levelId={levelId}
+                displayLevelId={displayLevelId}
+                levelTitle={levelTitle}
+                hasPrev={!!onPreviousLevel}
+                hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
+                isCompleted={canvasState.completed}
+                previouslyCompleted={previouslyCompleted ?? false}
+                onPrev={onPreviousLevel ?? (() => {})}
+                onNext={onNextLevel ?? (() => {})}
+                onWorldMap={onWorldMap ?? (() => {})}
+              />
+              <div className="mobile-side-return-links proof-return">
                 <button
                   type="button"
-                  className="mobile-side-close"
+                  className="mobile-page-link mobile-side-return-link"
                   onClick={() => setMobilePage('main')}
+                  title="Return to level"
                 >
-                  Back
+                  <span>Back</span>
+                  <span>&gt;</span>
                 </button>
               </div>
               <div className="mobile-side-page-body proof-page-body">
@@ -4254,17 +4266,29 @@ export function VisualCanvas({
               className={`mobile-side-page mobile-graph-page${mobilePage === 'graph' ? ' open' : ''}`}
               aria-hidden={mobilePage !== 'graph'}
             >
-              <div className="mobile-side-page-top">
-                <div>
-                  <div className="mobile-side-page-kicker">Graph</div>
-                  <h2>Proof graph</h2>
-                </div>
+              <VisualHeader
+                worldId={worldId}
+                worldTitle={worldTitle ?? undefined}
+                levelId={levelId}
+                displayLevelId={displayLevelId}
+                levelTitle={levelTitle}
+                hasPrev={!!onPreviousLevel}
+                hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
+                isCompleted={canvasState.completed}
+                previouslyCompleted={previouslyCompleted ?? false}
+                onPrev={onPreviousLevel ?? (() => {})}
+                onNext={onNextLevel ?? (() => {})}
+                onWorldMap={onWorldMap ?? (() => {})}
+              />
+              <div className="mobile-side-return-links graph-return">
                 <button
                   type="button"
-                  className="mobile-side-close"
+                  className="mobile-page-link mobile-side-return-link"
                   onClick={() => setMobilePage('main')}
+                  title="Return to level"
                 >
-                  Back
+                  <span>&lt;</span>
+                  <span>Back</span>
                 </button>
               </div>
               <div className="mobile-side-page-body graph-page-body">

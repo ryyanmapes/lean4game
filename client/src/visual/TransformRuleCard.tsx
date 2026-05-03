@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { parse, printDisplayExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
+import { OverflowMarquee } from './OverflowMarquee'
 
 interface EqualityHypCardProps {
   dragId: string
@@ -65,7 +66,9 @@ export function EqualityHypCard({
       className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
     >
       <h3>{label}</h3>
-      <div className="tr-symbol">{symbol}</div>
+      <div className="tr-symbol">
+        <OverflowMarquee>{symbol}</OverflowMarquee>
+      </div>
       {forallFooter && <div className="tr-forall-footer">{formatRuleExpr(forallFooter)}</div>}
     </div>
   )

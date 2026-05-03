@@ -408,6 +408,42 @@
   margin: 0;
 }
 
+.overflow-marquee {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.overflow-marquee-track {
+  display: inline-block;
+  max-width: none;
+  white-space: nowrap;
+}
+
+.overflow-marquee.is-overflowing .overflow-marquee-track {
+  animation: overflow-marquee-pan var(--marquee-duration, 10s) ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes overflow-marquee-pan {
+  0%, 18% {
+    transform: translateX(0);
+  }
+  50%, 68% {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overflow-marquee.is-overflowing .overflow-marquee-track {
+    animation: none;
+  }
+}
+
 /* ── Canvas: free-form absolute-position workspace ── */
 .visual-page .combining-canvas {
   position: relative;
@@ -2220,6 +2256,31 @@
     pointer-events: auto;
   }
 
+  .visual-page.phone-portrait .mobile-side-page > .visual-header {
+    position: relative;
+    flex: 0 0 52px;
+    z-index: 2;
+  }
+
+  .visual-page.phone-portrait .mobile-side-return-links {
+    flex: 0 0 auto;
+    display: flex;
+    padding: 0.55rem 0.75rem 0;
+    pointer-events: none;
+  }
+
+  .visual-page.phone-portrait .mobile-side-return-links.proof-return {
+    justify-content: flex-end;
+  }
+
+  .visual-page.phone-portrait .mobile-side-return-links.graph-return {
+    justify-content: flex-start;
+  }
+
+  .visual-page.phone-portrait .mobile-side-return-link {
+    min-width: 5.4rem;
+  }
+
   .visual-page.phone-portrait .mobile-side-page-top {
     height: calc(52px + env(safe-area-inset-top, 0px));
     flex: 0 0 auto;
@@ -2341,7 +2402,7 @@
   }
 
   .visual-page.phone-portrait.tr-overlay .tr-rule-card {
-    max-width: min(12rem, calc(100vw - 7rem));
+    max-width: min(18rem, calc(100vw - 6.5rem));
     padding: 0.5rem 0.7rem;
   }
 
@@ -2351,7 +2412,8 @@
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group {
-    top: calc(50% - 0.35rem);
+    top: calc(52px + 4.2rem);
+    transform: none;
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group:not(.static-right) {
@@ -2365,7 +2427,7 @@
   .visual-page.phone-portrait.tr-transformation-overlay .tr-static-label {
     font-size: 1rem;
     line-height: 1.15;
-    max-width: min(8.8rem, calc(42vw - 1rem));
+    max-width: min(16rem, calc(100vw - 1.5rem));
     white-space: normal;
     overflow-wrap: anywhere;
   }

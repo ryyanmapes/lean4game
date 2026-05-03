@@ -34,7 +34,9 @@ const insertStmt = db.prepare(`
 `)
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const GAME_ID_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+// gameId comes from app.tsx as "g/<owner>/<repo>" (three segments). Allow any
+// number of slash-separated path-safe segments for flexibility.
+const GAME_ID_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+$/
 const WORLD_ID_RE = /^[A-Za-z0-9._-]+$/
 
 type EventBody = {
