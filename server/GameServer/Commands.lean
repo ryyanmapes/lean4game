@@ -1086,8 +1086,8 @@ elab "MakeGame" : command => do
             new := levelInfo.new.contains item.name
             })
 
-      modifyLevel ⟨← getCurGameId, worldId, levelId⟩ fun level => do
-        return level.setComputedInventory inventoryType itemsArray
+        modifyLevel ⟨← getCurGameId, worldId, levelId⟩ fun level => do
+          return level.setComputedInventory inventoryType itemsArray
     allItemsByType := allItemsByType.insert inventoryType allItems
 
   let game ← getCurGame
