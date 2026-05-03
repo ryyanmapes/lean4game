@@ -8,6 +8,7 @@ import process from 'process';
 import { spawn } from 'child_process'
 import { GameManager } from './serverProcess.js';
 import { GameSessionsObserver } from './websocket.js';
+import { telemetryRouter } from './telemetry.js';
 import { WebSocketServer } from 'ws';
 // import fs from 'fs'
 // const __filename = url.fileURLToPath(import.meta.url);
@@ -105,6 +106,7 @@ const server = app
       }
     })
   })
+  .use('/telemetry', telemetryRouter)
   .use('/', router)
   .listen(PORT, () => console.log(`Server listening on ${PORT}`));
 

@@ -1,10 +1,11 @@
 import * as React from 'react'
-import { useEffect, useState, useCallback, useContext } from 'react'
+import { useEffect, useState, useCallback, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
 import { useAppSelector, useAppDispatch } from '../hooks'
 import { selectCompleted, levelCompleted } from '../state/progress'
+import { sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
@@ -106,9 +107,19 @@ export function VisualProofPage() {
   }, [navigate, gameId])
   const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
-  const handleLevelCompleted = useCallback(() => {
+  const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {
     if (levelId > 0) {
       dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
+    }
+    if (proof) {
+      sendTelemetry({
+        event_type: 'level_complete',
+        game_id: gameId,
+        world_id: worldId,
+        level_id: levelId,
+        play_script: proof.playScript,
+        lean_script: proof.leanScript,
+      })
     }
   }, [dispatch, gameId, worldId, levelId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
@@ -138,6 +149,7 @@ export function VisualProofPage() {
   const [propositionTheorems, setPropositionTheorems] = useState<PropositionTheorem[]>([])
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
   const { getClient, disposeClient } = useVisualRpcClient()
+  const startEventSentRef = useRef<string | null>(null)
 
   useEffect(() => {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
@@ -163,6 +175,16 @@ export function VisualProofPage() {
             return
           }
           setCanvasState(proofStateToCanvas(proof))
+          const startKey = `${gameId}/${worldId}/${levelId}`
+          if (startEventSentRef.current !== startKey) {
+            startEventSentRef.current = startKey
+            sendTelemetry({
+              event_type: 'level_start',
+              game_id: gameId,
+              world_id: worldId,
+              level_id: levelId,
+            })
+          }
           return
         } catch (err) {
           lastError = err

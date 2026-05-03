@@ -11,6 +11,7 @@ import { useAtom } from 'jotai'
 import { GithubIcon } from './navigation/github_icon'
 import { navOpenAtom } from '../store/navigation-atoms'
 import { getDataBaseUrl } from '../utils/url'
+import { TelemetryConsent } from './telemetry_consent'
 
 type FeaturedVisualGame = {
   label: string
@@ -150,6 +151,8 @@ function LandingPage() {
         <a className="link" onClick={() => setPopup(PopupType.impressum)}>Impressum</a>
         <a className="link" onClick={() => setPopup(PopupType.privacy)}>{t('Privacy Policy')}</a>
       </footer>
+
+      <TelemetryConsent />
     </div>
   )
 }

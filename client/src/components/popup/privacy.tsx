@@ -20,6 +20,17 @@ export function PrivacyPolicyPopup () {
         as site data. Your game progress is not saved on the server; if you delete
         your browser storage, it is completely gone.
       </p>
+      <p>
+        <strong>Anonymous usage statistics.</strong> If you accept the
+        statistics banner shown on the landing page, the site stores a random
+        identifier (UUID) in your browser and sends a small event to the server
+        when you start or successfully complete a level. Completion events
+        include the proof you constructed (both the visual play script and the
+        resulting Lean tactic script). No IP address, browser, name, email, or
+        other personal data is associated with these events. Refusing the
+        banner disables collection entirely; clearing your browser storage
+        also resets the identifier.
+      </p>
       <p>Our server is located in Germany.</p>
       <p>
         <strong>Contact:</strong><br />

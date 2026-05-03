@@ -1196,7 +1196,7 @@ interface VisualCanvasProps {
   /** Level indices skipped in Visual Lean (for skip-aware header nav). */
   skippedLevels?: number[]
   previouslyCompleted?: boolean
-  onLevelCompleted?: () => void
+  onLevelCompleted?: (proof?: { playScript: string; leanScript: string }) => void
 }
 
 function TheoremTray({
@@ -1508,7 +1508,9 @@ export function VisualCanvas({
 
   useEffect(() => {
     if (canvasState.completed) {
-      onLevelCompleted?.()
+      const playScript = proofSteps.map(s => s.playTactic).join('\n')
+      const leanScript = buildStructuredLeanProof(proofSteps)
+      onLevelCompleted?.({ playScript, leanScript })
     }
   }, [canvasState.completed])
 

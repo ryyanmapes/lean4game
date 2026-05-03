@@ -395,6 +395,92 @@ footer .link {
   padding: 2rem 2rem 3rem;
 }
 
+/* Telemetry consent banner */
+.telemetry-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(15, 23, 42, 0.96);
+  border-top: 1px solid rgba(139, 92, 246, 0.4);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  backdrop-filter: blur(8px);
+}
+
+.telemetry-banner-text {
+  margin: 0;
+  flex: 1 1 24rem;
+  line-height: 1.4;
+}
+
+.telemetry-banner-link {
+  color: #a78bfa;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.telemetry-banner-link:hover {
+  color: #c4b5fd;
+}
+
+.telemetry-banner-buttons {
+  display: flex;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.telemetry-banner-btn {
+  padding: 0.55rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.telemetry-banner-btn:hover {
+  transform: translateY(-1px);
+}
+
+.telemetry-banner-btn-accept {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  border-color: #8b5cf6;
+}
+
+.telemetry-banner-btn-refuse {
+  background: transparent;
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+.telemetry-banner-btn-refuse:hover {
+  border-color: rgba(148, 163, 184, 0.8);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+@media (max-width: 640px) {
+  .telemetry-banner {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 0.9rem 1rem;
+  }
+  .telemetry-banner-buttons {
+    justify-content: center;
+  }
+}
+
 @media (hover: none) and (orientation: landscape) {
   .landing-page-dark .lp-title-area {
     width: min(100%, 48rem);

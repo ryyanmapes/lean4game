@@ -53,6 +53,12 @@ FROM node:25-slim AS node-builder
 
 WORKDIR /app
 
+# Build tools for any native modules that lack a prebuilt binary for this
+# Node version (e.g. better-sqlite3 falls back to source compilation).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy patches/ before npm ci so the postinstall hook (patch-package) finds
 # patches/vscode+6.0.3.patch and applies the Windows dirname fix.
 COPY lean4game/patches ./patches
@@ -110,6 +116,10 @@ EXPOSE 8080
 
 ENV NODE_ENV=production \
     PORT=8080 \
-    API_PORT=8010
+    API_PORT=8010 \
+    TELEMETRY_DB_PATH=/data/telemetry.sqlite
+
+RUN mkdir -p /data
+VOLUME ["/data"]
 
 CMD ["node", "relay/dist/src/index.js"]
