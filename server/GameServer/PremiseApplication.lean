@@ -108,6 +108,111 @@ private def mkBinderApplicationAtIndex?
   let (args, _, _) ← forallMetaTelescopeReducing fnType
   mkBinderApplicationFromAssignedArgs? fnExpr fnType args selectedIdx argExpr
 
+/-- Match theorem premises against the displayed hypothesis shape before allowing
+    definitional equality to finish the type check. This keeps Visual Lean from
+    applying a theorem through hidden reductions the player has not made yet. -/
+private partial def visibleExprMatches (pattern actual : Expr) : MetaM Bool := do
+  let pattern ← instantiateMVars pattern
+  let actual ← instantiateMVars actual
+  let pattern := pattern.consumeMData
+  let actual := actual.consumeMData
+  match pattern with
+  | .mvar mvarId =>
+      if let some assigned ← getExprMVarAssignment? mvarId then
+        visibleExprMatches assigned actual
+      else
+        mvarId.assign actual
+        pure true
+  | .app patternFn patternArg =>
+      match actual with
+      | .app actualFn actualArg =>
+          if !(← visibleExprMatches patternFn actualFn) then
+            pure false
+          else
+            visibleExprMatches patternArg actualArg
+      | _ => pure false
+  | .forallE binderName patternDomain patternBody binderInfo =>
+      match actual with
+      | .forallE _ actualDomain actualBody actualBinderInfo =>
+          if binderInfo != actualBinderInfo then
+            pure false
+          else if !(← visibleExprMatches patternDomain actualDomain) then
+            pure false
+          else
+            let actualDomain ← instantiateMVars actualDomain
+            withLocalDecl binderName binderInfo actualDomain fun localExpr =>
+              visibleExprMatches (patternBody.instantiate1 localExpr) (actualBody.instantiate1 localExpr)
+      | _ => pure false
+  | .lam binderName patternDomain patternBody binderInfo =>
+      match actual with
+      | .lam _ actualDomain actualBody actualBinderInfo =>
+          if binderInfo != actualBinderInfo then
+            pure false
+          else if !(← visibleExprMatches patternDomain actualDomain) then
+            pure false
+          else
+            let actualDomain ← instantiateMVars actualDomain
+            withLocalDecl binderName binderInfo actualDomain fun localExpr =>
+              visibleExprMatches (patternBody.instantiate1 localExpr) (actualBody.instantiate1 localExpr)
+      | _ => pure false
+  | .letE binderName patternType patternValue patternBody nondep =>
+      match actual with
+      | .letE _ actualType actualValue actualBody actualNondep =>
+          if nondep != actualNondep then
+            pure false
+          else if !(← visibleExprMatches patternType actualType) then
+            pure false
+          else if !(← visibleExprMatches patternValue actualValue) then
+            pure false
+          else
+            let actualType ← instantiateMVars actualType
+            let actualValue ← instantiateMVars actualValue
+            withLetDecl binderName actualType actualValue fun localExpr =>
+              visibleExprMatches (patternBody.instantiate1 localExpr) (actualBody.instantiate1 localExpr)
+      | _ => pure false
+  | .proj patternTypeName patternIdx patternStruct =>
+      match actual with
+      | .proj actualTypeName actualIdx actualStruct =>
+          pure (patternTypeName == actualTypeName && patternIdx == actualIdx) <&&>
+            visibleExprMatches patternStruct actualStruct
+      | _ => pure false
+  | .const patternName _ =>
+      match actual with
+      | .const actualName _ => pure (patternName == actualName)
+      | _ => pure false
+  | .fvar patternId =>
+      match actual with
+      | .fvar actualId => pure (patternId == actualId)
+      | _ => pure false
+  | .bvar patternIdx =>
+      match actual with
+      | .bvar actualIdx => pure (patternIdx == actualIdx)
+      | _ => pure false
+  | .sort _ =>
+      match actual with
+      | .sort _ => pure true
+      | _ => pure false
+  | .lit patternLit =>
+      match actual with
+      | .lit actualLit => pure (patternLit == actualLit)
+      | _ => pure false
+  | .mdata _ patternExpr =>
+      visibleExprMatches patternExpr actual
+
+private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
+  let checkpoint ← getMCtx
+  try
+    if !(← visibleExprMatches domain argType) then
+      setMCtx checkpoint
+      return false
+    if !(← isDefEq domain argType) then
+      setMCtx checkpoint
+      return false
+    return true
+  catch _ =>
+    setMCtx checkpoint
+    return false
+
 /-- Return the domain of the named binder in `fnType`, after accounting for dependencies
     on earlier binders. -/
 def binderDomainByName? (fnType : Expr) (binderName : Name) : MetaM (Option Expr) := do
@@ -143,7 +248,7 @@ def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option
     for i in [:args.size] do
       let checkpoint ← getMCtx
       let dom ← instantiateMVars (← inferType args[i]!)
-      if (← isProp dom) && (← isDefEq dom argType) then
+      if (← isProp dom) && (← visiblePropPremiseMatches dom argType) then
         if let some proof ← mkBinderApplicationFromAssignedArgs? fnExpr fnType args i argExpr then
           setMCtx savedMCtx
           return some proof

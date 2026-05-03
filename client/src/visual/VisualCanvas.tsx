@@ -5,7 +5,7 @@ import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
-import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
+import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { ClickAction, ClickActionOption, InteractiveGoalsWithHints, ProofState } from '../components/infoview/rpc_api'
 import { HypCard } from './HypCard'
 import { GoalCard } from './GoalCard'
@@ -321,6 +321,12 @@ interface RewriteOutcome {
 
 interface TacticHypGuide {
   info: VisualTacticHypInfo
+  style: React.CSSProperties
+  arrow: GuideArrow
+}
+
+interface HypGoalGuide {
+  info: VisualHypGoalInfo
   style: React.CSSProperties
   arrow: GuideArrow
 }
@@ -1174,6 +1180,7 @@ interface VisualCanvasProps {
   visualGoalInfos?: VisualGoalInfo[]
   visualTransformInfos?: VisualTransformInfo[]
   visualTacticHypInfos?: VisualTacticHypInfo[]
+  visualHypGoalInfos?: VisualHypGoalInfo[]
   visualProofGraphInfos?: VisualProofGraphInfo[]
   worldId: string
   levelId: number
@@ -1379,7 +1386,7 @@ function TheoremTray({
 
 export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
-  visualTacticHypInfos, visualProofGraphInfos, worldId, levelId,
+  visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted
 }: VisualCanvasProps) {
@@ -1389,6 +1396,7 @@ export function VisualCanvas({
   const [goalsTopOverride, setGoalsTopOverride] = useState<number | null>(null)
   const [layoutVersion, setLayoutVersion] = useState(0)
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
+  const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -3101,6 +3109,12 @@ export function VisualCanvas({
     ),
     [displayGoalText, proofGraphVisible, visualTacticHypInfos],
   )
+  const activeHypGoalInfos = React.useMemo(
+    () => (visualHypGoalInfos ?? []).filter(info =>
+      !proofGraphVisible && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
+    ),
+    [displayGoalText, proofGraphVisible, visualHypGoalInfos],
+  )
   const activeProofGraphInfos = React.useMemo(
     () => proofGraphVisible
       ? (visualProofGraphInfos ?? []).filter(info =>
@@ -3209,6 +3223,92 @@ export function VisualCanvas({
       window.removeEventListener('scroll', updateGuides, true)
     }
   }, [activeTacticHypInfos, activeTrayTab, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
+
+  useLayoutEffect(() => {
+    const updateGuides = () => {
+      if (activeHypGoalInfos.length === 0) {
+        setHypGoalGuides([])
+        return
+      }
+
+      const goalEl = goalsContainerRef.current?.querySelector<HTMLElement>('[data-testid="goal-card"]')
+      if (!goalEl) {
+        setHypGoalGuides([])
+        return
+      }
+
+      const goalRect = goalEl.getBoundingClientRect()
+      const trayRect = document.getElementById(THEOREM_TRAY_ID)?.getBoundingClientRect()
+      const canvasRect = combiningCanvasRef.current?.getBoundingClientRect()
+      const guideWidth = Math.min(360, Math.max(260, window.innerWidth - 32))
+      const minLeft = (canvasRect?.left ?? 0) + 16
+      const maxLeft = Math.min(
+        window.innerWidth - guideWidth - 16,
+        (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
+      )
+      const minTop = (canvasRect?.top ?? 0) + 84
+      const maxTop = (trayRect?.top ?? window.innerHeight - trayHeight) - 120
+
+      const nextGuides: HypGoalGuide[] = []
+      for (const info of activeHypGoalInfos) {
+        const sourceCard = visibleHyps.find(card =>
+          card.hyp.names.includes(info.hyp) || card.hyp.playName === info.hyp
+        )
+        const sourceEl = sourceCard ? document.getElementById(sourceCard.id) : null
+        if (!sourceEl) continue
+
+        const sourceRect = sourceEl.getBoundingClientRect()
+        const start = {
+          x: sourceRect.right + 14,
+          y: sourceRect.top + sourceRect.height / 2,
+        }
+        const end = {
+          x: goalRect.left - 14,
+          y: goalRect.top + goalRect.height / 2,
+        }
+        const lineCenterX = (start.x + end.x) / 2
+        const lineTop = Math.min(start.y, end.y)
+        const left = clampViewportValue(lineCenterX - guideWidth / 2, minLeft, maxLeft)
+        const top = clampViewportValue(lineTop - 92, minTop, maxTop)
+
+        nextGuides.push({
+          info,
+          style: {
+            left,
+            top,
+            width: guideWidth,
+          },
+          arrow: {
+            start,
+            end,
+            startPadding: 0,
+            endPadding: 0,
+            arc: start.y > end.y ? 'up' : 'down',
+          },
+        })
+      }
+      setHypGoalGuides(nextGuides)
+    }
+
+    updateGuides()
+    const tray = document.getElementById(THEOREM_TRAY_ID)
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateGuides)
+    if (observer) {
+      if (combiningCanvasRef.current) observer.observe(combiningCanvasRef.current)
+      if (tray) observer.observe(tray)
+      const goalEl = goalsContainerRef.current?.querySelector<HTMLElement>('[data-testid="goal-card"]')
+      if (goalEl) observer.observe(goalEl)
+    }
+    window.addEventListener('resize', updateGuides)
+    window.addEventListener('scroll', updateGuides, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updateGuides)
+      window.removeEventListener('scroll', updateGuides, true)
+    }
+  }, [activeHypGoalInfos, layoutVersion, trayHeight, visibleHyps])
 
   visualTestStateRef.current = {
     canvasState,
@@ -3781,6 +3881,14 @@ export function VisualCanvas({
               <React.Fragment key={`${guide.info.tactic}-${guide.info.hyp}-${index}`}>
                 <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
                 <div className="visual-info-callout combining-info tactic-hyp-info" style={guide.style}>
+                  <VisualInfoText text={guide.info.text} />
+                </div>
+              </React.Fragment>
+            ))}
+            {hypGoalGuides.map((guide, index) => (
+              <React.Fragment key={`${guide.info.hyp}-goal-${index}`}>
+                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
+                <div className="visual-info-callout combining-info hyp-goal-info" style={guide.style}>
                   <VisualInfoText text={guide.info.text} />
                 </div>
               </React.Fragment>

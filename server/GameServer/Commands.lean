@@ -178,6 +178,13 @@ Can be used multiple times to highlight multiple items. Example: `VisualEmphasiz
 elab "VisualEmphasize" name:ident : command => do
   modifyCurLevel fun lvl => pure { lvl with visualEmphasize := lvl.visualEmphasize.push name.getId }
 
+/-- Unlock tactics only in the Visual Lean tactic tray, starting in this level and
+continuing through later levels that depend on it. -/
+elab "VisualUnlockTactic" args:ident* : command => do
+  modifyCurLevel fun lvl => pure {
+    lvl with visualTacticUnlocks := lvl.visualTacticUnlocks ++ args.map (·.getId)
+  }
+
 syntax visualBool := &"true" <|> &"false"
 
 def mkVisualGoalInfo (position : String) (arrow : Bool) (goal : Option String) (text : String) :
@@ -203,6 +210,10 @@ def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
 def mkVisualTacticHypInfo (tactic hyp : String) (goal : Option String) (text : String) :
     VisualTacticHypInfo :=
   { tactic := tactic, hyp := hyp, goal := goal, text := text }
+
+def mkVisualHypGoalInfo (hyp : String) (goal : Option String) (text : String) :
+    VisualHypGoalInfo :=
+  { hyp := hyp, goal := goal, text := text }
 
 def mkVisualProofGraphInfo (goal : Option String) (text : String) :
     VisualProofGraphInfo :=
@@ -293,6 +304,18 @@ while the current goal matches the supplied display text. -/
 elab "VisualTacticHypInfoOnGoal " tactic:ident hyp:ident goalText:str &"show" text:str : command => do
   let info := mkVisualTacticHypInfo tactic.getId.toString hyp.getId.toString (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualTacticHypInfos := lvl.visualTacticHypInfos.push info }
+
+/-- Add Visual Lean-only guidance linking a hypothesis card to the goal card.
+Usage: `VisualHypGoalInfo h "message"`. -/
+elab "VisualHypGoalInfo " hyp:ident text:str : command => do
+  let info := mkVisualHypGoalInfo hyp.getId.toString none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
+
+/-- Add Visual Lean-only guidance linking a hypothesis card to the goal card, only
+while the current goal matches the supplied display text. -/
+elab "VisualHypGoalInfoOnGoal " hyp:ident goalText:str &"show" text:str : command => do
+  let info := mkVisualHypGoalInfo hyp.getId.toString (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
 
 /-- Add Visual Lean-only instructional text to the left of the proof-stream graph.
 Usage: `VisualProofGraphInfo "message"`. -/
@@ -1063,9 +1086,26 @@ elab "MakeGame" : command => do
             new := levelInfo.new.contains item.name
             })
 
-        modifyLevel ⟨← getCurGameId, worldId, levelId⟩ fun level => do
-          return level.setComputedInventory inventoryType itemsArray
+      modifyLevel ⟨← getCurGameId, worldId, levelId⟩ fun level => do
+        return level.setComputedInventory inventoryType itemsArray
     allItemsByType := allItemsByType.insert inventoryType allItems
+
+  let game ← getCurGame
+  for (worldId, world) in game.worlds.nodes.toArray do
+    let mut unlockedVisualTactics : HashSet Name := {}
+    for predWorldId in game.worlds.predecessors worldId do
+      let some predWorld := game.worlds.nodes.get? predWorldId
+        | throwError s!"World {predWorldId} does not exist"
+      for (_, predLevel) in predWorld.levels.toArray do
+        unlockedVisualTactics := unlockedVisualTactics.insertMany predLevel.visualTacticUnlocks
+
+    let levels := world.levels.toArray.insertionSort fun a b => a.1 < b.1
+    for (levelId, level) in levels do
+      unlockedVisualTactics := unlockedVisualTactics.insertMany level.visualTacticUnlocks
+      let visualTactics := unlockedVisualTactics.toArray.insertionSort
+        (fun a b => a.toString < b.toString)
+      modifyLevel ⟨← getCurGameId, worldId, levelId⟩ fun level => do
+        pure { level with visualTactics := visualTactics }
 
   let getTiles (type : InventoryType) : CommandElabM (Array InventoryTile) := do
     (allItemsByType.getD type {}).toArray.mapM (fun name => do

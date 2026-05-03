@@ -72,6 +72,12 @@ export interface VisualTacticHypInfo {
   text: string
 }
 
+export interface VisualHypGoalInfo {
+  hyp: string
+  goal?: string | null
+  text: string
+}
+
 export interface VisualProofGraphInfo {
   goal?: string | null
   text: string

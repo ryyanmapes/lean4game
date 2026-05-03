@@ -280,6 +280,12 @@ structure VisualTacticHypInfo where
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
+structure VisualHypGoalInfo where
+  hyp : String
+  goal : Option String := none
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
+
 structure VisualProofGraphInfo where
   goal : Option String := none
   text : String
@@ -328,12 +334,18 @@ structure GameLevel where
   visualDramaticStart : Bool := false
   /-- Names of tactics/theorems to highlight in the Visual Lean inventory tray. -/
   visualEmphasize : Array Name := #[]
+  /-- Visual Lean-only tactics introduced by this level. -/
+  visualTacticUnlocks : Array Name := #[]
+  /-- Visual Lean-only tactics available in this level after inherited unlocks. -/
+  visualTactics : Array Name := #[]
   /-- Visual Lean instructional callouts attached to the proof goal card. -/
   visualGoalInfos : Array VisualGoalInfo := #[]
   /-- Visual Lean instructional callouts attached to transformation mode. -/
   visualTransformInfos : Array VisualTransformInfo := #[]
   /-- Visual Lean instructional callouts linking a tactic card to a hypothesis card. -/
   visualTacticHypInfos : Array VisualTacticHypInfo := #[]
+  /-- Visual Lean instructional callouts linking a hypothesis card to the goal card. -/
+  visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   /-- Visual Lean instructional callouts attached to the proof-stream graph. -/
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
 deriving Inhabited, Repr
@@ -364,9 +376,11 @@ structure LevelInfo where
   visualColorScheme? : Option String := none
   visualDramaticStart : Bool := false
   visualEmphasize : Array String := #[]
+  visualTactics : Array String := #[]
   visualGoalInfos : Array VisualGoalInfo := #[]
   visualTransformInfos : Array VisualTransformInfo := #[]
   visualTacticHypInfos : Array VisualTacticHypInfo := #[]
+  visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
 deriving ToJson, FromJson
 
@@ -404,9 +418,11 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     visualColorScheme? := lvl.visualColorScheme?
     visualDramaticStart := lvl.visualDramaticStart
     visualEmphasize := lvl.visualEmphasize.map (·.toString)
+    visualTactics := lvl.visualTactics.map (·.toString)
     visualGoalInfos := lvl.visualGoalInfos
     visualTransformInfos := lvl.visualTransformInfos
     visualTacticHypInfos := lvl.visualTacticHypInfos
+    visualHypGoalInfos := lvl.visualHypGoalInfos
     visualProofGraphInfos := lvl.visualProofGraphInfos
   }
 

@@ -8,7 +8,7 @@ import { selectCompleted, levelCompleted } from '../state/progress'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
-import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
+import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
@@ -93,34 +93,6 @@ function parseTheoremStatement(
   return parsed ? { ...parsed, forallFooter: theoremDisplay.forallFooter } : null
 }
 
-function withVisualOnlyTactics(
-  tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>,
-) {
-  const revertUnlocked = tactics.some(tactic =>
-    tactic.name === 'induction' && !tactic.locked && !tactic.hidden,
-  )
-  const nextTactics = tactics.map(tactic =>
-    tactic.name === 'revert'
-      ? { ...tactic, locked: !revertUnlocked, hidden: false }
-      : tactic,
-  )
-  const alreadyPresent = nextTactics.some(tactic => tactic.name === 'revert')
-
-  if (!alreadyPresent) {
-    const revertEntry = {
-      name: 'revert',
-      displayName: 'revert',
-      hidden: false,
-      locked: !revertUnlocked,
-    }
-    const inductionIndex = nextTactics.findIndex(tactic => tactic.name === 'induction')
-    if (inductionIndex >= 0) nextTactics.splice(inductionIndex + 1, 0, revertEntry)
-    else nextTactics.push(revertEntry)
-  }
-
-  return nextTactics
-}
-
 function visualTacticActivation(name: string): VisualTactic['activation'] {
   return name === 'positivity' ? 'goal_click' : 'drag'
 }
@@ -149,6 +121,7 @@ export function VisualProofPage() {
   const [visualGoalInfos, setVisualGoalInfos] = useState<VisualGoalInfo[]>([])
   const [visualTransformInfos, setVisualTransformInfos] = useState<VisualTransformInfo[]>([])
   const [visualTacticHypInfos, setVisualTacticHypInfos] = useState<VisualTacticHypInfo[]>([])
+  const [visualHypGoalInfos, setVisualHypGoalInfos] = useState<VisualHypGoalInfo[]>([])
   const [visualProofGraphInfos, setVisualProofGraphInfos] = useState<VisualProofGraphInfo[]>([])
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
   const handleNextLevel = useCallback(() => {
@@ -232,6 +205,7 @@ export function VisualProofPage() {
     setVisualGoalInfos([])
     setVisualTransformInfos([])
     setVisualTacticHypInfos([])
+    setVisualHypGoalInfos([])
     setVisualProofGraphInfos([])
     if (!worldId || !levelId) return
     let active = true
@@ -243,9 +217,11 @@ export function VisualProofPage() {
         lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
         tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
         visualEmphasize?: string[]
+        visualTactics?: string[]
         visualGoalInfos?: VisualGoalInfo[]
         visualTransformInfos?: VisualTransformInfo[]
         visualTacticHypInfos?: VisualTacticHypInfo[]
+        visualHypGoalInfos?: VisualHypGoalInfo[]
         visualProofGraphInfos?: VisualProofGraphInfo[]
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
@@ -256,6 +232,7 @@ export function VisualProofPage() {
         if (levelData.visualGoalInfos?.length) setVisualGoalInfos(levelData.visualGoalInfos)
         if (levelData.visualTransformInfos?.length) setVisualTransformInfos(levelData.visualTransformInfos)
         if (levelData.visualTacticHypInfos?.length) setVisualTacticHypInfos(levelData.visualTacticHypInfos)
+        if (levelData.visualHypGoalInfos?.length) setVisualHypGoalInfos(levelData.visualHypGoalInfos)
         if (levelData.visualProofGraphInfos?.length) setVisualProofGraphInfos(levelData.visualProofGraphInfos)
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         if (gameData?.skippedLevels?.[worldId]) setSkippedLevels(gameData.skippedLevels[worldId])
@@ -285,7 +262,19 @@ export function VisualProofPage() {
           adj[n].sort().forEach((m: string) => { if (--inDegree[m] === 0) queue.push(m) })
         }
 
-        const tacticsWithVisualUnlocks = withVisualOnlyTactics(tactics)
+        const tacticsWithVisualUnlocks = (() => {
+          const byName = new Map(tactics.map(tactic => [tactic.name, tactic]))
+          for (const name of levelData.visualTactics ?? []) {
+            const existing = byName.get(name)
+            byName.set(name, {
+              name,
+              displayName: existing?.displayName || name,
+              locked: false,
+              hidden: false,
+            })
+          }
+          return [...byName.values()]
+        })()
 
         // Category order matches the NNG4 inventory tab order: first occurrence of each
         // category in the alphabetically-sorted lemma list (same logic as inventorySubtabOptionsAtom).
@@ -411,6 +400,7 @@ export function VisualProofPage() {
       visualGoalInfos={visualGoalInfos}
       visualTransformInfos={visualTransformInfos}
       visualTacticHypInfos={visualTacticHypInfos}
+      visualHypGoalInfos={visualHypGoalInfos}
       visualProofGraphInfos={visualProofGraphInfos}
       worldId={worldId}
       levelId={levelId}

@@ -983,6 +983,23 @@ example (x y : Nat) (h : x = y) : y = x := by
   drag_to flipEqLocal h
   exact thm_flipEqLocal
 
+private theorem succInjLocal (x y : Nat) (h : Nat.succ x = Nat.succ y) : x = y := by
+  exact Nat.succ.inj h
+
+example (x : Nat) : x + 1 = 4 → True := by
+  intro h
+  fail_if_success drag_to succInjLocal h
+  trivial
+
+example (x : Nat) : x + 1 = 4 → True := by
+  intro h
+  fail_if_success drag_apply succInjLocal h
+  trivial
+
+example (x : Nat) (h : Nat.succ x = Nat.succ 3) : x = 3 := by
+  drag_to succInjLocal h
+  exact thm_succInjLocal
+
 private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
   intro _
   rfl

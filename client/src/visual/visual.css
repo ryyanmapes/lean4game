@@ -621,6 +621,10 @@
   max-width: min(24rem, calc(100vw - 2rem));
 }
 
+.visual-page .hyp-goal-info {
+  max-width: min(22.5rem, calc(100vw - 2rem));
+}
+
 .visual-page .goal-info-arrow {
   position: absolute;
   inset: 0;

@@ -64,7 +64,10 @@ export interface LevelInfo {
   template: null|string,
   image: null|string,
   visualGoalInfos?: Array<{ position: 'above' | 'below'; arrow: boolean; goal?: string | null; text: string }>,
-  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>
+  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>,
+  visualTacticHypInfos?: Array<{ tactic: string; hyp: string; goal?: string | null; text: string }>,
+  visualHypGoalInfos?: Array<{ hyp: string; goal?: string | null; text: string }>,
+  visualProofGraphInfos?: Array<{ goal?: string | null; text: string }>
 }
 
 /** Used to display the inventory on the welcome page */
