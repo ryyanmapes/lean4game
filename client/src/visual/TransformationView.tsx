@@ -51,7 +51,7 @@ export interface GuideArrow {
   end: { x: number; y: number }
   startPadding?: number
   endPadding?: number
-  arc?: 'up' | 'down'
+  arc?: 'up' | 'down' | 'none'
 }
 
 function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
@@ -76,7 +76,9 @@ export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideA
   const curveDx = end.x - start.x
   const curveDy = end.y - start.y
   const curveLen = Math.sqrt(curveDx * curveDx + curveDy * curveDy) || 1
-  const sag = Math.min(110, Math.max(44, curveLen * 0.14)) * (arrow.arc === 'up' ? -1 : 1)
+  const sag = arrow.arc === 'none'
+    ? 0
+    : Math.min(110, Math.max(44, curveLen * 0.14)) * (arrow.arc === 'up' ? -1 : 1)
   const cp1 = {
     x: start.x + curveDx * 0.28,
     y: start.y + curveDy * 0.18 + sag,
@@ -363,9 +365,13 @@ export function TransformationView({
     ? Math.min(288, Math.max(180, pageWidth))
     : 320
   const paginationCardPx = maxCardPx > 0 ? maxCardPx : estimatedCardPx
-  const itemsPerPage = (pageWidth > 0 && hasRules)
-    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (paginationCardPx + GAP_PX)))
-    : 1
+  const itemsPerPage = isPhonePortrait
+    ? 1
+    : (
+        (pageWidth > 0 && hasRules)
+          ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (paginationCardPx + GAP_PX)))
+          : 1
+      )
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
@@ -510,14 +516,21 @@ export function TransformationView({
       if (reverseInfo && reverseInfoRef.current && reverseButtonRef.current) {
         const infoRect = reverseInfoRef.current.getBoundingClientRect()
         const reverseRect = reverseButtonRef.current.getBoundingClientRect()
+        const reverseCenterX = reverseRect.left + reverseRect.width / 2
+        const reverseCenterY = reverseRect.top + reverseRect.height / 2
         setReverseArrow({
-          start: {
-            x: infoRect.right,
-            y: infoRect.top + infoRect.height / 2,
-          },
+          start: isPhonePortrait
+            ? {
+                x: reverseCenterX,
+                y: infoRect.bottom,
+              }
+            : {
+                x: infoRect.right,
+                y: infoRect.top + infoRect.height / 2,
+              },
           end: {
-            x: reverseRect.left + reverseRect.width / 2,
-            y: reverseRect.top + reverseRect.height / 2,
+            x: reverseCenterX,
+            y: reverseCenterY,
           },
         })
       } else {
@@ -574,7 +587,7 @@ export function TransformationView({
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
     }
-  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight])
+  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait])
 
   useEffect(() => {
     if (!activeId) return
@@ -882,7 +895,12 @@ export function TransformationView({
         )}
         {sideArrow && <InstructionGuideArrow arrow={sideArrow} />}
         {backArrow && <InstructionGuideArrow arrow={{ ...backArrow, startPadding: 28, endPadding: 42 }} />}
-        {reverseArrow && <InstructionGuideArrow arrow={{ ...reverseArrow, startPadding: 28, endPadding: 42, arc: 'up' }} />}
+        {reverseArrow && <InstructionGuideArrow arrow={{
+          ...reverseArrow,
+          startPadding: isPhonePortrait ? 8 : 28,
+          endPadding: 42,
+          arc: isPhonePortrait ? 'none' : 'up',
+        }} />}
         {rewriteGuide && (
           <>
             <InstructionGuideArrow arrow={rewriteGuide.arrow} />

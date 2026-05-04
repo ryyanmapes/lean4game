@@ -1680,12 +1680,20 @@ export function VisualCanvas({
       return
     }
 
-    const update = () => setGoalStackHeight(goals.offsetHeight)
+    const update = () => {
+      const goalCard = goals.querySelector<HTMLElement>('[data-testid="goal-card"]')
+      const nextHeight = isPhonePortrait && goalCard
+        ? goalCard.offsetHeight
+        : goals.offsetHeight
+      setGoalStackHeight(nextHeight)
+    }
     update()
     const observer = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(update)
     observer?.observe(goals)
+    const goalCard = goals.querySelector<HTMLElement>('[data-testid="goal-card"]')
+    if (goalCard) observer?.observe(goalCard)
     window.addEventListener('resize', update)
     return () => {
       observer?.disconnect()

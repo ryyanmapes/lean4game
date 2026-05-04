@@ -2412,7 +2412,7 @@
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group {
-    top: calc(52px + 2.2rem);
+    top: calc(52px + 3rem);
     transform: none;
   }
 
@@ -2742,11 +2742,19 @@
 
   .visual-map-scroll {
     justify-content: flex-start;
-    padding: 1rem 0.75rem 4rem;
+    padding: 1rem 0.75rem 5.25rem;
   }
 
   .visual-map-svg {
     flex: 0 0 auto;
+  }
+
+  .visual-map-page .visual-map-theme-toggle {
+    position: fixed;
+    left: calc(env(safe-area-inset-left, 0px) + 0.9rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.9rem);
+    z-index: 180;
+    box-shadow: 0 8px 24px var(--visual-shadow-strong);
   }
 }
 

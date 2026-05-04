@@ -564,11 +564,12 @@ export function VisualWorldMap() {
   const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
+  const phoneMapScale = 2.55
   // Desktop/tablet fill width by adding viewBox padding. Phone portrait should instead scale
   // the map itself so the world nodes remain tappable and the page scrolls vertically.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
     ? isPhonePortraitViewport
-      ? Math.max(naturalSvgDisplayWidth * 2.05, viewportSize.width * 1.6)
+      ? Math.max(naturalSvgDisplayWidth * phoneMapScale, viewportSize.width * 1.95)
       : Math.max(naturalSvgDisplayWidth, viewportSize.width)
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
