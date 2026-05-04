@@ -119,6 +119,9 @@ export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideA
 
 const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '≥'])
 
+const PHONE_EXPR_BASE_SCALE = 1.04
+const PHONE_EXPR_MIN_SCALE = 0.58
+
 export function parseTransformTarget(typeStr: string): ParsedTransformTarget | null {
   try {
     const parsed = parse(typeStr.trim())
@@ -230,7 +233,9 @@ export function TransformationView({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
-  const [pageWidth, setPageWidth] = useState(0)
+  const [pageWidth, setPageWidth] = useState(() =>
+    typeof window === 'undefined' ? 0 : Math.max(0, window.innerWidth - (isPhonePortrait ? 96 : 160))
+  )
   const [maxCardWidthsByTab, setMaxCardWidthsByTab] = useState<Record<string, number>>({})
   const [ruleDockHeight, setRuleDockHeight] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -244,6 +249,7 @@ export function TransformationView({
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
+  const [phoneExprScale, setPhoneExprScale] = useState<number | null>(null)
   const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
   const [backArrow, setBackArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
   const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
@@ -353,9 +359,13 @@ export function TransformationView({
   const GAP_PX = 12
   const maxCardPx = maxCardWidthsByTab[selectedTab] ?? 0
   const hasRules = tabRules.length > 0
-  const itemsPerPage = (pageWidth > 0 && maxCardPx > 0)
-    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
-    : Math.max(1, tabRules.length)  // show all until measured, but keep empty tabs safe
+  const estimatedCardPx = isPhonePortrait
+    ? Math.min(288, Math.max(180, pageWidth))
+    : 320
+  const paginationCardPx = maxCardPx > 0 ? maxCardPx : estimatedCardPx
+  const itemsPerPage = (pageWidth > 0 && hasRules)
+    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (paginationCardPx + GAP_PX)))
+    : 1
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
@@ -370,7 +380,7 @@ export function TransformationView({
     },
   })
 
-  // Emphasis: glow on matching cards; direct page/tab buttons toward emphasized items.
+  // Emphasis: glow on matching cards; direct page buttons toward emphasized items.
   const isEmphasizedRule = (rule: { id: string }) =>
     emphasizeItems != null && emphasizeItems.includes(rule.id)
   const emphIndexesInTab = tabRules.reduce<number[]>((acc, rule, i) => {
@@ -380,20 +390,6 @@ export function TransformationView({
   const emphVisibleNow = pageItems.some(r => isEmphasizedRule(r))
   const emphOnPrevPage = !emphVisibleNow && emphIndexesInTab.some(i => i < clampedPage * itemsPerPage)
   const emphOnNextPage = !emphVisibleNow && emphIndexesInTab.some(i => i >= (clampedPage + 1) * itemsPerPage)
-  // Per-tab glow: never light up 'all' or the current tab.
-  // When in a specific tab, suppress hints if the item is already on screen.
-  // When in 'all', always show which category tab the item belongs to (as a hint).
-  const emphByTabId: Record<string, boolean> = {}
-  tabs.forEach(tab => {
-    if (tab.id === 'all' || tab.id === selectedTab) { emphByTabId[tab.id] = false; return }
-    if (selectedTab !== 'all' && emphVisibleNow) { emphByTabId[tab.id] = false; return }
-    const tabItems = allRules.filter(r => {
-      if (tab.id === 'hyps') return r.dragId.startsWith('hyp_')
-      if (tab.id === 'other') return r.dragId.startsWith('thm_') && !r.category
-      return r.dragId.startsWith('thm_') && r.category === tab.id
-    })
-    emphByTabId[tab.id] = tabItems.some(r => isEmphasizedRule(r))
-  })
 
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
@@ -412,6 +408,60 @@ export function TransformationView({
     () => activeVisualInfos.filter(info => info.kind === 'rewrite' && info.text),
     [activeVisualInfos],
   )
+
+  useLayoutEffect(() => {
+    if (!isPhonePortrait) {
+      setPhoneExprScale(prev => prev == null ? prev : null)
+      return
+    }
+
+    const main = mainAreaRef.current
+    const expr = exprWrapperRef.current
+    if (!main || !expr) return
+
+    let rafId: number | null = null
+    const updateScale = () => {
+      if (rafId != null) window.cancelAnimationFrame(rafId)
+      rafId = window.requestAnimationFrame(() => {
+        const exprRect = expr.getBoundingClientRect()
+        const mainRect = main.getBoundingClientRect()
+        if (exprRect.width <= 0 || exprRect.height <= 0 || mainRect.width <= 0 || mainRect.height <= 0) return
+
+        const currentScale = phoneExprScale ?? PHONE_EXPR_BASE_SCALE
+        const unscaledWidth = exprRect.width / currentScale
+        const unscaledHeight = exprRect.height / currentScale
+        const availableWidth = Math.max(120, mainRect.width - 24)
+        const availableHeight = Math.max(120, mainRect.height - 192)
+        const fitScale = Math.min(
+          PHONE_EXPR_BASE_SCALE,
+          availableWidth / unscaledWidth,
+          availableHeight / unscaledHeight,
+        )
+        const nextScale = Math.max(PHONE_EXPR_MIN_SCALE, Number(fitScale.toFixed(3)))
+        setPhoneExprScale(prev => (prev != null && Math.abs(prev - nextScale) < 0.01) ? prev : nextScale)
+      })
+    }
+
+    updateScale()
+    window.addEventListener('resize', updateScale)
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        if (rafId != null) window.cancelAnimationFrame(rafId)
+        window.removeEventListener('resize', updateScale)
+      }
+    }
+
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(main)
+    observer.observe(expr)
+
+    return () => {
+      if (rafId != null) window.cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', updateScale)
+      observer.disconnect()
+    }
+  }, [isPhonePortrait, phoneExprScale, workingSide, workingExpr, ruleDockHeight])
 
   const cssEscape = (value: string) => {
     const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
@@ -478,7 +528,7 @@ export function TransformationView({
       let nextRewriteGuide: {
         info: VisualTransformInfo
         style: React.CSSProperties
-        arrow: { start: { x: number; y: number }; end: { x: number; y: number } }
+        arrow: GuideArrow
       } | null = null
       if (page) {
         for (const info of rewriteInfos) {
@@ -669,6 +719,7 @@ export function TransformationView({
       style={{
         ...(style ?? {}),
         '--tr-rule-dock-height': `${ruleDockHeight}px`,
+        '--tr-expression-scale': phoneExprScale != null ? String(phoneExprScale) : undefined,
       } as React.CSSProperties}
     >
       {headerSlot}
@@ -722,7 +773,7 @@ export function TransformationView({
           )}
 
           {reverseInfo && (
-            <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info">
+            <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info reverse-info">
               <VisualInfoText text={reverseInfo.text} />
             </div>
           )}
@@ -815,7 +866,7 @@ export function TransformationView({
               {tabs.map(tab => (
                 <button
                   key={tab.id}
-                  className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}${emphByTabId[tab.id] ? ' visual-emphasize-btn' : ''}`}
+                  className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
                   onClick={() => { onSelectedTabChange(tab.id); setHoveredId(null) }}
                 >
                   {tab.label}

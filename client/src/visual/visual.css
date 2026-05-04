@@ -1411,7 +1411,7 @@
 
 /* Working expression — scaled up like prototype */
 .visual-page .tr-expr-wrapper {
-  transform: scale(1.5);
+  transform: scale(var(--tr-expression-scale, 1.5));
 }
 
 .visual-page .transform-info {
@@ -2412,7 +2412,7 @@
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group {
-    top: calc(52px + 4.2rem);
+    top: calc(52px + 2.2rem);
     transform: none;
   }
 
@@ -2433,7 +2433,19 @@
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .tr-expr-wrapper {
-    transform: scale(1.04);
+    transform: scale(var(--tr-expression-scale, 1.04));
+  }
+
+  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.reverse-info {
+    top: auto;
+    bottom: calc(var(--tr-rule-dock-height, 0px) + 4.8rem);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(21rem, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
+    padding: 0.7rem 0.85rem;
+    font-size: 0.84rem;
+    line-height: 1.3;
   }
 }
 
@@ -2716,6 +2728,26 @@
 
 .visual-map-svg {
   /* inherited from .world-selection in world_tree.css */
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .visual-map-appbar {
+    gap: 0.55rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .visual-map-title {
+    font-size: 0.95rem;
+  }
+
+  .visual-map-scroll {
+    justify-content: flex-start;
+    padding: 1rem 0.75rem 4rem;
+  }
+
+  .visual-map-svg {
+    flex: 0 0 auto;
+  }
 }
 
 .visual-map-link {
@@ -3112,7 +3144,7 @@
   }
 
   .visual-page .tr-expr-wrapper {
-    transform: scale(1.02);
+    transform: scale(var(--tr-expression-scale, 1.02));
   }
 
   .visual-page .tr-controls,
@@ -3192,7 +3224,7 @@
   }
 
   .visual-page.tr-transformation-overlay .tr-expr-wrapper {
-    transform: scale(0.95);
+    transform: scale(var(--tr-expression-scale, 0.95));
   }
 
   .proof-sidebar-tab {

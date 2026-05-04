@@ -120,6 +120,18 @@ function toIconProp(icon: unknown): IconProp {
   return icon as IconProp
 }
 
+function getViewportSize() {
+  return { width: window.innerWidth, height: window.innerHeight }
+}
+
+function isNng4Game(gameId: string): boolean {
+  const parts = gameId.split('/').filter(Boolean)
+  return parts[parts.length - 1]?.toLowerCase() === 'nng4'
+}
+
+function getVisualMapGameTitle(gameId: string, title?: string | null): string {
+  return isNng4Game(gameId) ? 'The Natural Numbers Game' : (title || gameId)
+}
 
 function handleMapLinkKeyDown(
   event: React.KeyboardEvent<SVGGElement>,
@@ -385,9 +397,9 @@ export function VisualWorldMap() {
 
   const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
   const [levelTooltip, setLevelTooltip] = React.useState<LevelTooltipInfo | null>(null)
-  const [windowWidth, setWindowWidth] = React.useState(() => window.innerWidth)
+  const [viewportSize, setViewportSize] = React.useState(getViewportSize)
   React.useEffect(() => {
-    const onResize = () => setWindowWidth(window.innerWidth)
+    const onResize = () => setViewportSize(getViewportSize())
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -550,9 +562,18 @@ export function VisualWorldMap() {
   }
 
   const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
-  // Expand the SVG to at least the screen width, extending the viewBox symmetrically so nothing rescales.
-  const svgDisplayWidth = contentDx != null ? Math.max(ds * contentDx, windowWidth) : null
-  const extraViewBoxUnits = (svgDisplayWidth != null && contentDx != null) ? (svgDisplayWidth - ds * contentDx) / ds : 0
+  const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
+  const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
+  // Desktop/tablet fill width by adding viewBox padding. Phone portrait should instead scale
+  // the map itself so the world nodes remain tappable and the page scrolls vertically.
+  const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
+    ? isPhonePortraitViewport
+      ? Math.max(naturalSvgDisplayWidth * 2.05, viewportSize.width * 1.6)
+      : Math.max(naturalSvgDisplayWidth, viewportSize.width)
+    : null
+  const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
+    ? (svgDisplayWidth - naturalSvgDisplayWidth) / ds
+    : 0
   const dx = contentDx != null ? contentDx + extraViewBoxUnits : null
 
   const centerMapHorizontally = React.useCallback(() => {
@@ -630,7 +651,7 @@ export function VisualWorldMap() {
   return (
     <div className="visual-page visual-map-page">
       <VisualMapAppBar
-        gameTitle={title || gameId}
+        gameTitle={getVisualMapGameTitle(gameId, title)}
         isLightMode={isVisualLightMode}
         onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
       />
