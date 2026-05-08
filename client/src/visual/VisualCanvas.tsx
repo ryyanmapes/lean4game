@@ -72,7 +72,12 @@ const DEFAULT_HEIGHT = 50
 const COLLISION_EDGE_MARGIN = 24
 const PHONE_GOAL_TOP_PX = 108
 const PHONE_GOAL_FALLBACK_HEIGHT_PX = 92
-const PHONE_HYP_TOP_GAP_PX = 18
+// Negative offset: the goal-card-with-info wrapper is also an obstacle in the
+// collision resolver, which already pushes hyps below it by HITBOX_PADDING +
+// COLLISION_EDGE_MARGIN (~40px). The minY guardrail just needs to align with
+// (or sit slightly above) that natural settle so it doesn't add a second gap
+// on top of the collision gap. HITBOX_PADDING - COLLISION_EDGE_MARGIN = -8.
+const PHONE_HYP_TOP_GAP_PX = -8
 const PHONE_HYP_BOTTOM_GAP_PX = 24
 const PHONE_MIN_MIDDLE_HEIGHT_PX = 132
 
@@ -122,7 +127,13 @@ function resolveCollisions(
     })
 
   for (const id of obstacleIds) {
-    const rect = document.getElementById(id)?.getBoundingClientRect()
+    const goalEl = document.getElementById(id)
+    // Use the .goal-card-with-info wrapper (which dynamically grows with
+    // tutorial info text) as the obstacle, so hyps get pushed below the
+    // entire goal stack — not just the goal card itself.
+    const obstacleEl =
+      (goalEl?.closest('.goal-card-with-info') as HTMLElement | null) ?? goalEl
+    const rect = obstacleEl?.getBoundingClientRect()
     if (rect) {
       items.push({
         id,
@@ -1681,19 +1692,19 @@ export function VisualCanvas({
     }
 
     const update = () => {
-      const goalCard = goals.querySelector<HTMLElement>('[data-testid="goal-card"]')
-      const nextHeight = isPhonePortrait && goalCard
-        ? goalCard.offsetHeight
-        : goals.offsetHeight
-      setGoalStackHeight(nextHeight)
+      // Measure the full goals container so the height includes any tutorial
+      // info text (`.goal-info` elements) rendered inside `.goal-card-with-info`.
+      // This makes the gap between the goal stack and hypothesis cards
+      // adjust dynamically when a tutorial message appears or disappears.
+      setGoalStackHeight(goals.offsetHeight)
     }
     update()
     const observer = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(update)
     observer?.observe(goals)
-    const goalCard = goals.querySelector<HTMLElement>('[data-testid="goal-card"]')
-    if (goalCard) observer?.observe(goalCard)
+    const wrapper = goals.querySelector<HTMLElement>('.goal-card-with-info')
+    if (wrapper) observer?.observe(wrapper)
     window.addEventListener('resize', update)
     return () => {
       observer?.disconnect()

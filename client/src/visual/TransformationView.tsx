@@ -897,8 +897,13 @@ export function TransformationView({
         {backArrow && <InstructionGuideArrow arrow={{ ...backArrow, startPadding: 28, endPadding: 42 }} />}
         {reverseArrow && <InstructionGuideArrow arrow={{
           ...reverseArrow,
-          startPadding: isPhonePortrait ? 8 : 28,
-          endPadding: 42,
+          startPadding: isPhonePortrait ? 6 : 28,
+          // On phone portrait the info text sits just above the reverse
+          // button — the gap is small (~30–60px), so a large endPadding
+          // would over-shoot and flip the arrow to point upward at the info
+          // text. Keep endPadding short enough to stop just past the button
+          // edge.
+          endPadding: isPhonePortrait ? 20 : 42,
           arc: isPhonePortrait ? 'none' : 'up',
         }} />}
         {rewriteGuide && (
