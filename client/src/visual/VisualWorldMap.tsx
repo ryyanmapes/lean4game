@@ -351,7 +351,7 @@ function VisualMapAppBar({
           aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
         >
           <FontAwesomeIcon icon={toIconProp(faSun)} />
-          <span className="visual-map-theme-label">Light</span>
+          <span className="visual-map-theme-label">{isLightMode ? 'Light' : 'Dark'}</span>
         </button>
         <VisualMapMenuButton />
       </div>
@@ -564,8 +564,11 @@ export function VisualWorldMap() {
   const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
-  const phoneMapScale = 4.5
-  const phoneMapMinViewportScale = 3.4
+  // Phone portrait uses the natural SVG scale. Larger multipliers make the
+  // initial centered view feel zoomed into one column instead of showing the
+  // surrounding branches.
+  const phoneMapScale = 1.0
+  const phoneMapMinViewportScale = 1.0
   // Desktop/tablet fill width by adding viewBox padding. Phone portrait should instead scale
   // the map itself so the world nodes remain tappable and the page scrolls vertically.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null

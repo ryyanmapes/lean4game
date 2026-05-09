@@ -1186,6 +1186,11 @@ function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
   return serializeProofCommands(leanCommands)
 }
 
+function buildInteractiveProofLine(command: string, playTactic: string): string {
+  const { casePath } = parseFocusedCommand(command)
+  return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, playTactic)
+}
+
 type TransformTarget =
   | { kind: 'goal'; streamId: string }
   | { kind: 'hyp'; streamId: string; hypId: string; hypName: string; hypRef: string }
@@ -1228,6 +1233,7 @@ interface VisualCanvasProps {
   skippedLevels?: number[]
   previouslyCompleted?: boolean
   onLevelCompleted?: (proof?: { playScript: string; leanScript: string }) => void
+  onProofStep?: (interactiveLeanCode: string) => void
 }
 
 function TheoremTray({
@@ -1428,7 +1434,7 @@ export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted
+  onLevelCompleted, onProofStep
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
@@ -1953,6 +1959,7 @@ export function VisualCanvas({
     })
 
     if (handledBySyntheticReflexiveClick) {
+      onProofStep?.(buildInteractiveProofLine(command, playTactic))
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,
         canvasState,
@@ -2022,6 +2029,7 @@ export function VisualCanvas({
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
     }])
+    onProofStep?.(buildInteractiveProofLine(command, playTactic))
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
     if ((leanCanvas.completed || nextCanvas.completed) && options?.solvedGoalId) {
@@ -2080,6 +2088,7 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setDisplayCanvasState(cloneCanvasState(restoredCanvas))
     setCanvasState(restoredCanvas)
+    onProofStep?.('undo')
 
     // Navigate to the mode where the undone step was taken.
     // If it was a rewrite (non-null snapshot), restore transformation mode.
@@ -2747,6 +2756,7 @@ export function VisualCanvas({
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
     }])
+    onProofStep?.(buildInteractiveProofLine(command, playTactic))
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
@@ -2929,6 +2939,7 @@ export function VisualCanvas({
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: transformTarget,
     }])
+    onProofStep?.(buildInteractiveProofLine(command, playTactic))
 
     if (shouldDeferGoalCompletionUntilClose) {
       // When the rewrite auto-completes the proof (e.g. rw [add_zero] closes "0 = 0" via rfl),
@@ -3023,7 +3034,7 @@ export function VisualCanvas({
     setTransformationVersion(v => v + 1)
 
     return { success: true, completed: false }
-  }, [activeStreamId, canvasState, comparisonTransformEnabled, isProcessing, logKey, onInteraction, proofTree, transformTarget])
+  }, [activeStreamId, canvasState, comparisonTransformEnabled, isProcessing, logKey, onInteraction, onProofStep, proofTree, transformTarget])
 
   // ── Build TransformationView props ──────────────────────────────────────────
 

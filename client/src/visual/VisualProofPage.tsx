@@ -5,7 +5,7 @@ import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
 import { useAppSelector, useAppDispatch } from '../hooks'
 import { selectCompleted, levelCompleted } from '../state/progress'
-import { sendTelemetry } from '../utils/telemetry'
+import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
@@ -107,6 +107,7 @@ function visualTacticActivation(name: string): VisualTactic['activation'] {
 export function VisualProofPage() {
   const gameId = useContext(GameIdContext)
   const { worldId, levelId } = useContext(WorldLevelIdContext)
+  const solvingId = React.useMemo(() => createSolvingId(), [gameId, worldId, levelId])
   const navigate = useNavigate()
   const handleWorldMap = useCallback(() => {
     navigate(`/${gameId}/visual`)
@@ -123,11 +124,22 @@ export function VisualProofPage() {
         game_id: gameId,
         world_id: worldId,
         level_id: levelId,
+        solving_uuid: solvingId,
         play_script: proof.playScript,
         lean_script: proof.leanScript,
       })
     }
-  }, [dispatch, gameId, worldId, levelId])
+  }, [dispatch, gameId, worldId, levelId, solvingId])
+  const handleProofStep = useCallback((interactiveLeanCode: string) => {
+    sendTelemetry({
+      event_type: 'proof_step',
+      game_id: gameId,
+      world_id: worldId,
+      level_id: levelId,
+      solving_uuid: solvingId,
+      interactive_lean_code: interactiveLeanCode,
+    })
+  }, [gameId, worldId, levelId, solvingId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
@@ -185,7 +197,7 @@ export function VisualProofPage() {
 
         try {
           const proof = await withTimeout(
-            client.loadProofState(worldId, levelId),
+            client.loadProofState(worldId, levelId, { fresh: true }),
             INITIAL_PROOF_ATTEMPT_TIMEOUT_MS,
             'Initial proof request timed out',
           )
@@ -201,6 +213,7 @@ export function VisualProofPage() {
               game_id: gameId,
               world_id: worldId,
               level_id: levelId,
+              solving_uuid: solvingId,
             })
           }
           return
@@ -222,7 +235,7 @@ export function VisualProofPage() {
     return () => {
       active = false
     }
-  }, [disposeClient, gameId, getClient, worldId, levelId])
+  }, [disposeClient, gameId, getClient, worldId, levelId, solvingId])
 
   // Callback passed to VisualCanvas: sends an updated proof body to Lean and
   // returns the new ProofState, or null on Lean error.
@@ -455,6 +468,7 @@ export function VisualProofPage() {
       skippedLevels={skippedLevels}
       previouslyCompleted={previouslyCompleted}
       onLevelCompleted={handleLevelCompleted}
+      onProofStep={handleProofStep}
     />
   )
 }

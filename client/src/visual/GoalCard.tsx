@@ -45,9 +45,24 @@ export function GoalCard({
   const propositionRef = React.useRef<HTMLSpanElement | null>(null)
   const [arrows, setArrows] = React.useState<Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>>([])
   const goalText = formatFormulaText(TaggedText_stripTags(goal.type))
+  const hypTypeTexts = React.useMemo(
+    () => goal.hyps.map(h => formatFormulaText(TaggedText_stripTags(h.type))),
+    [goal.hyps],
+  )
   const activeVisualInfos = React.useMemo(
-    () => visualInfos.filter(info => !info.goal || formatFormulaText(info.goal) === goalText),
-    [goalText, visualInfos],
+    () => visualInfos.filter(info => {
+      if (info.goal && formatFormulaText(info.goal) !== goalText) return false
+      if (info.requireHypType) {
+        const target = formatFormulaText(info.requireHypType)
+        if (!hypTypeTexts.includes(target)) return false
+      }
+      if (info.excludeHypType) {
+        const target = formatFormulaText(info.excludeHypType)
+        if (hypTypeTexts.includes(target)) return false
+      }
+      return true
+    }),
+    [goalText, hypTypeTexts, visualInfos],
   )
 
   const classes = [

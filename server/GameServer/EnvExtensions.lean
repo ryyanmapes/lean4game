@@ -261,6 +261,13 @@ structure VisualGoalInfo where
   position : String
   arrow : Bool
   goal : Option String := none
+  /-- If set, the info is only displayed while the active goal contains a
+  hypothesis whose type matches this string (compared after Visual Lean's
+  formula-text normalization). -/
+  requireHypType : Option String := none
+  /-- If set, the info is only displayed while the active goal does *not*
+  contain a hypothesis whose type matches this string. -/
+  excludeHypType : Option String := none
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 

@@ -18,7 +18,7 @@ export function TelemetryConsent() {
     <div className="telemetry-banner" role="dialog" aria-label="Anonymous usage statistics">
       <p className="telemetry-banner-text">
         Help us improve the games by sharing anonymous usage statistics (level
-        starts, completions, and the proofs you build). No personal data is
+        starts, completions, proof steps, and undo actions). No personal data is
         collected. See our{' '}
         <a
           className="telemetry-banner-link"

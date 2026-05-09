@@ -53,6 +53,12 @@ export interface VisualGoalInfo {
   position: 'above' | 'below'
   arrow: boolean
   goal?: string | null
+  /** If set, the info only renders while the active goal contains a hypothesis whose
+   *  type matches this string after formula-text normalization. */
+  requireHypType?: string | null
+  /** If set, the info only renders while the active goal does *not* contain a hypothesis
+   *  whose type matches this string after formula-text normalization. */
+  excludeHypType?: string | null
   text: string
 }
 

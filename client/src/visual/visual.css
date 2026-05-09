@@ -2742,17 +2742,22 @@
 
   .visual-map-scroll {
     justify-content: flex-start;
-    padding: 1rem 0.75rem 5.25rem;
+    padding: 3.5rem 0.75rem 1.25rem;
   }
 
-  .visual-map-svg {
+  .visual-map-page .visual-map-svg {
     flex: 0 0 auto;
+    /* Keep the original phone zoom: let world_tree.css cap the SVG to the
+     * viewport instead of rendering the wider intrinsic map. */
+    margin-top: 0;
   }
 
   .visual-map-page .visual-map-theme-toggle {
     position: fixed;
-    left: calc(env(safe-area-inset-left, 0px) + 0.9rem);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.9rem);
+    /* Sit just below the appbar so it doesn't get hidden by the phone's
+     * bottom browser chrome and is easy to reach. */
+    left: calc(env(safe-area-inset-left, 0px) + 0.75rem);
+    top: calc(env(safe-area-inset-top, 0px) + 3.55rem);
     z-index: 180;
     box-shadow: 0 8px 24px var(--visual-shadow-strong);
   }

@@ -187,9 +187,11 @@ elab "VisualUnlockTactic" args:ident* : command => do
 
 syntax visualBool := &"true" <|> &"false"
 
-def mkVisualGoalInfo (position : String) (arrow : Bool) (goal : Option String) (text : String) :
+def mkVisualGoalInfo (position : String) (arrow : Bool) (goal : Option String) (text : String)
+    (requireHypType : Option String := none) (excludeHypType : Option String := none) :
     VisualGoalInfo :=
-  { position := position, arrow := arrow, goal := goal, text := text }
+  { position := position, arrow := arrow, goal := goal,
+    requireHypType := requireHypType, excludeHypType := excludeHypType, text := text }
 
 def mkVisualTransformSideInfo (side : String) (goal : Option String) (text : String) :
     VisualTransformInfo :=
@@ -206,6 +208,10 @@ def mkVisualTransformBackInfo (goal : Option String) (text : String) :
 def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
     VisualTransformInfo :=
   { kind := "reverse", goal := goal, text := text }
+
+def mkVisualTransformGeneralInfo (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "info", goal := goal, text := text }
 
 def mkVisualTacticHypInfo (tactic hyp : String) (goal : Option String) (text : String) :
     VisualTacticHypInfo :=
@@ -251,6 +257,40 @@ elab "VisualGoalInfoOnGoal " pos:ident &"false" goalText:str &"show" text:str : 
   let info := mkVisualGoalInfo position false (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
 
+/-- Add Visual Lean-only instructional text near the goal card, only while the current
+goal matches the supplied display text AND a hypothesis with the given type is present.
+Use this to gate a message on the user having produced a particular intermediate hypothesis. -/
+elab "VisualGoalInfoOnGoalWithHyp " pos:ident arrow:visualBool goalText:str hypType:str
+    &"show" text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfoOnGoalWithHyp position must be `above` or `below`"
+  let arrowBool :=
+    match arrow with
+    | `(visualBool| true) => true
+    | `(visualBool| false) => false
+    | _ => false
+  let info := mkVisualGoalInfo position arrowBool (some (goalText.getString)) text.getString
+    (requireHypType := some (hypType.getString))
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
+/-- Add Visual Lean-only instructional text near the goal card, only while the current
+goal matches the supplied display text AND no hypothesis with the given type is present.
+Use this to gate a message on the user *not yet* having produced a particular hypothesis. -/
+elab "VisualGoalInfoOnGoalWithoutHyp " pos:ident arrow:visualBool goalText:str hypType:str
+    &"show" text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfoOnGoalWithoutHyp position must be `above` or `below`"
+  let arrowBool :=
+    match arrow with
+    | `(visualBool| true) => true
+    | `(visualBool| false) => false
+    | _ => false
+  let info := mkVisualGoalInfo position arrowBool (some (goalText.getString)) text.getString
+    (excludeHypType := some (hypType.getString))
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
 /-- Add Visual Lean-only transformation guidance for switching equation sides.
 Usage: `VisualTransformSideInfo left "message"` or `VisualTransformSideInfo right "message"`. -/
 elab "VisualTransformSideInfo " side:ident text:str : command => do
@@ -291,6 +331,14 @@ elab "VisualTransformBackInfoOnGoal " goalText:str &"show" text:str : command =>
 button, only while the current goal matches the supplied display text. -/
 elab "VisualTransformReverseInfoOnGoal " goalText:str &"show" text:str : command => do
   let info := mkVisualTransformReverseInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only instructional text inside the transformation overlay
+*without* drawing an arrow to any UI control. Use this for general status text
+(e.g. "you must make both sides match") that doesn't direct the player to a
+specific button. Shown only while the current goal matches the supplied text. -/
+elab "VisualTransformInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformGeneralInfo (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
 
 /-- Add Visual Lean-only guidance linking a tactic card to a hypothesis card.

@@ -409,6 +409,7 @@ export function TransformationView({
     info.kind === 'side' && (info.side === 'left' || info.side === 'right') && info.side !== workingSide
   )
   const backInfo = activeVisualInfos.find(info => info.kind === 'back' && info.text)
+  const generalInfo = activeVisualInfos.find(info => info.kind === 'info' && info.text)
   const reverseInfo = activeVisualInfos.find(info => info.kind === 'reverse' && info.text)
   const rewriteInfos = useMemo(
     () => activeVisualInfos.filter(info => info.kind === 'rewrite' && info.text),
@@ -563,11 +564,24 @@ export function TransformationView({
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
           const guideWidth = 360
-          const lineMinX = Math.min(start.x, end.x)
+          const margin = 34
+          const viewportW = window.innerWidth
+          const lineLeft = Math.min(sourceRect.left, targetRect.left)
+          const lineRight = Math.max(sourceRect.right, targetRect.right)
+          const leftPos = lineLeft - guideWidth - margin
+          const rightPos = lineRight + margin
+          const fitsLeft = leftPos >= 16
+          const fitsRight = rightPos + guideWidth <= viewportW - 16
+          // Prefer whichever side has more room. If neither side has clearance,
+          // clamp to the viewport edge with the most space.
+          const preferLeft = fitsLeft && (!fitsRight || lineLeft > viewportW - lineRight)
+          const left = preferLeft
+            ? Math.max(16, leftPos)
+            : Math.min(viewportW - guideWidth - 16, rightPos)
           nextRewriteGuide = {
             info,
             style: {
-              left: Math.max(16, lineMinX - guideWidth - 34),
+              left,
               top: midpoint.y,
               transform: 'translateY(-50%)',
               width: guideWidth,
@@ -782,6 +796,12 @@ export function TransformationView({
           {backInfo && (
             <div ref={backInfoRef} className="visual-info-callout transform-info side-info">
               <VisualInfoText text={backInfo.text} />
+            </div>
+          )}
+
+          {generalInfo && (
+            <div className="visual-info-callout transform-info side-info">
+              <VisualInfoText text={generalInfo.text} />
             </div>
           )}
 

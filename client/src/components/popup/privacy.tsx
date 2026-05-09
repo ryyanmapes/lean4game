@@ -24,12 +24,15 @@ export function PrivacyPolicyPopup () {
         <strong>Anonymous usage statistics.</strong> If you accept the
         statistics banner shown on the landing page, the site stores a random
         identifier (UUID) in your browser and sends a small event to the server
-        when you start or successfully complete a level. Completion events
-        include the proof you constructed (both the visual play script and the
-        resulting Lean tactic script). No IP address, browser, name, email, or
-        other personal data is associated with these events. Refusing the
-        banner disables collection entirely; clearing your browser storage
-        also resets the identifier.
+        when you start or successfully complete a level. Each level attempt
+        also gets its own random solving UUID. While you solve a visual level,
+        the site sends proof-step events containing the new Interactive Lean
+        line, or the word "undo" when you undo. Completion events include the
+        proof you constructed (both the visual play script and the resulting
+        Lean tactic script). No IP address, browser, name, email, or other
+        personal data is associated with these events. Refusing the banner
+        disables collection entirely; clearing your browser storage also
+        resets the identifier.
       </p>
       <p>Our server is located in Germany.</p>
       <p>
