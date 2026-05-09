@@ -96,6 +96,7 @@ function resolveCollisions(
   hyps: HypCardType[],
   obstacleIds: string[] = [],
   canvasBounds: CanvasBounds = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
+  options: { phonePortrait?: boolean } = {},
 ): HypCardType[] {
   if (hyps.length === 0) return hyps
 
@@ -128,11 +129,15 @@ function resolveCollisions(
 
   for (const id of obstacleIds) {
     const goalEl = document.getElementById(id)
-    // Use the .goal-card-with-info wrapper (which dynamically grows with
-    // tutorial info text) as the obstacle, so hyps get pushed below the
-    // entire goal stack — not just the goal card itself.
-    const obstacleEl =
-      (goalEl?.closest('.goal-card-with-info') as HTMLElement | null) ?? goalEl
+    // On desktop / landscape we use the full .goal-card-with-info wrapper
+    // (which grows with tutorial info text) so hyps get pushed below the
+    // entire goal stack. On phone portrait the wrapper is full-width and
+    // would horizontally repel cards, scattering the 2-column hyp grid;
+    // there the canvas-minY clamp already handles the wrapper height
+    // (measured via goals.offsetHeight), so we use just the goal card.
+    const obstacleEl = options.phonePortrait
+      ? goalEl
+      : ((goalEl?.closest('.goal-card-with-info') as HTMLElement | null) ?? goalEl)
     const rect = obstacleEl?.getBoundingClientRect()
     if (rect) {
       items.push({
@@ -200,12 +205,56 @@ function positionsDiffer(left: { x: number; y: number }, right: { x: number; y: 
   return Math.abs(left.x - right.x) > 0.5 || Math.abs(left.y - right.y) > 0.5
 }
 
-function resolveCanvasStateCollisions(canvas: CanvasState, canvasBounds: CanvasBounds): CanvasState {
+/** Snap all non-userPlaced hypothesis cards to a clean 2-column grid below
+ *  the goal stack on phone portrait. The proof-state-driven hyp ordering can
+ *  shuffle cards (a new `intro` reuses an old slot, etc.); preserving saved
+ *  positions then ends up with overlap and the collision repulsion scatters
+ *  the grid. On the narrow phone viewport we want a strict grid instead. */
+function phonePortraitGridSnap(canvas: CanvasState, goalStackHeight: number): CanvasState {
+  if (typeof window === 'undefined') return canvas
+  const viewportWidth = window.innerWidth
+  const cols = viewportWidth >= 360 ? 2 : 1
+  const phoneStartX = 20
+  const phoneGap = 16
+  const colW = cols === 1
+    ? 0
+    : Math.max(156, (viewportWidth - phoneStartX * 2 - phoneGap) / cols)
+  const ROW_H = 96
+  const stackHeight = goalStackHeight || PHONE_GOAL_FALLBACK_HEIGHT_PX
+  const startY = PHONE_GOAL_TOP_PX + stackHeight + 18
+
+  let changed = false
+  const streams = canvas.streams.map(stream => {
+    const newHyps = stream.hyps.map((hyp, index) => {
+      if (hyp.userPlaced) return hyp
+      const col = index % cols
+      const row = Math.floor(index / cols)
+      const newPos = {
+        x: col * colW + phoneStartX,
+        y: row * ROW_H + startY,
+      }
+      if (
+        Math.abs(hyp.position.x - newPos.x) < 0.5 &&
+        Math.abs(hyp.position.y - newPos.y) < 0.5
+      ) return hyp
+      changed = true
+      return { ...hyp, position: newPos }
+    })
+    return changed ? { ...stream, hyps: newHyps } : stream
+  })
+  return changed ? { ...canvas, streams } : canvas
+}
+
+function resolveCanvasStateCollisions(
+  canvas: CanvasState,
+  canvasBounds: CanvasBounds,
+  options: { phonePortrait?: boolean } = {},
+): CanvasState {
   const obstacleIds = canvas.streams.map(stream => stream.id)
   let changed = false
 
   const streams = canvas.streams.map(stream => {
-    const resolvedHyps = resolveCollisions(stream.hyps, obstacleIds, canvasBounds)
+    const resolvedHyps = resolveCollisions(stream.hyps, obstacleIds, canvasBounds, options)
     if (!changed) {
       changed = resolvedHyps.some((hyp, index) => positionsDiffer(hyp.position, stream.hyps[index]!.position))
     }
@@ -1662,8 +1711,12 @@ export function VisualCanvas({
   }
 
   useLayoutEffect(() => {
+    if (isPhonePortrait) {
+      setCanvasState(prev => phonePortraitGridSnap(prev, goalStackHeight))
+      return
+    }
     const canvasBounds = getCombiningCanvasBounds()
-    setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds))
+    setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait }))
   }, [canvasState.streams, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
@@ -2383,7 +2436,10 @@ export function VisualCanvas({
             position: clampCanvasPosition(h.position.x + delta.x, h.position.y + delta.y, 250, 50),
           }
         })
-        return { ...stream, hyps: resolveCollisions(moved, obstacleIds, canvasBounds) }
+        return {
+          ...stream,
+          hyps: resolveCollisions(moved, obstacleIds, canvasBounds, { phonePortrait: isPhonePortrait }),
+        }
       })
       return { ...prev, streams }
     })
