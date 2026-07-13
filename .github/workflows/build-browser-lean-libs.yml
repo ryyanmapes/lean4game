@@ -59,7 +59,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y zstd libc6:i386 libstdc++6:i386 libgcc-s1:i386 libuv1:i386
+          sudo apt-get install -y zstd libc6:i386 libstdc++6:i386 libgcc-s1:i386 libuv1:i386 libssl3t64:i386
 
           archive="$(find .cauli-toolchain-download -type f -name '*.tar.zst' -print -quit)"
           if [[ -z "$archive" ]]; then
@@ -125,4 +125,3 @@ jobs:
           if-no-files-found: error
           compression-level: 6
           retention-days: 30
-
