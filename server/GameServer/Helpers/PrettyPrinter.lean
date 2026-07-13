@@ -3,8 +3,6 @@ import Lean.PrettyPrinter.Delaborator.Builtins
 import Lean.PrettyPrinter
 import Lean
 
-import Batteries.Tactic.OpenPrivate
-
 namespace GameServer
 
 namespace PrettyPrinter
@@ -14,7 +12,31 @@ open Lean.Parser Term
 open PrettyPrinter Delaborator SubExpr
 open TSyntax.Compat
 
-open private Lean.PrettyPrinter.Delaborator.shouldGroupWithNext evalSyntaxConstant from Lean.PrettyPrinter.Delaborator.Builtins
+def shouldGroupWithNext : DelabM Bool := do
+  let e ← getExpr
+  let ppEType ← getPPOption (getPPBinderTypes e)
+  let go (e' : Expr) := do
+    let ppE'Type ← withBindingBody `_ $ getPPOption (getPPBinderTypes e)
+    pure $ e.binderInfo == e'.binderInfo &&
+      e.bindingDomain! == e'.bindingDomain! &&
+      e'.binderInfo != BinderInfo.instImplicit &&
+      ppEType == ppE'Type
+  match e with
+  | Expr.lam _ _     e'@(Expr.lam _ _ _ _) _     => go e'
+  | Expr.forallE _ _ e'@(Expr.forallE _ _ _ _) _ => go e'
+  | _ => pure false
+where
+  getPPBinderTypes (e : Expr) :=
+    if e.isForall then getPPPiBinderTypes else getPPFunBinderTypes
+
+unsafe def evalSyntaxConstantUnsafe
+    (env : Environment) (opts : Options) (constName : Name) : ExceptT String Id Syntax :=
+  env.evalConstCheck Syntax opts ``Syntax constName
+
+@[implemented_by evalSyntaxConstantUnsafe]
+opaque evalSyntaxConstant
+    (env : Environment) (opts : Options) (constName : Name) : ExceptT String Id Syntax :=
+  throw ""
 
 -- def typeSpec := leading_parser " :\\n: " >> termParser
 
@@ -37,7 +59,7 @@ where
     if let .forallE n d _ i ← getExpr then
       let stxN ← annotateCurPos (mkIdent n)
       let curIds := curIds.push ⟨stxN⟩
-      if ← Lean.PrettyPrinter.Delaborator.shouldGroupWithNext then
+      if ← shouldGroupWithNext then
         withBindingBody n <| delabParams idStx groups curIds
       else
         let delabTy := withOptions (pp.piBinderTypes.set · false) delab

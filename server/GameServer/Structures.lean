@@ -30,7 +30,7 @@ inductive ExprTree where
   | other (pp : String)                      : ExprTree  -- fallback: pretty-printed string
   deriving Repr
 
-private partial def exprTreeToJson : ExprTree → Json
+partial def exprTreeToJson : ExprTree → Json
   | .lit n    => Json.mkObj [("tag", "lit"),   ("n",    toJson n)]
   | .fvar s   => Json.mkObj [("tag", "fvar"),  ("name", toJson s)]
   | .const s  => Json.mkObj [("tag", "const"), ("name", toJson s)]
@@ -39,7 +39,7 @@ private partial def exprTreeToJson : ExprTree → Json
 
 instance : ToJson ExprTree := ⟨exprTreeToJson⟩
 
-private partial def exprTreeFromJson (j : Json) : Except String ExprTree := do
+partial def exprTreeFromJson (j : Json) : Except String ExprTree := do
   let tag : String ← fromJson? (← j.getObjVal? "tag")
   match tag with
   | "lit"   => return .lit   (← fromJson? (← j.getObjVal? "n"))
