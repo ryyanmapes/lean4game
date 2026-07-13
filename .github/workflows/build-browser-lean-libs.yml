@@ -111,13 +111,15 @@ jobs:
 
       - name: Enable browser IR generation
         run: |
-          node scripts/enable-browser-module-system.mjs \
+          node scripts/enable-browser-module-system.mjs --meta \
             server/GameServer.lean \
             server/GameServer \
             server/.lake/packages/importGraph \
             server/.lake/packages/i18n \
+            server/.lake/packages/Cli
+
+          node scripts/enable-browser-module-system.mjs \
             server/.lake/packages/batteries \
-            server/.lake/packages/Cli \
             ../VisualTest/Game.lean \
             ../VisualTest/Game
 
