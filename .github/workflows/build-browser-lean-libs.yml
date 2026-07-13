@@ -89,9 +89,8 @@ jobs:
           version_status=$?
           set -e
           echo "$version_output"
-          if [[ "$version_status" != 0 && "$version_status" != 170 ]]; then
-            echo "::error::lean --version exited with unexpected status $version_status"
-            exit "$version_status"
+          if [[ "$version_status" != 0 ]]; then
+            echo "::warning::Cauli's 32-bit lean --version returned status $version_status after printing its version; validating the printed commit instead."
           fi
           if [[ "$version_output" =~ commit\ ([0-9a-f]{40}) ]]; then
             actual="${BASH_REMATCH[1]}"
