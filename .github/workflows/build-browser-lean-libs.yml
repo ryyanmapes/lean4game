@@ -1,0 +1,128 @@
+name: Build browser Lean libraries
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_nng4:
+        description: Also build and package ryyanmapes/NNG4
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: browser-lean-libs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CAULI_LEAN_SHA: 62b6a2291302d4bbeace37642a066b7510d0145c
+  CAULI_LEAN_RUN_ID: 29165653896
+  CAULI_LEAN_ARTIFACT: build-Linux 32bit
+
+jobs:
+  build:
+    name: GameServer + VisualTest${{ inputs.include_nng4 && ' + NNG4' || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out lean4game
+        uses: actions/checkout@v4
+
+      - name: Require Cauli artifact token
+        env:
+          CAULI_ARTIFACT_TOKEN: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
+        run: |
+          if [[ -z "$CAULI_ARTIFACT_TOKEN" ]]; then
+            echo '::error::Add CAULI_ARTIFACT_TOKEN as a repository Actions secret. It needs read access to public Actions artifacts.'
+            exit 1
+          fi
+
+      - name: Check out VisualTest
+        run: git clone --depth 1 https://github.com/ryyanmapes/VisualTest ../VisualTest
+
+      - name: Check out NNG4
+        if: inputs.include_nng4
+        run: git clone --depth 1 https://github.com/ryyanmapes/NNG4 ../NNG4
+
+      - name: Download matching Cauli 32-bit compiler
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
+          repository: cauli/lean4
+          run-id: ${{ env.CAULI_LEAN_RUN_ID }}
+          name: ${{ env.CAULI_LEAN_ARTIFACT }}
+          path: .cauli-toolchain-download
+
+      - name: Install 32-bit runtime and unpack compiler
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y zstd libc6:i386 libstdc++6:i386 libgcc-s1:i386 libuv1:i386
+
+          archive="$(find .cauli-toolchain-download -type f -name '*.tar.zst' -print -quit)"
+          if [[ -z "$archive" ]]; then
+            echo '::error::The Cauli artifact did not contain a .tar.zst toolchain archive.'
+            find .cauli-toolchain-download -maxdepth 3 -type f -print
+            exit 1
+          fi
+
+          mkdir .cauli-toolchain
+          tar --zstd -xf "$archive" -C .cauli-toolchain
+          lean_home="$(find "$PWD/.cauli-toolchain" -mindepth 1 -maxdepth 1 -type d -name 'lean-*' -print -quit)"
+          if [[ -z "$lean_home" || ! -x "$lean_home/bin/lake" ]]; then
+            echo '::error::Could not locate bin/lake in the extracted Cauli toolchain.'
+            find .cauli-toolchain -maxdepth 3 -type f -print | head -100
+            exit 1
+          fi
+
+          echo "LEAN_HOME=$lean_home" >> "$GITHUB_ENV"
+          echo "$lean_home/bin" >> "$GITHUB_PATH"
+
+      - name: Verify matching compiler
+        run: |
+          file "$LEAN_HOME/bin/lean"
+          ldd "$LEAN_HOME/bin/lean" || true
+          "$LEAN_HOME/bin/lean" --version
+          actual="$($LEAN_HOME/bin/lean --githash)"
+          if [[ "$actual" != "$CAULI_LEAN_SHA" ]]; then
+            echo "::error::Expected Lean $CAULI_LEAN_SHA, got $actual"
+            exit 1
+          fi
+          "$LEAN_HOME/bin/lake" --version
+
+      - name: Build GameServer with Cauli Lean
+        working-directory: server
+        run: |
+          "$LEAN_HOME/bin/lake" update
+          "$LEAN_HOME/bin/lake" build
+
+      - name: Build VisualTest with Cauli Lean
+        working-directory: ../VisualTest
+        run: |
+          "$LEAN_HOME/bin/lake" update
+          "$LEAN_HOME/bin/lake" build
+
+      - name: Build NNG4 with Cauli Lean
+        if: inputs.include_nng4
+        working-directory: ../NNG4
+        run: |
+          "$LEAN_HOME/bin/lake" update -Klean4game.local
+          "$LEAN_HOME/bin/lake" build
+
+      - name: Package browser libraries
+        env:
+          INCLUDE_NNG4: ${{ inputs.include_nng4 }}
+          LEAN4GAME_REF: ${{ github.sha }}
+        run: bash scripts/package-browser-lean-libs.sh browser-lean-libs
+
+      - name: Upload browser libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-lean-libs-${{ env.CAULI_LEAN_SHA }}
+          path: browser-lean-libs
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 30
+
