@@ -84,8 +84,15 @@ jobs:
         run: |
           file "$LEAN_HOME/bin/lean"
           ldd "$LEAN_HOME/bin/lean" || true
-          version_output="$("$LEAN_HOME/bin/lean" --version)"
+          set +e
+          version_output="$("$LEAN_HOME/bin/lean" --version 2>&1)"
+          version_status=$?
+          set -e
           echo "$version_output"
+          if [[ "$version_status" != 0 && "$version_status" != 170 ]]; then
+            echo "::error::lean --version exited with unexpected status $version_status"
+            exit "$version_status"
+          fi
           if [[ "$version_output" =~ commit\ ([0-9a-f]{40}) ]]; then
             actual="${BASH_REMATCH[1]}"
           else
