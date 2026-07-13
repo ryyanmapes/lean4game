@@ -110,6 +110,11 @@ jobs:
         run: |
           "$LEAN_HOME/bin/lake" build
 
+      - name: Link GameServer dependencies into VisualTest
+        run: |
+          mkdir -p ../VisualTest/.lake
+          ln -s "$GITHUB_WORKSPACE/server/.lake/packages" ../VisualTest/.lake/packages
+
       - name: Build VisualTest with Cauli Lean
         working-directory: ../VisualTest
         run: |
@@ -119,7 +124,6 @@ jobs:
         if: inputs.include_nng4
         working-directory: ../NNG4
         run: |
-          "$LEAN_HOME/bin/lake" update -Klean4game.local
           "$LEAN_HOME/bin/lake" build
 
       - name: Package browser libraries
