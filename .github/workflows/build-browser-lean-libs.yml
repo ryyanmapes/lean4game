@@ -84,8 +84,14 @@ jobs:
         run: |
           file "$LEAN_HOME/bin/lean"
           ldd "$LEAN_HOME/bin/lean" || true
-          "$LEAN_HOME/bin/lean" --version
-          actual="$($LEAN_HOME/bin/lean --githash)"
+          version_output="$("$LEAN_HOME/bin/lean" --version)"
+          echo "$version_output"
+          if [[ "$version_output" =~ commit\ ([0-9a-f]{40}) ]]; then
+            actual="${BASH_REMATCH[1]}"
+          else
+            echo '::error::Could not read the Lean commit from --version output.'
+            exit 1
+          fi
           if [[ "$actual" != "$CAULI_LEAN_SHA" ]]; then
             echo "::error::Expected Lean $CAULI_LEAN_SHA, got $actual"
             exit 1
