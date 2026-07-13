@@ -107,11 +107,13 @@ jobs:
 
       - name: Build GameServer with Cauli Lean
         working-directory: server
-        run: "$LEAN_HOME/bin/lake" build
+        run: |
+          "$LEAN_HOME/bin/lake" build
 
       - name: Build VisualTest with Cauli Lean
         working-directory: ../VisualTest
-        run: "$LEAN_HOME/bin/lake" build
+        run: |
+          "$LEAN_HOME/bin/lake" build
 
       - name: Build NNG4 with Cauli Lean
         if: inputs.include_nng4
