@@ -61,6 +61,20 @@ if [[ "$ir_count" == 0 ]]; then
   exit 1
 fi
 
+missing_ir=0
+while IFS= read -r -d '' olean; do
+  ir="${olean%.olean}.ir"
+  ir_sig="${olean%.olean}.ir.sig"
+  if [[ ! -f "$ir" || ! -f "$ir_sig" ]]; then
+    echo "Missing browser IR beside ${olean#"$out/lean-lib/"}" >&2
+    missing_ir=1
+  fi
+done < <(find "$out/lean-lib/GameServer" "$out/lean-lib/Game" -type f -name '*.olean' -print0)
+if [[ "$missing_ir" != 0 ]]; then
+  echo 'GameServer and game modules must all use Lean module-system builds.' >&2
+  exit 1
+fi
+
 cat > "$out/build-info.json" <<EOF
 {
   "format": 1,
@@ -76,4 +90,3 @@ EOF
 
 du -sh "$out"
 cat "$out/build-info.json"
-

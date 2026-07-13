@@ -104,7 +104,27 @@ jobs:
           fi
           "$LEAN_HOME/bin/lake" --version
 
-      - name: Build GameServer with Cauli Lean
+      - name: Materialize pinned GameServer dependencies
+        working-directory: server
+        run: |
+          "$LEAN_HOME/bin/lake" build
+
+      - name: Enable browser IR generation
+        run: |
+          node scripts/enable-browser-module-system.mjs \
+            server/GameServer.lean \
+            server/GameServer \
+            server/.lake/packages/importGraph \
+            server/.lake/packages/i18n \
+            server/.lake/packages/batteries \
+            server/.lake/packages/Cli \
+            ../VisualTest/Game.lean \
+            ../VisualTest/Game
+
+          rm -rf server/.lake/build
+          find server/.lake/packages -type d -path '*/.lake/build' -prune -exec rm -rf {} +
+
+      - name: Build GameServer browser modules with Cauli Lean
         working-directory: server
         run: |
           "$LEAN_HOME/bin/lake" build
