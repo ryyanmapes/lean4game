@@ -1,4 +1,6 @@
-import Lean
+import Lean.Meta.Basic
+import Lean.Meta.InferType
+import Lean.Meta.SynthInstance
 
 namespace GameServer
 

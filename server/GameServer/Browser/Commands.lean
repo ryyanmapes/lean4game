@@ -1,5 +1,5 @@
-import Lean
-import GameServer.Tactic.Visual
+import Lean.Elab.Command
+import GameServer.Tactic.Click
 
 /-!
 Browser-only command surface for games.
