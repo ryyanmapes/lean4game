@@ -180,12 +180,13 @@ jobs:
             exit 1
           fi
 
-          mkdir .cauli-wasm
-          tar --zstd -xf "$archive" -C .cauli-wasm
-          wasm_home="$(find "$PWD/.cauli-wasm" -mindepth 1 -maxdepth 1 -type d -name 'lean-*' -print -quit)"
+          wasm_root="$RUNNER_TEMP/cauli-wasm"
+          mkdir -p "$wasm_root"
+          tar --zstd -xf "$archive" -C "$wasm_root"
+          wasm_home="$(find "$wasm_root" -mindepth 1 -maxdepth 1 -type d -name 'lean-*' -print -quit)"
           if [[ -z "$wasm_home" || ! -f "$wasm_home/bin/lean.js" || ! -d "$wasm_home/lib/lean" ]]; then
             echo '::error::Could not locate bin/lean.js and lib/lean in the extracted Cauli WebAssembly toolchain.'
-            find .cauli-wasm -maxdepth 3 -type f -print | head -100
+            find "$wasm_root" -maxdepth 3 -type f -print | head -100
             exit 1
           fi
           echo "WASM_HOME=$wasm_home" >> "$GITHUB_ENV"
