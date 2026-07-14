@@ -123,9 +123,8 @@ jobs:
           "$LEAN_HOME/bin/lake" --version
 
       - name: Materialize pinned GameServer dependencies
-        working-directory: server
         run: |
-          "$LEAN_HOME/bin/lake" update
+          node scripts/materialize-lake-manifest.mjs server/lake-manifest.json
 
       - name: Enable browser IR generation
         run: |
@@ -203,7 +202,7 @@ jobs:
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
-          printf '%s\n' 'import Game' '#check GameServer.getTheoremKind' > .visual-snapshot-work/probe.lean
+          printf '%s\n' 'import Game' '#check GameServer.evalClickGoal' > .visual-snapshot-work/probe.lean
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
