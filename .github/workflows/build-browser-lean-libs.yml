@@ -190,8 +190,14 @@ jobs:
           fi
           echo "WASM_HOME=$wasm_home" >> "$GITHUB_ENV"
 
+      - name: Use Node with raised WebAssembly module limits
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26.0.0
+
       - name: Bake VisualTest browser environment snapshot
         run: |
+          node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
           printf '%s\n' 'import Game' '#check GameServer.getProofState' > .visual-snapshot-work/probe.lean
