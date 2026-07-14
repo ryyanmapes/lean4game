@@ -1,3 +1,1 @@
-import GameServer.Commands
-import GameServer.Tactic.Visual
-
+import GameServer.Browser.Commands

@@ -125,7 +125,7 @@ jobs:
       - name: Materialize pinned GameServer dependencies
         working-directory: server
         run: |
-          "$LEAN_HOME/bin/lake" build
+          "$LEAN_HOME/bin/lake" update
 
       - name: Enable browser IR generation
         run: |
@@ -147,7 +147,7 @@ jobs:
       - name: Build GameServer browser modules with Cauli Lean
         working-directory: server
         run: |
-          "$LEAN_HOME/bin/lake" build
+          "$LEAN_HOME/bin/lake" build GameServer.Browser
 
       - name: Link GameServer dependencies into VisualTest
         run: |
