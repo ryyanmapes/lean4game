@@ -198,19 +198,19 @@ jobs:
           # shim regression seen with Node 26's V8 14.6.
           node-version: 25.9.0
 
-      - name: Bake VisualTest browser environment snapshot
+      - name: Bake Lean browser environment snapshot
         run: |
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
-          printf '%s\n' 'import Game' '#check GameServer.getProofState' > .visual-snapshot-work/probe.lean
+          printf '%s\n' 'import Lean' '#check Lean.Environment' > .visual-snapshot-work/probe.lean
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$WASM_HOME" "$PWD/.visual-snapshot-work" \
-            '--incr-header-save=/work/game.snap' /work/probe.lean
-          test -s .visual-snapshot-work/game.snap
-          mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
-          rm -f .visual-snapshot-work/game.snap.deps
-          ls -lh browser-lean-libs/snapshots/game.snap
+            '--incr-header-save=/work/lean.snap' /work/probe.lean
+          test -s .visual-snapshot-work/lean.snap
+          mv .visual-snapshot-work/lean.snap browser-lean-libs/snapshots/lean.snap
+          rm -f .visual-snapshot-work/lean.snap.deps
+          ls -lh browser-lean-libs/snapshots/lean.snap
 
       - name: Upload browser libraries
         uses: actions/upload-artifact@v4
