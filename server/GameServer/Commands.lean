@@ -1,11 +1,11 @@
 import GameServer.Helpers
+import GameServer.CompletionMessages
 import GameServer.Inventory
 import GameServer.Options
 import GameServer.SaveData
 import GameServer.Hints
 import GameServer.Tactic.LetIntros
 import GameServer.Tactic.Template
-import GameServer.RpcHandlers -- only needed to collect the translations of "level completed" msgs
 import I18n
 
 open Lean Meta Elab Command Std

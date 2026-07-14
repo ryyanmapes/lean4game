@@ -1,4 +1,5 @@
 import GameServer.EnvExtensions
+import GameServer.CompletionMessages
 import GameServer.GoalClick
 import GameServer.InteractiveGoal
 import GameServer.Hints
