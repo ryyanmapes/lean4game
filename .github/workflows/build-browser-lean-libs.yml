@@ -204,9 +204,23 @@ jobs:
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
           printf '%s\n' 'import Game' '#check GameServer.getTheoremKind' > .visual-snapshot-work/probe.lean
+
+          echo 'Probing VisualTest import in WASM before snapshot save...'
+          node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+            "$WASM_HOME" "$PWD/.visual-snapshot-work" \
+            /work/probe.lean
+
+          echo 'Saving VisualTest header snapshot...'
+          set +e
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$WASM_HOME" "$PWD/.visual-snapshot-work" \
             '--incr-header-save=/work/game.snap' /work/probe.lean
+          snapshot_status=$?
+          set -e
+          if [[ "$snapshot_status" != 0 ]]; then
+            echo "::warning::VisualTest imports successfully in WASM, but snapshot saving failed with status $snapshot_status. Uploading the browser libraries without game.snap."
+            exit 0
+          fi
           test -s .visual-snapshot-work/game.snap
           mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
           rm -f .visual-snapshot-work/game.snap.deps
