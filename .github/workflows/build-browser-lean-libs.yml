@@ -191,10 +191,12 @@ jobs:
           fi
           echo "WASM_HOME=$wasm_home" >> "$GITHUB_ENV"
 
-      - name: Use Node with raised WebAssembly module limits
+      - name: Use compatible Node with raised WebAssembly module limits
         uses: actions/setup-node@v4
         with:
-          node-version: 26.0.0
+          # V8 14.1 raises the export cap to 1,000,000 without the exception
+          # shim regression seen with Node 26's V8 14.6.
+          node-version: 25.9.0
 
       - name: Bake VisualTest browser environment snapshot
         run: |
