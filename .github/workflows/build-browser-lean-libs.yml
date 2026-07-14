@@ -20,12 +20,14 @@ env:
   CAULI_LEAN_SHA: 62b6a2291302d4bbeace37642a066b7510d0145c
   CAULI_LEAN_RUN_ID: 29165653896
   CAULI_LEAN_ARTIFACT: build-Linux 32bit
+  CAULI_WASM_ARTIFACT: build-Web Assembly
+  CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
 
 jobs:
   build:
     name: GameServer + VisualTest${{ inputs.include_nng4 && ' + NNG4' || '' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Check out lean4game
         uses: actions/checkout@v4
@@ -42,6 +44,13 @@ jobs:
       - name: Check out VisualTest
         run: git clone --depth 1 https://github.com/ryyanmapes/VisualTest ../VisualTest
 
+      - name: Check out pinned browser snapshot host
+        uses: actions/checkout@v4
+        with:
+          repository: cauli/lean4-wasm-in-browser
+          ref: ${{ env.CAULI_BROWSER_HOST_REF }}
+          path: .cauli-browser-host
+
       - name: Check out NNG4
         if: inputs.include_nng4
         run: git clone --depth 1 https://github.com/ryyanmapes/NNG4 ../NNG4
@@ -54,6 +63,15 @@ jobs:
           run-id: ${{ env.CAULI_LEAN_RUN_ID }}
           name: ${{ env.CAULI_LEAN_ARTIFACT }}
           path: .cauli-toolchain-download
+
+      - name: Download matching Cauli WebAssembly compiler
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
+          repository: cauli/lean4
+          run-id: ${{ env.CAULI_LEAN_RUN_ID }}
+          name: ${{ env.CAULI_WASM_ARTIFACT }}
+          path: .cauli-wasm-download
 
       - name: Install 32-bit runtime and unpack compiler
         run: |
@@ -152,6 +170,38 @@ jobs:
           INCLUDE_NNG4: ${{ inputs.include_nng4 }}
           LEAN4GAME_REF: ${{ github.sha }}
         run: bash scripts/package-browser-lean-libs.sh browser-lean-libs
+
+      - name: Unpack matching WebAssembly compiler
+        run: |
+          archive="$(find .cauli-wasm-download -type f -name '*.tar.zst' -print -quit)"
+          if [[ -z "$archive" ]]; then
+            echo '::error::The Cauli WebAssembly artifact did not contain a .tar.zst toolchain archive.'
+            find .cauli-wasm-download -maxdepth 3 -type f -print
+            exit 1
+          fi
+
+          mkdir .cauli-wasm
+          tar --zstd -xf "$archive" -C .cauli-wasm
+          wasm_home="$(find "$PWD/.cauli-wasm" -mindepth 1 -maxdepth 1 -type d -name 'lean-*' -print -quit)"
+          if [[ -z "$wasm_home" || ! -f "$wasm_home/bin/lean.js" || ! -d "$wasm_home/lib/lean" ]]; then
+            echo '::error::Could not locate bin/lean.js and lib/lean in the extracted Cauli WebAssembly toolchain.'
+            find .cauli-wasm -maxdepth 3 -type f -print | head -100
+            exit 1
+          fi
+          echo "WASM_HOME=$wasm_home" >> "$GITHUB_ENV"
+
+      - name: Bake VisualTest browser environment snapshot
+        run: |
+          cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
+          mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
+          printf '%s\n' 'import Game' '#check GameServer.getProofState' > .visual-snapshot-work/probe.lean
+          node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+            "$WASM_HOME" "$PWD/.visual-snapshot-work" \
+            '--incr-header-save=/work/game.snap' /work/probe.lean
+          test -s .visual-snapshot-work/game.snap
+          mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
+          rm -f .visual-snapshot-work/game.snap.deps
+          ls -lh browser-lean-libs/snapshots/game.snap
 
       - name: Upload browser libraries
         uses: actions/upload-artifact@v4
