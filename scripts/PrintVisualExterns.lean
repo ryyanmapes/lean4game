@@ -2,6 +2,7 @@ import GameServer.Tactic.Visual
 import Lean.Compiler.ExternAttr
 import Lean.Compiler.IR.CompilerM
 import Lean.Compiler.NameMangling
+import Lean.Elab.Command
 
 open Lean Elab Command
 
@@ -19,7 +20,7 @@ elab "write_visual_externs" : command => do
   for moduleName in env.header.moduleNames do
     let some moduleIdx := env.getModuleIdx? moduleName | continue
     for decl in unsafe IR.declMapExt.getModuleIREntries env moduleIdx do
-      if let .extern name _ _ _ := decl then
+      if let IR.Decl.extern name _ _ _ := decl then
         let stem := name.mangle
         symbols := symbols.push s!"_{stem}"
         symbols := symbols.push s!"_{mkMangledBoxedName stem}"
