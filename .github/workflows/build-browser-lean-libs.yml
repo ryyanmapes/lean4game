@@ -148,6 +148,7 @@ jobs:
         run: |
           "$LEAN_HOME/bin/lake" build GameServer.Browser
           "$LEAN_HOME/bin/lake" build GameServer.Tactic.Click
+          "$LEAN_HOME/bin/lake" build GameServer.Tactic.Visual
 
       - name: Link GameServer dependencies into VisualTest
         run: |
@@ -203,7 +204,7 @@ jobs:
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
-          printf '%s\n' 'import Game' '#check True' > .visual-snapshot-work/probe.lean
+          printf '%s\n' 'import Game' '#check GameServer.evalClickGoal' '#check GameServer.evalDragGoal' > .visual-snapshot-work/probe.lean
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \

@@ -1,3 +1,5 @@
+import GameServer.Tactic.Visual
+
 /-!
 Browser-only command surface for games.
 
