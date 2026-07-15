@@ -3,9 +3,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const [fullExportsPath, externExportsPath, outputPath, entryModule, ...sourceRoots] = process.argv.slice(2)
+const [fullExportsPath, externExportsPath, outputPath, entryModule, ...remainingArgs] = process.argv.slice(2)
+const nativeSeparator = remainingArgs.indexOf('--native-c')
+const sourceRoots = nativeSeparator === -1 ? remainingArgs : remainingArgs.slice(0, nativeSeparator)
+const nativeSources = nativeSeparator === -1 ? [] : remainingArgs.slice(nativeSeparator + 1)
 if (!fullExportsPath || !externExportsPath || !outputPath || !entryModule || sourceRoots.length === 0) {
-  console.error('Usage: gen-visual-wasm-exports.mjs <full-exports> <extern-exports> <output> <entry-module> <source-root>...')
+  console.error('Usage: gen-visual-wasm-exports.mjs <full-exports> <extern-exports> <output> <entry-module> <source-root>... [--native-c <generated.c>...]')
   process.exit(2)
 }
 
@@ -126,6 +129,18 @@ for (const moduleName of closure) {
 for (const moduleName of ['GameServer.GoalClick', 'GameServer.PremiseApplication', entryModule]) {
   const symbol = linkedInitializer(moduleName)
   if (!exports.includes(symbol)) exports.push(symbol)
+}
+
+// Lake package functions use an `lp_<package>_...` prefix and are absent from
+// Lean's standard-library export manifest. Export every LEAN_EXPORT function
+// in the purpose-linked GameServer objects so the IR interpreter can resolve
+// their native bodies through dlsym.
+for (const sourcePath of nativeSources) {
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  for (const match of source.matchAll(/^LEAN_EXPORT[^\n(]*\s([A-Za-z_][A-Za-z0-9_]*)\s*\(/gmu)) {
+    const symbol = `_${match[1]}`
+    if (!exports.includes(symbol)) exports.push(symbol)
+  }
 }
 
 fs.writeFileSync(outputPath, `${exports.join('\n')}\n`)

@@ -234,7 +234,10 @@ jobs:
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
             .visual-link/visual-exports.txt \
-            GameServer.Tactic.Visual .cauli-lean-source/src server
+            GameServer.Tactic.Visual .cauli-lean-source/src server --native-c \
+            server/.lake/build/ir/GameServer/GoalClick.c \
+            server/.lake/build/ir/GameServer/PremiseApplication.c \
+            server/.lake/build/ir/GameServer/Tactic/Visual.c
 
           objects=()
           for module in GameServer/GoalClick GameServer/PremiseApplication GameServer/Tactic/Visual; do
