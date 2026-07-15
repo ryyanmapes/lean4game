@@ -224,7 +224,9 @@ jobs:
         run: |
           linkkit_archive="$(find .cauli-linkkit-download -type f -name '*.tar.zst' -print -quit)"
           test -n "$linkkit_archive"
-          mkdir -p .visual-link .visual-runtime/bin .visual-runtime/lib
+          visual_runtime="$RUNNER_TEMP/visual-runtime"
+          mkdir -p .visual-link "$visual_runtime/bin" "$visual_runtime/lib"
+          echo "VISUAL_RUNTIME=$visual_runtime" >> "$GITHUB_ENV"
           tar --zstd -xf "$linkkit_archive" -C .visual-link
           kit="$PWD/.visual-link/linkkit"
 
@@ -242,7 +244,7 @@ jobs:
             objects+=("$object")
           done
 
-          emcc -o .visual-runtime/bin/lean.js \
+          emcc -o "$visual_runtime/bin/lean.js" \
             "$kit/libleanmain.a" "$kit/libleanshell.a" "${objects[@]}" \
             -L "$kit" -lleancpp -lInit -lStd -lLean -lnodefs.js -lleanrt "$kit/libuv.a" -lstdc++ \
             -sDISABLE_EXCEPTION_CATCHING=0 -pthread -sALLOW_MEMORY_GROWTH=1 \
@@ -252,15 +254,15 @@ jobs:
             -sEXPORTED_RUNTIME_METHODS=ccall,callMain,FS,ENV,getValue,setValue,stringToNewUTF8,UTF8ToString \
             -s STACK_SIZE=16777216 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=4294967296 -sPTHREAD_POOL_SIZE=4
 
-          ln -s "$WASM_HOME/lib/lean" .visual-runtime/lib/lean
+          ln -s "$WASM_HOME/lib/lean" "$visual_runtime/lib/lean"
           mkdir -p browser-lean-libs/runtime
-          cp .visual-runtime/bin/lean.js .visual-runtime/bin/lean.wasm browser-lean-libs/runtime/
+          cp "$visual_runtime/bin/lean.js" "$visual_runtime/bin/lean.wasm" browser-lean-libs/runtime/
           ls -lh browser-lean-libs/runtime/*
 
       - name: Bake VisualTest browser environment snapshot
         run: |
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
-          cp -a browser-lean-libs/lean-lib/. .visual-runtime/lib/lean/
+          cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
           # Game metadata and level text are served from generated JSON.  The
           # proof worker only needs the formally checked custom tactic
@@ -283,13 +285,13 @@ jobs:
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
-            "$PWD/.visual-runtime" "$PWD/.visual-snapshot-work" \
+            "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
             /work/probe.lean
 
           echo 'Saving VisualTest header snapshot...'
           set +e
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
-            "$PWD/.visual-runtime" "$PWD/.visual-snapshot-work" \
+            "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
             '--incr-header-save=/work/game.snap' /work/probe.lean
           snapshot_status=$?
           set -e
