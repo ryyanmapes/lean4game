@@ -1,5 +1,4 @@
 import Lean.Parser
-import GameServer.Tactic.Click
 
 /-!
 Browser-only command surface for games.
