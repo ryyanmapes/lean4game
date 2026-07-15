@@ -1,4 +1,4 @@
-prelude
+import Init
 
 /-!
 Persistent browser wrapper for Cauli Lean's in-memory compiler.
@@ -20,8 +20,8 @@ namespace GameServer.Browser
 opaque cauliWasmCompile (code : @& String) (fileName : @& String) : IO UInt32
 
 @[export visual_lean_wasm_compile]
-def wasmCompile (code : String) (fileName : String := "<input>") : IO UInt32 := do
-  discard <| cauliWasmCompile code fileName
+def wasmCompile (code : String) (fileName : String) : IO UInt32 := do
+  let _status ← cauliWasmCompile code fileName
   return 0
 
 end GameServer.Browser
