@@ -1,13 +1,6 @@
 import Lean.Elab.Tactic.Basic
--- Visual Lean's fallback rewrite path only uses the `conv` driver,
--- `lhs`/`rhs`/`arg` navigation, and `rewrite`.  Importing the umbrella
--- `Lean.Elab.Tactic.Conv` also registers unrelated simp, delta, unfold, cbv,
--- pattern, and let conversion tactics, adding hundreds of modules to the
--- browser environment.
-import Lean.Elab.Tactic.Conv.Basic
-import Lean.Elab.Tactic.Conv.Congr
-import Lean.Elab.Tactic.Conv.Rewrite
-import Lean.Elab.Tactic.Rewrite
+import Lean.Meta.Tactic.Rewrite
+import Lean.Meta.Tactic.Replace
 import Lean.Meta.Tactic.Refl
 import Lean.Meta.Tactic.Assert
 import Lean.Meta.Tactic.Rename
@@ -55,10 +48,53 @@ private def tryTactic (stx : TSyntax `tactic) : TacticM Bool := do
     restoreState savedState
     return false
 
+/- The public `Lean.Elab.Tactic.Rewrite` module also registers and supports the
+entire `rw` surface language.  Visual Lean already has its own interaction
+syntax and only needs the small elaboration bridge to the kernel-checked Meta
+rewrite primitive, so keep that bridge here. -/
+private def elabVisualRewrite (mvarId : MVarId) (e : Expr) (stx : Syntax)
+    (symm : Bool) : TacticM RewriteResult := do
+  let mvarCounterSaved := (← getMCtx).mvarCounter
+  let thm ← Term.elabTerm stx none true
+  if thm.hasSyntheticSorry then
+    throwAbortTactic
+  unless ← occursCheck mvarId thm do
+    throwErrorAt stx "Occurs check failed: Expression{indentExpr thm}\ncontains the goal {Expr.mvar mvarId}"
+  let result ← withInstancesTypeCheckNote e do
+    mvarId.rewrite e thm symm
+  let mctx ← getMCtx
+  let mvarIds := result.mvarIds.filter fun newMVarId =>
+    (mctx.getDecl newMVarId |>.index) >= mvarCounterSaved
+  pure { result with mvarIds }
+
+private def finishVisualRewrite (result : RewriteResult) : MetaM RewriteResult := do
+  let mvarIds ← result.mvarIds.filterM (not <$> ·.isAssigned)
+  mvarIds.forM fun newMVarId => newMVarId.withContext do
+    if ← Meta.isProp (← newMVarId.getType) then
+      newMVarId.setKind .syntheticOpaque
+  pure { result with mvarIds }
+
+private def rewriteVisualTarget (stx : Syntax) (symm : Bool) : TacticM Unit := do
+  let result ← Term.withSynthesize <| withMainContext do
+    elabVisualRewrite (← getMainGoal) (← getMainTarget) stx symm
+  let result ← finishVisualRewrite result
+  let goal ← getMainGoal
+  let goal' ← goal.replaceTargetEq result.eNew result.eqProof
+  replaceMainGoal (goal' :: result.mvarIds)
+
+private def rewriteVisualLocalDecl (stx : Syntax) (symm : Bool) (fvarId : FVarId) :
+    TacticM Unit := withMainContext do
+  let result ← Term.withSynthesize <| withMainContext do
+    let localDecl ← fvarId.getDecl
+    elabVisualRewrite (← getMainGoal) localDecl.type stx symm
+  let result ← finishVisualRewrite result
+  let replacement ← (← getMainGoal).replaceLocalDecl fvarId result.eNew result.eqProof
+  replaceMainGoal (replacement.mvarId :: result.mvarIds)
+
 private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
   let savedState ← saveState
   try
-    rewriteTarget h symm
+    rewriteVisualTarget h symm
     return true
   catch _ =>
     restoreState savedState
@@ -67,10 +103,10 @@ private def tryRewrite (h : Syntax) (symm : Bool) : TacticM Bool := do
 private def tryRewriteAt (target : Ident) (h : Ident) (symm : Bool) : TacticM Bool := do
   let savedState ← saveState
   try
-    if symm then
-      evalTactic (← `(tactic| rw [← $h] at $target:ident))
-    else
-      evalTactic (← `(tactic| rw [$h:ident] at $target:ident))
+    withMainContext do
+      let some targetDecl := (← getLCtx).findFromUserName? target.getId
+        | throwError "unknown identifier '{target.getId}'"
+      rewriteVisualLocalDecl h.raw symm targetDecl.fvarId
     return true
   catch _ =>
     restoreState savedState
@@ -482,21 +518,6 @@ private def renameNewestCaseHyp
       throwTacticEx `click_prop goal
         "failed to locate the new case hypothesis after splitting this disjunction"
 
-private def mkConvRwScript (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : String :=
-  let rwTerm := if symm then s!"← {hName}" else s!"{hName}"
-  let sideLine := if sideIsRhs then "rhs" else "lhs"
-  let argSteps := path.map (fun k => s!"arg {k}")
-  let steps := sideLine :: (argSteps ++ [s!"rewrite [{rwTerm}]"])
-  "conv => { " ++ String.intercalate "; " steps ++ " }"
-
-private def mkConvRwHypScript
-    (targetHyp : Name) (hName : Name) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : String :=
-  let rwTerm := if symm then s!"← {hName}" else s!"{hName}"
-  let sideLine := if sideIsRhs then "rhs" else "lhs"
-  let argSteps := path.map (fun k => s!"arg {k}")
-  let steps := sideLine :: (argSteps ++ [s!"rewrite [{rwTerm}]"])
-  s!"conv at {targetHyp} => " ++ "{ " ++ String.intercalate "; " steps ++ " }"
-
 private def mkAppPrefix (fn : Expr) (args : Array Expr) (upto : Nat) : Expr :=
   (List.range upto).foldl (fun acc j => mkApp acc args[j]!) fn
 
@@ -552,6 +573,7 @@ private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array E
   let visibleArity? :=
     match headName with
     | ``Eq => some 2
+    | ``Iff => some 2
     | ``LT.lt => some 2
     | ``LE.le => some 2
     | _ => none
@@ -634,13 +656,7 @@ private def tryFocusedRewrite (h : Ident) (symm : Bool) (sideIsRhs : Bool) (path
     pure true
   catch _ =>
     restoreState savedState
-    let savedState' ← saveState
-    try
-      evalTacticString (mkConvRwScript h.getId symm sideIsRhs path)
-      return true
-    catch _ =>
-      restoreState savedState'
-      return false
+    return false
 
 private def tryFocusedRewriteHyp
     (targetHyp : Ident) (h : Ident) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) :
@@ -656,13 +672,7 @@ private def tryFocusedRewriteHyp
       pure true
   catch _ =>
     restoreState savedState
-    let savedState' ← saveState
-    try
-      evalTacticString (mkConvRwHypScript targetHyp.getId h.getId symm sideIsRhs path)
-      return true
-    catch _ =>
-      restoreState savedState'
-      return false
+    return false
 
 private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (pathOpt : Option (List Nat)) : TacticM Unit := do
   match pathOpt with

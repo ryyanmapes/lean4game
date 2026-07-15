@@ -204,7 +204,11 @@ jobs:
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$WASM_HOME/lib/lean/"
           mkdir -p .visual-snapshot-work browser-lean-libs/snapshots
-          printf '%s\n' 'import Game' '#check GameServer.evalClickGoal' '#check GameServer.evalDragGoal' > .visual-snapshot-work/probe.lean
+          # Game metadata and level text are served from generated JSON.  The
+          # proof worker only needs the formally checked custom tactic
+          # implementation; importing every level into the saved environment
+          # needlessly retains their declarations and command elaboration data.
+          printf '%s\n' 'import GameServer.Tactic.Visual' '#check GameServer.evalClickGoal' '#check GameServer.evalDragGoal' > .visual-snapshot-work/probe.lean
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
