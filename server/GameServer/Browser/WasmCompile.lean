@@ -1,4 +1,4 @@
-import Lean.Shell
+prelude
 
 /-!
 Persistent browser wrapper for Cauli Lean's in-memory compiler.
@@ -16,9 +16,12 @@ accepts or rejects proof moves exclusively from Lean's emitted diagnostics.
 
 namespace GameServer.Browser
 
+@[extern "lean_wasm_compile"]
+opaque cauliWasmCompile (code : @& String) (fileName : @& String) : IO UInt32
+
 @[export visual_lean_wasm_compile]
 def wasmCompile (code : String) (fileName : String := "<input>") : IO UInt32 := do
-  discard <| Lean.wasmCompile code fileName
+  discard <| cauliWasmCompile code fileName
   return 0
 
 end GameServer.Browser
