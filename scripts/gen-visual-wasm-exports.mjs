@@ -100,6 +100,12 @@ while (stack.length > 0) {
 }
 
 const initializer = moduleName => `_initialize_${moduleName.replaceAll('.', '_')}`
+// Lake prefixes native symbols with the package name.  The package and root
+// namespace are both `GameServer`, so its generated C initializers contain the
+// prefix twice (for example initialize_GameServer_GameServer_Tactic_Visual).
+const linkedInitializer = moduleName => moduleName.startsWith('GameServer.')
+  ? `_initialize_GameServer_${moduleName.replaceAll('.', '_')}`
+  : initializer(moduleName)
 const retainedInitializers = new Set([...closure].map(initializer))
 const fullExports = fs.readFileSync(fullExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean)
 const exports = fullExports.filter(symbol =>
@@ -117,7 +123,7 @@ for (const moduleName of closure) {
 
 // The three native GameServer objects are linked alongside Lean's archives.
 for (const moduleName of ['GameServer.GoalClick', 'GameServer.PremiseApplication', entryModule]) {
-  const symbol = initializer(moduleName)
+  const symbol = linkedInitializer(moduleName)
   if (!exports.includes(symbol)) exports.push(symbol)
 }
 
