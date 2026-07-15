@@ -1,5 +1,3 @@
-import Lean.Parser
-
 /-!
 Browser-only command surface for games.
 
@@ -99,8 +97,8 @@ macro "VisualProofGraphInfoOnGoal" str "show" str : command =>
 syntax (name := browserStatement) "Statement" declSig declVal : command
 
 macro_rules
-  | `(Statement $sig:declSig := by $proof:tacticSeq) =>
-      `(command| private theorem browser_statement $sig:declSig := by $proof:tacticSeq)
+  | `(Statement $sig:declSig $val:declVal) =>
+      `(command| private theorem browser_statement $sig:declSig $val:declVal)
 
 macro "MakeGame" : command => `(command| set_option linter.unusedVariables false)
 
