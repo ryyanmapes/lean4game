@@ -1,5 +1,12 @@
 import Lean.Elab.Tactic.Basic
-import Lean.Elab.Tactic.Conv
+-- Visual Lean's fallback rewrite path only uses the `conv` driver,
+-- `lhs`/`rhs`/`arg` navigation, and `rewrite`.  Importing the umbrella
+-- `Lean.Elab.Tactic.Conv` also registers unrelated simp, delta, unfold, cbv,
+-- pattern, and let conversion tactics, adding hundreds of modules to the
+-- browser environment.
+import Lean.Elab.Tactic.Conv.Basic
+import Lean.Elab.Tactic.Conv.Congr
+import Lean.Elab.Tactic.Conv.Rewrite
 import Lean.Elab.Tactic.Rewrite
 import Lean.Meta.Tactic.Refl
 import Lean.Meta.Tactic.Assert
