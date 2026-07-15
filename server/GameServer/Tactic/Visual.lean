@@ -1,10 +1,12 @@
 import Lean.Elab.Tactic.Basic
+import Lean.Elab.SyntheticMVars
 import Lean.Meta.Tactic.Rewrite
 import Lean.Meta.Tactic.Replace
 import Lean.Meta.Tactic.Refl
 import Lean.Meta.Tactic.Assert
 import Lean.Meta.Tactic.Rename
 import Lean.Parser.Extension
+import Lean.Util.OccursCheck
 import GameServer.GoalClick
 import GameServer.PremiseApplication
 
