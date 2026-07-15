@@ -3,9 +3,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const [fullExportsPath, outputPath, entryModule, ...sourceRoots] = process.argv.slice(2)
-if (!fullExportsPath || !outputPath || !entryModule || sourceRoots.length === 0) {
-  console.error('Usage: gen-visual-wasm-exports.mjs <full-exports> <output> <entry-module> <source-root>...')
+const [fullExportsPath, externExportsPath, outputPath, entryModule, ...sourceRoots] = process.argv.slice(2)
+if (!fullExportsPath || !externExportsPath || !outputPath || !entryModule || sourceRoots.length === 0) {
+  console.error('Usage: gen-visual-wasm-exports.mjs <full-exports> <extern-exports> <output> <entry-module> <source-root>...')
   process.exit(2)
 }
 
@@ -108,10 +108,11 @@ const linkedInitializer = moduleName => moduleName.startsWith('GameServer.')
   : initializer(moduleName)
 const retainedInitializers = new Set([...closure].map(initializer))
 const fullExports = fs.readFileSync(fullExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean)
+const requiredExterns = new Set(fs.readFileSync(externExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean))
 const exports = fullExports.filter(symbol =>
   symbol.startsWith('_initialize_')
     ? retainedInitializers.has(symbol)
-    : !symbol.startsWith('_l_'))
+    : !symbol.startsWith('_l_') || requiredExterns.has(symbol))
 
 for (const moduleName of closure) {
   const symbol = initializer(moduleName)

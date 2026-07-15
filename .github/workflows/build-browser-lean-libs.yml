@@ -230,8 +230,10 @@ jobs:
           tar --zstd -xf "$linkkit_archive" -C .visual-link
           kit="$PWD/.visual-link/linkkit"
 
+          (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
           node scripts/gen-visual-wasm-exports.mjs \
-            "$kit/emscripten-exports.txt" .visual-link/visual-exports.txt \
+            "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
+            .visual-link/visual-exports.txt \
             GameServer.Tactic.Visual .cauli-lean-source/src server
 
           objects=()
