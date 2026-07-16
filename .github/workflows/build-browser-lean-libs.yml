@@ -243,6 +243,7 @@ jobs:
           # public `lean_wasm_compile` export is a process wrapper that maps an
           # ordinary elaboration status 1 to proc_exit(1).
           echo _l___private_Lean_Shell_0__Lean_wasmCompile___boxed >> .visual-link/visual-exports.txt
+          echo _lean_io_mk_world >> .visual-link/visual-exports.txt
           sort -u -o .visual-link/visual-exports.txt .visual-link/visual-exports.txt
 
           objects=()
