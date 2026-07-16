@@ -93,7 +93,9 @@ globalThis.Module = {
         ),
         'second lean_wasm_compile',
       )
-      if (status !== 0) throw new Error(`click_goal compile returned ${status}`)
+      if (status !== 0) {
+        throw new Error(`click_goal compile returned ${status}: ${JSON.stringify(diagnostics)}`)
+      }
       if (diagnostics.some(diagnostic => diagnostic.severity === 'error')) {
         throw new Error(`click_goal emitted errors: ${JSON.stringify(diagnostics)}`)
       }
