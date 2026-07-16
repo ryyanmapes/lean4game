@@ -125,8 +125,16 @@ for (const moduleName of closure) {
   }
 }
 
-// The three native GameServer objects are linked alongside Lean's archives.
-for (const moduleName of ['GameServer.GoalClick', 'GameServer.PremiseApplication', entryModule]) {
+// These GameServer modules install tactic elaborators or functions called by
+// them. Keep the elaborator implementations native: storing an interpreted IR
+// closure in Lean's tactic-extension tables and later invoking it from native
+// code is not ABI-safe in the Emscripten runtime.
+for (const moduleName of [
+  'GameServer.GoalClick',
+  'GameServer.PremiseApplication',
+  'GameServer.Tactic.Click',
+  entryModule,
+]) {
   const symbol = linkedInitializer(moduleName)
   if (!exports.includes(symbol)) exports.push(symbol)
 }
