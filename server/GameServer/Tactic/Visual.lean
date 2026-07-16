@@ -9,6 +9,7 @@ import Lean.Parser.Extension
 import Lean.Util.OccursCheck
 import GameServer.GoalClick
 import GameServer.PremiseApplication
+import GameServer.Browser.ProofProbe
 
 namespace GameServer
 

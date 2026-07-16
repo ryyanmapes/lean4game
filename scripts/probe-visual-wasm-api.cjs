@@ -80,9 +80,19 @@ globalThis.Module = {
 
       const prefix = 'import GameServer.Tactic.Visual\n\nexample (P : Prop) : P → P := by\n'
       diagnostics.length = 0
-      ioUInt32(Module._lean_wasm_compile(mkLeanString(`${prefix}  skip\n`), mkLeanString('/work/incomplete.lean')), 'first lean_wasm_compile')
-      if (!diagnostics.some(diagnostic => /unsolved goals/u.test(diagnostic.data ?? ''))) {
-        throw new Error('incomplete proof did not produce an unsolved-goals diagnostic')
+      ioUInt32(Module._lean_wasm_compile(
+        mkLeanString(`${prefix}  skip\n  all_goals browser_report_state\n  all_goals sorry\n`),
+        mkLeanString('/work/incomplete.lean'),
+      ), 'first lean_wasm_compile')
+      const stateMarker = '__VISUAL_LEAN_STATE_V1__'
+      const stateDiagnostic = diagnostics.find(diagnostic => (diagnostic.data ?? '').includes(stateMarker))
+      if (!stateDiagnostic) {
+        throw new Error(`incomplete proof did not produce structured state: ${JSON.stringify(diagnostics)}`)
+      }
+      const stateJson = stateDiagnostic.data.slice(stateDiagnostic.data.indexOf(stateMarker) + stateMarker.length)
+      const state = JSON.parse(stateJson)
+      if (state.goal?.clickAction?.playTactic !== 'click_goal' || state.goal?.hyps?.[0]?.type?.text !== 'Prop') {
+        throw new Error(`structured state has unexpected content: ${JSON.stringify(state)}`)
       }
 
       diagnostics.length = 0

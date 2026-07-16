@@ -125,11 +125,16 @@ for (const moduleName of closure) {
   }
 }
 
-// The three native GameServer objects are linked alongside Lean's archives.
+// The purpose-built native GameServer objects are linked alongside Lean's archives.
 // `Visual.c` already contains the generated bodies of its imported Lean
 // modules (including Tactic.Click), so linking those objects separately would
 // define every imported symbol twice.
-for (const moduleName of ['GameServer.GoalClick', 'GameServer.PremiseApplication', entryModule]) {
+for (const moduleName of [
+  'GameServer.GoalClick',
+  'GameServer.PremiseApplication',
+  'GameServer.Browser.ProofProbe',
+  entryModule,
+]) {
   const symbol = linkedInitializer(moduleName)
   if (!exports.includes(symbol)) exports.push(symbol)
 }

@@ -1,8 +1,6 @@
 import type {
-  ClickAction,
   InteractiveGoalWithHints,
   InteractiveGoalsWithHints,
-  InteractiveHypothesisBundle,
   ProofState,
 } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
@@ -22,131 +20,28 @@ type PendingCompile = {
 type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?: string }
 
 const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz'
+const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
 const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=1237bea6'
 const WORKER_TIMEOUT_MS = 600_000
 
-function topLevelArrow(text: string): boolean {
-  let depth = 0
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === '(' || text[i] === '[' || text[i] === '{') depth++
-    else if (text[i] === ')' || text[i] === ']' || text[i] === '}') depth--
-    else if (depth === 0 && text[i] === '→') return true
-  }
-  return false
-}
-
-function goalClickAction(type: string): ClickAction | undefined {
-  const text = type.trim()
-  if (topLevelArrow(text) || /^∀\s/u.test(text)) {
-    return { playTactic: 'click_goal', tooltip: 'Click to introduce', options: [] }
-  }
-  if (/^(?:And\b|.+\s∧\s)/u.test(text)) {
-    return { playTactic: 'click_goal', tooltip: 'Click to split conjunction', streamSplit: true, options: [] }
-  }
-  if (/^(?:Or\b|.+\s∨\s)/u.test(text)) {
-    return {
-      tooltip: 'Choose which side to prove',
-      options: [
-        { label: 'Left', playTactic: 'click_goal_left' },
-        { label: 'Right', playTactic: 'click_goal_right' },
-      ],
+function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
+  const goals: InteractiveGoalWithHints[] = []
+  for (const diagnostic of diagnostics) {
+    const data = diagnostic.data ?? ''
+    const markerIndex = data.indexOf(PROOF_STATE_MARKER)
+    if (markerIndex < 0) continue
+    const payload = data.slice(markerIndex + PROOF_STATE_MARKER.length).trim()
+    try {
+      const parsed = JSON.parse(payload) as InteractiveGoalWithHints
+      if (parsed?.goal && Array.isArray(parsed.goal.hyps)) goals.push(parsed)
+    } catch (error) {
+      throw new Error(`Lean returned malformed structured proof state: ${String(error)}`)
     }
   }
-  const equality = text.split('=')
-  if (equality.length === 2 && equality[0]?.trim() === equality[1]?.trim()) {
-    return { playTactic: 'click_goal', tooltip: 'Click to complete', options: [] }
-  }
-  return undefined
-}
-
-function hypClickAction(name: string, type: string): ClickAction | undefined {
-  const text = type.trim()
-  if (/^(?:And\b|.+\s∧\s)/u.test(text)) {
-    return { playTactic: `click_prop ${name}`, tooltip: 'Click to split conjunction', options: [] }
-  }
-  if (/^(?:Or\b|.+\s∨\s)/u.test(text)) {
-    return { playTactic: `click_prop ${name}`, tooltip: 'Click to split into cases', streamSplit: true, options: [] }
-  }
-  if (/^∃\s/u.test(text)) {
-    return { playTactic: `click_prop ${name}`, tooltip: 'Click to introduce witness and condition', options: [] }
-  }
-  return undefined
-}
-
-function codeWithInfos(text: string) {
-  // CodeWithInfos is Lean's tagged-text JSON shape. Plain strings render in
-  // React, but infoview's tag traversal uses `"append" in value` and therefore
-  // requires the leaf wrapper even when there are no semantic info tags.
-  return { text } as never
-}
-
-function hypothesis(names: string[], type: string): InteractiveHypothesisBundle {
-  const primaryName = names[0] ?? 'h'
-  return {
-    names,
-    fvarIds: names as InteractiveHypothesisBundle['fvarIds'],
-    type: codeWithInfos(type),
-    isAssumption: type.trim() !== 'Prop' && type.trim() !== 'Type',
-    clickAction: hypClickAction(primaryName, type),
-    reductionForms: [],
-  }
-}
-
-function parseGoalBlock(lines: string[], index: number): InteractiveGoalWithHints | null {
-  const turnstile = lines.findIndex(line => /^\s*⊢\s/u.test(line))
-  if (turnstile < 0) return null
-
-  const heading = lines.find(line => /^case\s+/u.test(line.trim()))?.trim()
-  const hyps: InteractiveHypothesisBundle[] = []
-  for (const rawLine of lines.slice(0, turnstile)) {
-    const line = rawLine.trim()
-    if (!line || /^case\s+/u.test(line)) continue
-    const match = /^(.+?)\s*:\s*(.+)$/u.exec(line)
-    if (!match) continue
-    const names = match[1]!.trim().split(/\s+/u).filter(Boolean)
-    if (names.length > 0) hyps.push(hypothesis(names, match[2]!.trim()))
-  }
-
-  const goalType = lines.slice(turnstile)
-    .map((line, lineIndex) => lineIndex === 0 ? line.replace(/^\s*⊢\s*/u, '') : line.trim())
-    .join(' ')
-    .trim()
-  if (!goalType) return null
-
-  return {
-    goal: {
-      hyps,
-      type: codeWithInfos(goalType),
-      userName: heading?.replace(/^case\s+/u, ''),
-      mvarId: `wasm-goal-${index}-${goalType}` as never,
-      goalPrefix: '⊢ ',
-      clickAction: goalClickAction(goalType),
-      reductionForms: [],
-    },
-    hints: [],
-    reductionForms: [],
-  }
-}
-
-function parseUnsolvedGoals(message: string): InteractiveGoalWithHints[] {
-  const normalized = message.replace(/\r/g, '')
-  const start = normalized.indexOf('unsolved goals')
-  const lines = (start < 0 ? normalized : normalized.slice(start + 'unsolved goals'.length)).split('\n')
-  const blocks: string[][] = []
-  let current: string[] = []
-  for (const line of lines) {
-    if (/^case\s+/u.test(line.trim()) && current.some(item => /^\s*⊢\s/u.test(item))) {
-      blocks.push(current)
-      current = [line]
-    } else {
-      current.push(line)
-    }
-  }
-  if (current.some(item => item.trim())) blocks.push(current)
-  return blocks.map(parseGoalBlock).filter((goal): goal is InteractiveGoalWithHints => goal !== null)
+  return goals
 }
 
 function indentProof(proofBody: string): string {
@@ -269,7 +164,7 @@ export class LocalWasmRpcClient {
   private closed = false
   private worldId: string
   private levelId: number
-  private initialGoal = ''
+  private initialDeclaration = ''
 
   constructor(private readonly gameId: string, worldId: string, levelId: number) {
     this.worldId = worldId
@@ -284,7 +179,7 @@ export class LocalWasmRpcClient {
     if (this.closed) throw new Error('Local Lean worker closed')
     this.worldId = worldId
     this.levelId = levelId
-    this.initialGoal = await this.fetchInitialGoal(worldId, levelId)
+    this.initialDeclaration = await this.fetchInitialDeclaration(worldId, levelId)
     return this.checkProof('')
   }
 
@@ -306,32 +201,45 @@ export class LocalWasmRpcClient {
     return this.closed
   }
 
-  private async fetchInitialGoal(worldId: string, levelId: number): Promise<string> {
+  private async fetchInitialDeclaration(worldId: string, levelId: number): Promise<string> {
     const base = getDataBaseUrl().replace(/\/$/u, '')
     const response = await fetch(`${base}/${this.gameId}/level__${worldId}__${levelId}.json`)
     if (!response.ok) throw new Error(`Could not load level data (${response.status})`)
-    const level = await response.json() as { visualGoalInfos?: Array<{ goal?: string | null }> }
-    const goal = level.visualGoalInfos?.find(item => item.goal)?.goal?.trim()
-    if (!goal) throw new Error('This level does not expose an initial visual goal yet')
-    return goal
+    const level = await response.json() as {
+      descrFormat?: string | null
+      visualGoalInfos?: Array<{ goal?: string | null }>
+    }
+
+    // `visualGoalInfos.goal` is presentation metadata used to decide when an
+    // instructional callout is visible.  It deliberately omits the theorem's
+    // binders, so compiling it as a declaration would turn e.g. `P Q : Prop`
+    // into auto-implicit universe-polymorphic sorts.  `descrFormat` is emitted
+    // from the actual `Statement` syntax and preserves the exact local context.
+    const declaration = level.descrFormat?.trim().replace(/\s*:=\s*by\s*$/u, '')
+    if (!declaration || !/^(?:example|theorem)\b/u.test(declaration)) {
+      throw new Error('This level does not expose an executable Lean statement')
+    }
+    return declaration
   }
 
   private async checkProof(proofBody: string): Promise<ProofState> {
     // Game/level metadata is already delivered as JSON.  Import only the
     // custom tactic implementation needed to elaborate and kernel-check the
     // generated proof, keeping the cached browser environment much smaller.
-    const code = `import GameServer.Tactic.Visual\n\nexample : ${this.initialGoal} := by\n${indentProof(proofBody)}\n`
+    const code = `import GameServer.Tactic.Visual\n\n${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry\n`
     const result = await this.engine.compile(code)
     if (!result.success) throw new Error(result.error ?? 'Lean WASM failed')
 
     const errors = result.diagnostics.filter(diag => diag.severity === 'error')
-    const unsolved = errors.filter(diag => /unsolved goals/iu.test(diag.data ?? ''))
-    const tacticErrors = errors.filter(diag => !/unsolved goals/iu.test(diag.data ?? ''))
-    if (tacticErrors.length > 0) {
-      throw new Error(tacticErrors.map(diag => diag.data).filter(Boolean).join('\n'))
+    if (errors.length > 0) {
+      throw new Error(errors.map(diag => diag.data).filter(Boolean).join('\n'))
     }
 
-    const goals = unsolved.flatMap(diag => parseUnsolvedGoals(diag.data ?? ''))
+    const goals = parseStructuredGoals(result.diagnostics)
+    const admittedRemainder = result.diagnostics.some(diag => /declaration uses [`']sorry/iu.test(diag.data ?? ''))
+    if (goals.length === 0 && admittedRemainder) {
+      throw new Error('Lean left goals open but the structured proof-state probe returned no state')
+    }
     const command = lastCommand(proofBody)
     const step: InteractiveGoalsWithHints = {
       goals,
@@ -340,7 +248,7 @@ export class LocalWasmRpcClient {
       diags: [],
       annotation: annotationFor(command),
     }
-    const completed = errors.length === 0
+    const completed = goals.length === 0
     return {
       steps: [step],
       diagnostics: [],
