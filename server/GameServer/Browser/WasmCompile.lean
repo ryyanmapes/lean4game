@@ -16,8 +16,8 @@ accepts or rejects proof moves exclusively from Lean's emitted diagnostics.
 
 namespace GameServer.Browser
 
-@[extern "lean_wasm_compile"]
-opaque cauliWasmCompile (code : @& String) (fileName : @& String) : IO UInt32
+@[extern "lp_Lean_Lean_wasmCompile"]
+opaque cauliWasmCompile (code : String) (fileName : String) : IO UInt32
 
 @[export visual_lean_wasm_compile]
 def wasmCompile (code : String) (fileName : String) : IO UInt32 := do
