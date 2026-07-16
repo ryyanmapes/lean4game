@@ -78,7 +78,7 @@ globalThis.Module = {
       )
       if (loadStatus !== 0) throw new Error(`snapshot load returned ${loadStatus}`)
 
-      const prefix = 'import GameServer.Tactic.Visual\n\nexample (P Q : Prop) : P → (P → Q) → Q := by\n'
+      const prefix = 'import GameServer.Tactic.Visual\n\nexample (P : Prop) : P → P := by\n'
       diagnostics.length = 0
       ioUInt32(Module._lean_wasm_compile(mkLeanString(`${prefix}  skip\n`), mkLeanString('/work/incomplete.lean')), 'first lean_wasm_compile')
       if (!diagnostics.some(diagnostic => /unsolved goals/u.test(diagnostic.data ?? ''))) {
