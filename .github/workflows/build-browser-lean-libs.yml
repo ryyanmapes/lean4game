@@ -244,7 +244,7 @@ jobs:
             source="server/.lake/build/ir/$module.c"
             object=".visual-link/$(basename "$module").o"
             test -f "$source"
-            emcc -pthread -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
+            emcc -pthread -DLEAN_EMSCRIPTEN -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
               -c "$source" -o "$object"
             objects+=("$object")
           done
@@ -279,6 +279,13 @@ jobs:
           example (n : Nat) : n = n := by
             click_goal
 
+          -- Exercise the introduction branch in WASM, not merely native Lean.
+          -- A broken custom-function ABI can make the simple `rfl` branch pass
+          -- while crashing as soon as the tactic manipulates a metavariable.
+          example (P : Prop) : P → P := by
+            click_goal
+            exact h
+
           example (P Q : Prop) (h : P ↔ Q) (hp : P) : Q := by
             drag_goal h
             exact hp
@@ -305,6 +312,10 @@ jobs:
             exit 0
           fi
           test -s .visual-snapshot-work/game.snap
+          echo 'Probing custom tactics after reloading the saved snapshot...'
+          node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+            "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
+            '--incr-load=/work/game.snap' /work/probe.lean
           mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
           rm -f .visual-snapshot-work/game.snap.deps
           gzip -9 browser-lean-libs/snapshots/game.snap
