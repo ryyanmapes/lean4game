@@ -1,6 +1,5 @@
 import Lean.Elab.Tactic.Basic
 import Lean.Elab.SyntheticMVars
-import Lean.Meta.Tactic.Intro
 import Lean.Meta.Tactic.Rewrite
 import Lean.Meta.Tactic.Replace
 import Lean.Meta.Tactic.Refl
@@ -499,14 +498,6 @@ private def evalTacticString (src : String) : TacticM Unit := do
   | .error err =>
     throwError "{err}"
 
-/-- Introduce one binder without recursively invoking the tactic parser.
-This keeps `click_goal` synchronous in the browser compiler and preserves the
-new goal for the next formally checked interaction. -/
-private def introGoalAs (name : Name) : TacticM Unit :=
-  liftMetaTactic fun mvarId => do
-    let (_, nextGoal) ← mvarId.intro name
-    pure [nextGoal]
-
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
   let mut ids : Std.HashSet FVarId := {}
   for localDecl in lctx do
@@ -812,26 +803,26 @@ syntax (name := click_goal) "click_goal" : tactic
         let hypName ← freshUserName hypBase.toString
         match binderName with
         | some binderName =>
-            introGoalAs binderName
-            introGoalAs hypName
+            evalTacticString s!"intro {binderName}"
+            evalTacticString s!"intro {hypName}"
         | none =>
-            introGoalAs (← freshUserName "a")
-            introGoalAs hypName
+            evalTacticString "intro"
+            evalTacticString s!"intro {hypName}"
       else
         match goalWhnf with
         | .forallE binderName domain _ _ =>
             if ← isProp domain then
-              introGoalAs (← freshUserName "h")
+              evalTacticString "intro"
             else if binderName.isAnonymous then
-              introGoalAs (← freshUserName "a")
+              evalTacticString "intro"
             else
               let nextName ← freshUserName binderName.toString
-              introGoalAs nextName
+              evalTacticString s!"intro {nextName}"
         | _ =>
-            introGoalAs (← freshUserName "a")
+            evalTacticString "intro"
   | some .introProp =>
       let hName ← freshUserName "h"
-      introGoalAs hName
+      evalTacticString s!"intro {hName}"
   | some .splitAnd =>
       evalTactic (← `(tactic| constructor))
   | _ =>

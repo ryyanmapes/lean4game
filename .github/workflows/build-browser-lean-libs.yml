@@ -316,6 +316,9 @@ jobs:
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
             '--incr-load=/work/game.snap' /work/probe.lean
+          echo 'Probing the persistent browser snapshot/compile API...'
+          node --stack-size=8192 scripts/probe-visual-wasm-api.cjs \
+            "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work"
           mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
           rm -f .visual-snapshot-work/game.snap.deps
           gzip -9 browser-lean-libs/snapshots/game.snap
