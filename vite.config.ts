@@ -10,6 +10,7 @@ import importMetaUrlPlugin from '@codingame/esbuild-import-meta-url-plugin'
 
 const backendPort = process.env.PORT || 8080;
 const clientPort = process.env.CLIENT_PORT || 3000;
+const basePath = process.env.LEAN4GAME_BASE || "/";
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -50,7 +51,7 @@ export default defineConfig({
     }),
   ],
   publicDir: "client/public",
-  base: "/", // setting this to `/leangame/` means the server is now accessible at `localhost:3000/leangame`
+  base: basePath, // setting this to `/leangame/` means the server is now accessible at `localhost:3000/leangame`
   optimizeDeps: {
     exclude: ['games'],
     esbuildOptions: {

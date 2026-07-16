@@ -1,5 +1,6 @@
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getWebsocketUrl } from '../utils/url'
+import { LocalWasmRpcClient } from './localWasmRpcClient'
 
 const OPEN_TIMEOUT_MS = 15000
 const REQUEST_TIMEOUT_MS = 30000
@@ -27,7 +28,7 @@ function coerceProofState(value: any): ProofState | null {
   }
 }
 
-export class LeanRpcClient {
+class WebSocketLeanRpcClient {
   private ws: WebSocket
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
   private nextId = 1
@@ -359,5 +360,37 @@ export class LeanRpcClient {
     for (const handler of this.notificationHandlers) {
       handler(msg)
     }
+  }
+}
+
+/** Preserve the original websocket backend for normal deployments, while the
+ * locally mounted /lean4game app talks directly to the in-browser Lean worker. */
+export class LeanRpcClient {
+  private readonly implementation: WebSocketLeanRpcClient | LocalWasmRpcClient
+
+  constructor(gameId: string, worldId: string, levelId: number) {
+    this.implementation = window.location.pathname.startsWith('/lean4game')
+      ? new LocalWasmRpcClient(gameId, worldId, levelId)
+      : new WebSocketLeanRpcClient(gameId, worldId, levelId)
+  }
+
+  getProofState() {
+    return this.implementation.getProofState()
+  }
+
+  loadProofState(worldId: string, levelId: number, options: LoadProofStateOptions = {}) {
+    return this.implementation.loadProofState(worldId, levelId, options)
+  }
+
+  sendProofUpdate(proofBody: string) {
+    return this.implementation.sendProofUpdate(proofBody)
+  }
+
+  close() {
+    this.implementation.close()
+  }
+
+  isClosed() {
+    return this.implementation.isClosed()
   }
 }
