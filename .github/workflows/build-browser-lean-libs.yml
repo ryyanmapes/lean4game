@@ -22,6 +22,9 @@ env:
   CAULI_LEAN_ARTIFACT: build-Linux 32bit
   CAULI_WASM_ARTIFACT: build-Web Assembly
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
+  # Latest mathlib commit preceding the pinned Cauli Lean build. NNG4's normal
+  # manifest targets Lean 4.28 and cannot be compiled by this 4.33-pre toolchain.
+  CAULI_MATHLIB_SHA: 4efb186f102ebfd2eea1545c151d6fbcfdff0e43
 
 jobs:
   build:
@@ -142,10 +145,6 @@ jobs:
         run: |
           node scripts/materialize-lake-manifest.mjs server/lake-manifest.json
 
-      - name: Materialize pinned NNG4 dependencies
-        if: inputs.include_nng4
-        run: node scripts/materialize-lake-manifest.mjs ../NNG4/lake-manifest.json
-
       - name: Adapt NNG4 package configuration to Cauli Lake
         if: inputs.include_nng4
         run: |
@@ -154,6 +153,10 @@ jobs:
           # InputVer field; keep this compatibility rewrite confined to CI.
           sed -i 's/version? := none/version := .none/' ../NNG4/lakefile.lean
           sed -i 's/version? := s!"git#{leanVersion}"/version := .git leanVersion/' ../NNG4/lakefile.lean
+          sed -i "s/^def leanVersion : String :=.*/def leanVersion : String := \"$CAULI_MATHLIB_SHA\"/" ../NNG4/lakefile.lean
+          rm -f ../NNG4/lake-manifest.json
+          rm -rf ../NNG4/.lake/packages
+          (cd ../NNG4 && "$LEAN_HOME/bin/lake" update)
 
       - name: Enable browser IR generation
         run: |
@@ -341,7 +344,7 @@ jobs:
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
             '--incr-load=/work/game.snap' /work/probe.lean
           echo 'Probing the persistent browser snapshot/compile API...'
-          node --stack-size=8192 scripts/probe-visual-wasm-api.cjs \
+          PROBE_NNG4="${{ inputs.include_nng4 }}" node --stack-size=8192 scripts/probe-visual-wasm-api.cjs \
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work"
           mv .visual-snapshot-work/game.snap browser-lean-libs/snapshots/game.snap
           rm -f .visual-snapshot-work/game.snap.deps

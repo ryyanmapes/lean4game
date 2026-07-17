@@ -109,6 +109,24 @@ globalThis.Module = {
       if (diagnostics.some(diagnostic => diagnostic.severity === 'error')) {
         throw new Error(`click_goal emitted errors: ${JSON.stringify(diagnostics)}`)
       }
+
+      if (process.env.PROBE_NNG4 === 'true') {
+        diagnostics.length = 0
+        const nngStatus = ioUInt32(
+          Module._lean_wasm_compile(
+            mkLeanString(
+              'import Game.Levels.Tutorial.L01rfl\n\n' +
+              'example (x q : MyNat) : 37 * x + q = 37 * x + q := by\n' +
+              '  rfl\n',
+            ),
+            mkLeanString('/work/nng4-tutorial.lean'),
+          ),
+          'NNG4 lean_wasm_compile',
+        )
+        if (nngStatus !== 0 || diagnostics.some(diagnostic => diagnostic.severity === 'error')) {
+          throw new Error(`NNG4 persistent compile failed: ${JSON.stringify(diagnostics)}`)
+        }
+      }
       console.log('browser API probe passed')
       setImmediate(() => process.exit(0))
     } catch (error) {
