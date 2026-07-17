@@ -142,6 +142,10 @@ jobs:
         run: |
           node scripts/materialize-lake-manifest.mjs server/lake-manifest.json
 
+      - name: Materialize pinned NNG4 dependencies
+        if: inputs.include_nng4
+        run: node scripts/materialize-lake-manifest.mjs ../NNG4/lake-manifest.json
+
       - name: Enable browser IR generation
         run: |
           node scripts/enable-browser-module-system.mjs --meta \
@@ -155,6 +159,12 @@ jobs:
             server/.lake/packages/batteries \
             ../VisualTest/Game.lean \
             ../VisualTest/Game
+
+          if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
+            node scripts/enable-browser-module-system.mjs \
+              ../NNG4/Game.lean \
+              ../NNG4/Game
+          fi
 
           rm -rf server/.lake/build
           find server/.lake/packages -type d -path '*/.lake/build' -prune -exec rm -rf {} +
@@ -295,6 +305,10 @@ jobs:
             drag_rw_lhs [Nat.add_zero]
             click_goal
           LEAN
+
+          if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
+            sed -i '1i import Game' .visual-snapshot-work/probe.lean
+          fi
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \

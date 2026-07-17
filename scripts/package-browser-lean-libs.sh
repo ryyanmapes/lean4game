@@ -34,7 +34,11 @@ done < <(find "$root/server/.lake/packages" "$visual_test/.lake/packages" \
   -type d -path '*/.lake/build/lib/lean' -print0 2>/dev/null)
 
 copy_tree "$root/server/.lake/build/lib/lean" "GameServer"
-copy_tree "$visual_test/.lake/build/lib/lean" "VisualTest"
+# VisualTest's generated level modules use the same top-level `Game` module
+# names as NNG4.  The browser executes level statements from generated JSON,
+# so none of those VisualTest modules are needed at runtime; only its game data
+# and the compact GameServer tactic implementation are required.  Omitting
+# them both saves space and lets NNG4 own `Game.*` in a combined artifact.
 
 if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
   copy_tree "$nng4/.lake/build/lib/lean" "NNG4"
@@ -69,7 +73,7 @@ while IFS= read -r -d '' olean; do
     echo "Missing browser IR beside ${olean#"$out/lean-lib/"}" >&2
     missing_ir=1
   fi
-done < <(find "$out/lean-lib/GameServer" "$out/lean-lib/Game" -type f -name '*.olean' -print0)
+done < <(find "$out/lean-lib/GameServer" "$out/lean-lib/Game" -type f -name '*.olean' -print0 2>/dev/null)
 if [[ "$missing_ir" != 0 ]]; then
   echo 'GameServer and game modules must all use Lean module-system builds.' >&2
   exit 1

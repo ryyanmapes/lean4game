@@ -19,6 +19,14 @@ function run(cmd, args, cwd) {
 }
 
 for (const pkg of manifest.packages ?? []) {
+  if (pkg.type === 'path') {
+    const target = path.resolve(root, pkg.dir)
+    if (!fs.existsSync(target)) {
+      console.error(`Missing path dependency for ${pkg.name}: ${target}`)
+      process.exit(1)
+    }
+    continue
+  }
   if (pkg.type !== 'git') {
     console.error(`Unsupported Lake package type for ${pkg.name}: ${pkg.type}`)
     process.exit(1)

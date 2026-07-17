@@ -165,6 +165,7 @@ export class LocalWasmRpcClient {
   private worldId: string
   private levelId: number
   private initialDeclaration = ''
+  private levelModule = ''
 
   constructor(private readonly gameId: string, worldId: string, levelId: number) {
     this.worldId = worldId
@@ -179,7 +180,9 @@ export class LocalWasmRpcClient {
     if (this.closed) throw new Error('Local Lean worker closed')
     this.worldId = worldId
     this.levelId = levelId
-    this.initialDeclaration = await this.fetchInitialDeclaration(worldId, levelId)
+    const level = await this.fetchInitialDeclaration(worldId, levelId)
+    this.initialDeclaration = level.declaration
+    this.levelModule = level.module
     return this.checkProof('')
   }
 
@@ -201,12 +204,13 @@ export class LocalWasmRpcClient {
     return this.closed
   }
 
-  private async fetchInitialDeclaration(worldId: string, levelId: number): Promise<string> {
+  private async fetchInitialDeclaration(worldId: string, levelId: number): Promise<{ declaration: string; module: string }> {
     const base = getDataBaseUrl().replace(/\/$/u, '')
     const response = await fetch(`${base}/${this.gameId}/level__${worldId}__${levelId}.json`)
     if (!response.ok) throw new Error(`Could not load level data (${response.status})`)
     const level = await response.json() as {
       descrFormat?: string | null
+      module?: string | null
       visualGoalInfos?: Array<{ goal?: string | null }>
     }
 
@@ -219,14 +223,20 @@ export class LocalWasmRpcClient {
     if (!declaration || !/^(?:example|theorem)\b/u.test(declaration)) {
       throw new Error('This level does not expose an executable Lean statement')
     }
-    return declaration
+    return { declaration, module: level.module?.trim() ?? '' }
   }
 
   private async checkProof(proofBody: string): Promise<ProofState> {
     // Game/level metadata is already delivered as JSON.  Import only the
     // custom tactic implementation needed to elaborate and kernel-check the
     // generated proof, keeping the cached browser environment much smaller.
-    const code = `import GameServer.Tactic.Visual\n\n${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry\n`
+    // NNG4's declarations, notation, and proven inventory theorems live in the
+    // snapshotted `Game` environment. Importing the precise level module also
+    // preserves any local namespace/options established by that source file.
+    const levelImport = this.gameId.toLowerCase().endsWith('/nng4') && this.levelModule
+      ? `import ${this.levelModule}\n`
+      : ''
+    const code = `import GameServer.Tactic.Visual\n${levelImport}\n${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry\n`
     const result = await this.engine.compile(code)
     if (!result.success) throw new Error(result.error ?? 'Lean WASM failed')
 
