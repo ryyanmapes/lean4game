@@ -177,8 +177,11 @@ jobs:
             node scripts/enable-browser-module-system.mjs --meta \
               ../NNG4/.lake/packages/importGraph \
               ../NNG4/.lake/packages/i18n \
-              ../NNG4/.lake/packages/Cli
+              ../NNG4/.lake/packages/Cli \
+              ../NNG4/.lake/packages/Qq
             node scripts/enable-browser-module-system.mjs \
+              ../NNG4/.lake/packages/mathlib \
+              ../NNG4/.lake/packages/batteries \
               ../NNG4/Game.lean \
               ../NNG4/Game
           fi
