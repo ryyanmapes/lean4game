@@ -53,17 +53,38 @@ def getCurrentModule : IO Name := pure \`Game
     .replace('import Lake.Load.Manifest', 'import Lean')
 })
 
-// GameServer imports the I18n umbrella for String.translate and its persistent
-// environment extensions. Browser play never emits developer .pot templates,
-// so keep that command available as a no-op without retaining Template,
-// Std.Time, JSON/PO writers, or their filesystem code in the WASM environment.
-edit('.lake/packages/i18n/I18n.lean', () => `public import I18n.EnvExtension
-public import I18n.InterpolatedStr
-public import I18n.Language
-public import I18n.Translate
+// GameServer imports the I18n umbrella only for translated user-facing text
+// and for the developer-only template command.  Its real persistent
+// environment extensions are the first NNG dependency whose generated IR
+// reaches an unsupported `unreachable` body in the purpose-linked WASM
+// compiler.  The browser edition deliberately ships English game data, so a
+// small source-compatible layer is both sufficient and keeps translations out
+// of the formal proof/runtime closure.
+edit('.lake/packages/i18n/I18n.lean', () => `public import Lean
+
+open Lean
+
+/-- Browser games retain their authored English text without collecting PO entries. -/
+def _root_.String.markForTranslation [Monad m] [MonadEnv m] [MonadLog m] [AddMessageContext m]
+    [MonadOptions m] (_s : String) : m Unit := pure ()
+
+/-- Browser games retain their authored English text without a translation lookup. -/
+def _root_.String.translate [Monad m] [MonadEnv m] [MonadLog m] [AddMessageContext m]
+    [MonadOptions m] (s : String) : m String := pure s
+
+/-- English-only counterpart of lean-i18n's translated string syntax. -/
+syntax:max "t!" interpolatedStr(term) : term
+
+/-- English-only counterpart of lean-i18n's translated message-data syntax. -/
+syntax:max "mt!" interpolatedStr(term) : term
+
+macro_rules
+  | \`(t! $interpStr) => \`(s! $interpStr)
+  | \`(mt! $interpStr) => \`(m! $interpStr)
 
 namespace I18n
 
+/-- Translation templates are a build-authoring concern, not a browser runtime concern. -/
 def createTemplate : Lean.Elab.Command.CommandElabM Unit := pure ()
 
 end I18n
