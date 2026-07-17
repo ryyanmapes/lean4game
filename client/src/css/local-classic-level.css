@@ -1,0 +1,24 @@
+.local-classic-page { min-height: 100vh; background: #f4f1e8; color: #20242d; font-family: Roboto, sans-serif; }
+.local-classic-header { min-height: 3.5rem; padding: .75rem 1.25rem; background: #26364a; color: white; display: flex; align-items: center; gap: 1.5rem; }
+.local-classic-header a { color: white; text-decoration: none; font-weight: 600; }
+.local-classic-header nav { margin-left: auto; display: flex; gap: 1rem; }
+.local-classic-columns { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(24rem, 1.25fr); gap: 1.5rem; padding: 1.5rem; max-width: 96rem; margin: auto; }
+.local-classic-lesson, .local-classic-workspace { background: white; border: 1px solid #d8d3c6; border-radius: .45rem; padding: 1.4rem; box-shadow: 0 3px 12px #26364a14; }
+.local-classic-kicker { color: #66758a; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.local-classic-lesson h1 { margin: .2rem 0 1rem; }
+.local-classic-statement { white-space: pre-wrap; padding: 1rem; background: #f2f4f7; border-left: .3rem solid #3e6d9c; font: 1rem/1.5 JuliaMono, monospace; }
+.local-classic-inventory h2 { font-size: 1rem; }
+.local-classic-inventory div { display: flex; flex-wrap: wrap; gap: .45rem; }
+.local-classic-inventory code { background: #e7edf4; border-radius: .25rem; padding: .3rem .5rem; }
+.local-classic-workspace { display: flex; flex-direction: column; gap: .8rem; }
+.local-classic-workspace > label { font-weight: 700; }
+.local-classic-workspace textarea { min-height: 14rem; resize: vertical; border: 1px solid #9da9b8; border-radius: .3rem; padding: .85rem; font: 1rem/1.55 JuliaMono, monospace; color: #eef2f7; background: #172131; }
+.local-classic-status { padding: .65rem .8rem; border-radius: .3rem; background: #e8edf3; }
+.local-classic-status.is-complete { background: #dff3df; color: #185c24; font-weight: 700; }
+.local-classic-goal { border: 1px solid #aeb9c6; border-radius: .35rem; padding: 1rem; background: #f9fafb; }
+.local-classic-hyp { display: grid; grid-template-columns: auto auto 1fr; gap: .5rem; margin: .25rem 0; }
+.local-classic-turnstile { border-top: 1px solid #718096; margin-top: .8rem; padding-top: .45rem; color: #536176; }
+.local-classic-target { display: block; font-size: 1.05rem; margin-top: .25rem; white-space: pre-wrap; }
+.local-classic-conclusion { border-left: .3rem solid #39854b; background: #edf8ee; padding: .75rem 1rem; }
+.local-classic-loading { padding: 3rem; }
+@media (max-width: 800px) { .local-classic-columns { grid-template-columns: 1fr; padding: .75rem; } .local-classic-header { flex-wrap: wrap; } }

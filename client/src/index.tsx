@@ -9,6 +9,7 @@ import ErrorPage from './components/error_page'
 import Welcome from './components/welcome'
 import LandingPage from './components/landing_page'
 import Level from './components/level'
+import LocalClassicLevel from './components/local_classic_level'
 import VisualProofPage from './visual/VisualProofPage'
 import VisualWorldMap from './visual/VisualWorldMap'
 import './i18n';
@@ -57,7 +58,9 @@ const router = createHashRouter([
       },
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId",
-        element: <Level />,
+        element: window.location.pathname.startsWith('/lean4game') && !window.location.hash.endsWith('/level/0')
+          ? <LocalClassicLevel />
+          : <Level />,
       },
       {
         path: "/g/:owner/:repo/visual",
