@@ -130,7 +130,7 @@ macro "cases " target:Parser.Tactic.elimTarget : tactic =>
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
     name:(colGt binderIdent) : tactic =>
-  \`(tactic| cases' $target using MyNat.casesOn' with $name)
+  \`(tactic| cases' $target with $name <;> try rw [MyNat.zero_eq_0] at *)
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
     first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
