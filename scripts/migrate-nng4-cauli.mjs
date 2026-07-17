@@ -54,7 +54,7 @@ replace(
 replace(
   'Game/Tactic/Rfl.lean',
   'import Lean.Elab.Tactic.Basic',
-  'import Lean.Elab.Tactic.Basic\n\nnoncomputable section',
+  'public meta import Lean.Elab.Tactic.Basic\n\nnoncomputable section',
 )
 replace(
   'Game/Tactic/Rfl.lean',
