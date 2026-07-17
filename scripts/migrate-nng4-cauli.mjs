@@ -23,6 +23,15 @@ function replace(relativePath, from, to) {
   })
 }
 
+// Algorithm World is intentionally absent from the browser edition. It is not
+// a proof prerequisite of Advanced Addition; that level's Implication import
+// already supplies every declaration its proof uses. Keeping these umbrella
+// imports would retain nine unused level environments in every browser worker.
+edit('Game.lean', source =>
+  source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
+edit('Game/Levels/AdvAddition/L01add_right_cancel.lean', source =>
+  source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
+
 // Lean 4.33's module system does not unfold ordinary definitions across a
 // module boundary. Numeral reduction is intentionally part of NNG's kernel
 // computation, so expose precisely these two small recursive conversions.

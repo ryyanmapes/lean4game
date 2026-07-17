@@ -33,6 +33,16 @@ while IFS= read -r -d '' tree; do
 done < <(find "$root/server/.lake/packages" "$visual_test/.lake/packages" \
   -type d -path '*/.lake/build/lib/lean' -print0 2>/dev/null)
 
+# NNG4 has a separate Lake package directory. Only dependency build trees
+# reached by `lake build` exist here, so this is the compiled import closure
+# rather than the full dependency source trees.
+if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
+  while IFS= read -r -d '' tree; do
+    copy_tree "$tree" "NNG4 dependency"
+  done < <(find "$nng4/.lake/packages" \
+    -type d -path '*/.lake/build/lib/lean' -print0 2>/dev/null)
+fi
+
 copy_tree "$root/server/.lake/build/lib/lean" "GameServer"
 # VisualTest's generated level modules use the same top-level `Game` module
 # names as NNG4.  The browser executes level statements from generated JSON,
