@@ -128,10 +128,12 @@ two-binder overload as the second binder name (seen in AdvAddition L05). -/
 macro "cases " target:Parser.Tactic.elimTarget : tactic =>
   \`(tactic| cases' $target)
 
-macro "cases " target:Parser.Tactic.elimTarget " with " name:(colGt binderIdent) : tactic =>
-  \`(tactic| cases' $target with $name)
+macro "cases " target:Parser.Tactic.elimTarget " with"
+    (ppSpace colGt name:binderIdent) : tactic =>
+  \`(tactic| cases' $target using MyNat.casesOn' with $name)
 
-macro "cases " target:Parser.Tactic.elimTarget " with " first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
+macro "cases " target:Parser.Tactic.elimTarget " with"
+    (ppSpace colGt first:binderIdent) (ppSpace colGt second:binderIdent) : tactic =>
   \`(tactic| cases' $target with $first $second)
 `)
 
