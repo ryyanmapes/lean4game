@@ -24,7 +24,7 @@ env:
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
   # Latest mathlib commit preceding the pinned Cauli Lean build. NNG4's normal
   # manifest targets Lean 4.28 and cannot be compiled by this 4.33-pre toolchain.
-  CAULI_MATHLIB_SHA: 4efb186f102ebfd2eea1545c151d6fbcfdff0e43
+  CAULI_MATHLIB_SHA: 9944fe2973b8dc0b86949101ed98232c07cd54a0
 
 jobs:
   build:
@@ -154,6 +154,10 @@ jobs:
           sed -i 's/version? := none/version := .none/' ../NNG4/lakefile.lean
           sed -i 's/version? := s!"git#{leanVersion}"/version := .git leanVersion/' ../NNG4/lakefile.lean
           sed -i "s/^def leanVersion : String :=.*/def leanVersion : String := \"$CAULI_MATHLIB_SHA\"/" ../NNG4/lakefile.lean
+          sed -i 's/@\[tactic MyNat.rfl\] def evalRfl/@[tactic MyNat.rfl] meta def evalRfl/' ../NNG4/Game/Tactic/Rfl.lean
+          sed -i 's/@\[tactic MyNat.rewriteSeq\] def evalRewriteSeq/@[tactic MyNat.rewriteSeq] meta def evalRewriteSeq/' ../NNG4/Game/Tactic/Rw.lean
+          sed -i 's/@\[delab app.Not\] def delab_not_mem/@[delab app.Not] meta def delab_not_mem/' ../NNG4/Game/Tactic/Ne.lean
+          sed -i 's/theorem zero_eq_0 : MyNat.zero = 0 := rfl/theorem zero_eq_0 : MyNat.zero = 0 := by change MyNat.zero = MyNat.zero; rfl/' ../NNG4/Game/MyNat/Definition.lean
           rm -f ../NNG4/lake-manifest.json
           rm -rf ../NNG4/.lake/packages
           (cd ../NNG4 && "$LEAN_HOME/bin/lake" update --keep-toolchain)
@@ -173,6 +177,10 @@ jobs:
             ../VisualTest/Game
 
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
+            node scripts/enable-browser-module-system.mjs --meta \
+              ../NNG4/.lake/packages/importGraph \
+              ../NNG4/.lake/packages/i18n \
+              ../NNG4/.lake/packages/Cli
             node scripts/enable-browser-module-system.mjs \
               ../NNG4/Game.lean \
               ../NNG4/Game
