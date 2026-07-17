@@ -156,7 +156,7 @@ jobs:
           sed -i "s/^def leanVersion : String :=.*/def leanVersion : String := \"$CAULI_MATHLIB_SHA\"/" ../NNG4/lakefile.lean
           rm -f ../NNG4/lake-manifest.json
           rm -rf ../NNG4/.lake/packages
-          (cd ../NNG4 && "$LEAN_HOME/bin/lake" update)
+          (cd ../NNG4 && "$LEAN_HOME/bin/lake" update --keep-toolchain)
 
       - name: Enable browser IR generation
         run: |
