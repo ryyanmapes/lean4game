@@ -123,8 +123,11 @@ open Lean Parser Tactic
 macro "cases " target:Parser.Tactic.elimTarget : tactic =>
   \`(tactic| cases' $target)
 
-macro "cases " target:Parser.Tactic.elimTarget " with " names:binderIdent* : tactic =>
-  \`(tactic| cases' $target with $names*)
+macro "cases " target:Parser.Tactic.elimTarget " with " name:binderIdent : tactic =>
+  \`(tactic| cases' $target with $name)
+
+macro "cases " target:Parser.Tactic.elimTarget " with " first:binderIdent second:binderIdent : tactic =>
+  \`(tactic| cases' $target with $first $second)
 `)
 
 // This mathlib revision is a few commits newer than the exact Cauli pre-release
