@@ -48,6 +48,11 @@ replace(
 )
 replace(
   'Game/Tactic/Rfl.lean',
+  'import Lean.Meta.Tactic.Refl',
+  'public meta import Lean.Meta.Tactic.Refl\npublic meta import Lean.Meta.Tactic.Util\n\nnoncomputable section',
+)
+replace(
+  'Game/Tactic/Rfl.lean',
   '@[tactic MyNat.rfl] def evalRfl',
   '@[tactic MyNat.rfl] meta def evalRfl',
 )
@@ -86,10 +91,10 @@ end MyNat
 open Lean Parser Tactic
 
 /-- Lean-3-style induction syntax used throughout the Natural Number Game. -/
-macro "induction " target:term " with " n:ident ih:ident : tactic =>
+macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:binderIdent : tactic =>
   \`(tactic| induction' $target using MyNat.rec' with $n $ih)
 
-macro "induction " target:term " with " n:ident ih:ident
+macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:binderIdent
     " generalizing " vars:ident* : tactic =>
   \`(tactic| induction' $target using MyNat.rec' with $n $ih generalizing $vars*)
 `)
@@ -102,7 +107,7 @@ namespace MyNat
 /-- Case principle which prints the base case as an NNG numeral. -/
 @[expose] def casesOn' {P : ℕ → Sort u} : (t : ℕ) → P 0 →
     ((a : ℕ) → P (MyNat.succ a)) → P t
-  | .zero, zero, _ => zero
+  | .zero, base, _ => base
   | .succ n, _, succ => succ n
 
 end MyNat
@@ -110,10 +115,10 @@ end MyNat
 open Lean Parser Tactic
 
 /-- Lean-3-style cases syntax used throughout the Natural Number Game. -/
-macro "cases " target:term : tactic =>
+macro "cases " target:Parser.Tactic.elimTarget : tactic =>
   \`(tactic| cases' $target)
 
-macro "cases " target:term " with " names:ident* : tactic =>
+macro "cases " target:Parser.Tactic.elimTarget " with " names:binderIdent* : tactic =>
   \`(tactic| cases' $target with $names*)
 `)
 
@@ -126,4 +131,15 @@ edit('.lake/packages/mathlib/Mathlib/Logic/Basic.lean', source => {
     throw new Error('Expected rec_heq_of_heq proof not found in pinned mathlib')
   }
   return source.replace(pattern, '$1 := by\n  cases e\n  exact h')
+})
+
+edit('Game/MyNat/PeanoAxioms.lean', source => {
+  const exposed = source
+    .replace(/\bdef pred\b/, '@[expose] def pred')
+    .replace(/\bdef is_zero\b/, '@[expose] def is_zero')
+  if (!exposed.includes('@[expose] def pred') ||
+      !exposed.includes('@[expose] def is_zero')) {
+    throw new Error('Failed to expose the NNG Peano helper definitions')
+  }
+  return exposed
 })
