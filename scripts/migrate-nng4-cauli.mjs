@@ -49,7 +49,12 @@ replace(
 replace(
   'Game/Tactic/Rfl.lean',
   'import Lean.Meta.Tactic.Refl',
-  'public meta import Lean.Meta.Tactic.Refl\npublic meta import Lean.Meta.Tactic.Util\n\nnoncomputable section',
+  'public meta import Lean.Meta.Tactic.Refl\npublic meta import Lean.Meta.Tactic.Util',
+)
+replace(
+  'Game/Tactic/Rfl.lean',
+  'import Lean.Elab.Tactic.Basic',
+  'import Lean.Elab.Tactic.Basic\n\nnoncomputable section',
 )
 replace(
   'Game/Tactic/Rfl.lean',
@@ -108,7 +113,7 @@ namespace MyNat
 @[expose] def casesOn' {P : ℕ → Sort u} : (t : ℕ) → P 0 →
     ((a : ℕ) → P (MyNat.succ a)) → P t
   | .zero, base, _ => base
-  | .succ n, _, succ => succ n
+  | .succ n, _, step => step n
 
 end MyNat
 
