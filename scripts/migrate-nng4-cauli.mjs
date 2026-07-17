@@ -129,11 +129,11 @@ macro "cases " target:Parser.Tactic.elimTarget : tactic =>
   \`(tactic| cases' $target)
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
-    (ppSpace colGt name:binderIdent) : tactic =>
+    name:(colGt binderIdent) : tactic =>
   \`(tactic| cases' $target using MyNat.casesOn' with $name)
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
-    (ppSpace colGt first:binderIdent) (ppSpace colGt second:binderIdent) : tactic =>
+    first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
   \`(tactic| cases' $target with $first $second)
 `)
 
