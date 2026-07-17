@@ -154,13 +154,10 @@ jobs:
           sed -i 's/version? := none/version := .none/' ../NNG4/lakefile.lean
           sed -i 's/version? := s!"git#{leanVersion}"/version := .git leanVersion/' ../NNG4/lakefile.lean
           sed -i "s/^def leanVersion : String :=.*/def leanVersion : String := \"$CAULI_MATHLIB_SHA\"/" ../NNG4/lakefile.lean
-          sed -i 's/@\[tactic MyNat.rfl\] def evalRfl/@[tactic MyNat.rfl] meta def evalRfl/' ../NNG4/Game/Tactic/Rfl.lean
-          sed -i 's/@\[tactic MyNat.rewriteSeq\] def evalRewriteSeq/@[tactic MyNat.rewriteSeq] meta def evalRewriteSeq/' ../NNG4/Game/Tactic/Rw.lean
-          sed -i 's/@\[delab app.Not\] def delab_not_mem/@[delab app.Not] meta def delab_not_mem/' ../NNG4/Game/Tactic/Ne.lean
-          sed -i 's/theorem zero_eq_0 : MyNat.zero = 0 := rfl/theorem zero_eq_0 : MyNat.zero = 0 := by change MyNat.zero = MyNat.zero; rfl/' ../NNG4/Game/MyNat/Definition.lean
           rm -f ../NNG4/lake-manifest.json
           rm -rf ../NNG4/.lake/packages
           (cd ../NNG4 && "$LEAN_HOME/bin/lake" update --keep-toolchain)
+          node scripts/migrate-nng4-cauli.mjs ../NNG4
 
       - name: Enable browser IR generation
         run: |
