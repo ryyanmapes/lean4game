@@ -32,6 +32,27 @@ edit('Game.lean', source =>
 edit('Game/Levels/AdvAddition/L01add_right_cancel.lean', source =>
   source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
 
+// lean-i18n imports Lake only to rediscover the current package/module name
+// while producing translation metadata. Both browser games build their main
+// library as `Game`; making that build-time fact explicit removes Lake's
+// native-only manifest loader from the runtime import closure.
+edit('.lake/packages/i18n/I18n/Utils.lean', source => {
+  const start = source.indexOf('/-- Read the name of the current package')
+  const end = source.indexOf('open System in')
+  if (start < 0 || end < 0 || end <= start) {
+    throw new Error('Expected lean-i18n manifest helper block not found')
+  }
+  const helpers = `/-- Browser games in this build use the Lake package name \`Game\`. -/
+def getProjectName : IO Name := pure \`Game
+
+/-- The corresponding main Lean module is also \`Game\`. -/
+def getCurrentModule : IO Name := pure \`Game
+
+`
+  return (source.slice(0, start) + helpers + source.slice(end))
+    .replace('import Lake.Load.Manifest', 'import Lean')
+})
+
 // Lean 4.33's module system does not unfold ordinary definitions across a
 // module boundary. Numeral reduction is intentionally part of NNG's kernel
 // computation, so expose precisely these two small recursive conversions.
