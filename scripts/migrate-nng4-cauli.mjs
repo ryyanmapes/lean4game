@@ -158,3 +158,14 @@ edit('Game/MyNat/PeanoAxioms.lean', source => {
   }
   return exposed
 })
+
+edit('Game/MyNat/LE.lean', source => {
+  const exposed = source
+    .replace(/\bdef le\b/, '@[expose] def le')
+    .replace('instance : LE MyNat', '@[expose] instance : LE MyNat')
+  if (!exposed.includes('@[expose] def le') ||
+      !exposed.includes('@[expose] instance : LE MyNat')) {
+    throw new Error('Failed to expose the NNG less-than-or-equal definition')
+  }
+  return exposed
+})
