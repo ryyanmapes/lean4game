@@ -18,7 +18,11 @@ function leanFiles(input) {
 
 function migrate(file, meta) {
   const source = fs.readFileSync(file, 'utf8')
-  if (/^\s*module\s*(?:\/\/.*)?$/m.test(source)) return false
+  // Modern module headers may carry compiler/shake directives in a trailing
+  // comment (and the exact directive grammar evolves with Lean). Recognize
+  // the command token itself instead of trying to validate the whole line;
+  // otherwise we can accidentally prepend a second `module` command.
+  if (/^\s*module(?=\s|\/\/|$)/m.test(source)) return false
 
   const hadFinalNewline = source.endsWith('\n')
   const lines = source.replace(/\r\n/g, '\n').split('\n')
