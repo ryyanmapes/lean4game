@@ -95,12 +95,14 @@ end MyNat
 
 open Lean Parser Tactic
 
-/-- Lean-3-style induction syntax used throughout the Natural Number Game. -/
-macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:binderIdent : tactic =>
+/-- Lean-3-style induction syntax used throughout the Natural Number Game.
+Every binder is colGt-bounded so longest-match parsing cannot swallow the
+next line's tactic as a binder name. -/
+macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt binderIdent) ih:(colGt binderIdent) : tactic =>
   \`(tactic| induction' $target using MyNat.rec' with $n $ih)
 
-macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:binderIdent
-    " generalizing " generalized:ident : tactic =>
+macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt binderIdent) ih:(colGt binderIdent)
+    " generalizing " generalized:(colGt ident) : tactic =>
   \`(tactic| induction' $target using MyNat.rec' with $n $ih generalizing $generalized)
 `)
 
@@ -119,14 +121,17 @@ end MyNat
 
 open Lean Parser Tactic
 
-/-- Lean-3-style cases syntax used throughout the Natural Number Game. -/
+/-- Lean-3-style cases syntax used throughout the Natural Number Game.
+Every binder is colGt-bounded: without it, \`cases b with d\` followed by a
+tactic line like \`intro h\` lets longest-match parsing feed \`intro\` to the
+two-binder overload as the second binder name (seen in AdvAddition L05). -/
 macro "cases " target:Parser.Tactic.elimTarget : tactic =>
   \`(tactic| cases' $target)
 
-macro "cases " target:Parser.Tactic.elimTarget " with " name:binderIdent : tactic =>
+macro "cases " target:Parser.Tactic.elimTarget " with " name:(colGt binderIdent) : tactic =>
   \`(tactic| cases' $target with $name)
 
-macro "cases " target:Parser.Tactic.elimTarget " with " first:binderIdent second:binderIdent : tactic =>
+macro "cases " target:Parser.Tactic.elimTarget " with " first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
   \`(tactic| cases' $target with $first $second)
 `)
 
