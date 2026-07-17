@@ -146,6 +146,15 @@ jobs:
         if: inputs.include_nng4
         run: node scripts/materialize-lake-manifest.mjs ../NNG4/lake-manifest.json
 
+      - name: Adapt NNG4 package configuration to Cauli Lake
+        if: inputs.include_nng4
+        run: |
+          # NNG4 targets stable Lean 4.28, whose Lake Dependency used an
+          # optional String `version?`. The pinned Cauli compiler uses the new
+          # InputVer field; keep this compatibility rewrite confined to CI.
+          sed -i 's/version? := none/version := .none/' ../NNG4/lakefile.lean
+          sed -i 's/version? := s!"git#{leanVersion}"/version := .git leanVersion/' ../NNG4/lakefile.lean
+
       - name: Enable browser IR generation
         run: |
           node scripts/enable-browser-module-system.mjs --meta \
