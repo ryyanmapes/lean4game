@@ -53,6 +53,22 @@ def getCurrentModule : IO Name := pure \`Game
     .replace('import Lake.Load.Manifest', 'import Lean')
 })
 
+// GameServer imports the I18n umbrella for String.translate and its persistent
+// environment extensions. Browser play never emits developer .pot templates,
+// so keep that command available as a no-op without retaining Template,
+// Std.Time, JSON/PO writers, or their filesystem code in the WASM environment.
+edit('.lake/packages/i18n/I18n.lean', () => `public import I18n.EnvExtension
+public import I18n.InterpolatedStr
+public import I18n.Language
+public import I18n.Translate
+
+namespace I18n
+
+def createTemplate : Lean.Elab.Command.CommandElabM Unit := pure ()
+
+end I18n
+`)
+
 // Lean 4.33's module system does not unfold ordinary definitions across a
 // module boundary. Numeral reduction is intentionally part of NNG's kernel
 // computation, so expose precisely these two small recursive conversions.

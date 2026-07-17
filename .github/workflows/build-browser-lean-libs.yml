@@ -328,9 +328,6 @@ jobs:
 
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
             sed -i '1i import Game' .visual-snapshot-work/probe.lean
-            echo 'Probing the NNG import closure incrementally in one WASM process...'
-            node --stack-size=8192 scripts/diagnose-nng-wasm-imports.cjs \
-              "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work"
           fi
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
