@@ -19,12 +19,12 @@ type PendingCompile = {
 
 type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?: string }
 
-const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz?v=8c7ca0a1'
+const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz?v=nng4-browser-v1'
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=8c7ca0a1'
+const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=nng4-browser-v1'
 const WORKER_TIMEOUT_MS = 600_000
 
 function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
@@ -130,7 +130,7 @@ class LocalLeanWorker {
     return new Promise((resolve, reject) => {
       this.snapshotResolver = result => result.success
         ? resolve()
-        : reject(new Error(result.error ?? 'Visual Lean snapshot failed to load'))
+        : reject(new Error(result.error ?? 'Lean game snapshot failed to load'))
       this.worker!.postMessage({ type: 'load_snapshot', name: 'game.snap', url: SNAPSHOT_URL })
     })
   }
