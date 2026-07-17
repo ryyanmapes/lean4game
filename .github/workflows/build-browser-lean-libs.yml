@@ -295,6 +295,26 @@ jobs:
           cp "$visual_runtime/bin/lean.js" "$visual_runtime/bin/lean.wasm" browser-lean-libs/runtime/
           ls -lh browser-lean-libs/runtime/*
 
+      - name: Isolate NNG WebAssembly imports
+        if: inputs.include_nng4
+        run: |
+          cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
+          mkdir -p .nng-import-probes
+          for module in \
+            I18n \
+            Mathlib.Tactic.Tauto \
+            GameServer.Commands \
+            Game.Metadata \
+            Game.Levels.Tutorial \
+            Game.Levels.AdvMultiplication \
+            Game
+          do
+            echo "WASM CLI import probe: $module"
+            printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
+            node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+              "$VISUAL_RUNTIME" "$PWD/.nng-import-probes" /work/probe.lean
+          done
+
       - name: Bake VisualTest browser environment snapshot
         run: |
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
