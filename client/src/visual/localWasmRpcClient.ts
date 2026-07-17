@@ -19,12 +19,12 @@ type PendingCompile = {
 
 type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?: string }
 
-const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz'
+const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz?v=8c7ca0a1'
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=1237bea6'
+const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=8c7ca0a1'
 const WORKER_TIMEOUT_MS = 600_000
 
 function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
