@@ -100,8 +100,8 @@ macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:bin
   \`(tactic| induction' $target using MyNat.rec' with $n $ih)
 
 macro "induction " target:Parser.Tactic.elimTarget " with " n:binderIdent ih:binderIdent
-    " generalizing " vars:ident* : tactic =>
-  \`(tactic| induction' $target using MyNat.rec' with $n $ih generalizing $vars*)
+    " generalizing " variable:ident : tactic =>
+  \`(tactic| induction' $target using MyNat.rec' with $n $ih generalizing $variable)
 `)
 
 edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
