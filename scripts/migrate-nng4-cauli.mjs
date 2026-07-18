@@ -61,8 +61,7 @@ edit('Game/Metadata.lean', source => {
   return migrated
 })
 
-const browserTacticImports = `meta import GameServer.Browser.Commands
-meta import Lean.Elab.Tactic.Induction
+const browserTacticImports = `meta import Lean.Elab.Tactic.Induction
 meta import Game.Tactic.FromMathlib
 meta import Game.Tactic.Induction
 meta import Game.Tactic.Cases

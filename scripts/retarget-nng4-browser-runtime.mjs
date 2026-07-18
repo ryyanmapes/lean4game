@@ -18,7 +18,7 @@ function leanFiles(input) {
 let changed = 0
 for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, 'Game'))]) {
   const before = fs.readFileSync(file, 'utf8')
-  const after = before
+  let after = before
     .replace(
       /^([ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+)GameServer\.Commands[ \t]*$/gmu,
       '$1GameServer.Browser.Commands',
@@ -27,6 +27,11 @@ for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, '
       /^([ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+)GameServer[ \t]*$/gmu,
       '$1GameServer.Browser',
     )
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  if (relative.startsWith('Game/Levels/') && /^\s*Statement\b/m.test(after) &&
+      !/^meta import GameServer\.Browser\.Commands$/m.test(after)) {
+    after = `meta import GameServer.Browser.Commands\n${after}`
+  }
   if (after !== before) {
     fs.writeFileSync(file, after)
     changed++
