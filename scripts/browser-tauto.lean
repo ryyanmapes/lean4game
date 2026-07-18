@@ -14,7 +14,7 @@ number of browser goals.
 
 open Lean Elab Tactic Meta
 
-private def isLogicalConnective (e : Expr) : Option (Array Expr) :=
+private meta def isLogicalConnective (e : Expr) : Option (Array Expr) :=
   if e.isAppOfArity ``And 2 || e.isAppOfArity ``Or 2 || e.isAppOfArity ``Iff 2 then
     some e.getAppArgs
   else if e.isAppOfArity ``Not 1 then
@@ -22,7 +22,7 @@ private def isLogicalConnective (e : Expr) : Option (Array Expr) :=
   else
     none
 
-private partial def collectAtoms (e : Expr) (atoms : Array Expr := #[]) : MetaM (Array Expr) := do
+private meta partial def collectAtoms (e : Expr) (atoms : Array Expr := #[]) : MetaM (Array Expr) := do
   let e ← whnf e
   match isLogicalConnective e with
   | some args => args.foldlM (fun atoms arg => collectAtoms arg atoms) atoms
