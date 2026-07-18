@@ -274,15 +274,22 @@ jobs:
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
             .visual-link/visual-exports.txt \
-            GameServer.Tactic.Visual .cauli-lean-source/src server --native-c \
+            GameServer.Tactic.Visual .cauli-lean-source/src server ../NNG4 --native-c \
             server/.lake/build/ir/GameServer/GoalClick.c \
             server/.lake/build/ir/GameServer/PremiseApplication.c \
             server/.lake/build/ir/GameServer/Browser/ProofProbe.c \
-            server/.lake/build/ir/GameServer/Tactic/Visual.c
+            server/.lake/build/ir/GameServer/Tactic/Visual.c \
+            ../NNG4/.lake/build/ir/Game/MyNat/Definition.c
 
           objects=()
-          for module in GameServer/GoalClick GameServer/PremiseApplication GameServer/Browser/ProofProbe GameServer/Tactic/Visual; do
-            source="server/.lake/build/ir/$module.c"
+          for module in \
+            server/.lake/build/ir/GameServer/GoalClick.c \
+            server/.lake/build/ir/GameServer/PremiseApplication.c \
+            server/.lake/build/ir/GameServer/Browser/ProofProbe.c \
+            server/.lake/build/ir/GameServer/Tactic/Visual.c \
+            ../NNG4/.lake/build/ir/Game/MyNat/Definition.c
+          do
+            source="$module"
             object=".visual-link/$(basename "$module").o"
             test -f "$source"
             emcc -pthread -DLEAN_EMSCRIPTEN -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
