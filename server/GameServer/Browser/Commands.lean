@@ -38,6 +38,7 @@ macro (docComment)? "DefinitionDoc" ident "as" str (" in " str)? (str)? : comman
   `(command| set_option linter.unusedVariables false)
 
 macro "NewTactic" ident* : command => `(command| set_option linter.unusedVariables false)
+macro "NewHiddenTactic" ident* : command => `(command| set_option linter.unusedVariables false)
 macro "NewTheorem" ident* : command => `(command| set_option linter.unusedVariables false)
 macro "NewLemma" ident* : command => `(command| set_option linter.unusedVariables false)
 macro "NewDefinition" ident* : command => `(command| set_option linter.unusedVariables false)
@@ -96,9 +97,14 @@ macro "VisualProofGraphInfo" str : command =>
 macro "VisualProofGraphInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 
+macro "TheoremTab" str : command => `(command| set_option linter.unusedVariables false)
+
 syntax (name := browserStatement) "Statement" declSig declVal : command
+syntax (name := browserNamedStatement) "Statement" ident declSig declVal : command
 
 macro_rules
+  | `(Statement $name:ident $sig:declSig $val:declVal) =>
+      `(command| theorem $name:ident $sig:declSig $val:declVal)
   | `(Statement $sig:declSig $val:declVal) =>
       `(command| private theorem browser_statement $sig:declSig $val:declVal)
 

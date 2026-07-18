@@ -212,6 +212,16 @@ jobs:
         run: |
           "$LEAN_HOME/bin/lake" build
 
+      - name: Rebuild NNG4 against browser command surface
+        if: inputs.include_nng4
+        run: |
+          # The first build above runs the native GameServer commands and
+          # writes canonical gamedata. Browser proof checking consumes that
+          # JSON but must not initialize the metadata/inventory command stack.
+          node scripts/retarget-nng4-browser-runtime.mjs ../NNG4
+          rm -rf ../NNG4/.lake/build
+          (cd ../NNG4 && "$LEAN_HOME/bin/lake" build)
+
       - name: Package browser libraries
         env:
           INCLUDE_NNG4: ${{ inputs.include_nng4 }}
@@ -303,7 +313,7 @@ jobs:
           for module in \
             I18n \
             Game.Tactic.FromMathlib \
-            GameServer.Commands \
+            GameServer.Browser.Commands \
             Game.Metadata \
             Game.Levels.Tutorial \
             Game.Levels.AdvMultiplication \
