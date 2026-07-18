@@ -1,3 +1,5 @@
+import Lean.Elab.Tactic.ElabTerm
+import Lean.Elab.Tactic.Rewrite
 import GameServer.Tactic.Visual
 
 /-!
@@ -15,6 +17,12 @@ pulls in most of the Lean frontend, which makes browser startup much larger.
 namespace GameServer
 
 syntax visualBool := &"true" <|> &"false"
+syntax browserHintArg := "(" ident ":=" visualBool ")"
+
+/- Hints are already packaged in canonical game-data JSON. During browser
+proof elaboration they are intentional no-ops, avoiding the native metadata
+environment while preserving every authored sample proof verbatim. -/
+macro "Hint" browserHintArg* interpolatedStr(term) : tactic => `(tactic| skip)
 
 macro "Game" str : command => `(command| set_option linter.unusedVariables false)
 macro "World" str : command => `(command| set_option linter.unusedVariables false)
