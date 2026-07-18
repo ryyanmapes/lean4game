@@ -61,15 +61,7 @@ edit('Game/Metadata.lean', source => {
   return migrated
 })
 
-for (const file of fs.readdirSync(path.join(root, 'Game'), { recursive: true })) {
-  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
-  const relativePath = path.join('Game', file)
-  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
-  if (/^import Game\.Metadata\r?$/m.test(source)) {
-    edit(relativePath, source => source.replace(
-      /^import Game\.Metadata\r?$/m,
-      `meta import Game.Metadata
-meta import Game.Tactic.FromMathlib
+const browserTacticImports = `meta import Game.Tactic.FromMathlib
 meta import Game.Tactic.Induction
 meta import Game.Tactic.Cases
 meta import Game.Tactic.Rfl
@@ -79,9 +71,31 @@ meta import Game.Tactic.Ne
 meta import Game.Tactic.Xyzzy
 meta import Game.Tactic.SimpAdd
 meta import Game.Tactic.BrowserTauto
-meta import Game.Tactic.BrowserNthRewrite`,
+meta import Game.Tactic.BrowserNthRewrite`
+
+for (const file of fs.readdirSync(path.join(root, 'Game'), { recursive: true })) {
+  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
+  const relativePath = path.join('Game', file)
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  if (/^import Game\.Metadata\r?$/m.test(source)) {
+    edit(relativePath, source => source.replace(
+      /^import Game\.Metadata\r?$/m,
+      `meta import Game.Metadata
+${browserTacticImports}`,
     ))
   }
+}
+
+// Meta elaborators do not propagate through the ordinary import chain from one
+// level to the next in Lean 4.33. Give every authored level a direct edge to
+// the same compact tactic surface. This does not enlarge the import closure:
+// the modules were already dependencies of Game.Metadata.
+for (const file of fs.readdirSync(path.join(root, 'Game', 'Levels'), { recursive: true })) {
+  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
+  const relativePath = path.join('Game', 'Levels', file)
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  if (!/^\s*Statement\b/m.test(source) || source.includes(browserTacticImports)) continue
+  edit(relativePath, source => `${browserTacticImports}\n${source}`)
 }
 
 // lean-i18n imports Lake only to rediscover the current package/module name
