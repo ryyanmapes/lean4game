@@ -68,7 +68,18 @@ for (const file of fs.readdirSync(path.join(root, 'Game'), { recursive: true }))
   if (/^import Game\.Metadata\r?$/m.test(source)) {
     edit(relativePath, source => source.replace(
       /^import Game\.Metadata\r?$/m,
-      'meta import Game.Metadata',
+      `meta import Game.Metadata
+meta import Game.Tactic.FromMathlib
+meta import Game.Tactic.Induction
+meta import Game.Tactic.Cases
+meta import Game.Tactic.Rfl
+meta import Game.Tactic.Rw
+meta import Game.Tactic.Use
+meta import Game.Tactic.Ne
+meta import Game.Tactic.Xyzzy
+meta import Game.Tactic.SimpAdd
+meta import Game.Tactic.BrowserTauto
+meta import Game.Tactic.BrowserNthRewrite`,
     ))
   }
 }
