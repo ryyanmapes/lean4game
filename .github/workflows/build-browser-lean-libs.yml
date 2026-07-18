@@ -274,7 +274,8 @@ jobs:
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
             .visual-link/visual-exports.txt \
-            Game.Browser.Metadata .cauli-lean-source/src server ../NNG4 --native-c \
+            Game.Browser.Metadata .cauli-lean-source/src server ../NNG4 \
+            ../NNG4/.lake/packages/mathlib --native-c \
             server/.lake/build/ir/GameServer/GoalClick.c \
             server/.lake/build/ir/GameServer/PremiseApplication.c \
             server/.lake/build/ir/GameServer/Browser/ProofProbe.c \
