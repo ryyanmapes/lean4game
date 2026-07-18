@@ -35,7 +35,7 @@ for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, '
     }
     after = after.replace(
       /^module\r?\n/,
-      matched => `${matched}\nmeta import GameServer.Browser.Commands\n`,
+      matched => `${matched}\nmeta import GameServer.Browser.Commands\nmeta import Lean.Elab.Tactic.Induction\n`,
     )
   }
   if (after !== before) {
