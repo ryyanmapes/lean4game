@@ -99,13 +99,12 @@ macro "VisualProofGraphInfoOnGoal" str "show" str : command =>
 
 macro "TheoremTab" str : command => `(command| set_option linter.unusedVariables false)
 
-elab doc:docComment ? "Statement" statementName:ident ? sig:declSig val:declVal : command => do
-  let command ← match statementName with
+macro doc:docComment ? "Statement" statementName:ident ? sig:declSig val:declVal : command => do
+  match statementName with
     | some name =>
       `(command| $[$doc]? theorem $name $sig:declSig $val:declVal)
     | none =>
       `(command| $[$doc]? private theorem browser_statement $sig:declSig $val:declVal)
-  Lean.Elab.Command.elabCommand command
 
 macro "MakeGame" : command => `(command| set_option linter.unusedVariables false)
 
