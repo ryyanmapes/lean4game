@@ -176,26 +176,20 @@ edit('Game/MyNat/Definition.lean', source => {
   return exposed
 })
 
-replace(
-  'Game/Tactic/Rfl.lean',
-  'def Lean.MVarId.iffRefl',
-  'meta def Lean.MVarId.iffRefl',
-)
-replace(
-  'Game/Tactic/Rfl.lean',
-  'import Lean.Meta.Tactic.Refl',
-  'public meta import Lean.Meta.Tactic.Refl\npublic meta import Lean.Meta.Tactic.Util',
-)
-replace(
-  'Game/Tactic/Rfl.lean',
-  'import Lean.Elab.Tactic.Basic',
-  'public meta import Lean.Elab.Tactic.Basic\n\nnoncomputable section',
-)
-replace(
-  'Game/Tactic/Rfl.lean',
-  '@[tactic MyNat.rfl] def evalRfl',
-  '@[tactic MyNat.rfl] meta def evalRfl',
-)
+edit('Game/Tactic/Rfl.lean', () => `public meta import Lean.Elab.Tactic.ElabTerm
+
+namespace MyNat
+
+/-!
+Browser-safe form of NNG's deliberately weakened \`rfl\`. It accepts only
+equality and iff reflexivity and elaborates under reducible transparency, just
+like the original handler, but needs no separately initialized tactic closure.
+-/
+macro "rfl" : tactic =>
+  \`(tactic| with_reducible first | exact Eq.refl _ | exact Iff.rfl)
+
+end MyNat
+`)
 replace(
   'Game/Tactic/Rw.lean',
   'import Lean.Elab.Tactic.Rewrite',
