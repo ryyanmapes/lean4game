@@ -90,6 +90,17 @@ def createTemplate : Lean.Elab.Command.CommandElabM Unit := pure ()
 end I18n
 `)
 
+// Lean's bundled propositional `tauto` tactic is sufficient for the handful
+// of NNG levels that teach it.  Mathlib's newer implementation brings a large
+// independent module closure whose initializer is not ABI-safe in Cauli's
+// purpose-linked WASM interpreter.  Keep the player-facing tactic name and
+// kernel proofs, but use the compiler's already-resident implementation.
+replace(
+  'Game/Tactic/FromMathlib.lean',
+  'import Mathlib.Tactic.Tauto',
+  'import Lean',
+)
+
 // Lean 4.33's module system does not unfold ordinary definitions across a
 // module boundary. Numeral reduction is intentionally part of NNG's kernel
 // computation, so expose precisely these two small recursive conversions.

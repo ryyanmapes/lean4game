@@ -302,7 +302,7 @@ jobs:
           mkdir -p .nng-import-probes
           for module in \
             I18n \
-            Mathlib.Tactic.Tauto \
+            Game.Tactic.FromMathlib \
             GameServer.Commands \
             Game.Metadata \
             Game.Levels.Tutorial \
