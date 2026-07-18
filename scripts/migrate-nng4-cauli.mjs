@@ -44,6 +44,23 @@ edit('Game.lean', source =>
 edit('Game/Levels/AdvAddition/L01add_right_cancel.lean', source =>
   source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
 
+// Lean 4.33 separates executable elaborators from ordinary declarations.
+// NNG's tactic modules are imported through Game.Metadata, so make that hop
+// explicitly meta-public; otherwise their syntax is visible in a level while
+// the associated tactic handler is absent (reported misleadingly as
+// `unknown tactic`, first seen for the game's deliberately weakened `rfl`).
+edit('Game/Metadata.lean', source => {
+  const migrated = source.replace(
+    /^import (Game\.Tactic\.[A-Za-z0-9_.]+)\r?$/gm,
+    'public meta import $1',
+  )
+  if (!migrated.includes('public meta import Game.Tactic.Rfl') ||
+      !migrated.includes('public meta import Game.Tactic.Rw')) {
+    throw new Error('Failed to expose NNG tactic elaborators through Game.Metadata')
+  }
+  return migrated
+})
+
 // lean-i18n imports Lake only to rediscover the current package/module name
 // while producing translation metadata. Both browser games build their main
 // library as `Game`; making that build-time fact explicit removes Lake's
