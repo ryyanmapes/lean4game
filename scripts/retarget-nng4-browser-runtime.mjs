@@ -14,15 +14,8 @@ const root = path.resolve(process.argv[2] ?? '../NNG4')
 const browserMetadata = `module
 
 public import Game.MyNat.Definition
-public import Game.Tactic.FromMathlib
-public import Game.Tactic.Induction
-public import Game.Tactic.Cases
 public import Game.Tactic.Rfl
 public import Game.Tactic.Rw
-public import Game.Tactic.Use
-public import Game.Tactic.Ne
-public import Game.Tactic.Xyzzy
-public import Game.Tactic.SimpAdd
 public meta import GameServer.Browser.Commands
 public meta import Lean.Elab.Tactic.Induction
 `

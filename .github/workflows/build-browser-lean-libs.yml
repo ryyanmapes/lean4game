@@ -312,7 +312,6 @@ jobs:
           mkdir -p .nng-import-probes
           for module in \
             I18n \
-            Game.Tactic.FromMathlib \
             GameServer.Browser.Commands \
             Game.Browser.Metadata \
             Game.Levels.Tutorial.L01rfl
