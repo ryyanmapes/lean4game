@@ -180,6 +180,8 @@ edit('Game/Tactic/Rfl.lean', () => `public meta import Lean.Elab.Tactic.ElabTerm
 
 namespace MyNat
 
+open Lean.Parser.Tactic
+
 /-!
 Browser-safe form of NNG's deliberately weakened \`rfl\`. It accepts only
 equality and iff reflexivity and elaborates under reducible transparency, just
@@ -190,16 +192,20 @@ macro "rfl" : tactic =>
 
 end MyNat
 `)
-replace(
-  'Game/Tactic/Rw.lean',
-  'import Lean.Elab.Tactic.Rewrite',
-  'public meta import Lean.Elab.Tactic.Rewrite',
-)
-replace(
-  'Game/Tactic/Rw.lean',
-  '@[tactic MyNat.rewriteSeq] def evalRewriteSeq',
-  '@[tactic MyNat.rewriteSeq] meta def evalRewriteSeq',
-)
+edit('Game/Tactic/Rw.lean', () => `public meta import Lean.Elab.Tactic.Rewrite
+
+namespace MyNat
+
+open Lean.Parser.Tactic
+
+/-! Browser-safe spelling of the NNG rewrite tactic. The authored tactic is
+deliberately identical to Lean's core \`rewrite\`; a macro preserves that exact
+behavior without a separately initialized tactic handler. -/
+macro "rw" rules:rwRuleSeq loc:(location)? : tactic =>
+  \`(tactic| rewrite $rules:rwRuleSeq $[$loc:location]?)
+
+end MyNat
+`)
 replace(
   'Game/Tactic/Ne.lean',
   '@[delab app.Not] def delab_not_mem',
