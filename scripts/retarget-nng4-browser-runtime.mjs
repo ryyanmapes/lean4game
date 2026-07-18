@@ -30,7 +30,13 @@ for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, '
   const relative = path.relative(root, file).replaceAll('\\', '/')
   if (relative.startsWith('Game/Levels/') && /^\s*Statement\b/m.test(after) &&
       !/^meta import GameServer\.Browser\.Commands$/m.test(after)) {
-    after = `meta import GameServer.Browser.Commands\n${after}`
+    if (!/^module\r?$/m.test(after)) {
+      throw new Error(`Expected module header before browser retarget: ${relative}`)
+    }
+    after = after.replace(
+      /^module\r?\n/,
+      matched => `${matched}\nmeta import GameServer.Browser.Commands\n`,
+    )
   }
   if (after !== before) {
     fs.writeFileSync(file, after)
