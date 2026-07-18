@@ -112,6 +112,13 @@ const linkedInitializer = moduleName => moduleName.startsWith('GameServer.')
 const retainedInitializers = new Set([...closure].map(initializer))
 const fullExports = fs.readFileSync(fullExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean)
 const requiredExterns = new Set(fs.readFileSync(externExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean))
+const nativeInitializers = new Set()
+for (const sourcePath of nativeSources) {
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  for (const match of source.matchAll(/\b(initialize_[A-Za-z0-9_]+)\s*\(/gmu)) {
+    nativeInitializers.add(`_${match[1]}`)
+  }
+}
 const exports = fullExports.filter(symbol =>
   symbol.startsWith('_initialize_')
     ? retainedInitializers.has(symbol)
@@ -119,10 +126,13 @@ const exports = fullExports.filter(symbol =>
 
 for (const moduleName of closure) {
   const symbol = initializer(moduleName)
-  if (!fullExports.includes(symbol) && !moduleName.startsWith('GameServer.')) {
+  const nativeInitializer = [...nativeInitializers].find(candidate =>
+    candidate.endsWith(`_${moduleName.replaceAll('.', '_')}`))
+  if (!fullExports.includes(symbol) && !moduleName.startsWith('GameServer.') && !nativeInitializer) {
     console.error(`Full export list has no initializer for ${moduleName} (${symbol})`)
     process.exit(1)
   }
+  if (nativeInitializer && !exports.includes(nativeInitializer)) exports.push(nativeInitializer)
 }
 
 // The purpose-built native GameServer objects are linked alongside Lean's archives.
