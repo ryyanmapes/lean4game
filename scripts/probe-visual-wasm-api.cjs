@@ -117,7 +117,7 @@ globalThis.Module = {
             mkLeanString(
               'import Game.Levels.Tutorial.L01rfl\n\n' +
               'example (x q : MyNat) : 37 * x + q = 37 * x + q := by\n' +
-              '  rfl\n',
+              '  exact Eq.refl _\n',
             ),
             mkLeanString('/work/nng4-tutorial.lean'),
           ),
