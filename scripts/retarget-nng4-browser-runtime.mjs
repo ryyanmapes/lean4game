@@ -5,6 +5,32 @@ import path from 'node:path'
 
 const root = path.resolve(process.argv[2] ?? '../NNG4')
 
+// `Game.Metadata` is the server application's catalogue: it pulls in level
+// documentation and the native GameServer command stack.  Browser levels get
+// that catalogue from gamedata JSON, so retaining it in their import closure
+// both wastes memory and initializes code that is not linked into the compact
+// WASM runtime.  This facade preserves the declarations and player-facing
+// tactics needed to typecheck an authored proof, without that server payload.
+const browserMetadata = `module
+
+public import Game.MyNat.Definition
+public import Game.Tactic.FromMathlib
+public import Game.Tactic.Induction
+public import Game.Tactic.Cases
+public import Game.Tactic.Rfl
+public import Game.Tactic.Rw
+public import Game.Tactic.Use
+public import Game.Tactic.Ne
+public import Game.Tactic.Xyzzy
+public import Game.Tactic.SimpAdd
+public meta import GameServer.Browser.Commands
+public meta import Lean.Elab.Tactic.Induction
+`
+
+const browserMetadataPath = path.join(root, 'Game', 'Browser', 'Metadata.lean')
+fs.mkdirSync(path.dirname(browserMetadataPath), { recursive: true })
+fs.writeFileSync(browserMetadataPath, browserMetadata)
+
 function leanFiles(input) {
   const files = []
   for (const entry of fs.readdirSync(input, { withFileTypes: true })) {
@@ -28,6 +54,12 @@ for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, '
       '$1GameServer.Browser',
     )
   const relative = path.relative(root, file).replaceAll('\\', '/')
+  if (relative.startsWith('Game/Levels/')) {
+    after = after.replace(
+      /^([ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+)Game\.Metadata[ \t]*$/gmu,
+      '$1Game.Browser.Metadata',
+    )
+  }
   if (relative.startsWith('Game/Levels/') && /^\s*Statement\b/m.test(after) &&
       !/^meta import GameServer\.Browser\.Commands$/m.test(after)) {
     if (!/^module\r?$/m.test(after)) {

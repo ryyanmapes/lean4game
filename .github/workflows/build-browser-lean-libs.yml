@@ -314,7 +314,8 @@ jobs:
             I18n \
             Game.Tactic.FromMathlib \
             GameServer.Browser.Commands \
-            Game.Metadata
+            Game.Browser.Metadata \
+            Game.Levels.Tutorial.L01rfl
           do
             echo "WASM CLI import probe: $module"
             printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
@@ -352,10 +353,6 @@ jobs:
             drag_rw_lhs [Nat.add_zero]
             click_goal
           LEAN
-
-          if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
-            sed -i '1i import Game' .visual-snapshot-work/probe.lean
-          fi
 
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
