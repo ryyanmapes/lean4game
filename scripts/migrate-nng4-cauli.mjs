@@ -241,7 +241,7 @@ replace(
 // commands taught by the game, but delegate to mathlib's maintained public
 // compatibility tactics instead.
 edit('Game/Tactic/Induction.lean', () => `public import Game.MyNat.Definition
-public import Mathlib.Tactic.Cases
+public meta import Mathlib.Tactic.Cases
 
 namespace MyNat
 
@@ -267,7 +267,7 @@ macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt binderIdent
 `)
 
 edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
-public import Mathlib.Tactic.Cases
+public meta import Mathlib.Tactic.Cases
 
 namespace MyNat
 
