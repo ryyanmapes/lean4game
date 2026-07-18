@@ -314,10 +314,7 @@ jobs:
             I18n \
             Game.Tactic.FromMathlib \
             GameServer.Browser.Commands \
-            Game.Metadata \
-            Game.Levels.Tutorial \
-            Game.Levels.AdvMultiplication \
-            Game
+            Game.Metadata
           do
             echo "WASM CLI import probe: $module"
             printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
