@@ -25,6 +25,12 @@ proof elaboration they are intentional no-ops, avoiding the native metadata
 environment while preserving every authored sample proof verbatim. -/
 macro "Hint" browserHintArg* interpolatedStr(term) : tactic => `(tactic| skip)
 
+/- A branch is pedagogical dead-end code: native Visual Lean runs it and
+restores the tactic state so authored hints can demonstrate a failed route.
+The browser already ships those messages in canonical JSON, therefore the
+proof checker can safely parse and discard the branch. -/
+macro "Branch" _branch:tacticSeq : tactic => `(tactic| skip)
+
 macro "Game" str : command => `(command| set_option linter.unusedVariables false)
 macro "World" str : command => `(command| set_option linter.unusedVariables false)
 macro "Level" num : command => `(command| set_option linter.unusedVariables false)
