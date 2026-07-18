@@ -116,6 +116,25 @@ replace(
   'import Game.Tactic.BrowserTauto',
 )
 
+// `nth_rewrite n [rules]` is syntax sugar for Lean's own occurrence-filtered
+// rewrite tactic.  Use that core form in the authored NNG proofs so the
+// browser does not need Mathlib.Tactic.NthRewrite's runtime closure.
+for (const file of fs.readdirSync(path.join(root, 'Game'), { recursive: true })) {
+  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
+  const relativePath = path.join('Game', file)
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  if (source.includes('nth_rewrite')) {
+    edit(relativePath, source => source.replace(
+      /\bnth_rewrite\s+([0-9]+)\b/g,
+      'rw (occs := .pos [$1])',
+    ))
+  }
+}
+edit('Game/Tactic/FromMathlib.lean', source => source.replace(
+  'import Mathlib.Tactic.NthRewrite\n',
+  '',
+))
+
 // Lean 4.33's module system does not unfold ordinary definitions across a
 // module boundary. Numeral reduction is intentionally part of NNG's kernel
 // computation, so expose precisely these two small recursive conversions.
