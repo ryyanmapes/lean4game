@@ -1,4 +1,5 @@
 import Lean.Elab.Tactic.ElabTerm
+import Lean.Elab.Tactic.Induction
 import Lean.Elab.Tactic.Rewrite
 import GameServer.Tactic.Visual
 
