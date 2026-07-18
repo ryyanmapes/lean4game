@@ -17,7 +17,7 @@ function edit(relativePath, transform) {
 }
 
 edit('Game/Tactic/LabelAttr.lean', () =>
-  'public meta import Lean.Meta.Tactic.Simp.Attr\n\n' +
+  'public import Lean.Meta.Tactic.Simp.Attr\n\n' +
   'open Lean Meta\n\n' +
   '/-- Simp set used by the Natural Numbers Game evaluator. -/\n' +
   'initialize myNatDecideSimpExtension : SimpExtension ←\n' +
