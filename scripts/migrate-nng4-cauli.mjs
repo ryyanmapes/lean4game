@@ -99,6 +99,35 @@ for (const file of fs.readdirSync(path.join(root, 'Game', 'Levels'), { recursive
   edit(relativePath, source => `${browserTacticImports}\n${source}`)
 }
 
+// Cauli's executable module boundary retains the parser for the imported NNG
+// induction macro but not its macro expander. Retarget only the temporary
+// browser-build copy of authored proof lines to Lean's equivalent core syntax.
+// Branch headers without bodies deliberately leave both goals for the bullets
+// already present in the original level source.
+let rewrittenInductionFiles = 0
+for (const file of fs.readdirSync(path.join(root, 'Game', 'Levels'), { recursive: true })) {
+  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
+  const relativePath = path.join('Game', 'Levels', file)
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  if (!/^\s*Statement\b/m.test(source)) continue
+  const generalizing = /^([ \t]+)induction[ \t]+([A-Za-z_][A-Za-z0-9_']*)[ \t]+with[ \t]+([A-Za-z_][A-Za-z0-9_']*|_)[ \t]+([A-Za-z_][A-Za-z0-9_']*|_)[ \t]+generalizing[ \t]+([A-Za-z_][A-Za-z0-9_' ]*)[ \t]*$/gm
+  const ordinary = /^([ \t]+)induction[ \t]+([A-Za-z_][A-Za-z0-9_']*)[ \t]+with[ \t]+([A-Za-z_][A-Za-z0-9_']*|_)[ \t]+([A-Za-z_][A-Za-z0-9_']*|_)[ \t]*$/gm
+  const migrated = source
+    .replace(generalizing, (_line, indent, target, n, ih, xs) =>
+      `${indent}induction ${target} using MyNat.rec' generalizing ${xs.trim()} with\n` +
+      `${indent}| zero\n${indent}| succ ${n} ${ih}`)
+    .replace(ordinary, (_line, indent, target, n, ih) =>
+      `${indent}induction ${target} using MyNat.rec' with\n` +
+      `${indent}| zero\n${indent}| succ ${n} ${ih}`)
+  if (migrated === source) continue
+  edit(relativePath, () => migrated)
+  rewrittenInductionFiles++
+}
+if (rewrittenInductionFiles === 0) {
+  throw new Error('No authored NNG induction proof lines were retargeted')
+}
+console.log(`Retargeted induction proofs in ${rewrittenInductionFiles} NNG level files.`)
+
 // lean-i18n imports Lake only to rediscover the current package/module name
 // while producing translation metadata. Both browser games build their main
 // library as `Game`; making that build-time fact explicit removes Lake's
