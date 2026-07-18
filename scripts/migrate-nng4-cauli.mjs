@@ -20,7 +20,7 @@ edit('Game/Tactic/LabelAttr.lean', () =>
   'public import Lean.Meta.Tactic.Simp.Attr\n\n' +
   'open Lean Meta\n\n' +
   '/-- Simp set used by the Natural Numbers Game evaluator. -/\n' +
-  'initialize myNatDecideSimpExtension : SimpExtension ←\n' +
+  'builtin_initialize myNatDecideSimpExtension : SimpExtension ←\n' +
   '  registerSimpAttr `MyNat_decide "Natural Numbers Game evaluation theorem"\n')
 
 function replace(relativePath, from, to) {
