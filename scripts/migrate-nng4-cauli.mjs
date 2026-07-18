@@ -61,6 +61,18 @@ edit('Game/Metadata.lean', source => {
   return migrated
 })
 
+for (const file of fs.readdirSync(path.join(root, 'Game'), { recursive: true })) {
+  if (typeof file !== 'string' || !file.endsWith('.lean')) continue
+  const relativePath = path.join('Game', file)
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
+  if (/^import Game\.Metadata\r?$/m.test(source)) {
+    edit(relativePath, source => source.replace(
+      /^import Game\.Metadata\r?$/m,
+      'meta import Game.Metadata',
+    ))
+  }
+}
+
 // lean-i18n imports Lake only to rediscover the current package/module name
 // while producing translation metadata. Both browser games build their main
 // library as `Game`; making that build-time fact explicit removes Lake's
