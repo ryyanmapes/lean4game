@@ -241,7 +241,7 @@ replace(
 // commands taught by the game, but delegate to mathlib's maintained public
 // compatibility tactics instead.
 edit('Game/Tactic/Induction.lean', () => `public import Game.MyNat.Definition
-public meta import Mathlib.Tactic.Cases
+public meta import Lean.Elab.Tactic.Induction
 
 namespace MyNat
 
@@ -258,12 +258,21 @@ open Lean Parser Tactic
 /-- Lean-3-style induction syntax used throughout the Natural Number Game.
 Every binder is colGt-bounded so longest-match parsing cannot swallow the
 next line's tactic as a binder name. -/
-macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt binderIdent) ih:(colGt binderIdent) : tactic =>
-  \`(tactic| induction' $target using MyNat.rec' with $n $ih)
+macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt ident) ih:(colGt ident) : tactic =>
+  \`(tactic| induction $target using MyNat.rec' with
+    | zero
+    | succ $n $ih)
 
-macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt binderIdent) ih:(colGt binderIdent)
-    " generalizing " generalized:(colGt ident) : tactic =>
-  \`(tactic| induction' $target using MyNat.rec' with $n $ih generalizing $generalized)
+macro "induction " target:Parser.Tactic.elimTarget " with " "_" "_" : tactic =>
+  \`(tactic| induction $target using MyNat.rec' with
+    | zero
+    | succ _ _)
+
+macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt ident) ih:(colGt ident)
+    " generalizing " generalized:(colGt ident)+ : tactic =>
+  \`(tactic| induction $target using MyNat.rec' generalizing $generalized* with
+    | zero
+    | succ $n $ih)
 `)
 
 edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
