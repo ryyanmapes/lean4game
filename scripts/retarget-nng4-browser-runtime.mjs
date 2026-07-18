@@ -20,11 +20,11 @@ for (const file of [path.join(root, 'Game.lean'), ...leanFiles(path.join(root, '
   const before = fs.readFileSync(file, 'utf8')
   const after = before
     .replace(
-      /^(\s*(?:public\s+)?(?:meta\s+)?import\s+)GameServer\.Commands\s*$/gmu,
+      /^([ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+)GameServer\.Commands[ \t]*$/gmu,
       '$1GameServer.Browser.Commands',
     )
     .replace(
-      /^(\s*(?:public\s+)?(?:meta\s+)?import\s+)GameServer\s*$/gmu,
+      /^([ \t]*(?:public[ \t]+)?(?:meta[ \t]+)?import[ \t]+)GameServer[ \t]*$/gmu,
       '$1GameServer.Browser',
     )
   if (after !== before) {
