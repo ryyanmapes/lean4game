@@ -1,7 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(process.argv[2] ?? '../NNG4')
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 
 function edit(relativePath, transform) {
   const file = path.join(root, relativePath)
@@ -21,6 +23,16 @@ function replace(relativePath, from, to) {
     }
     return source.replace(from, to)
   })
+}
+
+function add(relativePath, source) {
+  const file = path.join(root, relativePath)
+  if (fs.existsSync(file)) {
+    throw new Error(`Expected browser-only file to be absent: ${relativePath}`)
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, source)
+  console.log(`added ${relativePath}`)
 }
 
 // Algorithm World is intentionally absent from the browser edition. It is not
@@ -90,15 +102,18 @@ def createTemplate : Lean.Elab.Command.CommandElabM Unit := pure ()
 end I18n
 `)
 
-// Lean's bundled propositional `tauto` tactic is sufficient for the handful
-// of NNG levels that teach it.  Mathlib's newer implementation brings a large
-// independent module closure whose initializer is not ABI-safe in Cauli's
-// purpose-linked WASM interpreter.  Keep the player-facing tactic name and
-// kernel proofs, but use the compiler's already-resident implementation.
+// Mathlib's `tauto` implementation brings a large independent module closure
+// whose initializer is not ABI-safe in Cauli's purpose-linked WASM interpreter.
+// Retain the player-facing tactic name with a compact truth-table elaborator
+// that asks Lean's own simplifier to construct and check every proof branch.
+add('Game/Tactic/BrowserTauto.lean', fs.readFileSync(
+  path.join(scriptDir, 'browser-tauto.lean'),
+  'utf8',
+))
 replace(
   'Game/Tactic/FromMathlib.lean',
   'import Mathlib.Tactic.Tauto',
-  'import Lean',
+  'import Game.Tactic.BrowserTauto',
 )
 
 // Lean 4.33's module system does not unfold ordinary definitions across a
