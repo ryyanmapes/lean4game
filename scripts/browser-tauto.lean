@@ -1,4 +1,7 @@
-public meta import Lean.Elab.Tactic
+public meta import Lean.Elab.Tactic.Basic
+public meta import Lean.Elab.Tactic.BuiltinTactic
+public meta import Lean.Elab.Tactic.Simp
+public meta import Lean.PrettyPrinter.Delaborator.Builtins
 
 /-!
 Small browser-safe implementation of the propositional `tauto` tactic used by
