@@ -332,8 +332,14 @@ jobs:
           cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
           mkdir -p .nng-import-probes
           for module in \
-            Game.Tactic.BrowserTauto \
-            Game.Tactic.Cases \
+            Game.Tactic.Xyzzy \
+            Game.Tactic.Use \
+            Game.Tactic.Induction \
+            Game.Tactic.Rfl \
+            Game.Tactic.Rw \
+            Game.Tactic.SimpAdd \
+            Game.Tactic.FromMathlib \
+            Game.Tactic.BrowserNthRewrite \
             Game.Browser.Runtime
           do
             echo "WASM CLI import probe: $module"
