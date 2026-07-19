@@ -358,7 +358,10 @@ macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt ident) ih:(
     | succ $n $ih)
 `)
 
-add('Game/Tactic/BrowserCasesCore.lean', `public meta import Lean.Elab.Tactic.Induction
+add('Game/Tactic/BrowserCasesCore.lean', `module
+
+prelude
+public meta import Lean.Elab.Tactic.Induction
 public meta import Batteries.Data.List.Basic
 public meta import Batteries.Lean.Expr
 import all Lean.Elab.Tactic.Induction
