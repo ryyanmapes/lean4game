@@ -16,6 +16,7 @@ const browserMetadata = `module
 public import Game.MyNat.Definition
 public meta import GameServer.Browser.Commands
 public meta import Lean.Elab.Tactic.Induction
+public meta import Game.Tactic.BrowserApplyAt
 `
 
 const browserMetadataPath = path.join(root, 'Game', 'Browser', 'Metadata.lean')
@@ -41,6 +42,7 @@ public import Game.Levels.AdvMultiplication
 public meta import GameServer.Browser.Commands
 public meta import Lean.Elab.Tactic.Induction
 public meta import Game.Tactic.FromMathlib
+public meta import Game.Tactic.BrowserApplyAt
 public meta import Game.Tactic.Induction
 public meta import Game.Tactic.Cases
 public meta import Game.Tactic.Rfl

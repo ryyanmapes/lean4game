@@ -64,6 +64,59 @@ function add(relativePath, source) {
   console.log(`added ${relativePath}`)
 }
 
+// `apply f at h` is taught by Implication World. Upstream obtained it only
+// incidentally from PeanoAxioms' unused Mathlib ApplyAt import. Keep the exact
+// syntax and behavior with the small public Lean API implementation below.
+add('Game/Tactic/BrowserApplyAt.lean', `module
+
+public meta import Lean.Elab.Tactic.ElabTerm
+public meta import Lean.Meta.AppBuilder
+
+public meta section
+
+open Lean Meta Elab Tactic Term
+
+namespace Game.Tactic
+
+private def forallMetaTelescopeUntilDefEq
+    (e t : Expr) (kind : MetavarKind := MetavarKind.natural) :
+    MetaM (Array Expr × Array BinderInfo × Expr) := do
+  let (ms, bs, tp) ← forallMetaTelescopeReducing e (some 1) kind
+  unless ms.size == 1 do
+    if ms.size == 0 then
+      throwError m!"{← ppExpr e} is not the type of a function"
+    else
+      throwError "failed to inspect function argument"
+  let mut mvs := ms
+  let mut bis := bs
+  let mut out := tp
+  while !(← isDefEq (← inferType mvs.toList.getLast!) t) do
+    let (ms, bs, tp) ← forallMetaTelescopeReducing out (some 1) kind
+    unless ms.size == 1 do
+      throwError m!"Failed to find {← ppExpr t} as an argument of {← ppExpr e}"
+    mvs := mvs ++ ms
+    bis := bis ++ bs
+    out := tp
+  return (mvs, bis, out)
+
+elab "apply " t:term " at " i:ident : tactic =>
+    withSynthesize <| withMainContext do
+  let f ← elabTermForApply t
+  let some ldecl := (← getLCtx).findFromUserName? i.getId
+    | throwErrorAt i m!"Identifier {i} not found"
+  let (mvs, bis, _) ← forallMetaTelescopeUntilDefEq (← inferType f) ldecl.type
+  for (m, b) in mvs.zip bis do
+    if b.isInstImplicit && !(← m.mvarId!.isAssigned) then
+      try m.mvarId!.inferInstance
+      catch _ => continue
+  let (_, mainGoal) ← (← getMainGoal).note ldecl.userName
+    (← mkAppOptM' f (mvs.pop.push ldecl.toExpr |>.map some))
+  let mainGoal ← mainGoal.tryClear ldecl.fvarId
+  replaceMainGoal <| [mainGoal] ++ mvs.pop.toList.map (·.mvarId!)
+
+end Game.Tactic
+`)
+
 // Algorithm World is intentionally absent from the browser edition. It is not
 // a proof prerequisite of Advanced Addition; that level's Implication import
 // already supplies every declaration its proof uses. Keeping these umbrella
@@ -82,9 +135,13 @@ edit('Game/Metadata.lean', source => {
   const migrated = source.replace(
     /^import (Game\.Tactic\.[A-Za-z0-9_.]+)\r?$/gm,
     'public meta import $1',
+  ).replace(
+    /^public meta import Game\.Tactic\.FromMathlib$/m,
+    'public meta import Game.Tactic.FromMathlib\npublic meta import Game.Tactic.BrowserApplyAt',
   )
   if (!migrated.includes('public meta import Game.Tactic.Rfl') ||
-      !migrated.includes('public meta import Game.Tactic.Rw')) {
+      !migrated.includes('public meta import Game.Tactic.Rw') ||
+      !migrated.includes('public meta import Game.Tactic.BrowserApplyAt')) {
     throw new Error('Failed to expose NNG tactic elaborators through Game.Metadata')
   }
   return migrated
@@ -92,6 +149,7 @@ edit('Game/Metadata.lean', source => {
 
 const browserTacticImports = `meta import Lean.Elab.Tactic.Induction
 meta import Game.Tactic.FromMathlib
+meta import Game.Tactic.BrowserApplyAt
 meta import Game.Tactic.Induction
 meta import Game.Tactic.Cases
 meta import Game.Tactic.Rfl
