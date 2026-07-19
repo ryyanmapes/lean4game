@@ -247,14 +247,14 @@ replace(
 // computation, so expose precisely these two small recursive conversions.
 edit('Game/MyNat/Definition.lean', source => {
   const exposed = source
-    .replace(/@\[MyNat_decide\]\r?\ndef ofNat/, '@[MyNat_decide, expose]\ndef ofNat')
-    .replace(/@\[MyNat_decide\]\r?\ndef toNat/, '@[MyNat_decide, expose]\ndef toNat')
+    .replace(/^def ofNat/m, '@[expose]\ndef ofNat')
+    .replace(/^def toNat/m, '@[expose]\ndef toNat')
     .replace(
       'theorem zero_eq_0 : MyNat.zero = 0 := rfl',
       'theorem zero_eq_0 : MyNat.zero = 0 := by change MyNat.zero = MyNat.zero; rfl',
     )
-  if (!exposed.includes('@[MyNat_decide, expose]\ndef ofNat') ||
-      !exposed.includes('@[MyNat_decide, expose]\ndef toNat')) {
+  if (!exposed.includes('@[expose]\ndef ofNat') ||
+      !exposed.includes('@[expose]\ndef toNat')) {
     throw new Error('Failed to expose the NNG numeral conversion definitions')
   }
   return exposed
