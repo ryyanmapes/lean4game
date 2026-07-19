@@ -28,6 +28,9 @@ const INITIAL_PROOF_RETRY_DELAY_MS = 2000
 const INITIAL_PROOF_ATTEMPT_TIMEOUT_MS = 600000
 const LEVEL_DATA_MAX_ATTEMPTS = 5
 const LEVEL_DATA_RETRY_DELAY_MS = 1000
+// Warm snapshot-backed transitions often finish within a frame or two. Avoid
+// flashing the full loading animation for those fast paths.
+const LOADING_CHROME_DELAY_MS = 200
 
 function delay(ms: number) {
   return new Promise<void>(resolve => window.setTimeout(resolve, ms))
@@ -142,6 +145,8 @@ export function VisualProofPage() {
   }, [gameId, worldId, levelId, solvingId])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [presentationReady, setPresentationReady] = useState(false)
+  const [showLoadingChrome, setShowLoadingChrome] = useState(false)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
   const [worldTitle, setWorldTitle] = useState<string | null>(null)
   const [worldSize, setWorldSize] = useState<number | null>(null)
@@ -168,6 +173,12 @@ export function VisualProofPage() {
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
   const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
   const { getClient, disposeClient } = useVisualRpcClient()
+
+  useEffect(() => {
+    setShowLoadingChrome(false)
+    const timer = window.setTimeout(() => setShowLoadingChrome(true), LOADING_CHROME_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [gameId, worldId, levelId])
 
   useEffect(() => {
     const updatePhonePortrait = () => setIsPhonePortrait(isPhonePortraitViewport())
@@ -247,6 +258,7 @@ export function VisualProofPage() {
   // Fetch the level JSON directly to get the lemma list (InventoryPanel is not mounted
   // on this standalone route, so the jotai atom would always be empty).
   useEffect(() => {
+    setPresentationReady(false)
     setTheoremEqualityHyps([])
     setPropositionTheorems([])
     setVisualTactics([])
@@ -279,7 +291,11 @@ export function VisualProofPage() {
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
-        if (!active || !levelData) return
+        if (!active) return
+        if (!levelData) {
+          setPresentationReady(true)
+          return
+        }
         if (levelData.title) setLevelTitle(levelData.title)
         if (levelData.visualEmphasize?.length) setEmphasizeItems(levelData.visualEmphasize)
         if (levelData.visualGoalInfos?.length) setVisualGoalInfos(levelData.visualGoalInfos)
@@ -397,8 +413,13 @@ export function VisualProofPage() {
         }
         setTheoremEqualityHyps(hyps)
         setPropositionTheorems(propositionHyps)
+        setPresentationReady(true)
       })
-      .catch(() => { /* level fetch failed — no theorems */ })
+      .catch(() => {
+        // Optional presentation metadata must not leave an otherwise usable
+        // Lean proof route stuck on its loading screen.
+        if (active) setPresentationReady(true)
+      })
 
     return () => { active = false }
   }, [gameId, worldId, levelId])
@@ -412,9 +433,12 @@ export function VisualProofPage() {
   const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
   const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
 
-  if (!canvasState) {
+  if (!canvasState || !presentationReady) {
+    if (!showLoadingChrome) {
+      return <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} aria-busy="true" />
+    }
     return (
-      <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`}>
+      <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} aria-busy="true">
         <VisualHeader
           worldId={worldId}
           worldTitle={worldTitle ?? undefined}
