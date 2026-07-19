@@ -108,6 +108,8 @@ const initializer = moduleName => `_initialize_${moduleName.replaceAll('.', '_')
 // prefix twice (for example initialize_GameServer_GameServer_Tactic_Visual).
 const linkedInitializer = moduleName => moduleName.startsWith('GameServer.')
   ? `_initialize_GameServer_${moduleName.replaceAll('.', '_')}`
+  : moduleName.startsWith('Game.')
+    ? `_initialize_Game_${moduleName.replaceAll('.', '_')}`
   : initializer(moduleName)
 const retainedInitializers = new Set([...closure].map(initializer))
 const fullExports = fs.readFileSync(fullExportsPath, 'utf8').split(/\r?\n/u).filter(Boolean)

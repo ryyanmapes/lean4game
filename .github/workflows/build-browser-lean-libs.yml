@@ -284,6 +284,7 @@ jobs:
             server/.lake/build/ir/GameServer/GoalClick.c \
             server/.lake/build/ir/GameServer/PremiseApplication.c \
             server/.lake/build/ir/GameServer/Browser/ProofProbe.c \
+            server/.lake/build/ir/GameServer/Browser/Commands.c \
             server/.lake/build/ir/GameServer/Tactic/Visual.c \
             ../NNG4/.lake/build/ir/Game/Browser/Metadata.c \
             ../NNG4/.lake/build/ir/Game/MyNat/Definition.c
@@ -293,6 +294,7 @@ jobs:
             server/.lake/build/ir/GameServer/GoalClick.c \
             server/.lake/build/ir/GameServer/PremiseApplication.c \
             server/.lake/build/ir/GameServer/Browser/ProofProbe.c \
+            server/.lake/build/ir/GameServer/Browser/Commands.c \
             server/.lake/build/ir/GameServer/Tactic/Visual.c \
             ../NNG4/.lake/build/ir/Game/Browser/Metadata.c \
             ../NNG4/.lake/build/ir/Game/MyNat/Definition.c
