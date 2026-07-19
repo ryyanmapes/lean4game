@@ -591,11 +591,11 @@ function goalIsReflexiveEquality(stream: GoalStream): boolean {
 
 function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
   if (goalIsReflexiveEquality(stream)) return false
-  return stream.equalityTree !== undefined || parsedGoalTarget(stream, allowComparisons) !== null
+  return stream.equalityTree != null || parsedGoalTarget(stream, allowComparisons) !== null
 }
 
 function goalIsConstructable(stream: GoalStream): boolean {
-  return stream.existsInfo !== undefined
+  return stream.existsInfo != null
 }
 
 function hypForallSpecification(card: HypCardType) {
@@ -612,7 +612,7 @@ function hypIsConstructable(card: HypCardType): boolean {
 }
 
 function hypIsTransformable(card: HypCardType, allowComparisons: boolean): boolean {
-  return card.hyp.equalityTree !== undefined || parsedHypTarget(card, allowComparisons) !== null
+  return card.hyp.equalityTree != null || parsedHypTarget(card, allowComparisons) !== null
 }
 
 function natContextVarNames(stream: GoalStream): string[] {

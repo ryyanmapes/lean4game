@@ -230,7 +230,17 @@ export class LocalWasmRpcClient {
     // The snapshot contains all non-Algorithm NNG declarations behind one
     // stable facade. Every level must repeat this exact import header: the
     // persistent WASM compiler keys its cached environment by that header.
-    const code = `import GameServer.Tactic.Visual\nimport Game.Browser.Runtime\n\n${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry\n`
+    const declaration = `${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry`
+    // Lean4Game's exported `descrFormat` contains the statement itself, but not
+    // the namespace surrounding the authored level. Every NNG4 level is
+    // declared in `MyNat`; restoring that context is what makes unqualified
+    // names such as `succ`, `zero_add`, and `add_assoc` resolve exactly as they
+    // do in the original game sources.
+    const repositoryName = this.gameId.split('/').at(-1)?.toLowerCase()
+    const namespacedDeclaration = repositoryName === 'nng4'
+      ? `namespace MyNat\n\n${declaration}\n\nend MyNat`
+      : declaration
+    const code = `import GameServer.Tactic.Visual\nimport Game.Browser.Runtime\n\n${namespacedDeclaration}\n`
     const result = await this.engine.compile(code)
     if (!result.success) throw new Error(result.error ?? 'Lean WASM failed')
 
