@@ -423,6 +423,36 @@ elab "nng_cases' " tgts:(Parser.Tactic.elimTarget,+)
 end Game.Browser.Cases
 `)
 
+// The Mathlib-compatible implementation above depends on private induction
+// elaborator bodies, which Cauli's exported IR intentionally omits. NNG's
+// authored cases commands all target a local variable or hypothesis, so use
+// Lean's public meta-level cases primitive directly and preserve the same flat
+// Lean-3-style binder naming order.
+edit('Game/Tactic/BrowserCasesCore.lean', () => `public meta import Lean.Elab.Tactic.Basic
+public meta import Lean.Meta.Tactic.Cases
+public meta import Lean.Meta.Tactic.Rename
+
+open Lean Meta Elab Tactic
+
+/-- Browser-safe Lean-3-style cases syntax built only from public Lean APIs. -/
+elab "nng_cases' " target:ident
+    withArg:((" with" (ppSpace colGt binderIdent)+)?) : tactic => do
+  let g :: gs ← getUnsolvedGoals | throwNoGoalsToBeSolved
+  g.withContext do
+    let fvarId ← getFVarId target
+    let results ← g.cases fvarId
+    let mut names : List Syntax := withArg[1].getArgs |>.toList
+    let mut subgoals := #[]
+    for result in results do
+      let mut goal := result.mvarId
+      for field in result.fields do
+        if let nameStx :: rest := names then
+          names := rest
+          goal ← goal.rename field (getNameOfIdent' nameStx[0])
+      subgoals := subgoals.push goal
+    setGoals <| subgoals.toList ++ gs
+`)
+
 edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
 public meta import Game.Tactic.BrowserCasesCore
 
@@ -502,14 +532,14 @@ open Lean Parser Tactic
 Every binder is colGt-bounded: without it, \`cases b with d\` followed by a
 tactic line like \`intro h\` lets longest-match parsing feed \`intro\` to the
 two-binder overload as the second binder name (seen in AdvAddition L05). -/
-macro "cases " target:Parser.Tactic.elimTarget : tactic =>
+macro "cases " target:ident : tactic =>
   \`(tactic| nng_cases' $target)
 
-macro "cases " target:Parser.Tactic.elimTarget " with"
+macro "cases " target:ident " with"
     name:(colGt binderIdent) : tactic =>
   \`(tactic| nng_cases' $target with $name <;> try rw [MyNat.zero_eq_0] at *)
 
-macro "cases " target:Parser.Tactic.elimTarget " with"
+macro "cases " target:ident " with"
     first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
   \`(tactic| nng_cases' $target with $first $second)
 `)
