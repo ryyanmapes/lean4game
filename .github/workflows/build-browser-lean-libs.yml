@@ -288,6 +288,8 @@ jobs:
             server/.lake/build/ir/GameServer/Tactic/Visual.c \
             ../NNG4/.lake/build/ir/Game/Browser/Metadata.c \
             ../NNG4/.lake/build/ir/Game/MyNat/Definition.c \
+            ../NNG4/.lake/build/ir/Game/Tactic/BrowserApplyAt.c \
+            ../NNG4/.lake/build/ir/Game/Tactic/BrowserHave.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserCasesCore.c \
             ../NNG4/.lake/build/ir/Game/Tactic/Cases.c
 
@@ -300,6 +302,8 @@ jobs:
             server/.lake/build/ir/GameServer/Tactic/Visual.c \
             ../NNG4/.lake/build/ir/Game/Browser/Metadata.c \
             ../NNG4/.lake/build/ir/Game/MyNat/Definition.c \
+            ../NNG4/.lake/build/ir/Game/Tactic/BrowserApplyAt.c \
+            ../NNG4/.lake/build/ir/Game/Tactic/BrowserHave.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserCasesCore.c \
             ../NNG4/.lake/build/ir/Game/Tactic/Cases.c
           do
