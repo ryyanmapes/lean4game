@@ -97,7 +97,6 @@ meta import Game.Tactic.Cases
 meta import Game.Tactic.Rfl
 meta import Game.Tactic.Rw
 meta import Game.Tactic.Use
-meta import Game.Tactic.Ne
 meta import Game.Tactic.Xyzzy
 meta import Game.Tactic.SimpAdd
 meta import Game.Tactic.BrowserTauto
@@ -289,6 +288,31 @@ macro "rw" rules:rwRuleSeq loc:(location)? : tactic =>
   \`(tactic| rewrite $rules:rwRuleSeq $[$loc:location]?)
 
 end MyNat
+`)
+
+// NNG uses `use` only to provide witnesses for existential goals. Preserve
+// its player-facing comma-separated syntax with Lean's core `refine`, avoiding
+// Mathlib.Tactic.Use and its large initializer closure.
+edit('Game/Tactic/Use.lean', () => `public meta import Lean.Elab.Tactic.Basic
+
+open Lean Parser Tactic
+
+syntax (name := MyNat.useSyntax) "use " term,+ : tactic
+
+macro_rules
+  | \`(tactic| use $args:term,*) => \`(tactic| refine ⟨$args,*, ?_⟩)
+`)
+
+// The magic tactic is a tiny axiom-backed macro; importing the `Lean`
+// umbrella for it retained the entire language server in every NNG worker.
+edit('Game/Tactic/Xyzzy.lean', () => `public meta import Lean.Elab.Tactic.Basic
+
+universe u
+
+@[never_extract]
+axiom xyzzyAxiom (α : Sort u) (synthetic := false) : α
+
+macro "xyzzy" : tactic => \`(tactic| exact @xyzzyAxiom _ false)
 `)
 replace(
   'Game/Tactic/Ne.lean',

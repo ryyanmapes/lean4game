@@ -46,7 +46,6 @@ public meta import Game.Tactic.Cases
 public meta import Game.Tactic.Rfl
 public meta import Game.Tactic.Rw
 public meta import Game.Tactic.Use
-public meta import Game.Tactic.Ne
 public meta import Game.Tactic.Xyzzy
 public meta import Game.Tactic.SimpAdd
 public meta import Game.Tactic.BrowserTauto
