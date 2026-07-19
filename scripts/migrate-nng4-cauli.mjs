@@ -117,6 +117,40 @@ elab "apply " t:term " at " i:ident : tactic =>
 end Game.Tactic
 `)
 
+// Advanced Multiplication teaches Lean-3-style `have h : P`, where proving P
+// becomes the next goal and the continuation receives h.  This small variant
+// covers the game's documented syntax without Mathlib.Tactic.Have's unrelated
+// binder, let, and suffices extensions.
+add('Game/Tactic/BrowserHave.lean', `module
+
+public meta import Lean.Elab.SyntheticMVars
+public meta import Lean.Elab.Tactic.Basic
+public meta import Lean.Meta.Tactic.Assert
+
+public meta section
+
+open Lean Meta Elab Tactic Term
+
+namespace Game.Tactic
+
+syntax (name := browserHave) "have " ident " : " term : tactic
+
+elab_rules : tactic
+  | `(tactic| have $name:ident : $type:term) => withMainContext do
+      let goal ← getMainGoal
+      let type ← withRef type do
+        let type ← Term.elabType type
+        Term.synthesizeSyntheticMVars (postpone := .no)
+        instantiateMVars type
+      let proof ← mkFreshExprMVar type MetavarKind.syntheticOpaque name.getId
+      let (fvar, continuation) ← (← goal.assert name.getId type proof).intro1P
+      continuation.withContext do
+        Term.addTermInfo' (isBinder := true) name (mkFVar fvar)
+      replaceMainGoal [proof.mvarId!, continuation]
+
+end Game.Tactic
+`)
+
 // Algorithm World is intentionally absent from the browser edition. It is not
 // a proof prerequisite of Advanced Addition; that level's Implication import
 // already supplies every declaration its proof uses. Keeping these umbrella
@@ -137,11 +171,14 @@ edit('Game/Metadata.lean', source => {
     'public meta import $1',
   ).replace(
     /^public meta import Game\.Tactic\.FromMathlib$/m,
-    'public meta import Game.Tactic.FromMathlib\npublic meta import Game.Tactic.BrowserApplyAt',
+    'public meta import Game.Tactic.FromMathlib\n' +
+      'public meta import Game.Tactic.BrowserApplyAt\n' +
+      'public meta import Game.Tactic.BrowserHave',
   )
   if (!migrated.includes('public meta import Game.Tactic.Rfl') ||
       !migrated.includes('public meta import Game.Tactic.Rw') ||
-      !migrated.includes('public meta import Game.Tactic.BrowserApplyAt')) {
+      !migrated.includes('public meta import Game.Tactic.BrowserApplyAt') ||
+      !migrated.includes('public meta import Game.Tactic.BrowserHave')) {
     throw new Error('Failed to expose NNG tactic elaborators through Game.Metadata')
   }
   return migrated
@@ -150,6 +187,7 @@ edit('Game/Metadata.lean', source => {
 const browserTacticImports = `meta import Lean.Elab.Tactic.Induction
 meta import Game.Tactic.FromMathlib
 meta import Game.Tactic.BrowserApplyAt
+meta import Game.Tactic.BrowserHave
 meta import Game.Tactic.Induction
 meta import Game.Tactic.Cases
 meta import Game.Tactic.Rfl
