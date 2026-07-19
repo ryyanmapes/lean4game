@@ -557,25 +557,35 @@ edit('.lake/packages/mathlib/Mathlib/Logic/Basic.lean', source => {
   return source.replace(pattern, '$1 := by\n  cases e\n  exact h')
 })
 
-edit('Game/MyNat/PeanoAxioms.lean', source => {
-  const exposed = source
-    // These three Mathlib tactic umbrellas are historical leftovers: this
-    // module only uses `rw`, `intro`, and `trivial`.  Pulling them into the
-    // browser closure adds roughly 200 modules and, on the Cauli runtime,
-    // reaches an unlinked tactic initializer while importing Implication.
-    .replace(/^import Mathlib\.Tactic\.ApplyAt\r?\n/m, '')
-    .replace(/^import Mathlib\.Tactic\.Contrapose\r?\n/m, '')
-    .replace(/^import Mathlib\.Tactic\.Have\r?\n/m,
-      'import Lean.Elab.Tactic.BuiltinTactic\nimport Lean.Elab.Tactic.Rewrite\n')
-    .replace(/\bdef pred\b/, '@[expose] def pred')
-    .replace(/\bdef is_zero\b/, '@[expose] def is_zero')
-  if (!exposed.includes('import Lean.Elab.Tactic.Rewrite') ||
-      !exposed.includes('@[expose] def pred') ||
-      !exposed.includes('@[expose] def is_zero')) {
-    throw new Error('Failed to narrow and expose the NNG Peano helper definitions')
-  }
-  return exposed
-})
+// The upstream file historically imports ApplyAt, Contrapose, and Have merely
+// to obtain common tactic/command syntax.  None is part of the declarations'
+// computational content.  Direct proof terms preserve the same kernel-checked
+// theorems while keeping all three Mathlib tactic closures out of the browser.
+edit('Game/MyNat/PeanoAxioms.lean', () => `import Game.MyNat.Definition
+
+namespace MyNat
+
+attribute [-simp] MyNat.succ.injEq
+
+@[expose] def pred : MyNat → MyNat
+  | 0 => 37
+  | succ n => n
+
+theorem pred_succ (n : MyNat) : pred (succ n) = n := rfl
+
+theorem succ_inj (a b : MyNat) (h : succ a = succ b) : a = b :=
+  congrArg pred h
+
+@[expose] def is_zero : MyNat → Prop
+  | 0 => True
+  | succ _ => False
+
+theorem is_zero_zero : is_zero 0 = True := rfl
+theorem is_zero_succ (n : MyNat) : is_zero (succ n) = False := rfl
+
+theorem zero_ne_succ (a : MyNat) : 0 ≠ succ a := fun h =>
+  Eq.mp (congrArg is_zero h) True.intro
+`)
 
 edit('Game/MyNat/LE.lean', source => {
   const exposed = source
