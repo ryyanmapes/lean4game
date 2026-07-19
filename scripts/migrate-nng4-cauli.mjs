@@ -559,11 +559,20 @@ edit('.lake/packages/mathlib/Mathlib/Logic/Basic.lean', source => {
 
 edit('Game/MyNat/PeanoAxioms.lean', source => {
   const exposed = source
+    // These three Mathlib tactic umbrellas are historical leftovers: this
+    // module only uses `rw`, `intro`, and `trivial`.  Pulling them into the
+    // browser closure adds roughly 200 modules and, on the Cauli runtime,
+    // reaches an unlinked tactic initializer while importing Implication.
+    .replace(/^import Mathlib\.Tactic\.ApplyAt\r?\n/m, '')
+    .replace(/^import Mathlib\.Tactic\.Contrapose\r?\n/m, '')
+    .replace(/^import Mathlib\.Tactic\.Have\r?\n/m,
+      'import Lean.Elab.Tactic.BuiltinTactic\nimport Lean.Elab.Tactic.Rewrite\n')
     .replace(/\bdef pred\b/, '@[expose] def pred')
     .replace(/\bdef is_zero\b/, '@[expose] def is_zero')
-  if (!exposed.includes('@[expose] def pred') ||
+  if (!exposed.includes('import Lean.Elab.Tactic.Rewrite') ||
+      !exposed.includes('@[expose] def pred') ||
       !exposed.includes('@[expose] def is_zero')) {
-    throw new Error('Failed to expose the NNG Peano helper definitions')
+    throw new Error('Failed to narrow and expose the NNG Peano helper definitions')
   }
   return exposed
 })

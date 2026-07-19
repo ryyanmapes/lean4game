@@ -332,10 +332,7 @@ jobs:
           cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
           mkdir -p .nng-import-probes
           for module in \
-            Game.Levels.Tutorial \
-            Game.Levels.Addition \
-            Game.Levels.Multiplication \
-            Game.Levels.Power \
+            Game.MyNat.PeanoAxioms \
             Game.Levels.Implication \
             Game.Levels.AdvAddition \
             Game.Levels.LessOrEqual \
