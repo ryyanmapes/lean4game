@@ -145,7 +145,6 @@ for (const moduleName of [
   'GameServer.GoalClick',
   'GameServer.PremiseApplication',
   'GameServer.Browser.ProofProbe',
-  entryModule,
 ]) {
   const symbol = linkedInitializer(moduleName)
   if (!exports.includes(symbol)) exports.push(symbol)

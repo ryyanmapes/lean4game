@@ -220,7 +220,7 @@ jobs:
           # JSON but must not initialize the metadata/inventory command stack.
           node scripts/retarget-nng4-browser-runtime.mjs ../NNG4
           rm -rf ../NNG4/.lake/build
-          (cd ../NNG4 && "$LEAN_HOME/bin/lake" build)
+          (cd ../NNG4 && "$LEAN_HOME/bin/lake" build && "$LEAN_HOME/bin/lake" build Game.Browser.Runtime)
 
       - name: Package browser libraries
         env:
@@ -274,7 +274,7 @@ jobs:
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
             .visual-link/visual-exports.txt \
-            Game.Browser.Metadata .cauli-lean-source/src server ../NNG4 \
+            Game.Browser.Runtime .cauli-lean-source/src server ../NNG4 \
             ../NNG4/.lake/packages/mathlib \
             ../NNG4/.lake/packages/importGraph \
             ../NNG4/.lake/packages/Cli \
@@ -330,7 +330,8 @@ jobs:
           for module in \
             I18n \
             GameServer.Browser.Commands \
-            Game.Browser.Metadata
+            Game.Browser.Metadata \
+            Game.Browser.Runtime
           do
             echo "WASM CLI import probe: $module"
             printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
@@ -370,10 +371,10 @@ jobs:
           LEAN
 
           # The persistent compile API reuses snapshots by their exact import
-          # header. Cache the compact NNG facade alongside Visual Lean so
+          # header. Cache the reduced NNG runtime facade alongside Visual Lean so
           # changing levels never asks the WASM runtime to import it afresh.
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
-            sed -i '2i import Game.Browser.Metadata' .visual-snapshot-work/probe.lean
+            sed -i '2i import Game.Browser.Runtime' .visual-snapshot-work/probe.lean
           fi
 
           echo 'Probing VisualTest import in WASM before snapshot save...'

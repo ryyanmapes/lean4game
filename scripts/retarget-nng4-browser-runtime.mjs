@@ -22,6 +22,40 @@ const browserMetadataPath = path.join(root, 'Game', 'Browser', 'Metadata.lean')
 fs.mkdirSync(path.dirname(browserMetadataPath), { recursive: true })
 fs.writeFileSync(browserMetadataPath, browserMetadata)
 
+// Keep one stable import header for the lifetime of the browser worker.  The
+// eight world aggregators expose every declaration used by the playable NNG
+// (Algorithm World is intentionally omitted), while the direct meta imports
+// retain the original player-facing tactic implementations.  Baking this
+// module into the snapshot lets arbitrary level navigation reuse one Lean
+// environment instead of dynamically importing a different level each time.
+const browserRuntime = `module
+
+public import Game.Levels.Tutorial
+public import Game.Levels.Addition
+public import Game.Levels.Multiplication
+public import Game.Levels.Power
+public import Game.Levels.Implication
+public import Game.Levels.AdvAddition
+public import Game.Levels.LessOrEqual
+public import Game.Levels.AdvMultiplication
+public meta import GameServer.Browser.Commands
+public meta import Lean.Elab.Tactic.Induction
+public meta import Game.Tactic.FromMathlib
+public meta import Game.Tactic.Induction
+public meta import Game.Tactic.Cases
+public meta import Game.Tactic.Rfl
+public meta import Game.Tactic.Rw
+public meta import Game.Tactic.Use
+public meta import Game.Tactic.Ne
+public meta import Game.Tactic.Xyzzy
+public meta import Game.Tactic.SimpAdd
+public meta import Game.Tactic.BrowserTauto
+public meta import Game.Tactic.BrowserNthRewrite
+`
+
+const browserRuntimePath = path.join(root, 'Game', 'Browser', 'Runtime.lean')
+fs.writeFileSync(browserRuntimePath, browserRuntime)
+
 function leanFiles(input) {
   const files = []
   for (const entry of fs.readdirSync(input, { withFileTypes: true })) {

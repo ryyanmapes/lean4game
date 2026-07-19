@@ -79,7 +79,7 @@ globalThis.Module = {
       if (loadStatus !== 0) throw new Error(`snapshot load returned ${loadStatus}`)
 
       const browserImports = process.env.PROBE_NNG4 === 'true'
-        ? 'import GameServer.Tactic.Visual\nimport Game.Browser.Metadata'
+        ? 'import GameServer.Tactic.Visual\nimport Game.Browser.Runtime'
         : 'import GameServer.Tactic.Visual'
       const prefix = `${browserImports}\n\nexample (P : Prop) : P → P := by\n`
       diagnostics.length = 0
@@ -119,6 +119,8 @@ globalThis.Module = {
           Module._lean_wasm_compile(
             mkLeanString(
               `${browserImports}\n\n` +
+              '#check MyNat.add_comm\n' +
+              '#check MyNat.mul_right_eq_self\n\n' +
               'example (x : MyNat) : x = x := by\n' +
               '  exact Eq.refl _\n',
             ),
