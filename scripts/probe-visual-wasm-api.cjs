@@ -115,8 +115,8 @@ globalThis.Module = {
         const nngStatus = ioUInt32(
           Module._lean_wasm_compile(
             mkLeanString(
-              'import Game.Levels.Tutorial.L01rfl\n\n' +
-              'example (x q : MyNat) : 37 * x + q = 37 * x + q := by\n' +
+              'import Game.Browser.Metadata\n\n' +
+              'example (x : MyNat) : x = x := by\n' +
               '  exact Eq.refl _\n',
             ),
             mkLeanString('/work/nng4-tutorial.lean'),

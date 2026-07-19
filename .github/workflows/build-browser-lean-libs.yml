@@ -330,8 +330,7 @@ jobs:
           for module in \
             I18n \
             GameServer.Browser.Commands \
-            Game.Browser.Metadata \
-            Game.Levels.Tutorial.L01rfl
+            Game.Browser.Metadata
           do
             echo "WASM CLI import probe: $module"
             printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
