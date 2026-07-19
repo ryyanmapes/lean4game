@@ -359,7 +359,10 @@ macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt ident) ih:(
 `)
 
 edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
-public meta import Mathlib.Tactic.Cases
+public meta import Lean.Elab.Tactic.Induction
+public meta import Batteries.Data.List.Basic
+public meta import Batteries.Lean.Expr
+import all Lean.Elab.Tactic.Induction
 
 namespace MyNat
 
@@ -371,6 +374,62 @@ namespace MyNat
 
 end MyNat
 
+public meta section
+
+namespace Game.Browser.Cases
+
+open Lean Meta Elab Elab.Tactic
+
+private def getAltNumFields (elimInfo : ElimInfo) (altName : Name) : TermElabM Nat := do
+  for altInfo in elimInfo.altsInfo do
+    if altInfo.name == altName then
+      return altInfo.numFields
+  throwError "unknown alternative name '{altName}'"
+
+private def evalNames (elimInfo : ElimInfo) (alts : Array ElimApp.Alt) (withArg : Syntax)
+    (numEqs := 0) (toClear : Array FVarId := #[])
+    (toTag : Array (Ident × FVarId) := #[]) : TermElabM (Array MVarId) := do
+  let mut names : List Syntax := withArg[1].getArgs |>.toList
+  let mut subgoals := #[]
+  for { name := altName, mvarId := g, .. } in alts do
+    let numFields ← getAltNumFields elimInfo altName
+    let (altVarNames, names') := names.splitAtD numFields (Unhygienic.run \`(_))
+    names := names'
+    let (fvars, g) ← g.introN numFields <| altVarNames.map (getNameOfIdent' ·[0])
+    let some (g, subst) ← Cases.unifyEqs? numEqs g {} | pure ()
+    let g ← liftM <| toClear.foldlM (·.tryClear) g
+    g.withContext do
+      for (stx, fvar) in toTag do
+        Term.addLocalVarInfo stx (subst.get fvar)
+      for fvar in fvars, stx in altVarNames do
+        (subst.get fvar).addLocalVarInfoForBinderIdent ⟨stx⟩
+    subgoals := subgoals.push g
+  pure subgoals
+
+/-- Browser-safe Lean-3-style cases syntax without Mathlib's runtime initializer. -/
+elab "nng_cases' " tgts:(Parser.Tactic.elimTarget,+)
+    usingArg:((" using " ident)?)
+    withArg:((" with" (ppSpace colGt binderIdent)+)?) : tactic => do
+  let (targets, toTag) ← elabElimTargets tgts.1.getSepArgs
+  let g :: gs ← getUnsolvedGoals | throwNoGoalsToBeSolved
+  g.withContext do
+    let elimInfo ← getElimNameInfo usingArg targets (induction := false)
+    let targets ← addImplicitTargets elimInfo targets
+    let result ← withRef tgts <| ElimApp.mkElimApp elimInfo targets (← g.getTag)
+    let elimArgs := result.elimApp.getAppArgs
+    let targets ← elimInfo.targetsPos.mapM (instantiateMVars elimArgs[·]!)
+    let motive := elimArgs[elimInfo.motivePos]!
+    let g ← generalizeTargetsEq g (← inferType motive) targets
+    let (targetsNew, g) ← g.introN targets.size
+    g.withContext do
+      ElimApp.setMotiveArg g motive.mvarId! targetsNew
+      g.assign result.elimApp
+      let subgoals ← evalNames elimInfo result.alts withArg
+        (numEqs := targets.size) (toClear := targetsNew) (toTag := toTag)
+      setGoals <| subgoals.toList ++ gs
+
+end Game.Browser.Cases
+
 open Lean Parser Tactic
 
 /-- Lean-3-style cases syntax used throughout the Natural Number Game.
@@ -378,15 +437,15 @@ Every binder is colGt-bounded: without it, \`cases b with d\` followed by a
 tactic line like \`intro h\` lets longest-match parsing feed \`intro\` to the
 two-binder overload as the second binder name (seen in AdvAddition L05). -/
 macro "cases " target:Parser.Tactic.elimTarget : tactic =>
-  \`(tactic| cases' $target)
+  \`(tactic| nng_cases' $target)
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
     name:(colGt binderIdent) : tactic =>
-  \`(tactic| cases' $target with $name <;> try rw [MyNat.zero_eq_0] at *)
+  \`(tactic| nng_cases' $target with $name <;> try rw [MyNat.zero_eq_0] at *)
 
 macro "cases " target:Parser.Tactic.elimTarget " with"
     first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
-  \`(tactic| cases' $target with $first $second)
+  \`(tactic| nng_cases' $target with $first $second)
 `)
 
 // This mathlib revision is a few commits newer than the exact Cauli pre-release

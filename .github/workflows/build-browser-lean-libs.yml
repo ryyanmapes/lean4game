@@ -328,9 +328,6 @@ jobs:
           cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
           mkdir -p .nng-import-probes
           for module in \
-            I18n \
-            GameServer.Browser.Commands \
-            Game.Browser.Metadata \
             Game.Tactic.BrowserTauto \
             Game.Tactic.Cases \
             Game.Browser.Runtime
