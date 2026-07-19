@@ -130,10 +130,12 @@ for (const moduleName of closure) {
   const symbol = initializer(moduleName)
   const nativeInitializer = [...nativeInitializers].find(candidate =>
     candidate.endsWith(`_${moduleName.replaceAll('.', '_')}`))
-  if (!fullExports.includes(symbol) &&
-      !moduleName.startsWith('GameServer.') &&
-      !moduleName.startsWith('Game.') &&
-      !nativeInitializer) {
+  const toolchainModule = ['Init', 'Std', 'Lean', 'Lake'].some(root =>
+    moduleName === root || moduleName.startsWith(`${root}.`))
+  // The link kit owns toolchain initializers. Project and Lake dependency
+  // modules (Game, Mathlib, Batteries, Qq, I18n, ...) are shipped as IR and
+  // initialized by Lean's interpreter unless explicitly native-linked above.
+  if (toolchainModule && !fullExports.includes(symbol) && !nativeInitializer) {
     console.error(`Full export list has no initializer for ${moduleName} (${symbol})`)
     process.exit(1)
   }
