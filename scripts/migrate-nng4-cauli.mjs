@@ -324,7 +324,7 @@ replace(
 // commands taught by the game, but delegate to mathlib's maintained public
 // compatibility tactics instead.
 edit('Game/Tactic/Induction.lean', () => `public import Game.MyNat.Definition
-public meta import Lean.Elab.Tactic.Induction
+public import Lean.Elab.Tactic.Induction
 
 namespace MyNat
 
