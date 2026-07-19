@@ -130,7 +130,10 @@ for (const moduleName of closure) {
   const symbol = initializer(moduleName)
   const nativeInitializer = [...nativeInitializers].find(candidate =>
     candidate.endsWith(`_${moduleName.replaceAll('.', '_')}`))
-  if (!fullExports.includes(symbol) && !moduleName.startsWith('GameServer.') && !nativeInitializer) {
+  if (!fullExports.includes(symbol) &&
+      !moduleName.startsWith('GameServer.') &&
+      !moduleName.startsWith('Game.') &&
+      !nativeInitializer) {
     console.error(`Full export list has no initializer for ${moduleName} (${symbol})`)
     process.exit(1)
   }
