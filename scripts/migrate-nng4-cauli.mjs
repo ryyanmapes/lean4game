@@ -136,7 +136,7 @@ namespace Game.Tactic
 syntax (name := browserHave) "have " ident " : " term : tactic
 
 elab_rules : tactic
-  | `(tactic| have $name:ident : $type:term) => withMainContext do
+  | \`(tactic| have $name:ident : $type:term) => withMainContext do
       let goal ← getMainGoal
       let type ← withRef type do
         let type ← Term.elabType type
