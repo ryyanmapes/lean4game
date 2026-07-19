@@ -216,7 +216,14 @@ export class LocalWasmRpcClient {
     // binders, so compiling it as a declaration would turn e.g. `P Q : Prop`
     // into auto-implicit universe-polymorphic sorts.  `descrFormat` is emitted
     // from the actual `Statement` syntax and preserves the exact local context.
-    const declaration = level.descrFormat?.trim().replace(/\s*:=\s*by\s*$/u, '')
+    const authoredDeclaration = level.descrFormat?.trim().replace(/\s*:=\s*by\s*$/u, '')
+    // The persistent snapshot already contains the named declarations proved
+    // by earlier NNG levels. Re-elaborate the current puzzle as an anonymous
+    // example so loading a level never attempts to redeclare its theorem.
+    const declaration = authoredDeclaration?.replace(
+      /^(?:theorem|lemma)\s+(?:«[^»]+»|[^\s(:]+)\s*/u,
+      'example ',
+    )
     if (!declaration || !/^(?:example|theorem)\b/u.test(declaration)) {
       throw new Error('This level does not expose an executable Lean statement')
     }
