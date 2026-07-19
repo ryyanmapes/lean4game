@@ -331,6 +331,8 @@ jobs:
             I18n \
             GameServer.Browser.Commands \
             Game.Browser.Metadata \
+            Game.Tactic.BrowserTauto \
+            Game.Tactic.Cases \
             Game.Browser.Runtime
           do
             echo "WASM CLI import probe: $module"
