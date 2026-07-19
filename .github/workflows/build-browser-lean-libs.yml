@@ -369,6 +369,13 @@ jobs:
             click_goal
           LEAN
 
+          # The persistent compile API reuses snapshots by their exact import
+          # header. Cache the compact NNG facade alongside Visual Lean so
+          # changing levels never asks the WASM runtime to import it afresh.
+          if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
+            sed -i '2i import Game.Browser.Metadata' .visual-snapshot-work/probe.lean
+          fi
+
           echo 'Probing VisualTest import in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \

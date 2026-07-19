@@ -78,7 +78,10 @@ globalThis.Module = {
       )
       if (loadStatus !== 0) throw new Error(`snapshot load returned ${loadStatus}`)
 
-      const prefix = 'import GameServer.Tactic.Visual\n\nexample (P : Prop) : P → P := by\n'
+      const browserImports = process.env.PROBE_NNG4 === 'true'
+        ? 'import GameServer.Tactic.Visual\nimport Game.Browser.Metadata'
+        : 'import GameServer.Tactic.Visual'
+      const prefix = `${browserImports}\n\nexample (P : Prop) : P → P := by\n`
       diagnostics.length = 0
       ioUInt32(Module._lean_wasm_compile(
         mkLeanString(`${prefix}  skip\n  all_goals browser_report_state\n  all_goals sorry\n`),
@@ -115,7 +118,7 @@ globalThis.Module = {
         const nngStatus = ioUInt32(
           Module._lean_wasm_compile(
             mkLeanString(
-              'import Game.Browser.Metadata\n\n' +
+              `${browserImports}\n\n` +
               'example (x : MyNat) : x = x := by\n' +
               '  exact Eq.refl _\n',
             ),
