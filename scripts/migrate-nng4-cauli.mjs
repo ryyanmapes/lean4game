@@ -439,16 +439,18 @@ elab "nng_cases' " target:ident
     withArg:((" with" (ppSpace colGt binderIdent)+)?) : tactic => do
   let g :: gs ← getUnsolvedGoals | throwNoGoalsToBeSolved
   g.withContext do
-    let fvarId ← getFVarId target
+    let some localDecl := (← getLCtx).findFromUserName? target.getId
+      | throwErrorAt target "unknown local variable '{target.getId}'"
+    let fvarId := localDecl.fvarId
     let results ← g.cases fvarId
-    let mut names : List Syntax := withArg[1].getArgs |>.toList
+    let mut names : List Syntax := withArg.raw[1]!.getArgs |>.toList
     let mut subgoals := #[]
     for result in results do
       let mut goal := result.mvarId
       for field in result.fields do
         if let nameStx :: rest := names then
           names := rest
-          goal ← goal.rename field (getNameOfIdent' nameStx[0])
+          goal ← goal.rename field.fvarId! (getNameOfIdent' nameStx[0])
       subgoals := subgoals.push goal
     setGoals <| subgoals.toList ++ gs
 `)
