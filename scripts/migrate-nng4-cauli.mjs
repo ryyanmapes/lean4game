@@ -23,6 +23,28 @@ edit('Game/Tactic/LabelAttr.lean', () =>
   'builtin_initialize myNatDecideSimpExtension : SimpExtension ←\n' +
   '  registerSimpAttr `MyNat_decide "Natural Numbers Game evaluation theorem"\n')
 
+edit('Game/MyNat/Definition.lean', source => source
+  .replace(/^import Game\.Tactic\.LabelAttr.*\r?\n/m, '')
+  .replace(/^@\[MyNat_decide\]\r?\n/gm, ''))
+edit('Game/MyNat/Addition.lean', source => source
+  .replace('@[simp, MyNat_decide]', '@[simp]')
+  .replace(/^@\[MyNat_decide\]\r?\n/gm, ''))
+for (const file of ['Game/MyNat/Multiplication.lean', 'Game/MyNat/Power.lean']) {
+  edit(file, source => source.replace(/^@\[MyNat_decide\]\r?\n/gm, ''))
+}
+edit('Game/Tactic/Decide.lean', () => `import Game.MyNat.Power
+
+theorem ofNat_succ : (OfNat.ofNat (Nat.succ n) : MyNat) =
+    MyNat.succ (OfNat.ofNat n) := _root_.rfl
+
+macro "decide" : tactic => \`(tactic|(
+  try simp only [MyNat.ofNat, MyNat.toNat, MyNat.zero_eq_0, ofNat_succ,
+    MyNat.add_zero, MyNat.add_succ, MyNat.mul_zero, MyNat.mul_succ,
+    MyNat.pow_zero, MyNat.pow_succ]
+  try decide
+))
+`)
+
 function replace(relativePath, from, to) {
   edit(relativePath, source => {
     if (!source.includes(from)) {
