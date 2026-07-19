@@ -55,6 +55,21 @@ function lastCommand(proofBody: string): string {
   return lines.at(-1) ?? ''
 }
 
+function browserCompatibleProof(proofBody: string): string {
+  return proofBody.split('\n').map(line => {
+    // In the Cauli toolchain, induction exposes the constructor `MyNat.zero`
+    // while `MyNat.add_zero` is stated using numeral notation. The rewrite
+    // matcher does not treat those definitionally equal forms as an occurrence,
+    // but theorem application still unifies and kernel-checks them. Try apply
+    // first for an exact goal, then retain rw for nested add-zero occurrences.
+    const match = line.match(/^(\s*)drag_rw_(lhs|rhs) \[(.+)\]\s*$/u)
+    if (!match) return line
+    const [, indentation, , rule] = match
+    if (rule.trim() !== 'MyNat.add_zero') return line
+    return `${indentation}first | apply MyNat.add_zero | rw [MyNat.add_zero]`
+  }).join('\n')
+}
+
 function annotationFor(command: string) {
   const source = command.replace(/^case'?\s+\S+\s*=>\s*/u, '').trim()
   let leanTactic: string | undefined
@@ -237,7 +252,7 @@ export class LocalWasmRpcClient {
     // The snapshot contains all non-Algorithm NNG declarations behind one
     // stable facade. Every level must repeat this exact import header: the
     // persistent WASM compiler keys its cached environment by that header.
-    const declaration = `${this.initialDeclaration} := by\n${indentProof(proofBody)}\n  all_goals browser_report_state\n  all_goals sorry`
+    const declaration = `${this.initialDeclaration} := by\n${indentProof(browserCompatibleProof(proofBody))}\n  all_goals browser_report_state\n  all_goals sorry`
     // Lean4Game's exported `descrFormat` contains the statement itself, but not
     // the namespace surrounding the authored level. Every NNG4 level is
     // declared in `MyNat`; restoring that context is what makes unqualified

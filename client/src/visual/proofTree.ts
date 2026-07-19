@@ -120,31 +120,26 @@ export function collectLiveStreamIds(tree: ProofStreamTreeNode): string[] {
 }
 
 export function casePathForStream(tree: ProofStreamTreeNode, streamId: string): string[] | null {
-  function isLive(node: ProofStreamTreeNode): boolean {
-    if (node.children.length === 0) return !node.completed && node.streamId !== null
-    return node.children.some(isLive)
-  }
-
-  // liveBeforeCount: number of live sibling subtrees that appear before this node.
-  // A `case X =>` label is only needed when there is at least one live goal
-  // that precedes this one — otherwise this stream is already the focused goal.
-  function visit(node: ProofStreamTreeNode, path: string[], liveBeforeCount: number): string[] | null {
-    const nextPath = (node.label && liveBeforeCount > 0) ? [...path, node.label] : path
+  // Preserve explicit case paths after every split, including the first live
+  // branch. This isolates tactics that inspect the full goal list and keeps
+  // commands stable when the player visits proof streams in any order.
+  function visit(node: ProofStreamTreeNode, path: string[]): string[] | null {
     if (node.children.length === 0) {
-      return node.streamId === streamId ? nextPath : null
+      return node.streamId === streamId ? path : null
     }
 
-    let liveBefore = 0
     for (const child of node.children) {
-      const result = visit(child, nextPath, liveBefore)
+      const childPath = node.children.length > 1 && child.label
+        ? [...path, child.label]
+        : path
+      const result = visit(child, childPath)
       if (result) return result
-      if (isLive(child)) liveBefore++
     }
 
     return null
   }
 
-  return visit(tree, [], 0)
+  return visit(tree, [])
 }
 
 export function findLeafForStream(tree: ProofStreamTreeNode, streamId: string): ProofStreamTreeNode | null {

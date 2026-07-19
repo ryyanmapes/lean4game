@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 
 const {
+  casePathForStream,
   collectActiveStreamIds,
   collectLiveStreamIds,
   completeLeafStream,
@@ -63,6 +64,22 @@ function baseStreams() {
 
   return { streamA, streamB, staleSiblingC, refreshedSiblingC }
 }
+
+test('every induction branch keeps an explicit case path, including the first branch', () => {
+  const tree = {
+    id: 'root',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      { id: 'zero-node', streamId: 'zero-stream', label: 'zero', completed: false, children: [] },
+      { id: 'succ-node', streamId: 'succ-stream', label: 'succ', completed: false, children: [] },
+    ],
+  }
+
+  assert.deepEqual(casePathForStream(tree, 'zero-stream'), ['zero'])
+  assert.deepEqual(casePathForStream(tree, 'succ-stream'), ['succ'])
+})
 
 function unicodeStreams() {
   const splitHypType = `B ${String.fromCharCode(0x2227)} (A ${String.fromCharCode(0x2192)} B ${String.fromCharCode(0x2192)} C)`
