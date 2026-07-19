@@ -358,21 +358,10 @@ macro "induction " target:Parser.Tactic.elimTarget " with " n:(colGt ident) ih:(
     | succ $n $ih)
 `)
 
-edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
-public import Lean.Elab.Tactic.Induction
+add('Game/Tactic/BrowserCasesCore.lean', `public meta import Lean.Elab.Tactic.Induction
 public meta import Batteries.Data.List.Basic
 public meta import Batteries.Lean.Expr
 import all Lean.Elab.Tactic.Induction
-
-namespace MyNat
-
-/-- Case principle which prints the base case as an NNG numeral. -/
-@[expose] def casesOn' {P : ℕ → Sort u} : (t : ℕ) → P 0 →
-    ((a : ℕ) → P (MyNat.succ a)) → P t
-  | .zero, base, _ => base
-  | .succ n, _, step => step n
-
-end MyNat
 
 public meta section
 
@@ -429,6 +418,80 @@ elab "nng_cases' " tgts:(Parser.Tactic.elimTarget,+)
       setGoals <| subgoals.toList ++ gs
 
 end Game.Browser.Cases
+`)
+
+edit('Game/Tactic/Cases.lean', () => `public import Game.MyNat.Definition
+public meta import Game.Tactic.BrowserCasesCore
+
+namespace MyNat
+
+/-- Case principle which prints the base case as an NNG numeral. -/
+@[expose] def casesOn' {P : ℕ → Sort u} : (t : ℕ) → P 0 →
+    ((a : ℕ) → P (MyNat.succ a)) → P t
+  | .zero, base, _ => base
+  | .succ n, _, step => step n
+
+end MyNat
+
+/- Implementation moved to BrowserCasesCore so private Lean imports do not
+conflict with this module's public MyNat surface.
+
+public meta section
+
+namespace Game.Browser.Cases
+
+open Lean Meta Elab Elab.Tactic
+
+private def getAltNumFields (elimInfo : ElimInfo) (altName : Name) : TermElabM Nat := do
+  for altInfo in elimInfo.altsInfo do
+    if altInfo.name == altName then
+      return altInfo.numFields
+  throwError "unknown alternative name '{altName}'"
+
+private def evalNames (elimInfo : ElimInfo) (alts : Array ElimApp.Alt) (withArg : Syntax)
+    (numEqs := 0) (toClear : Array FVarId := #[])
+    (toTag : Array (Ident × FVarId) := #[]) : TermElabM (Array MVarId) := do
+  let mut names : List Syntax := withArg[1].getArgs |>.toList
+  let mut subgoals := #[]
+  for { name := altName, mvarId := g, .. } in alts do
+    let numFields ← getAltNumFields elimInfo altName
+    let (altVarNames, names') := names.splitAtD numFields (Unhygienic.run \`(_))
+    names := names'
+    let (fvars, g) ← g.introN numFields <| altVarNames.map (getNameOfIdent' ·[0])
+    let some (g, subst) ← Cases.unifyEqs? numEqs g {} | pure ()
+    let g ← liftM <| toClear.foldlM (·.tryClear) g
+    g.withContext do
+      for (stx, fvar) in toTag do
+        Term.addLocalVarInfo stx (subst.get fvar)
+      for fvar in fvars, stx in altVarNames do
+        (subst.get fvar).addLocalVarInfoForBinderIdent ⟨stx⟩
+    subgoals := subgoals.push g
+  pure subgoals
+
+/-- Browser-safe Lean-3-style cases syntax without Mathlib's runtime initializer. -/
+elab "nng_cases' " tgts:(Parser.Tactic.elimTarget,+)
+    usingArg:((" using " ident)?)
+    withArg:((" with" (ppSpace colGt binderIdent)+)?) : tactic => do
+  let (targets, toTag) ← elabElimTargets tgts.1.getSepArgs
+  let g :: gs ← getUnsolvedGoals | throwNoGoalsToBeSolved
+  g.withContext do
+    let elimInfo ← getElimNameInfo usingArg targets (induction := false)
+    let targets ← addImplicitTargets elimInfo targets
+    let result ← withRef tgts <| ElimApp.mkElimApp elimInfo targets (← g.getTag)
+    let elimArgs := result.elimApp.getAppArgs
+    let targets ← elimInfo.targetsPos.mapM (instantiateMVars elimArgs[·]!)
+    let motive := elimArgs[elimInfo.motivePos]!
+    let g ← generalizeTargetsEq g (← inferType motive) targets
+    let (targetsNew, g) ← g.introN targets.size
+    g.withContext do
+      ElimApp.setMotiveArg g motive.mvarId! targetsNew
+      g.assign result.elimApp
+      let subgoals ← evalNames elimInfo result.alts withArg
+        (numEqs := targets.size) (toClear := targetsNew) (toTag := toTag)
+      setGoals <| subgoals.toList ++ gs
+
+end Game.Browser.Cases
+-/
 
 open Lean Parser Tactic
 
