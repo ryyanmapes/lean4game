@@ -5,6 +5,7 @@ import type {
 } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
 import { instrumentBrowserProof } from './browserProof'
+import { coreTacticForVisualCommand } from './proofText'
 
 type WorkerDiagnostic = {
   severity?: string
@@ -58,9 +59,8 @@ function lastCommand(proofBody: string): string {
 
 function annotationFor(command: string) {
   const source = command.replace(/^case'?\s+\S+\s*=>\s*/u, '').trim()
-  let leanTactic: string | undefined
-  if (source === 'click_goal') leanTactic = 'intro'
-  else if (source === 'click_goal_left') leanTactic = 'left'
+  let leanTactic: string | undefined = coreTacticForVisualCommand(source) ?? undefined
+  if (source === 'click_goal_left') leanTactic = 'left'
   else if (source === 'click_goal_right') leanTactic = 'right'
   else if (source.startsWith('delete_theorem ')) leanTactic = `clear ${source.slice(15).trim()}`
   return source ? { playTactic: source, leanTactic } : undefined

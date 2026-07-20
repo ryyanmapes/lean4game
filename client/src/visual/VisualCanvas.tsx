@@ -40,6 +40,15 @@ import {
 } from './proofTree'
 import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
+import {
+  buildStructuredProof,
+  displayedProofLines,
+  isVisualOnlyPlayTactic,
+  parseFocusedCommand,
+  serializeProofCommands,
+  shortenQualifiedNames,
+  stripCasePrefixes,
+} from './proofText'
 
 import './visual.css'
 
@@ -451,11 +460,6 @@ interface TransformRewriteDebug {
   deferredCompletion: boolean
 }
 
-interface FocusedCommand {
-  casePath: string[]
-  tactic: string
-}
-
 interface VisualCanvasTestHarness {
   dragHypToGoal: (hypName: string) => Promise<void>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
@@ -504,14 +508,6 @@ interface VisualCanvasTestHarness {
   }
 }
 
-interface ProofScriptBlock {
-  items: ProofScriptItem[]
-}
-
-type ProofScriptItem =
-  | { kind: 'tactic'; tactic: string }
-  | { kind: 'case'; label: string; block: ProofScriptBlock }
-
 const THEOREM_TRAY_ID = 'theorem-tray'
 const REDUCTION_TOOLTIP_EXIT_MS = 140
 type TrayTab = 'tactics' | 'theorems'
@@ -534,33 +530,6 @@ function focusCommandForStream(
     .filter(label => label.length > 0)
     ?? []
   return casePath.reduceRight((inner, caseName) => `case ${caseName} => ${inner}`, playTactic)
-}
-
-function parseFocusedCommand(command: string): FocusedCommand {
-  const casePath: string[] = []
-  let rest = command.trim()
-
-  while (
-    rest.startsWith('focus_case ') ||
-    rest.startsWith('case ') ||
-    rest.startsWith("case' ")
-  ) {
-    const prefixLength = rest.startsWith('focus_case ')
-      ? 11
-      : rest.startsWith("case' ")
-        ? 6
-        : 5
-    const inner = rest.slice(prefixLength)
-    const separator = inner.indexOf('=>')
-    if (separator === -1) break
-    const label = inner.slice(0, separator).trim()
-    const next = inner.slice(separator + 2).trim()
-    if (!label || !next) break
-    casePath.push(label)
-    rest = next
-  }
-
-  return { casePath, tactic: rest }
 }
 
 function parsedGoalEquality(stream: GoalStream) {
@@ -646,10 +615,6 @@ function nextFreshHypName(cards: HypCardType[], baseName: string): string {
   let suffix = 2
   while (existing.has(`${baseName}${suffix}`)) suffix += 1
   return `${baseName}${suffix}`
-}
-
-function isVisualOnlyPlayTactic(playTactic: string): boolean {
-  return playTactic.startsWith('click_') || playTactic.startsWith('drag_')
 }
 
 function normalizeFormulaText(text: string): string {
@@ -1141,15 +1106,6 @@ function inferLeanTacticFromVisualInteraction(
   return null
 }
 
-/** Strip capitalized namespace prefixes from Lean identifiers for display (e.g. MyNat.zero_ne_succ → zero_ne_succ). */
-function shortenQualifiedNames(tactic: string): string {
-  return tactic.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
-}
-
-function formatProofDisplayText(tactic: string): string {
-  return shortenQualifiedNames(tactic)
-}
-
 function resolveLeanTactic(
   annotationLeanTactic: string | null | undefined,
   command: string,
@@ -1169,70 +1125,8 @@ function resolveLeanTactic(
   return null
 }
 
-function getOrCreateCaseItem(block: ProofScriptBlock, label: string): ProofScriptBlock {
-  const existing = block.items.find(item => item.kind === 'case' && item.label === label)
-  if (existing && existing.kind === 'case') return existing.block
-
-  const nextBlock: ProofScriptBlock = { items: [] }
-  block.items.push({ kind: 'case', label, block: nextBlock })
-  return nextBlock
-}
-
-function serializeProofCommands(commands: string[]): string {
-  const root: ProofScriptBlock = { items: [] }
-
-  for (const command of commands) {
-    const { casePath, tactic } = parseFocusedCommand(command)
-    if (!tactic) continue
-
-    let block = root
-    for (const label of casePath) {
-      block = getOrCreateCaseItem(block, label)
-    }
-    block.items.push({ kind: 'tactic', tactic })
-  }
-
-  function render(block: ProofScriptBlock, indent: number): string[] {
-    const pad = ' '.repeat(indent)
-    const lines: string[] = []
-
-    for (const item of block.items) {
-      if (item.kind === 'tactic') {
-        lines.push(`${pad}${item.tactic}`)
-        continue
-      }
-
-      lines.push(`${pad}case ${item.label} =>`)
-      lines.push(...render(item.block, indent + 2))
-    }
-
-    return lines
-  }
-
-  return render(root, 0).join('\n')
-}
-
-function stripCasePrefixes(tactic: string | null): string | null {
-  if (!tactic) return null
-  let s = tactic.trim()
-  while (s.startsWith('case ') || s.startsWith('focus_case ') || s.startsWith("case' ")) {
-    const prefixLen = s.startsWith('focus_case ') ? 11 : s.startsWith("case' ") ? 6 : 5
-    const inner = s.slice(prefixLen)
-    const sep = inner.indexOf('=>')
-    if (sep === -1) break
-    s = inner.slice(sep + 2).trim()
-  }
-  return s || null
-}
-
 function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
-  const leanCommands = steps.map(step => {
-    const { casePath } = parseFocusedCommand(step.command)
-    const leaf = stripCasePrefixes(step.leanTactic)
-      ?? (isVisualOnlyPlayTactic(step.playTactic) ? `-- ? (${step.playTactic})` : step.playTactic)
-    return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf)
-  })
-  return serializeProofCommands(leanCommands)
+  return buildStructuredProof(steps, 'lean')
 }
 
 function buildInteractiveProofLine(command: string, playTactic: string): string {
@@ -1610,7 +1504,7 @@ export function VisualCanvas({
 
   useEffect(() => {
     if (canvasState.completed) {
-      const playScript = proofSteps.map(s => s.playTactic).join('\n')
+      const playScript = buildStructuredProof(proofSteps, 'play')
       const leanScript = buildStructuredLeanProof(proofSteps)
       onLevelCompleted?.({ playScript, leanScript })
     }
@@ -3863,33 +3757,8 @@ export function VisualCanvas({
   }
 
   function copyDisplayedProof() {
-    const text = sideViewMode === 'lean'
-      ? buildStructuredLeanProof(proofSteps)
-      : proofSteps.map(s => s.playTactic).join('\n')
+    const text = buildStructuredProof(proofSteps, sideViewMode)
     navigator.clipboard.writeText(text).catch(() => {})
-  }
-
-  function proofStepDisplay(step: ProofStepRecord) {
-    if (sideViewMode === 'lean') {
-      const { casePath } = parseFocusedCommand(step.command)
-      const leaf = stripCasePrefixes(step.leanTactic)
-      if (!leaf) {
-        const fallback = isVisualOnlyPlayTactic(step.playTactic)
-          ? `? (${step.playTactic})`
-          : step.playTactic
-        return formatProofDisplayText(
-          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback),
-        )
-      }
-      return formatProofDisplayText(
-        casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf),
-      )
-    }
-
-    const { casePath } = parseFocusedCommand(step.command)
-    return formatProofDisplayText(
-      casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic),
-    )
   }
 
   function renderProofToolbar() {
@@ -3913,17 +3782,17 @@ export function VisualCanvas({
   }
 
   function renderProofStepList() {
+    const lines = displayedProofLines(proofSteps, sideViewMode)
     return (
       <div className="proof-sidebar-steps">
-        {proofSteps.length === 0
+        {lines.length === 0
           ? <div className="proof-sidebar-empty">No proof steps yet.</div>
-          : proofSteps.map((step, i) => {
-              const display = proofStepDisplay(step)
-              const isUnknown = sideViewMode === 'lean' && !step.leanTactic && isVisualOnlyPlayTactic(step.playTactic)
+          : lines.map((line, i) => {
+              const isUnknown = sideViewMode === 'lean' && line.trimStart().startsWith('? (')
               return (
                 <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
                   <span className="proof-sidebar-step-num">{i + 1}</span>
-                  <span className="proof-sidebar-step-text">{display}</span>
+                  <span className="proof-sidebar-step-text">{line}</span>
                 </div>
               )
             })
@@ -4416,68 +4285,8 @@ export function VisualCanvas({
           <span>Proof</span>
         </button>
         <div className="proof-sidebar-inner">
-          <div className="proof-sidebar-header">
-            <button
-              className={`proof-sidebar-mode-btn${sideViewMode === 'lean' ? ' active' : ''}`}
-              onClick={() => {
-                setSideViewMode('lean')
-                try { localStorage.setItem('visual-proof-view-mode', 'lean') } catch {}
-              }}
-            >Core</button>
-            <button
-              className={`proof-sidebar-mode-btn${sideViewMode === 'play' ? ' active' : ''}`}
-              onClick={() => {
-                setSideViewMode('play')
-                try { localStorage.setItem('visual-proof-view-mode', 'play') } catch {}
-              }}
-            >Interactive</button>
-            <button
-              className="proof-sidebar-copy-btn"
-              onClick={() => {
-                const text = sideViewMode === 'lean'
-                  ? buildStructuredLeanProof(proofSteps)
-                  : proofSteps.map(s => s.playTactic).join('\n')
-                navigator.clipboard.writeText(text).catch(() => {})
-              }}
-              title="Copy to clipboard"
-            >Copy</button>
-          </div>
-          <div className="proof-sidebar-steps">
-            {proofSteps.length === 0
-              ? <div className="proof-sidebar-empty">No proof steps yet.</div>
-              : proofSteps.map((step, i) => {
-                  const display = sideViewMode === 'lean'
-                    ? (() => {
-                        const { casePath } = parseFocusedCommand(step.command)
-                        const leaf = stripCasePrefixes(step.leanTactic)
-                        if (!leaf) {
-                          const fallback = isVisualOnlyPlayTactic(step.playTactic)
-                            ? `? (${step.playTactic})`
-                            : step.playTactic
-                          return formatProofDisplayText(
-                            casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, fallback),
-                          )
-                        }
-                        return formatProofDisplayText(
-                          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, leaf),
-                        )
-                      })()
-                    : (() => {
-                        const { casePath } = parseFocusedCommand(step.command)
-                        return formatProofDisplayText(
-                          casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, step.playTactic),
-                        )
-                      })()
-                  const isUnknown = sideViewMode === 'lean' && !step.leanTactic && isVisualOnlyPlayTactic(step.playTactic)
-                  return (
-                    <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
-                      <span className="proof-sidebar-step-num">{i + 1}</span>
-                      <span className="proof-sidebar-step-text">{display}</span>
-                    </div>
-                  )
-                })
-            }
-          </div>
+          {renderProofToolbar()}
+          {renderProofStepList()}
         </div>
       </div>
       )}
