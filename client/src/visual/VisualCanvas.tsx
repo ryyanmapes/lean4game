@@ -2238,7 +2238,12 @@ export function VisualCanvas({
       const targetName = interactionHypName(targetCard)
       if (targetCard && targetStream && targetName) {
         if (tacticTemplate.name === 'induction') {
-          const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetName })
+          const playTactic = interactionToPlayTactic({
+            type: 'drag_induction',
+            hypName: targetName,
+            predecessorName: nextFreshHypName(targetStream.hyps, 'd'),
+            inductionHypName: nextFreshHypName(targetStream.hyps, 'hd'),
+          })
           applyInteraction(playTactic, activeId, { streamSplit: true })
           return
         }
@@ -3584,7 +3589,12 @@ export function VisualCanvas({
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
 
     if (tacticName === 'induction') {
-      const playTactic = interactionToPlayTactic({ type: 'drag_induction', hypName: targetPlayName })
+      const playTactic = interactionToPlayTactic({
+        type: 'drag_induction',
+        hypName: targetPlayName,
+        predecessorName: nextFreshHypName(stream.hyps, 'd'),
+        inductionHypName: nextFreshHypName(stream.hyps, 'hd'),
+      })
       await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
         streamSplit: true,
         targetStreamId: stream.id,

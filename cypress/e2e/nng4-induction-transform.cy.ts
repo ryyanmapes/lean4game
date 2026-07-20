@@ -116,7 +116,9 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       cy.log(JSON.stringify(snapshot))
       expect(snapshot.goalType).to.contain('=')
-      expect(snapshot.goalType).to.contain('succ')
+      expect(snapshot.goalType).to.contain('succ d')
+      expect(snapshot.goalType).not.to.contain(String.fromCharCode(0x2020))
+      expect(snapshot.hypTypes).to.have.keys(['d', 'hd'])
       expect(snapshot.streamInteractionsEnabled).to.equal(true)
     })
 

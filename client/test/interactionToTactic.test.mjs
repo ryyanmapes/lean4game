@@ -16,3 +16,15 @@ test('non-revert tactic drops still use at-syntax on hypotheses', () => {
     'symm at h',
   )
 })
+
+test('induction supplies stable names for the successor and induction hypothesis', () => {
+  assert.equal(
+    interactionToPlayTactic({
+      type: 'drag_induction',
+      hypName: 'n',
+      predecessorName: 'd',
+      inductionHypName: 'hd',
+    }),
+    'induction n with d hd',
+  )
+})

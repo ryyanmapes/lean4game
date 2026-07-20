@@ -1086,7 +1086,7 @@ function synthesizeSplitStreamsForInteraction(
   }
 
   if (playTactic?.startsWith('induction ')) {
-    const hypName = playTactic.slice('induction '.length).trim()
+    const hypName = playTactic.slice('induction '.length).trim().split(/\s+/u)[0] ?? ''
     return synthesizeInductionStreams(focusedStream, hypName)
   }
 
