@@ -4,6 +4,7 @@ import type {
   ProofState,
 } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
+import { instrumentBrowserProof } from './browserProof'
 
 type WorkerDiagnostic = {
   severity?: string
@@ -53,28 +54,6 @@ function indentProof(proofBody: string): string {
 function lastCommand(proofBody: string): string {
   const lines = proofBody.split('\n').map(line => line.trim()).filter(Boolean)
   return lines.at(-1) ?? ''
-}
-
-function browserCompatibleProof(proofBody: string): string {
-  return proofBody.split('\n').map(line => {
-    // The Cauli toolchain's focused rewrite matcher has two incompatibilities
-    // with the NNG induction equations. Keep the visual/custom tactic as the
-    // recorded interaction, but use Lean's kernel-checked core tactics for the
-    // corresponding root rewrites in the browser compiler.
-    const match = line.match(/^(\s*)drag_rw_(lhs|rhs) \[(.+)\]\s*$/u)
-    if (!match) return line
-    const [, indentation, , rule] = match
-    const trimmedRule = rule.trim()
-    if (trimmedRule === 'MyNat.add_zero') {
-      // Induction exposes `MyNat.zero`, whereas add_zero uses numeral notation.
-      return `${indentation}first | apply MyNat.add_zero | rw [MyNat.add_zero]`
-    }
-    if (trimmedRule === 'MyNat.add_succ') {
-      // Core rw handles the successor equation's implicit arguments reliably.
-      return `${indentation}rw [MyNat.add_succ]`
-    }
-    return line
-  }).join('\n')
 }
 
 function annotationFor(command: string) {
@@ -259,7 +238,7 @@ export class LocalWasmRpcClient {
     // The snapshot contains all non-Algorithm NNG declarations behind one
     // stable facade. Every level must repeat this exact import header: the
     // persistent WASM compiler keys its cached environment by that header.
-    const declaration = `${this.initialDeclaration} := by\n${indentProof(browserCompatibleProof(proofBody))}\n  all_goals browser_report_state\n  all_goals sorry`
+    const declaration = `${this.initialDeclaration} := by\n${indentProof(instrumentBrowserProof(proofBody))}\n  all_goals browser_report_state\n  all_goals sorry`
     // Lean4Game's exported `descrFormat` contains the statement itself, but not
     // the namespace surrounding the authored level. Every NNG4 level is
     // declared in `MyNat`; restoring that context is what makes unqualified
