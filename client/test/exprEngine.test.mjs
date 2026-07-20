@@ -1,7 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-const { formatFormulaText } = await import('../../tmp-expr-tests/visual/expr-engine.js')
+const {
+  applyTheoremRewrite,
+  formatFormulaText,
+  matchesPattern,
+  parse,
+  printExpression,
+} = await import('../../tmp-expr-tests/visual/expr-engine.js')
 
 const AND = '\u2227'
 const OR = '\u2228'
@@ -21,6 +27,15 @@ test('renders Lean natural-number zero constructors as the numeral 0', () => {
   assert.equal(formatFormulaText('0 + zero = zero'), '0 + 0 = 0')
   assert.equal(formatFormulaText('MyNat.zero + Nat.zero = zero'), '0 + 0 = 0')
   assert.equal(formatFormulaText('zero_add n = n'), 'zero_add(n) = n')
+})
+
+test('add_succ matches and rewrites the induction successor goal', () => {
+  const goal = parse('0 + succ d')
+  const lhs = parse('a + succ(d)')
+  const rhs = parse('succ(a + d)')
+
+  assert.equal(matchesPattern(goal, lhs), true)
+  assert.equal(printExpression(applyTheoremRewrite(goal, goal.id, lhs, rhs, false)), 'succ(0 + d)')
 })
 
 test('omits arithmetic parentheses when PEMDAS already settles the grouping', () => {

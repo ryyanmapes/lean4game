@@ -57,16 +57,23 @@ function lastCommand(proofBody: string): string {
 
 function browserCompatibleProof(proofBody: string): string {
   return proofBody.split('\n').map(line => {
-    // In the Cauli toolchain, induction exposes the constructor `MyNat.zero`
-    // while `MyNat.add_zero` is stated using numeral notation. The rewrite
-    // matcher does not treat those definitionally equal forms as an occurrence,
-    // but theorem application still unifies and kernel-checks them. Try apply
-    // first for an exact goal, then retain rw for nested add-zero occurrences.
+    // The Cauli toolchain's focused rewrite matcher has two incompatibilities
+    // with the NNG induction equations. Keep the visual/custom tactic as the
+    // recorded interaction, but use Lean's kernel-checked core tactics for the
+    // corresponding root rewrites in the browser compiler.
     const match = line.match(/^(\s*)drag_rw_(lhs|rhs) \[(.+)\]\s*$/u)
     if (!match) return line
     const [, indentation, , rule] = match
-    if (rule.trim() !== 'MyNat.add_zero') return line
-    return `${indentation}first | apply MyNat.add_zero | rw [MyNat.add_zero]`
+    const trimmedRule = rule.trim()
+    if (trimmedRule === 'MyNat.add_zero') {
+      // Induction exposes `MyNat.zero`, whereas add_zero uses numeral notation.
+      return `${indentation}first | apply MyNat.add_zero | rw [MyNat.add_zero]`
+    }
+    if (trimmedRule === 'MyNat.add_succ') {
+      // Core rw handles the successor equation's implicit arguments reliably.
+      return `${indentation}rw [MyNat.add_succ]`
+    }
+    return line
   }).join('\n')
 }
 

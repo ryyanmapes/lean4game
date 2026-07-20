@@ -227,7 +227,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
 
     cy.get('.tr-back-btn').click()
-    visualHarness().then(harness => harness.dragHypToGoal('n_ih'))
+    visualHarness().then(harness => harness.dragHypToGoal('hd'))
 
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 1 of 2')
@@ -261,7 +261,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
   })
 
-  it('keeps the switched successor goal live after applying n_ih', () => {
+  it('keeps the switched successor goal live after applying hd', () => {
     let switchedGoalType = ''
 
     visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
@@ -287,7 +287,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 2 of 2')
 
-    visualHarness().then(harness => harness.dragHypToGoal('n_ih'))
+    visualHarness().then(harness => harness.dragHypToGoal('hd'))
 
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 2 of 2')
@@ -306,7 +306,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
       expect(goalText).to.contain('0 + succ')
       expect(goalText).to.contain('= succ')
     })
-    cy.get('[data-testid="hyp-card"][data-hyp-name="n_ih"]', { timeout: 60000 })
+    cy.get('[data-testid="hyp-card"][data-hyp-name="hd"]', { timeout: 60000 })
       .should('be.visible')
 
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
