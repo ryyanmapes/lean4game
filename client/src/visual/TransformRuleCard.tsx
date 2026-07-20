@@ -50,7 +50,6 @@ export function EqualityHypCard({
   const formattedLhs = formatRuleExpr(lhsStr, lhsNode)
   const formattedRhs = formatRuleExpr(rhsStr, rhsNode)
   const symbol = isReverse ? `${formattedRhs} \u2192 ${formattedLhs}` : `${formattedLhs} \u2192 ${formattedRhs}`
-  const tooltip = `${label}: ${symbol}`
 
   return (
     <div
@@ -60,7 +59,6 @@ export function EqualityHypCard({
       data-rule-label={label}
       {...listeners}
       {...attributes}
-      title={tooltip}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
@@ -93,7 +91,6 @@ export function TheoremCard({ dragId, name, displayName, locked }: TheoremCardPr
       id={dragId}
       {...listeners}
       {...attributes}
-      title={`${displayName || name}: ${name}`}
       className={`tr-rule-card tr-theorem-card${locked ? ' locked' : ''}${isDragging ? ' dragging' : ''}`}
     >
       <h3>{displayName || name}</h3>

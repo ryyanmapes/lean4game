@@ -6,18 +6,6 @@ function isClickOnlyTactic(tactic: VisualTactic) {
   return tactic.activation === 'goal_click'
 }
 
-function tacticTitle(tactic: VisualTactic, disabled = false): string {
-  if (isClickOnlyTactic(tactic)) {
-    return disabled
-      ? 'Select an active goal to use this tactic'
-      : 'Click to try this tactic on the current goal'
-  }
-
-  return tactic.name === 'revert'
-    ? 'Drag onto a hypothesis to apply this tactic'
-    : 'Drag onto a goal or hypothesis to apply this tactic'
-}
-
 function VisualTacticContent({ tactic }: { tactic: VisualTactic }) {
   return <span className="tactic-label">{tactic.label}</span>
 }
@@ -61,7 +49,6 @@ export function VisualTacticTemplateCard({
       onClick={clickOnly && !disabled ? onClick : undefined}
       {...(!clickOnly && !disabled ? listeners : {})}
       {...(!clickOnly && !disabled ? attributes : {})}
-      title={tacticTitle(tactic, disabled)}
     >
       <VisualTacticContent tactic={tactic} />
     </div>

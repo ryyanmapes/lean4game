@@ -67,10 +67,6 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDouble
     data: { theoremTemplate: true, theorem },
   })
   const style: React.CSSProperties | undefined = isDragging ? { visibility: 'hidden' } : undefined
-  const title = theorem.forallSpecification
-    ? 'Drag out to create a theorem copy, or double-click to specify an expression'
-    : 'Drag out to create a theorem copy'
-
   return (
     <div
       ref={setNodeRef}
@@ -83,7 +79,6 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDouble
       onContextMenu={onContextMenu}
       {...listeners}
       {...attributes}
-      title={title}
     >
       <PropositionTheoremContent theorem={theorem} iffDirection={iffDirection} />
     </div>
