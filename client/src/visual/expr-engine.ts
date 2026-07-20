@@ -92,6 +92,12 @@ class Parser {
 
     if (this.isIdentifier(token)) {
       this.consume()
+      // Lean may pretty-print the zero constructor exposed by induction as
+      // `zero` instead of numeral notation. It is still the same natural
+      // number value and should remain a constant in the visual expression.
+      if (token === 'zero') {
+        return { type: 'constant', value: 0, id: uuidv4() }
+      }
       // Support both `name(arg)` and simple Lean-style unary application `name arg`.
       if (this.peek() === '(') {
         this.consume()
@@ -393,7 +399,8 @@ function normalizeNegatedFormalDifferences(text: string): string {
 }
 
 export function formatFormulaText(text: string): string {
-  const normalized = normalizeNegatedFormalDifferences(text.replace(/\s+/g, ' ').trim())
+  const normalizedZero = text.replace(/\b(?:MyNat\.|Nat\.)zero\b/g, '0')
+  const normalized = normalizeNegatedFormalDifferences(normalizedZero.replace(/\s+/g, ' ').trim())
   if (normalized.length === 0) return normalized
 
   try {

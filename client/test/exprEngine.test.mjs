@@ -17,6 +17,12 @@ test('keeps arithmetic sides of equality in familiar form', () => {
   assert.equal(formatFormulaText('A + B = C * D'), 'A + B = C * D')
 })
 
+test('renders Lean natural-number zero constructors as the numeral 0', () => {
+  assert.equal(formatFormulaText('0 + zero = zero'), '0 + 0 = 0')
+  assert.equal(formatFormulaText('MyNat.zero + Nat.zero = zero'), '0 + 0 = 0')
+  assert.equal(formatFormulaText('zero_add n = n'), 'zero_add(n) = n')
+})
+
 test('omits arithmetic parentheses when PEMDAS already settles the grouping', () => {
   assert.equal(formatFormulaText('A * B + C'), 'A * B + C')
 })
