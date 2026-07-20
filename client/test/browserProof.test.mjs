@@ -35,10 +35,13 @@ case succ =>
   )
 })
 
-test('retains the add_zero constructor compatibility rewrite inside a case', () => {
-  assert.match(
+test('uses Lean core rewriting on the selected side for nested add_zero', () => {
+  assert.equal(
     instrumentBrowserProof(`case zero =>
-  drag_rw_lhs [MyNat.add_zero]`),
-    /first \| apply MyNat\.add_zero \| rw \[MyNat\.add_zero\]/u,
+  drag_rw_rhs_at [MyNat.add_zero] [2]`),
+    `case zero =>
+  conv => rhs; rw [MyNat.add_zero]
+  all_goals browser_report_state
+  all_goals sorry`,
   )
 })

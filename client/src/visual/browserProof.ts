@@ -1,16 +1,21 @@
 /** Adapt the recorded visual proof to known Cauli WASM elaborator differences. */
 function browserCompatibleProof(proofBody: string): string {
   return proofBody.split('\n').map(line => {
-    // Induction exposes `MyNat.zero`, whereas add_zero uses numeral notation.
-    // The rewrite matcher does not see those definitionally equal forms as an
-    // occurrence, but theorem application still unifies and kernel-checks them.
+    const addZeroMatch = line.match(
+      /^(\s*)drag_rw_(lhs|rhs)(?:_at)? \[(←\s*)?MyNat\.add_zero\](?: \[[\d,\s]*\])?\s*$/u,
+    )
+    if (addZeroMatch) {
+      const [, indentation, side, reverse = ''] = addZeroMatch
+      // The Cauli snapshot's custom matcher reduces overloaded addition to
+      // `MyNat.add`, then mistakenly treats it as unary while following a
+      // nested visual path. Core `rw` under the selected equality side keeps
+      // this action formally checked and reaches the intended `b + 0`.
+      return `${indentation}conv => ${side}; rw [${reverse}MyNat.add_zero]`
+    }
     const match = line.match(/^(\s*)drag_rw_(lhs|rhs) \[(.+)\]\s*$/u)
     if (!match) return line
     const [, indentation, , rule] = match
     const trimmedRule = rule.trim()
-    if (trimmedRule === 'MyNat.add_zero') {
-      return `${indentation}first | apply MyNat.add_zero | rw [MyNat.add_zero]`
-    }
     if (trimmedRule === 'MyNat.add_succ') {
       // The focused matcher in the Cauli build fails to instantiate the
       // successor branch's exposed free variable. Core rw handles it correctly.
