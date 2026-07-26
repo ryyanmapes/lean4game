@@ -135,6 +135,26 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
   })
 
+  it('applies a clicked rewrite rule when exactly one expression is highlighted', () => {
+    visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
+    visualHarness().then(harness => harness.openGoalTransform())
+
+    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
+    cy.get('.tr-swap-btn').click()
+    cy.get('[data-rule-label="add_zero"]', { timeout: 60000 })
+      .trigger('mouseenter')
+    cy.get('.tr-expression-node.potential-target').should('have.length', 1)
+
+    cy.get('[data-rule-label="add_zero"]').click()
+
+    cy.window({ timeout: 60000 }).should(win => {
+      const entries = JSON.parse(win.localStorage.getItem('playlog/Addition/1') ?? '[]')
+      expect(entries.at(-1)?.playTactic).to.match(/^drag_rw_lhs \[(?:MyNat\.)?add_zero\]$/)
+      expect(entries.at(-1)?.succeeded).to.equal(true)
+    })
+    cy.get('.tr-expression-node', { timeout: 60000 }).should('contain.text', '0')
+  })
+
   it('keeps the base-case goal available until the player backs out and clicks rfl', () => {
     visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
 

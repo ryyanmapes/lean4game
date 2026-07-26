@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 const {
   applyTheoremRewrite,
+  findMatchingNodeIds,
   formatFormulaText,
   matchesPattern,
   parse,
@@ -36,6 +37,21 @@ test('add_succ matches and rewrites the induction successor goal', () => {
 
   assert.equal(matchesPattern(goal, lhs), true)
   assert.equal(printExpression(applyTheoremRewrite(goal, goal.id, lhs, rhs, false)), 'succ(0 + d)')
+})
+
+test('finds one automatic rewrite target only when the highlighted match is unambiguous', () => {
+  const lhs = parse('a + 0')
+  const uniqueGoal = parse('(a + b) + 0')
+  const ambiguousGoal = parse('(a + 0) + (b + 0)')
+
+  assert.equal(
+    findMatchingNodeIds(uniqueGoal, node => matchesPattern(node, lhs)).length,
+    1,
+  )
+  assert.equal(
+    findMatchingNodeIds(ambiguousGoal, node => matchesPattern(node, lhs)).length,
+    2,
+  )
 })
 
 test('omits arithmetic parentheses when PEMDAS already settles the grouping', () => {

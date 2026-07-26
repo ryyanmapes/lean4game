@@ -463,6 +463,26 @@ export function findPath(root: ExpressionNode, targetId: string): number[] | nul
   return null
 }
 
+export function findMatchingNodeIds(
+  root: ExpressionNode,
+  predicate: (node: ExpressionNode) => boolean,
+): string[] {
+  const matches: string[] = []
+
+  function visit(node: ExpressionNode) {
+    if (predicate(node)) matches.push(node.id)
+    if (node.type === 'binary') {
+      visit(node.left)
+      visit(node.right)
+    } else if (node.type === 'app') {
+      visit(node.arg)
+    }
+  }
+
+  visit(root)
+  return matches
+}
+
 // --- Apply equality rewrite rule ---
 
 export function applyEqualityRule(

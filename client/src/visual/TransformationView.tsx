@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } fr
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
-import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findNodeById, findPath } from './expr-engine'
+import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findMatchingNodeIds, findNodeById, findPath } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
@@ -250,6 +250,7 @@ export function TransformationView({
   const backInfoRef = useRef<HTMLDivElement>(null)
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
+  const suppressRuleClickRef = useRef(false)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
   const [phoneExprScale, setPhoneExprScale] = useState<number | null>(null)
   const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
@@ -662,6 +663,7 @@ export function TransformationView({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const handleDragStart = (event: DragStartEvent) => {
+    suppressRuleClickRef.current = true
     const id = event.active.id as string
     setActiveId(id)
     const el = document.getElementById(id)
@@ -673,28 +675,20 @@ export function TransformationView({
     if (sensorEvent) setArrowEnd({ x: sensorEvent.clientX, y: sensorEvent.clientY })
   }
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
-    const draggedId = active.id as string
-    setActiveId(null)
-    setArrowStart(null)
-    setArrowEnd(null)
-    if (!over || !active) return
-
-    const targetId = over.id as string
+  const applyRewriteAtTarget = async (draggedId: string, targetId: string) => {
     const hyp = getEqualityHypForId(draggedId)
-    if (!hyp) return
+    if (!hyp) return false
 
     // Pre-check: does the target node structurally match the rewrite pattern?
     // Theorem hyps use wildcard matching; hypothesis hyps use exact matching.
     const from = isReverse ? hyp.rhs : hyp.lhs
     const isThm = draggedId.startsWith('thm_')
     const targetNode = findNodeById(workingExpr, targetId)
-    if (!targetNode) return
+    if (!targetNode) return false
     const patternMatches = isThm
       ? matchesPattern(targetNode, from)
       : printExpression(applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)) !== printExpression(workingExpr)
-    if (!patternMatches) return
+    if (!patternMatches) return false
 
     // Compute the path from the root of the working expression to the target node.
     const path = findPath(workingExpr, targetId) ?? undefined
@@ -714,12 +708,46 @@ export function TransformationView({
     if (!outcome.success) {
       setFailingCardId(draggedId)
       setTimeout(() => setFailingCardId(null), 600)
-      return
+      return false
     }
 
     setHistory(prev => [...prev, { lhs, rhs }])
     if (workingSide === 'right') setRhs(rewrittenExpr)
     else setLhs(rewrittenExpr)
+    return true
+  }
+
+  const handleRuleClick = async (draggedId: string) => {
+    if (isProcessing || suppressRuleClickRef.current) return
+    const hyp = getEqualityHypForId(draggedId)
+    if (!hyp) return
+
+    const from = isReverse ? hyp.rhs : hyp.lhs
+    const isThm = draggedId.startsWith('thm_')
+    const matchingTargetIds = findMatchingNodeIds(workingExpr, node =>
+      isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
+    )
+    if (matchingTargetIds.length !== 1) return
+
+    await applyRewriteAtTarget(draggedId, matchingTargetIds[0]!)
+  }
+
+  const releaseSuppressedRuleClick = () => {
+    window.setTimeout(() => {
+      suppressRuleClickRef.current = false
+    }, 0)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    const draggedId = active.id as string
+    setActiveId(null)
+    setArrowStart(null)
+    setArrowEnd(null)
+    releaseSuppressedRuleClick()
+    if (!over || !active) return
+
+    await applyRewriteAtTarget(draggedId, over.id as string)
   }
 
   const handleUndo = async () => {
@@ -755,6 +783,7 @@ export function TransformationView({
         collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={releaseSuppressedRuleClick}
       >
         {/* Back button */}
         <button ref={backButtonRef} className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
@@ -870,6 +899,7 @@ export function TransformationView({
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         emphasized={isEmphasizedRule(rule)}
+                        onClick={() => void handleRuleClick(rule.dragId)}
                         onMouseEnter={() => setHoveredId(rule.dragId)}
                         onMouseLeave={() => setHoveredId(null)}
                       />

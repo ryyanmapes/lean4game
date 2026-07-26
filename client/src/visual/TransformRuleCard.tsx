@@ -15,6 +15,7 @@ interface EqualityHypCardProps {
   isReverse: boolean
   isFailing?: boolean
   emphasized?: boolean
+  onClick?: () => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
@@ -39,6 +40,7 @@ export function EqualityHypCard({
   isReverse,
   isFailing = false,
   emphasized = false,
+  onClick,
   onMouseEnter,
   onMouseLeave,
 }: EqualityHypCardProps) {
@@ -59,6 +61,7 @@ export function EqualityHypCard({
       data-rule-label={label}
       {...listeners}
       {...attributes}
+      onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
