@@ -69,6 +69,19 @@ jobs:
           repository: ryyanmapes/lean4game
           ref: ${{ inputs.lean4game_ref }}
 
+      - name: Restore Lean4Game sibling layout
+        shell: bash
+        run: |
+          # Reusable workflows run inside the caller repository's workspace
+          # directory. NNG4's local GameServer dependency is intentionally
+          # ../lean4game/server, so expose this checkout under that stable
+          # sibling name as well.
+          expected_checkout="$GITHUB_WORKSPACE/../lean4game"
+          if [[ ! -e "$expected_checkout" ]]; then
+            ln -s "$GITHUB_WORKSPACE" "$expected_checkout"
+          fi
+          test -d "$expected_checkout/server"
+
       - name: Require Cauli artifact token
         env:
           CAULI_ARTIFACT_TOKEN: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
