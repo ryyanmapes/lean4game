@@ -3374,11 +3374,10 @@ export function VisualCanvas({
             }
         const lineCenterX = (start.x + end.x) / 2
         const lineCenterY = (start.y + end.y) / 2
-        const lineTop = Math.min(start.y, end.y)
         const left = clampViewportValue(lineCenterX - guideWidth / 2, minLeft, maxLeft)
         const top = isPhonePortrait
           ? clampViewportValue(lineCenterY, minTop, maxTop)
-          : clampViewportValue(lineTop - 92, minTop, maxTop)
+          : clampViewportValue(lineCenterY + 42, minTop, maxTop)
 
         nextGuides.push({
           info,
@@ -3800,18 +3799,15 @@ export function VisualCanvas({
     const lines = displayedProofLines(proofSteps, sideViewMode)
     return (
       <div className="proof-sidebar-steps">
-        {lines.length === 0
-          ? <div className="proof-sidebar-empty">No proof steps yet.</div>
-          : lines.map((line, i) => {
-              const isUnknown = sideViewMode === 'lean' && line.trimStart().startsWith('? (')
-              return (
-                <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
-                  <span className="proof-sidebar-step-num">{i + 1}</span>
-                  <span className="proof-sidebar-step-text">{line}</span>
-                </div>
-              )
-            })
-        }
+        {lines.map((line, i) => {
+          const isUnknown = sideViewMode === 'lean' && line.trimStart().startsWith('? (')
+          return (
+            <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
+              <span className="proof-sidebar-step-num">{i + 1}</span>
+              <span className="proof-sidebar-step-text">{line}</span>
+            </div>
+          )
+        })}
       </div>
     )
   }

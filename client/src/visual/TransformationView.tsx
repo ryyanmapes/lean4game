@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } fr
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
-import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findMatchingNodeIds, findNodeById, findPath } from './expr-engine'
+import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findMatchingNodeIds, findDisambiguatingRewritePath, findNodeById } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
@@ -690,8 +690,16 @@ export function TransformationView({
       : printExpression(applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)) !== printExpression(workingExpr)
     if (!patternMatches) return false
 
-    // Compute the path from the root of the working expression to the target node.
-    const path = findPath(workingExpr, targetId) ?? undefined
+    // Lean's elaborated expression can hide typeclass-backed arithmetic behind a
+    // different application tree than the display ExprTree (notably MyNat.add).
+    // When this is the only matching target on the selected side, let Lean's
+    // side-scoped rewrite find it without a structural path. Keep explicit paths
+    // only when they are actually needed to distinguish multiple matches.
+    const path = findDisambiguatingRewritePath(
+      workingExpr,
+      targetId,
+      node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
+    )
 
     // Send to Lean — it is the final arbiter. Visual update comes from remount
     // with the fresh Lean state (TransformationView key changes on each rewrite).

@@ -36,7 +36,7 @@ import { saveState } from '../state/local_storage'
 import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
-import { getWebsocketUrl } from '../utils/url'
+import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
 import { titleCaseLevel } from './VisualHeader'
 import './visual.css'
 
@@ -407,10 +407,11 @@ export function VisualWorldMap() {
   React.useEffect(() => {
     if (!gameInfo.data?.worldSize) return
     const ws = gameInfo.data.worldSize as Record<string, number>
+    const dataBaseUrl = getDataBaseUrl().replace(/\/$/, '')
     const promises = Object.entries(ws).flatMap(([worldId, size]) =>
       Array.from({ length: size }, (_, i) => {
         const level = i + 1
-        return fetch(`/data/${gameId}/level__${worldId}__${level}.json`)
+        return fetch(`${dataBaseUrl}/${gameId}/level__${worldId}__${level}.json`)
           .then(r => r.json())
           .then((d: { title?: string }) => ({ worldId, level, title: d.title ? titleCaseLevel(d.title) : `Level ${level}` }))
           .catch(() => ({ worldId, level, title: `Level ${level}` }))

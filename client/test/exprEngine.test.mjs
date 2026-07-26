@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 const {
   applyTheoremRewrite,
+  findDisambiguatingRewritePath,
   findMatchingNodeIds,
   formatFormulaText,
   matchesPattern,
@@ -51,6 +52,23 @@ test('finds one automatic rewrite target only when the highlighted match is unam
   assert.equal(
     findMatchingNodeIds(ambiguousGoal, node => matchesPattern(node, lhs)).length,
     2,
+  )
+})
+
+test('omits backend paths for a unique nested rewrite but keeps them for ambiguous matches', () => {
+  const lhs = parse('a + succ(d)')
+  const uniqueGoal = parse('(a + succ(d)) + b')
+  const uniqueTarget = uniqueGoal.left
+  assert.equal(
+    findDisambiguatingRewritePath(uniqueGoal, uniqueTarget.id, node => matchesPattern(node, lhs)),
+    undefined,
+  )
+
+  const ambiguousGoal = parse('(a + succ(d)) + (b + succ(d))')
+  const ambiguousTarget = ambiguousGoal.right
+  assert.deepEqual(
+    findDisambiguatingRewritePath(ambiguousGoal, ambiguousTarget.id, node => matchesPattern(node, lhs)),
+    [2],
   )
 })
 

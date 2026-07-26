@@ -483,6 +483,22 @@ export function findMatchingNodeIds(
   return matches
 }
 
+/**
+ * Return a structural path only when Lean needs one to distinguish multiple
+ * visually matching rewrite targets. A unique side-scoped rewrite is more
+ * robust without a path because Lean's elaborated arithmetic tree may differ
+ * from the display ExprTree.
+ */
+export function findDisambiguatingRewritePath(
+  root: ExpressionNode,
+  targetId: string,
+  predicate: (node: ExpressionNode) => boolean,
+): number[] | undefined {
+  return findMatchingNodeIds(root, predicate).length === 1
+    ? undefined
+    : findPath(root, targetId) ?? undefined
+}
+
 // --- Apply equality rewrite rule ---
 
 export function applyEqualityRule(

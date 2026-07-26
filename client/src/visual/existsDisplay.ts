@@ -103,5 +103,32 @@ export function contextualizeReductionForm(form: string, contextNames: Iterable<
 }
 
 export function contextualizeReductionForms(forms: string[], contextNames: Iterable<string>): string[] {
-  return forms.map(form => contextualizeReductionForm(form, contextNames))
+  const contextualizedForms = forms.map(form => contextualizeReductionForm(form, contextNames))
+  const expandedForms: string[] = []
+  const seen = new Set<string>()
+
+  const append = (form: string) => {
+    if (seen.has(form)) return
+    seen.add(form)
+    expandedForms.push(form)
+  }
+
+  for (const form of contextualizedForms) {
+    append(form)
+
+    const trimmed = form.trim()
+    if (!trimmed.startsWith('\u00ac')) continue
+
+    const negatedBody = trimmed.slice(1).trim()
+    if (!negatedBody) continue
+
+    const alreadyParenthesized = negatedBody.startsWith('(') && negatedBody.endsWith(')')
+    const antecedent =
+      !alreadyParenthesized && (negatedBody.startsWith('\u00ac') || negatedBody.includes('\u2192'))
+        ? `(${negatedBody})`
+        : negatedBody
+    append(`${antecedent} \u2192 False`)
+  }
+
+  return expandedForms
 }
