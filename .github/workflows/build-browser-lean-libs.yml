@@ -1,8 +1,39 @@
 name: Build browser Lean libraries
 
 on:
+  workflow_call:
+    inputs:
+      lean4game_ref:
+        description: lean4game branch, tag, or SHA
+        required: false
+        default: main
+        type: string
+      nng4_ref:
+        description: NNG4 branch, tag, or SHA
+        required: false
+        default: main
+        type: string
+      include_nng4:
+        description: Build and package ryyanmapes/NNG4
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      CAULI_ARTIFACT_TOKEN:
+        description: Token with Actions read access to cauli/lean4
+        required: true
   workflow_dispatch:
     inputs:
+      lean4game_ref:
+        description: lean4game branch, tag, or SHA
+        required: false
+        default: main
+        type: string
+      nng4_ref:
+        description: NNG4 branch, tag, or SHA
+        required: false
+        default: main
+        type: string
       include_nng4:
         description: Build and package ryyanmapes/NNG4
         required: true
@@ -34,6 +65,9 @@ jobs:
     steps:
       - name: Check out lean4game
         uses: actions/checkout@v4
+        with:
+          repository: ryyanmapes/lean4game
+          ref: ${{ inputs.lean4game_ref }}
 
       - name: Require Cauli artifact token
         env:
@@ -60,7 +94,12 @@ jobs:
 
       - name: Check out NNG4
         if: inputs.include_nng4
-        run: git clone --depth 1 https://github.com/ryyanmapes/NNG4 ../NNG4
+        env:
+          NNG4_REF: ${{ inputs.nng4_ref }}
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/NNG4 ../NNG4
+          git -C ../NNG4 fetch --depth 1 origin "$NNG4_REF"
+          git -C ../NNG4 checkout --detach FETCH_HEAD
 
       - name: Download matching Cauli 32-bit compiler
         uses: actions/download-artifact@v4

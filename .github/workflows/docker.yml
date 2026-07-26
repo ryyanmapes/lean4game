@@ -1,12 +1,7 @@
-name: Docker Release Build
-run-name: Build and push Docker image
+name: Legacy relay Docker release
+run-name: Build and push legacy relay Docker image
 
 on:
-  push:
-    branches:
-      - main
-  # Triggered by NNG4 and VisualTest repos when they push to main.
-  # They call the GitHub API with workflow_dispatch; no extra event type needed.
   workflow_dispatch:
     inputs:
       nng4_ref:
