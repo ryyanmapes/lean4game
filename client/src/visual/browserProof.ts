@@ -1,6 +1,23 @@
 /** Adapt the recorded visual proof to known Cauli WASM elaborator differences. */
 function browserCompatibleProof(proofBody: string): string {
-  return proofBody.split('\n').map(line => {
+  const lines = proofBody.split('\n')
+  return lines.map((line, index) => {
+    const tautoMatch = line.match(/^(\s*)tauto\s*$/u)
+    if (tautoMatch) {
+      if (lines[index - 1]?.trim() === 'have h2 := mul_ne_zero a b') {
+        // `simp_all` alone does not split the two decidable equality cases in
+        // mul_eq_zero. Make those cases explicit, then let the core simplifier
+        // discharge the same propositional argument. This remains transient
+        // compiler input: the player's authored action is still shown as
+        // `tauto`, and Lean kernel-checks the resulting proof.
+        return `${tautoMatch[1]}by_cases ha : a = 0 <;> by_cases hb : b = 0 <;> simp_all`
+      }
+      // The compact browser `tauto` elaborator reaches an unsupported dynamic
+      // evaluator path in the purpose-linked WASM runtime. Its final proof
+      // step is Lean's own propositional simplifier; NNG's four authored uses
+      // are all discharged by that kernel-checked step directly.
+      return `${tautoMatch[1]}simp_all`
+    }
     const addZeroMatch = line.match(
       /^(\s*)drag_rw_(lhs|rhs)(?:_at)? \[(←\s*)?MyNat\.add_zero\](?: \[[\d,\s]*\])?\s*$/u,
     )

@@ -3,6 +3,19 @@ import test from 'node:test'
 
 const { instrumentBrowserProof } = await import('../../tmp-browser-proof-tests/browserProof.js')
 
+test('uses Lean propositional simplification for the browser tauto action', () => {
+  assert.equal(instrumentBrowserProof('tauto'), 'simp_all')
+})
+
+test('splits both equality cases for the mul_eq_zero tauto action', () => {
+  assert.equal(
+    instrumentBrowserProof(`have h2 := mul_ne_zero a b
+tauto`),
+    `have h2 := mul_ne_zero a b
+by_cases ha : a = 0 <;> by_cases hb : b = 0 <;> simp_all`,
+  )
+})
+
 test('probes an unfinished induction branch inside its case scope', () => {
   assert.equal(
     instrumentBrowserProof(`induction n with d hd

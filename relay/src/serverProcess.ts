@@ -11,8 +11,6 @@ type ResolvedGame = Tag & { gameDir: string };
 const DEVELOPMENT_REPO_ALIASES: Record<string, string[]> = {
   nng4: ['nng4'],
   visualtest: ['visualtest'],
-  realanalysisgame: ['rng'],
-  rng: ['rng'],
 }
 export type GameSession = {
   process: ChildProcess,
@@ -41,7 +39,6 @@ export class GameManager {
       "g/ryyanmapes/visualtest": 2,
       "g/test/testgame": 1,
       "g/local/visualtest": 1,
-      "g/local/rng": 1,
     };
     /** We keep queues of started Lean Server processes to be ready when a user arrives */
     this.queue = {};
@@ -52,7 +49,6 @@ export class GameManager {
     if (isDevelopment) {
       this.fillQueue({ owner: 'test', repo: 'testgame' })
       this.fillQueue({ owner: 'local', repo: 'visualtest' })
-      this.fillQueue({ owner: 'local', repo: 'rng' })
     }
   }
 

@@ -1,24 +1,299 @@
-.local-classic-page { min-height: 100vh; background: #f4f1e8; color: #20242d; font-family: Roboto, sans-serif; }
-.local-classic-header { min-height: 3.5rem; padding: .75rem 1.25rem; background: #26364a; color: white; display: flex; align-items: center; gap: 1.5rem; }
-.local-classic-header a { color: white; text-decoration: none; font-weight: 600; }
-.local-classic-header nav { margin-left: auto; display: flex; gap: 1rem; }
-.local-classic-columns { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(24rem, 1.25fr); gap: 1.5rem; padding: 1.5rem; max-width: 96rem; margin: auto; }
-.local-classic-lesson, .local-classic-workspace { background: white; border: 1px solid #d8d3c6; border-radius: .45rem; padding: 1.4rem; box-shadow: 0 3px 12px #26364a14; }
-.local-classic-kicker { color: #66758a; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
-.local-classic-lesson h1 { margin: .2rem 0 1rem; }
-.local-classic-statement { white-space: pre-wrap; padding: 1rem; background: #f2f4f7; border-left: .3rem solid #3e6d9c; font: 1rem/1.5 JuliaMono, monospace; }
-.local-classic-inventory h2 { font-size: 1rem; }
-.local-classic-inventory div { display: flex; flex-wrap: wrap; gap: .45rem; }
-.local-classic-inventory code { background: #e7edf4; border-radius: .25rem; padding: .3rem .5rem; }
-.local-classic-workspace { display: flex; flex-direction: column; gap: .8rem; }
-.local-classic-workspace > label { font-weight: 700; }
-.local-classic-workspace textarea { min-height: 14rem; resize: vertical; border: 1px solid #9da9b8; border-radius: .3rem; padding: .85rem; font: 1rem/1.55 JuliaMono, monospace; color: #eef2f7; background: #172131; }
-.local-classic-status { padding: .65rem .8rem; border-radius: .3rem; background: #e8edf3; }
-.local-classic-status.is-complete { background: #dff3df; color: #185c24; font-weight: 700; }
-.local-classic-goal { border: 1px solid #aeb9c6; border-radius: .35rem; padding: 1rem; background: #f9fafb; }
-.local-classic-hyp { display: grid; grid-template-columns: auto auto 1fr; gap: .5rem; margin: .25rem 0; }
-.local-classic-turnstile { border-top: 1px solid #718096; margin-top: .8rem; padding-top: .45rem; color: #536176; }
-.local-classic-target { display: block; font-size: 1.05rem; margin-top: .25rem; white-space: pre-wrap; }
-.local-classic-conclusion { border-left: .3rem solid #39854b; background: #edf8ee; padding: .75rem 1rem; }
-.local-classic-loading { padding: 3rem; }
-@media (max-width: 800px) { .local-classic-columns { grid-template-columns: 1fr; padding: .75rem; } .local-classic-header { flex-wrap: wrap; } }
+/*
+ * Only the controls that replace the hosted Monaco/WebSocket transport live
+ * here. The surrounding classic page intentionally uses Lean4Game's original
+ * app.css, level.css, infoview.css, inventory.css, and tab-bar components.
+ */
+
+.local-wasm-typewriter {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.5em;
+  --typewriter-control-height: 30.4px;
+}
+
+.local-wasm-typewriter .typewriter-input-wrapper {
+  flex: 1;
+}
+
+.local-wasm-typewriter input {
+  width: 100%;
+  min-height: 1.5rem;
+  padding: 0;
+  color: #111;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: 1rem/1.5 JuliaMono, "Roboto Mono", monospace;
+}
+
+.local-wasm-typewriter input:disabled {
+  color: #777;
+}
+
+.local-wasm-code-editor {
+  width: 100%;
+  min-height: 14rem;
+  padding: 0.75rem;
+  flex: 1 1 45%;
+  resize: none;
+  color: #202020;
+  background: #fff;
+  border: 0;
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  outline: none;
+  font: 0.95rem/1.55 JuliaMono, "Roboto Mono", monospace;
+  tab-size: 2;
+}
+
+.local-wasm-editor-goals {
+  min-height: 10rem;
+  padding: 0.5rem;
+  flex: 1 1 40%;
+  overflow: auto;
+}
+
+.local-classic-status {
+  margin: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  color: #555;
+  background: #eee;
+  border-radius: 0.2rem;
+}
+
+.local-classic-status.is-complete {
+  color: #185c24;
+  background: #dff3df;
+  font-weight: 700;
+}
+
+.local-classic-status + .goal-tabs {
+  margin-top: 0;
+}
+
+.local-classic-loading {
+  min-height: 100vh;
+  padding: 3rem;
+}
+
+.app[data-visual-theme='dark'] .local-wasm-typewriter input,
+.app[data-visual-theme='dark'] .local-wasm-code-editor {
+  color: #e2e8f0;
+  background: #111c31;
+  border-color: #334155;
+}
+
+.app[data-visual-theme='dark'] .local-classic-status {
+  color: #cbd5e1;
+  background: #1e293b;
+}
+
+.app[data-visual-theme='dark'] .local-classic-status.is-complete {
+  color: #86efac;
+  background: #14532d;
+}
+
+/* Cohesive dark palette for the original NNG4 shell. The upstream styles use
+ * hard-coded white and pale-blue surfaces, so merely darkening `.app-content`
+ * leaves the three columns visually disconnected. */
+.app[data-visual-theme='dark'] .typewriter-interface .content,
+.app[data-visual-theme='dark'] .world-image-container.empty {
+  background: #0d182a;
+}
+
+.app[data-visual-theme='dark'] .typewriter-interface .proof {
+  color: var(--classic-text);
+  background: var(--classic-panel);
+  border-top: 1px solid var(--classic-border);
+}
+
+.app[data-visual-theme='dark'] .exercise-statement {
+  color: var(--classic-text);
+  background: var(--classic-panel);
+  border-bottom: 1px solid var(--classic-border);
+}
+
+.app[data-visual-theme='dark'] .exercise-statement .lean-code {
+  color: #8fc5ed;
+}
+
+.app[data-visual-theme='dark'] .chat {
+  scrollbar-color: #41546e var(--classic-bg);
+}
+
+.app[data-visual-theme='dark'] .message.information,
+.app[data-visual-theme='dark'] .message.info {
+  color: var(--classic-text);
+  background: #172b3d;
+  border: 1px solid #29475e;
+}
+
+.app[data-visual-theme='dark'] .message.warning {
+  color: #f6d889;
+  background: #342c1d;
+  border: 1px solid #67542a;
+}
+
+.app[data-visual-theme='dark'] .message.error {
+  color: #fecaca;
+  background: #3b1d27;
+  border: 1px solid #7f3446;
+}
+
+.app[data-visual-theme='dark'] .message.deleted-hint {
+  color: var(--classic-muted);
+  background: #162235;
+  border-color: #2a3a50;
+  box-shadow: none;
+}
+
+.app[data-visual-theme='dark'] .chat .recent {
+  box-shadow: 0 0 0.35em 0.1em rgba(76, 159, 214, 0.55);
+}
+
+.app[data-visual-theme='dark'] .markdown code,
+.app[data-visual-theme='dark'] .markdown pre {
+  color: #d9e9f7;
+  background: #22354b;
+}
+
+.app[data-visual-theme='dark'] .goal-tabs {
+  color: var(--classic-text);
+  background: var(--classic-panel);
+}
+
+.app[data-visual-theme='dark'] .goal-tab.vscode-light {
+  color: var(--classic-text);
+}
+
+.app[data-visual-theme='dark'] .vscode-light .goal-goals,
+.app[data-visual-theme='dark'] .vscode-light .goal-vdash {
+  color: #7fc3f1;
+}
+
+.app[data-visual-theme='dark'] .vscode-light .goal-case {
+  color: #8bd49c;
+}
+
+.app[data-visual-theme='dark'] .vscode-light .goal-hyp {
+  color: #f2bd63;
+}
+
+.app[data-visual-theme='dark'] .goal-sign line {
+  stroke: #62738b;
+}
+
+.app[data-visual-theme='dark'] .tab-bar {
+  border-color: #506079;
+}
+
+.app[data-visual-theme='dark'] .tab {
+  color: #94a5ba;
+  background-image: none;
+}
+
+.app[data-visual-theme='dark'] .tab:hover {
+  color: #dce9f6;
+}
+
+.app[data-visual-theme='dark'] .tab.active,
+.app[data-visual-theme='dark'] .tab-bar.current .tab.active {
+  color: #f3f7fb;
+  background-image: none;
+  border-bottom-color: var(--classic-accent);
+}
+
+.app[data-visual-theme='dark'] .tab.new:not(.active) {
+  border-bottom-color: #b89442;
+}
+
+.app[data-visual-theme='dark'] .tab.recent:not(.active) {
+  border-bottom-color: #9366b8;
+}
+
+.app[data-visual-theme='dark'] .inventory-panel,
+.app[data-visual-theme='dark'] .inventory {
+  color: var(--classic-text);
+  background: var(--classic-bg);
+}
+
+.app[data-visual-theme='dark'] .inventory .item {
+  color: #dce8f5;
+  background: var(--classic-surface);
+  border-color: #48617e;
+}
+
+.app[data-visual-theme='dark'] .inventory .item:hover {
+  background: var(--classic-surface-raised);
+  border-color: #6da9d6;
+}
+
+.app[data-visual-theme='dark'] .inventory .item.locked:not(.enabled) {
+  color: #718096;
+  background: #121e30;
+  border-color: #2a394e;
+}
+
+.app[data-visual-theme='dark'] .inventory .item.disabled {
+  color: #f18b8b;
+}
+
+.app[data-visual-theme='dark'] .inventory .item.new {
+  color: #f7e4a4;
+  background: #3b321d;
+  border-color: #8f7434;
+}
+
+.app[data-visual-theme='dark'] .inventory .item.recent {
+  color: #e6d1f4;
+  background: #32233d;
+  border-color: #76508b;
+}
+
+.app[data-visual-theme='dark'] .inventory-panel .documentation {
+  color: var(--classic-text);
+  background: var(--classic-panel);
+}
+
+.app[data-visual-theme='dark'] .exercise .command {
+  background: #293950;
+}
+
+.app[data-visual-theme='dark'] .exercise .failed-command {
+  background: #352532;
+}
+
+.app[data-visual-theme='dark'] .exercise .command-text {
+  color: var(--classic-text);
+  background: #111d30;
+}
+
+.app[data-visual-theme='dark'] .typewriter {
+  background: #174873;
+}
+
+.app[data-visual-theme='dark'] .typewriter .typewriter-input-wrapper {
+  background: #101c2f;
+  box-shadow: inset 0 0 0 1px #38516e;
+}
+
+.app[data-visual-theme='dark'] .level-completed {
+  color: #a7f3d0;
+  background: #153b32;
+}
+
+.app[data-visual-theme='dark'] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.app[data-visual-theme='dark'] ::-webkit-scrollbar-track {
+  background: #0b1424;
+}
+
+.app[data-visual-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #3c506a;
+  border: 3px solid #0b1424;
+  border-radius: 8px;
+}

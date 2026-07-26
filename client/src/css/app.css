@@ -12,6 +12,13 @@
 
 /* General styling */
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: var(--ff-primary);
   -webkit-font-smoothing: antialiased;
@@ -96,6 +103,87 @@ em {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.app[data-visual-theme='dark'] {
+  --clr-primary: #2f79b9;
+  --clr-primary-dark: #78b8ed;
+  --clr-light-gray: #26364d;
+  --clr-dark-gray: #718198;
+  --clr-darker-gray: #a7b6c9;
+  --classic-bg: #0b1424;
+  --classic-panel: #101c2f;
+  --classic-surface: #17263b;
+  --classic-surface-raised: #1d2e47;
+  --classic-border: #30435d;
+  --classic-text: #e6edf7;
+  --classic-muted: #9eacc0;
+  --classic-accent: #70b7ed;
+  --vscode-editor-foreground: #e6edf7;
+  --vscode-editor-background: #101c2f;
+  --vscode-editor-font-family: JuliaMono, "Roboto Mono", monospace;
+  --vscode-editor-font-weight: 400;
+  --vscode-editor-font-size: 14px;
+  --vscode-editor-line-height: 1.5;
+  --vscode-editor-selectionBackground: #315c84;
+  --vscode-editorOverviewRuler-rangeHighlightForeground: #315c84;
+  color: #e2e8f0;
+  background: var(--classic-bg);
+}
+
+.app[data-visual-theme='dark'] .app-content,
+.app[data-visual-theme='dark'] .welcome,
+.app[data-visual-theme='dark'] .exercise,
+.app[data-visual-theme='dark'] .exercise-panel,
+.app[data-visual-theme='dark'] .inventory-panel,
+.app[data-visual-theme='dark'] .chat-panel {
+  color: var(--classic-text);
+  background: var(--classic-bg);
+}
+
+.app[data-visual-theme='dark'] .gutter {
+  background-color: #24344a;
+}
+
+.app[data-visual-theme='dark'] .markdown code,
+.app[data-visual-theme='dark'] .markdown pre,
+.app[data-visual-theme='dark'] .world-selection-menu {
+  color: var(--classic-text);
+  background: var(--classic-surface);
+}
+
+.theme-mode-btn.active {
+  color: #f59e0b;
+}
+
+.app[data-visual-theme='dark'] .app-bar {
+  background: #174873;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
+}
+
+.app[data-visual-theme='dark'] .btn-inverted {
+  color: #b9ddfa;
+  background: #1b2d44;
+  box-shadow: inset 0 0 0 1px rgba(143, 197, 238, 0.18);
+}
+
+.app[data-visual-theme='dark'] .btn-inverted:hover {
+  color: #ffffff;
+  background: #243c59;
+}
+
+.app[data-visual-theme='dark'] .btn-inverted[disabled],
+.app[data-visual-theme='dark'] .btn-inverted.btn-disabled {
+  color: #718096;
+  background: #172337;
+  box-shadow: inset 0 0 0 1px rgba(113, 128, 150, 0.12);
+}
+
+.app[data-visual-theme='dark'] .menu.dropdown {
+  color: var(--classic-text);
+  background: var(--classic-surface);
+  border-color: var(--classic-border);
+  box-shadow: -0.1rem 0.3rem 0.5rem rgba(0, 0, 0, 0.4);
 }
 
 .app-bar {

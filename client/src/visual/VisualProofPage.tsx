@@ -9,6 +9,7 @@ import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
+import { VisualLoadingScreen } from './VisualLoadingScreen'
 import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
@@ -115,6 +116,18 @@ export function VisualProofPage() {
   const handleWorldMap = useCallback(() => {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
+  const handleOpenClassic = useCallback((proofBody: string) => {
+    navigate(`/${gameId}/world/${worldId}/level/${levelId}`, {
+      state: {
+        visualProofHandoff: {
+          gameId,
+          worldId,
+          levelId,
+          proofBody,
+        },
+      },
+    })
+  }, [gameId, levelId, navigate, worldId])
   const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {
@@ -434,37 +447,21 @@ export function VisualProofPage() {
   const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
 
   if (!canvasState || !presentationReady) {
-    if (!showLoadingChrome) {
-      return <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} aria-busy="true" />
-    }
-    return (
-      <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} aria-busy="true">
-        <VisualHeader
-          worldId={worldId}
-          worldTitle={worldTitle ?? undefined}
-          levelId={levelId}
-          displayLevelId={displayLevelId}
-          levelTitle={levelTitle}
-          hasPrev={hasPrev}
-          hasNext={hasNext}
-          isCompleted={false}
-          previouslyCompleted={previouslyCompleted ?? false}
-          onPrev={levelId > 1 ? handlePreviousLevel : () => {}}
-          onNext={handleNextLevel}
-          onWorldMap={handleWorldMap}
-        />
-        <div className="visual-loading-anim">
-          <div className="hop-mask">
-            <div className="hop-dots" />
-          </div>
-          <div className="hop-left-cover" />
-          <div className="hop-ball-wrapper">
-            <div className="hop-ball" />
-          </div>
-        </div>
-        <p className="visual-loading-text">Connecting to Lean…</p>
-      </div>
-    )
+    return <VisualLoadingScreen
+      worldId={worldId}
+      worldTitle={worldTitle ?? undefined}
+      levelId={levelId}
+      displayLevelId={displayLevelId}
+      levelTitle={levelTitle}
+      showChrome={showLoadingChrome}
+      onWorldMap={handleWorldMap}
+      hasPrev={hasPrev}
+      hasNext={hasNext}
+      previouslyCompleted={previouslyCompleted ?? false}
+      onPrev={levelId > 1 ? handlePreviousLevel : () => {}}
+      onNext={handleNextLevel}
+      phonePortrait={isPhonePortrait}
+    />
   }
 
   return (
@@ -493,6 +490,7 @@ export function VisualProofPage() {
       previouslyCompleted={previouslyCompleted}
       onLevelCompleted={handleLevelCompleted}
       onProofStep={handleProofStep}
+      onOpenClassic={handleOpenClassic}
     />
   )
 }

@@ -102,7 +102,7 @@ function Level() {
   return <PlayableLevel key={`${worldId}/${levelId}`} />
 }
 
-function ChatPanel({lastLevel, visible = true}) {
+export function ChatPanel({lastLevel, visible = true}) {
   let { t } = useTranslation()
   const { t : gT } = useGameTranslation()
   const chatRef = useRef<HTMLDivElement>(null)

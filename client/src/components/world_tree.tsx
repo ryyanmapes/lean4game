@@ -3,24 +3,16 @@
 */
 import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { useStore, useSelector } from 'react-redux'
-import { Slider } from '@mui/material'
 import cytoscape, { LayoutOptions } from 'cytoscape'
 import klay from 'cytoscape-klay'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faXmark, faCircleQuestion } from '@fortawesome/free-solid-svg-icons'
 
 import { GameIdContext } from '../app'
-import { useAppDispatch } from '../hooks'
-import { selectDifficulty, changedDifficulty, selectCompleted } from '../state/progress'
+import { selectCompleted } from '../state/progress'
 import { store } from '../state/store'
 
 import '../css/world_tree.css'
-import { PreferencesContext } from './infoview/context'
-import { useTranslation } from 'react-i18next'
-import { useAtom } from 'jotai'
-import { popupAtom, PopupType } from '../store/popup-atoms'
 import { useGameTranslation } from '../utils/translation'
+import { getDataBaseUrl } from '../utils/url'
 
 // Settings for the world tree
 cytoscape.use( klay )
@@ -38,24 +30,25 @@ const NSPIRAL = 12 // world size if NMAX has been passed and need to spiral.
 const MINFONT = 12
 
 // colours
-const grey = '#999'
-const lightgrey = '#bbb'
-const green = 'green' // 118a11?
-const lightgreen = '#139e13'
-const blue = '#1976d2'
-const darkgrey = '#868686'
-const darkgreen = '#0e770e'
-const darkblue = '#1667b8'
+const grey = 'var(--world-locked)'
+const lightgrey = 'var(--world-level-locked)'
+const green = 'var(--world-path-complete)'
+const lightgreen = 'var(--world-level-complete)'
+const blue = 'var(--world-level-current)'
+const darkgrey = 'var(--world-label-locked)'
+const darkgreen = 'var(--world-label-complete)'
+const darkblue = 'var(--world-label-current)'
 
 
 /** svg object for a level in the game tree */
-export function LevelIcon({ world, level, position, completed, unlocked, worldSize }:
+export function LevelIcon({ world, level, position, completed, unlocked, worldSize, title }:
   { world: string,
     level: number,
     position: cytoscape.Position,
     completed: boolean,
     unlocked: boolean,
-    worldSize: number
+    worldSize: number,
+    title?: string
   }) {
 
   const N = Math.max(worldSize, NMIN)
@@ -69,8 +62,6 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
   let R = 1.1 * r / Math.sin(beta/2)
 
   const gameId = React.useContext(GameIdContext)
-  const difficulty = useSelector(selectDifficulty(gameId))
-  const levelDisabled = (difficulty >= 2 && !(unlocked || completed))
 
   /** In the spiral, the angle `β` should decrease to avoid big gaps between levels.
    * This is a simplified function, which has little mathematical foundation, but
@@ -92,8 +83,10 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
     s * position.y - Math.cos(level * betaSpiral(level)) * (R + 2*r*(level-1)/(NSPIRAL+1))
 
   return (
-    <Link to={levelDisabled ? '' : `/${gameId}/world/${world}/level/${level == 1 ? 0 : level}`}
-        className={`level${levelDisabled ? ' disabled' : ''}`}>
+    <Link to={`/${gameId}/world/${world}/level/${level}`}
+        className={`level ${completed ? 'completed' : unlocked ? 'unlocked' : 'locked'}`}
+        aria-label={`Open ${world} level ${level}: ${title ?? `Level ${level}`}`}>
+      <title>{title ?? `Level ${level}`}</title>
       <circle fill={completed ? lightgreen : unlocked? blue : lightgrey} cx={x} cy={y} r={r} />
       <foreignObject className="level-title-wrapper" x={x} y={y}
           width={1.42*r} height={1.42*r} transform={"translate("+ -.71*r +","+ -.71*r +")"}>
@@ -108,12 +101,11 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
 }
 
 /** svg object of one world in the game tree */
-export function WorldIcon({world, title, position, completedLevels, difficulty, worldSize}:
+export function WorldIcon({world, title, position, completedLevels, worldSize}:
   { world: string,
     title: string,
     position: cytoscape.Position,
     completedLevels: any,
-    difficulty: number,
     worldSize: number
   }) {
   const { t : gT } = useGameTranslation()
@@ -134,17 +126,14 @@ export function WorldIcon({world, title, position, completedLevels, difficulty, 
   let completed = completedLevels.slice(1).every(Boolean)
   // select the first non-completed level
   let nextLevel: number = completedLevels.findIndex(c => !c)
-  if (nextLevel <= 1) {
-    // note: `findIndex` returns `-1` on failure, therefore the indices
-    // `-1, 0, 1` indicate all that the introduction should be shown
-    nextLevel = 0
-  }
-  let playable = difficulty <= 1 || completed || unlocked
+  if (nextLevel <= 1) nextLevel = 1
   const gameId = React.useContext(GameIdContext)
 
   return <Link
-      to={playable ? `/${gameId}/world/${world}/level/${nextLevel}` : ''}
-      className={playable ? '' : 'disabled'}>
+      to={`/${gameId}/world/${world}/level/${nextLevel}`}
+      className={`world ${completed ? 'completed' : unlocked ? 'unlocked' : 'locked'}`}
+      aria-label={`Open ${title || world}`}>
+    <title>{title || world}</title>
     <circle className="world-circle" cx={s*position.x} cy={s*position.y} r={R}
         fill={completed ? green : unlocked ? blue : grey}/>
     { false ? // fontSize >= MINFONT ?
@@ -198,52 +187,6 @@ export const downloadFile = ({ data, fileName, fileType } :
   a.remove()
 }
 
-/** The menu that is shown next to the world selection graph */
-export function WorldSelectionMenu() {
-  const { t, i18n } = useTranslation()
-  const gameId = React.useContext(GameIdContext)
-  const difficulty = useSelector(selectDifficulty(gameId))
-  const dispatch = useAppDispatch()
-  const { mobile } = React.useContext(PreferencesContext)
-  const [popup, setPopup] = useAtom(popupAtom)
-
-
-  function label(x : number) {
-    return x == 0 ? t("none") : x == 1 ? t("relaxed") : t("regular")
-  }
-
-
-  return <nav className={`world-selection-menu${mobile ? '' : ' desktop'}`}>
-    <div className="slider-wrap">
-      <span className="difficulty-label">
-        {t("Rules")}
-        <FontAwesomeIcon
-          onClick={() => {setPopup(PopupType.rules)}}
-          icon={(popup == PopupType.rules) ? faXmark : faCircleQuestion}
-          className='helpButton' />
-      </span>
-      <Slider
-        orientation="vertical"
-        title={t("Game Rules")}
-        min={0} max={2}
-        aria-label={t("Game Rules")}
-        value={difficulty}
-        marks={[
-          {value: 0, label: label(0)},
-          {value: 1, label: label(1)},
-          {value: 2, label: label(2)}
-        ]}
-        valueLabelFormat={label}
-        getAriaValueText={label}
-        valueLabelDisplay="off"
-        onChange={(ev, val: number) => {
-          dispatch(changedDifficulty({game: gameId, difficulty: val}))
-        }}
-        ></Slider>
-    </div>
-  </nav>
-}
-
 export function computeWorldLayout(worlds) {
   let elements = []
   const sortedWorldIds = Object.keys(worlds.nodes).sort((a, b) => a.localeCompare(b))
@@ -285,8 +228,33 @@ export function WorldTreePanel({worlds, worldSize}:
     worldSize: any,
   }) {
   const gameId = React.useContext(GameIdContext)
-  const difficulty = useSelector(selectDifficulty(gameId))
   const {nodes, bounds}: any = worlds ? computeWorldLayout(worlds) : {nodes: []}
+  const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
+
+  React.useEffect(() => {
+    if (!worldSize) return
+    const controller = new AbortController()
+    const base = getDataBaseUrl().replace(/\/$/u, '')
+    const requests = Object.entries(worldSize as Record<string, number>).flatMap(([worldId, size]) =>
+      Array.from({length: size}, (_, index) => {
+        const level = index + 1
+        return fetch(`${base}/${gameId}/level__${worldId}__${level}.json`, {signal: controller.signal})
+          .then(response => response.ok ? response.json() : null)
+          .then((data: {title?: string} | null) => ({worldId, level, title: data?.title ?? `Level ${level}`}))
+          .catch(() => ({worldId, level, title: `Level ${level}`}))
+      })
+    )
+    void Promise.all(requests).then(results => {
+      if (controller.signal.aborted) return
+      const next: Record<string, Record<number, string>> = {}
+      for (const {worldId, level, title} of results) {
+        next[worldId] ??= {}
+        next[worldId][level] = title
+      }
+      setLevelTitles(next)
+    })
+    return () => controller.abort()
+  }, [gameId, worldSize])
 
   // scroll to playable world
   React.useEffect(() => {
@@ -337,7 +305,6 @@ export function WorldTreePanel({worlds, worldSize}:
           title={nodes[worldId].data.title || worldId}
           position={position}
           completedLevels={completed[worldId]}
-          difficulty={difficulty}
           key={`${gameId}-${worldId}`}
           worldSize={worldSize[worldId]}
         />
@@ -353,6 +320,7 @@ export function WorldTreePanel({worlds, worldSize}:
             unlocked={completed[worldId][i-1]}
             key={`${gameId}-${worldId}-${i}`}
             worldSize={worldSize[worldId]}
+            title={levelTitles[worldId]?.[i]}
           />
         )
       }
@@ -367,7 +335,6 @@ export function WorldTreePanel({worlds, worldSize}:
   let dx = bounds ? s*(bounds.x2 - bounds.x1) + 2*padding : null
 
   return <div className="column">
-      <WorldSelectionMenu />
       <svg xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink"
           width={bounds ? `${ds * dx}` : ''}
           viewBox={bounds ? `${s*bounds.x1 - padding} ${s*bounds.y1 - padding} ${dx} ${s*(bounds.y2 - bounds.y1) + 2 * padding}` : ''}

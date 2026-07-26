@@ -7,9 +7,6 @@ import type { RouteObject } from "react-router"
 import { createHashRouter, RouterProvider, Route, redirect } from "react-router-dom"
 import ErrorPage from './components/error_page'
 import Welcome from './components/welcome'
-import LandingPage from './components/landing_page'
-import Level from './components/level'
-import LocalClassicLevel from './components/local_classic_level'
 import VisualProofPage from './visual/VisualProofPage'
 import VisualWorldMap from './visual/VisualWorldMap'
 import './i18n';
@@ -20,19 +17,26 @@ import './i18n';
 // `/g/local/game` or customized VITE_LEAN4GAME_SINGLE_NAME. This is used for the devcontainer setup
 let single_game = (import.meta.env.VITE_LEAN4GAME_SINGLE === "true")
 let single_game_name = (import.meta.env.VITE_LEAN4GAME_SINGLE_NAME === undefined) ? "game" : import.meta.env.VITE_LEAN4GAME_SINGLE_NAME
-let root_object: RouteObject = single_game ? {
+const mountedLocalRelease = window.location.pathname.startsWith('/lean4game')
+const HostedLevel = React.lazy(() => import('./components/level'))
+const LocalClassicLevel = React.lazy(() => import('./components/local_classic_level'))
+
+function ReleaseRootRedirect() {
+  React.useEffect(() => {
+    window.location.replace('/')
+  }, [])
+  return null
+}
+
+let root_object: RouteObject = mountedLocalRelease ? {
+  path: "/",
+  element: <ReleaseRootRedirect />,
+} : single_game ? {
   path: "/",
   loader: () => redirect(`/g/local/${single_game_name}`)
 } : {
   path: "/",
-  element: <App />,
-  errorElement: <ErrorPage />,
-  children: [
-    {
-      path: "/",
-      element: <LandingPage />,
-    }
-  ]
+  loader: () => redirect("/g/leanprover-community/nng4")
 }
 
 const router = createHashRouter([
@@ -58,13 +62,14 @@ const router = createHashRouter([
       },
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId",
-        element: window.location.pathname.startsWith('/lean4game') && !window.location.hash.endsWith('/level/0')
-          ? <LocalClassicLevel />
-          : <Level />,
+        loader: ({ params }) => mountedLocalRelease && params.levelId === '0'
+          ? redirect(`/g/${params.owner}/${params.repo}/world/${params.worldId}/level/1`)
+          : null,
+        element: mountedLocalRelease ? <LocalClassicLevel /> : <HostedLevel />,
       },
       {
         path: "/g/:owner/:repo/visual",
-        element: <VisualWorldMap />,
+        element: <VisualWorldMap levelMode="visual" />,
       },
       {
         path: "/g/:owner/:repo/world/:worldId/level/:levelId/visual",

@@ -461,6 +461,7 @@ interface TransformRewriteDebug {
 }
 
 interface VisualCanvasTestHarness {
+  runPlayerTactic: (command: string) => Promise<void>
   dragHypToGoal: (hypName: string) => Promise<void>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
   dragTacticToHyp: (tacticName: string, hypName: string) => Promise<void>
@@ -488,6 +489,15 @@ interface VisualCanvasTestHarness {
     targetStreamId: string | null
   }
   getLastTransformRewriteDebug: () => TransformRewriteDebug | null
+  getProofAudit: () => {
+    completed: boolean
+    processing: boolean
+    proofBody: string
+    coreLines: string[]
+    interactiveLines: string[]
+    visibleNames: string[]
+    visibleTypes: string[]
+  }
   getCurrentStreamSnapshot: () => {
     streamId: string
     displayStreamId: string | null
@@ -1172,6 +1182,7 @@ interface VisualCanvasProps {
   previouslyCompleted?: boolean
   onLevelCompleted?: (proof?: { playScript: string; leanScript: string }) => void
   onProofStep?: (interactiveLeanCode: string) => void
+  onOpenClassic?: (proofBody: string) => void
 }
 
 function TheoremTray({
@@ -1372,7 +1383,7 @@ export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep
+  onLevelCompleted, onProofStep, onOpenClassic
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
@@ -1464,7 +1475,7 @@ export function VisualCanvas({
     canvasCompleted: initialState.completed,
   })
   const lastTransformRewriteDebugRef = useRef<TransformRewriteDebug | null>(null)
-  const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<void>) | null>(null)
+  const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<boolean>) | null>(null)
 
   // Stable game key for play log
   const logKey = `${worldId}/${levelId}`
@@ -1861,8 +1872,8 @@ export function VisualCanvas({
     })
   }
 
-  async function applyInteraction(playTactic: string, sourceCardId: string, options?: InteractionOptions) {
-    if (isProcessing) return
+  async function applyInteraction(playTactic: string, sourceCardId: string, options?: InteractionOptions): Promise<boolean> {
+    if (isProcessing) return false
     const focusedStreamId = options?.targetStreamId
       ?? (canvasState.streams.some(stream => stream.id === sourceCardId) ? sourceCardId : null)
       ?? (canvasState.streams.find(stream => stream.hyps.some(card => card.id === sourceCardId))?.id ?? null)
@@ -1870,7 +1881,7 @@ export function VisualCanvas({
     const focusedStream = focusedStreamId
       ? canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null
       : null
-    if (!focusedStream) return
+    if (!focusedStream) return false
     const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
@@ -1922,11 +1933,11 @@ export function VisualCanvas({
 
       if (nextCanvas.completed && options?.solvedGoalId) {
         freezeCompletedProof(canvasState, options.solvedGoalId)
-        return
+        return true
       }
 
       setCanvasState(nextCanvas)
-      return
+      return true
     }
 
     if (result === null) {
@@ -1936,7 +1947,7 @@ export function VisualCanvas({
       }
       if (getTheoremCopyById(sourceCardId)) triggerTheoremCopyFailureFeedback(sourceCardId)
       else triggerFailureFeedback(sourceCardId)
-      return
+      return false
     }
 
     const annotation = lastStep?.annotation
@@ -1987,7 +1998,7 @@ export function VisualCanvas({
         ? placeHypNearAnchor(nextCanvas, options.placementHint)
         : canvasState
       freezeCompletedProof(completionCanvas, options.solvedGoalId)
-      return
+      return true
     }
 
     if (options?.placementHint) {
@@ -2001,10 +2012,11 @@ export function VisualCanvas({
       window.setTimeout(() => {
         setCanvasState(prev => placeHypNearAnchor(prev, options.placementHint!))
       }, 24)
-      return
+      return true
     }
 
     setCanvasState(nextCanvas)
+    return true
   }
 
   async function undoLastStep(): Promise<boolean> {
@@ -3460,6 +3472,23 @@ export function VisualCanvas({
     return card?.hyp.playName ?? card?.hyp.names[0]
   }
 
+  async function applyTestPlayerTactic(command: string) {
+    const stream = requireInteractiveCurrentStream()
+    const latestApplyInteraction = applyInteractionRef.current
+    if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
+    const accepted = await latestApplyInteraction(command, stream.id, {
+      solvedGoalId: stream.id,
+      streamSplit: /^(?:induction|cases|have)\b/u.test(command.trim()),
+      targetStreamId: stream.id,
+    })
+    if (!accepted) {
+      const detail = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      throw new Error(
+        `Lean rejected player tactic "${command}" on stream ${stream.id}${detail ? `: ${detail}` : ''}`,
+      )
+    }
+  }
+
   async function applyTestDragHypToGoal(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, hypName)
@@ -3657,6 +3686,29 @@ export function VisualCanvas({
     return lastTransformRewriteDebugRef.current
   }
 
+  function getProofAudit() {
+    const streams = visualTestStateRef.current.canvasState.streams
+    const coreLines = displayedProofLines(proofSteps, 'lean')
+    const interactiveLines = displayedProofLines(proofSteps, 'play')
+    return {
+      completed: visualTestStateRef.current.canvasCompleted,
+      processing: isProcessing,
+      proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
+      coreLines,
+      interactiveLines,
+      visibleNames: streams.flatMap(stream =>
+        stream.hyps.flatMap(card => [
+          ...card.hyp.names,
+          ...(card.hyp.playName ? [card.hyp.playName] : []),
+        ])
+      ),
+      visibleTypes: streams.flatMap(stream => [
+        TaggedText_stripTags(stream.goal.type).trim(),
+        ...stream.hyps.map(card => TaggedText_stripTags(card.hyp.type).trim()),
+      ]),
+    }
+  }
+
   function getCurrentStreamSnapshot() {
     const stream = requireInteractiveCurrentStream()
     const displaySnapshot = displayStream ?? null
@@ -3711,6 +3763,7 @@ export function VisualCanvas({
     if (!window.Cypress) return
 
     const harness: VisualCanvasTestHarness = {
+      runPlayerTactic: applyTestPlayerTactic,
       dragHypToGoal: applyTestDragHypToGoal,
       dragHypToHyp: applyTestDragHypToHyp,
       dragTacticToHyp: applyTestDragTacticToHyp,
@@ -3723,6 +3776,7 @@ export function VisualCanvas({
       closeTransform: closeTestTransform,
       getTransformStatus,
       getLastTransformRewriteDebug,
+      getProofAudit,
       getCurrentStreamSnapshot,
     }
     window.__visualTestHarness = harness
@@ -3808,6 +3862,21 @@ export function VisualCanvas({
             </div>
           )
         })}
+      </div>
+    )
+  }
+
+  function renderProofFooter() {
+    if (!onOpenClassic) return null
+    return (
+      <div className="proof-sidebar-footer">
+        <button
+          type="button"
+          className="proof-sidebar-classic-btn"
+          onClick={() => onOpenClassic(serializeProofCommands(proofSteps.map(step => step.command)))}
+        >
+          Continue in classic text mode
+        </button>
       </div>
     )
   }
@@ -4234,6 +4303,7 @@ export function VisualCanvas({
               <div className="mobile-side-page-body proof-page-body">
                 {renderProofToolbar()}
                 {renderProofStepList()}
+                {renderProofFooter()}
               </div>
             </section>
           )}
@@ -4298,6 +4368,7 @@ export function VisualCanvas({
         <div className="proof-sidebar-inner">
           {renderProofToolbar()}
           {renderProofStepList()}
+          {renderProofFooter()}
         </div>
       </div>
       )}

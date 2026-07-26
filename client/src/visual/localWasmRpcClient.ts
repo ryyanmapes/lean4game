@@ -26,7 +26,9 @@ const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = '/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=nng4-browser-v2'
+const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=nng4-browser-v2${
+  typeof window !== 'undefined' && window.Cypress ? '&memoryMB=1536' : ''
+}`
 const WORKER_TIMEOUT_MS = 600_000
 
 function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
@@ -82,6 +84,9 @@ class LocalLeanWorker {
 
       worker.onmessage = event => {
         const msg = event.data ?? {}
+        if (window.Cypress) {
+          ;(window as typeof window & { __leanWorkerStatus?: unknown }).__leanWorkerStatus = msg
+        }
         if (msg.type === 'worker_boot') worker.postMessage({ type: 'load_library', files: [] })
         else if (msg.type === 'library_received') worker.postMessage({ type: 'start_worker' })
         else if (msg.type === 'worker_ready') {
@@ -163,6 +168,7 @@ const sharedLeanWorker = new LocalLeanWorker()
 export class LocalWasmRpcClient {
   private readonly engine = sharedLeanWorker
   private closed = false
+  private lastProofError = ''
   private worldId: string
   private levelId: number
   private initialDeclaration = ''
@@ -187,12 +193,21 @@ export class LocalWasmRpcClient {
 
   async sendProofUpdate(proofBody: string): Promise<ProofState | null> {
     if (this.closed) return null
+    this.lastProofError = ''
     try {
-      return await this.checkProof(proofBody)
+      const proof = await this.checkProof(proofBody)
+      ;(window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError = ''
+      return proof
     } catch (error) {
       console.error('Local Lean proof check failed', error)
+      this.lastProofError = error instanceof Error ? error.message : String(error)
+      ;(window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError = this.lastProofError
       return null
     }
+  }
+
+  getLastProofError() {
+    return this.lastProofError
   }
 
   close() {
@@ -250,9 +265,11 @@ export class LocalWasmRpcClient {
       : declaration
     const code = `import GameServer.Tactic.Visual\nimport Game.Browser.Runtime\n\n${namespacedDeclaration}\n`
     const result = await this.engine.compile(code)
-    if (!result.success) throw new Error(result.error ?? 'Lean WASM failed')
-
     const errors = result.diagnostics.filter(diag => diag.severity === 'error')
+    if (!result.success) {
+      const diagnosticText = errors.map(diag => diag.data).filter(Boolean).join('\n')
+      throw new Error(diagnosticText || result.error || 'Lean WASM failed')
+    }
     if (errors.length > 0) {
       throw new Error(errors.map(diag => diag.data).filter(Boolean).join('\n'))
     }

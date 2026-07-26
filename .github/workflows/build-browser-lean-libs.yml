@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       include_nng4:
-        description: Also build and package ryyanmapes/NNG4
+        description: Build and package ryyanmapes/NNG4
         required: true
-        default: false
+        default: true
         type: boolean
 
 concurrency:
@@ -28,7 +28,7 @@ env:
 
 jobs:
   build:
-    name: GameServer + VisualTest${{ inputs.include_nng4 && ' + NNG4' || '' }}
+    name: GameServer + NNG4 browser runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -43,9 +43,6 @@ jobs:
             echo '::error::Add CAULI_ARTIFACT_TOKEN as a repository Actions secret. It needs read access to public Actions artifacts.'
             exit 1
           fi
-
-      - name: Check out VisualTest
-        run: git clone --depth 1 https://github.com/ryyanmapes/VisualTest ../VisualTest
 
       - name: Check out pinned browser snapshot host
         uses: actions/checkout@v4
@@ -169,9 +166,7 @@ jobs:
             server/.lake/packages/Cli
 
           node scripts/enable-browser-module-system.mjs \
-            server/.lake/packages/batteries \
-            ../VisualTest/Game.lean \
-            ../VisualTest/Game
+            server/.lake/packages/batteries
 
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
             node scripts/enable-browser-module-system.mjs --meta \
@@ -195,16 +190,6 @@ jobs:
           "$LEAN_HOME/bin/lake" build GameServer.Browser
           "$LEAN_HOME/bin/lake" build GameServer.Tactic.Click
           "$LEAN_HOME/bin/lake" build GameServer.Tactic.Visual
-
-      - name: Link GameServer dependencies into VisualTest
-        run: |
-          mkdir -p ../VisualTest/.lake
-          ln -s "$GITHUB_WORKSPACE/server/.lake/packages" ../VisualTest/.lake/packages
-
-      - name: Build VisualTest with Cauli Lean
-        working-directory: ../VisualTest
-        run: |
-          "$LEAN_HOME/bin/lake" build
 
       - name: Build NNG4 with Cauli Lean
         if: inputs.include_nng4
@@ -349,7 +334,7 @@ jobs:
               "$VISUAL_RUNTIME" "$PWD/.nng-import-probes" /work/probe.lean
           done
 
-      - name: Bake VisualTest browser environment snapshot
+      - name: Bake Visual Lean NNG4 browser environment snapshot
         run: |
           node -p "'Node ' + process.version + ', V8 ' + process.versions.v8"
           cp -a browser-lean-libs/lean-lib/. "$VISUAL_RUNTIME/lib/lean/"
@@ -387,12 +372,12 @@ jobs:
             sed -i '2i import Game.Browser.Runtime' .visual-snapshot-work/probe.lean
           fi
 
-          echo 'Probing VisualTest import in WASM before snapshot save...'
+          echo 'Probing Visual Lean imports in WASM before snapshot save...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
             /work/probe.lean
 
-          echo 'Saving VisualTest header snapshot...'
+          echo 'Saving Visual Lean NNG4 header snapshot...'
           set +e
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
             "$VISUAL_RUNTIME" "$PWD/.visual-snapshot-work" \
@@ -400,7 +385,7 @@ jobs:
           snapshot_status=$?
           set -e
           if [[ "$snapshot_status" != 0 ]]; then
-            echo "::warning::VisualTest imports successfully in WASM, but snapshot saving failed with status $snapshot_status. Uploading the browser libraries without game.snap."
+            echo "::warning::Visual Lean imports successfully in WASM, but snapshot saving failed with status $snapshot_status. Uploading the browser runtime without game.snap."
             exit 0
           fi
           test -s .visual-snapshot-work/game.snap
@@ -415,6 +400,17 @@ jobs:
           rm -f .visual-snapshot-work/game.snap.deps
           gzip -9 browser-lean-libs/snapshots/game.snap
           ls -lh browser-lean-libs/snapshots/game.snap.gz
+
+      - name: Remove build-only browser inputs
+        run: |
+          # The saved environment is self-contained and the persistent worker
+          # sends no loose library files. Game metadata is shipped by the
+          # Lean4Game client sync, so neither tree belongs in the release
+          # artifact.
+          rm -rf browser-lean-libs/lean-lib \
+            browser-lean-libs/lean-lib-files.txt \
+            browser-lean-libs/gamedata
+          du -sh browser-lean-libs
 
       - name: Upload browser libraries
         uses: actions/upload-artifact@v4

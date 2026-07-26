@@ -1,0 +1,993 @@
+{
+  "generatedFrom": "NNG4/Game/Levels",
+  "solutions": [
+    {
+      "world": "Addition",
+      "level": 1,
+      "title": "zero_add",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Addition/L01zero_add.lean",
+      "commands": [
+        "induction n with d hd",
+        "rw [add_zero]",
+        "rfl",
+        "rw [add_succ]",
+        "rw [hd]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Addition",
+      "level": 2,
+      "title": "succ_add",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Addition/L02succ_add.lean",
+      "commands": [
+        "induction b with d hd",
+        "rw [add_zero]",
+        "rw [add_zero]",
+        "rfl",
+        "rw [add_succ, add_succ, hd]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Addition",
+      "level": 3,
+      "title": "add_comm (level boss)",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Addition/L03add_comm.lean",
+      "commands": [
+        "induction b with d hd",
+        "rw [add_zero, zero_add]",
+        "rfl",
+        "rw [add_succ, succ_add, hd]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Addition",
+      "level": 4,
+      "title": "add_assoc (associativity of addition)",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Addition/L04add_assoc.lean",
+      "commands": [
+        "induction c with d hd",
+        "rw [add_zero, add_zero]",
+        "rfl",
+        "rw [add_succ, add_succ, hd, add_succ]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Addition",
+      "level": 5,
+      "title": "add_right_comm",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Addition/L05add_right_comm.lean",
+      "commands": [
+        "rw [add_assoc]",
+        "rw [add_comm b, add_assoc]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 1,
+      "title": "add_right_cancel",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L01add_right_cancel.lean",
+      "commands": [
+        "induction n with d hd",
+        "intro h",
+        "repeat rw [add_zero] at h",
+        "exact h",
+        "intro h",
+        "repeat rw [add_succ] at h",
+        "apply succ_inj at h",
+        "apply hd at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 2,
+      "title": "add_left_cancel",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L02add_left_cancel.lean",
+      "commands": [
+        "repeat rw [add_comm n]",
+        "intro h",
+        "apply add_right_cancel at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 3,
+      "title": "add_left_eq_self",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L03add_left_eq_self.lean",
+      "commands": [
+        "intro h",
+        "nth_rewrite 2 [← zero_add y] at h",
+        "apply add_right_cancel at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 4,
+      "title": "add_right_eq_self",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L04add_right_eq_self.lean",
+      "commands": [
+        "rw [add_comm]",
+        "exact add_left_eq_self y x"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 5,
+      "title": "add_right_eq_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L05add_right_eq_zero.lean",
+      "commands": [
+        "cases b with d",
+        "intro h",
+        "rw [add_zero] at h",
+        "exact h",
+        "intro h",
+        "rw [add_succ] at h",
+        "symm at h",
+        "apply zero_ne_succ at h",
+        "cases h"
+      ]
+    },
+    {
+      "world": "AdvAddition",
+      "level": 6,
+      "title": "add_left_eq_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvAddition/L06add_left_eq_zero.lean",
+      "commands": [
+        "rw [add_comm]",
+        "exact add_right_eq_zero b a"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 1,
+      "title": "mul_le_mul_right",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L01mul_le_mul_right.lean",
+      "commands": [
+        "cases h with d hd",
+        "use d * t",
+        "rw [hd, add_mul]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 2,
+      "title": "mul_left_ne_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L02mul_left_ne_zero.lean",
+      "commands": [
+        "intro hb",
+        "apply h",
+        "rw [hb, mul_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 3,
+      "title": "eq_succ_of_ne_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L03eq_succ_of_ne_zero.lean",
+      "commands": [
+        "cases a with d",
+        "tauto",
+        "use d",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 4,
+      "title": "one_le_of_ne_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L04one_le_of_ne_zero.lean",
+      "commands": [
+        "apply eq_succ_of_ne_zero at ha",
+        "cases ha with n hn",
+        "use n",
+        "rw [hn, succ_eq_add_one, add_comm]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 5,
+      "title": "le_mul_right",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L05le_mul_right.lean",
+      "commands": [
+        "apply mul_left_ne_zero at h",
+        "apply one_le_of_ne_zero at h",
+        "apply mul_le_mul_right 1 b a at h",
+        "rw [one_mul, mul_comm] at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 6,
+      "title": "mul_right_eq_one",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L06mul_right_eq_one.lean",
+      "commands": [
+        "have h2 : x * y ≠ 0",
+        "rw [h]",
+        "exact one_ne_zero",
+        "apply le_mul_right at h2",
+        "rw [h] at h2",
+        "apply le_one at h2",
+        "cases h2 with h0 h1",
+        "rw [h0, zero_mul] at h",
+        "tauto",
+        "exact h1"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 7,
+      "title": "mul_ne_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L07mul_ne_zero.lean",
+      "commands": [
+        "apply eq_succ_of_ne_zero at ha",
+        "apply eq_succ_of_ne_zero at hb",
+        "cases ha with c hc",
+        "cases hb with d hd",
+        "rw [hc, hd]",
+        "rw [mul_succ, add_succ]",
+        "symm",
+        "apply zero_ne_succ"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 8,
+      "title": "mul_eq_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L08mul_eq_zero.lean",
+      "commands": [
+        "have h2 := mul_ne_zero a b",
+        "tauto"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 9,
+      "title": "mul_left_cancel",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L09mul_left_cancel.lean",
+      "commands": [
+        "induction b with d hd generalizing c",
+        "rw [mul_zero] at h",
+        "symm at h",
+        "apply mul_eq_zero at h",
+        "cases h with h1 h2",
+        "tauto",
+        "rw [h2]",
+        "rfl",
+        "cases c with e",
+        "rw [mul_succ, mul_zero] at h",
+        "apply add_left_eq_zero at h",
+        "tauto",
+        "rw [mul_succ, mul_succ] at h",
+        "apply add_right_cancel at h",
+        "apply hd at h",
+        "rw [h]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "AdvMultiplication",
+      "level": 10,
+      "title": "mul_right_eq_self",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/AdvMultiplication/L10mul_right_eq_self.lean",
+      "commands": [
+        "nth_rewrite 2 [← mul_one a] at h",
+        "exact mul_left_cancel a b 1 ha h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 1,
+      "title": "The `exact` tactic",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L01exact.lean",
+      "commands": [
+        "exact h1"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 2,
+      "title": "`exact` practice.",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L02exact2.lean",
+      "commands": [
+        "rw [zero_add] at h",
+        "rw [zero_add] at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 3,
+      "title": "The `apply` tactic.",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L03apply.lean",
+      "commands": [
+        "apply h2 at h1",
+        "exact h1"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 4,
+      "title": "succ_inj : the successor function is injective",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L04succ_inj.lean",
+      "commands": [
+        "rw [four_eq_succ_three] at h",
+        "rw [←succ_eq_add_one] at h",
+        "apply succ_inj at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 5,
+      "title": "Arguing backwards",
+      "visualSkip": true,
+      "source": "NNG4/Game/Levels/Implication/L05succ_inj2.lean",
+      "commands": [
+        "apply succ_inj",
+        "rw [succ_eq_add_one]",
+        "rw [← four_eq_succ_three]",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 6,
+      "title": "intro",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L06intro.lean",
+      "commands": [
+        "intro h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 7,
+      "title": "intro practice",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L07intro2.lean",
+      "commands": [
+        "intro h",
+        "repeat rw [← succ_eq_add_one] at h",
+        "apply succ_inj at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 8,
+      "title": "≠",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L08ne.lean",
+      "commands": [
+        "apply h2 at h1",
+        "exact h1"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 9,
+      "title": "zero_ne_succ",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L09zero_ne_succ.lean",
+      "commands": [
+        "intro h",
+        "rw [one_eq_succ_zero] at h",
+        "apply zero_ne_succ at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 10,
+      "title": "1 ≠ 0",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L10one_ne_zero.lean",
+      "commands": [
+        "symm",
+        "exact zero_ne_one"
+      ]
+    },
+    {
+      "world": "Implication",
+      "level": 11,
+      "title": "2 + 2 ≠ 5",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Implication/L11two_add_two_ne_five.lean",
+      "commands": [
+        "intro h",
+        "rw [add_succ, add_succ, add_zero] at h",
+        "repeat apply succ_inj at h",
+        "apply zero_ne_succ at h",
+        "exact h"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 1,
+      "title": "The `use` tactic",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L01le_refl.lean",
+      "commands": [
+        "use 0",
+        "rw [add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 2,
+      "title": "0 ≤ x",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L02zero_le.lean",
+      "commands": [
+        "use x",
+        "rw [zero_add]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 3,
+      "title": "x ≤ succ x",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L03le_succ_self.lean",
+      "commands": [
+        "use 1",
+        "rw [succ_eq_add_one]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 4,
+      "title": "x ≤ y and y ≤ z implies x ≤ z",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L04le_trans.lean",
+      "commands": [
+        "cases hxy with a ha",
+        "cases hyz with b hb",
+        "use a + b",
+        "rw [hb, ha]",
+        "exact add_assoc x a b"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 5,
+      "title": "x ≤ 0 → x = 0",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L05le_zero.lean",
+      "commands": [
+        "cases hx with y hy",
+        "symm at hy",
+        "apply add_right_eq_zero at hy",
+        "exact hy"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 6,
+      "title": "x ≤ y and y ≤ x implies x = y",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L06le_antisymm.lean",
+      "commands": [
+        "cases hxy with a ha",
+        "cases hyx with b hb",
+        "rw [ha]",
+        "rw [ha, add_assoc] at hb",
+        "symm at hb",
+        "apply add_right_eq_self at hb",
+        "apply add_right_eq_zero at hb",
+        "rw [hb, add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 7,
+      "title": "Dealing with `or`",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L07or_symm.lean",
+      "commands": [
+        "cases h with hx hy",
+        "right",
+        "exact hx",
+        "left",
+        "exact hy"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 8,
+      "title": "x ≤ y or y ≤ x",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L08le_total.lean",
+      "commands": [
+        "induction y with d hd",
+        "right",
+        "exact zero_le x",
+        "cases hd with h1 h2",
+        "left",
+        "cases h1 with e h1",
+        "rw [h1]",
+        "use e + 1",
+        "rw [succ_eq_add_one, add_assoc]",
+        "rfl",
+        "cases h2 with e he",
+        "cases e with a",
+        "rw [he]",
+        "left",
+        "rw [add_zero]",
+        "use 1",
+        "exact succ_eq_add_one d",
+        "right",
+        "use a",
+        "rw [add_succ] at he",
+        "rw [succ_add]",
+        "exact he"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 9,
+      "title": "succ x ≤ succ y → x ≤ y",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L09succ_le_succ.lean",
+      "commands": [
+        "cases hx with d hd",
+        "use d",
+        "rw [succ_add] at hd",
+        "apply succ_inj at hd",
+        "exact hd"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 10,
+      "title": "x ≤ 1",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L10le_one.lean",
+      "commands": [
+        "cases x with y",
+        "left",
+        "rfl",
+        "rw [one_eq_succ_zero] at hx ⊢",
+        "apply succ_le_succ at hx",
+        "apply le_zero at hx",
+        "rw [hx]",
+        "right",
+        "rfl"
+      ]
+    },
+    {
+      "world": "LessOrEqual",
+      "level": 11,
+      "title": "le_two",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/LessOrEqual/L11le_two.lean",
+      "commands": [
+        "cases x with y",
+        "left",
+        "rfl",
+        "cases y with z",
+        "right",
+        "left",
+        "rw [one_eq_succ_zero]",
+        "rfl",
+        "rw [two_eq_succ_one, one_eq_succ_zero] at hx ⊢",
+        "apply succ_le_succ at hx",
+        "apply succ_le_succ at hx",
+        "apply le_zero at hx",
+        "rw [hx]",
+        "right",
+        "right",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 1,
+      "title": "mul_one",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L01mul_one.lean",
+      "commands": [
+        "rw [one_eq_succ_zero]",
+        "rw [mul_succ]",
+        "rw [mul_zero]",
+        "rw [zero_add]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 2,
+      "title": "zero_mul",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L02zero_mul.lean",
+      "commands": [
+        "induction m with d hd",
+        "rw [mul_zero]",
+        "rfl",
+        "rw [mul_succ]",
+        "rw [hd]",
+        "rw [add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 3,
+      "title": "succ_mul",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L03succ_mul.lean",
+      "commands": [
+        "induction b with d hd",
+        "rw [mul_zero]",
+        "rw [mul_zero]",
+        "rw [add_zero]",
+        "rfl",
+        "rw [mul_succ]",
+        "rw [mul_succ]",
+        "rw [hd]",
+        "rw [add_succ]",
+        "rw [add_succ]",
+        "rw [add_right_comm]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 4,
+      "title": "mul_comm",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L04mul_comm.lean",
+      "commands": [
+        "induction b with d hd",
+        "rw [zero_mul]",
+        "rw [mul_zero]",
+        "rfl",
+        "rw [succ_mul]",
+        "rw [← hd]",
+        "rw [mul_succ]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 5,
+      "title": "one_mul",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L05one_mul.lean",
+      "commands": [
+        "rw [mul_comm, mul_one]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 6,
+      "title": "two_mul",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L06two_mul.lean",
+      "commands": [
+        "rw [two_eq_succ_one, succ_mul, one_mul]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 7,
+      "title": "mul_add",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L07mul_add.lean",
+      "commands": [
+        "induction c with d hd",
+        "rw [add_zero, mul_zero, add_zero]",
+        "rfl",
+        "rw [add_succ, mul_succ, hd, mul_succ, add_assoc]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 8,
+      "title": "add_mul",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L08add_mul.lean",
+      "commands": [
+        "rw [mul_comm, mul_add]",
+        "repeat rw [mul_comm c]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Multiplication",
+      "level": 9,
+      "title": "mul_assoc",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Multiplication/L09mul_assoc.lean",
+      "commands": [
+        "induction c with d hd",
+        "rw [mul_zero, mul_zero, mul_zero]",
+        "rfl",
+        "rw [mul_succ]",
+        "rw [mul_succ]",
+        "rw [hd]",
+        "rw [mul_add]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 1,
+      "title": "zero_pow_zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L01zero_pow_zero.lean",
+      "commands": [
+        "rw [pow_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 2,
+      "title": "zero_pow_succ",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L02zero_pow_succ.lean",
+      "commands": [
+        "rw [pow_succ]",
+        "rw [mul_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 3,
+      "title": "pow_one",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L03pow_one.lean",
+      "commands": [
+        "rw [one_eq_succ_zero]",
+        "rw [pow_succ]",
+        "rw [pow_zero]",
+        "rw [one_mul]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 4,
+      "title": "one_pow",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L04one_pow.lean",
+      "commands": [
+        "induction m with t ht",
+        "rw [pow_zero]",
+        "rfl",
+        "rw [pow_succ]",
+        "rw [ht]",
+        "rw [mul_one]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 5,
+      "title": "pow_two",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L05pow_two.lean",
+      "commands": [
+        "rw [two_eq_succ_one]",
+        "rw [pow_succ]",
+        "rw [pow_one]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 6,
+      "title": "pow_add",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L06pow_add.lean",
+      "commands": [
+        "induction n with t ht",
+        "rw [add_zero, pow_zero, mul_one]",
+        "rfl",
+        "rw [add_succ, pow_succ, pow_succ, ht, mul_assoc]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 7,
+      "title": "mul_pow",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L07mul_pow.lean",
+      "commands": [
+        "induction n with t Ht",
+        "rw [pow_zero, pow_zero, pow_zero, mul_one]",
+        "rfl",
+        "rw [pow_succ, pow_succ, pow_succ, Ht]",
+        "repeat rw [mul_assoc]",
+        "rw [mul_comm a (_ * b), mul_assoc, mul_comm b a]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 8,
+      "title": "pow_pow",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L08pow_pow.lean",
+      "commands": [
+        "induction n with t Ht",
+        "rw [mul_zero, pow_zero, pow_zero]",
+        "rfl",
+        "rw [pow_succ, Ht, mul_succ, pow_add]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 9,
+      "title": "add_sq",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Power/L09add_sq.lean",
+      "commands": [
+        "rw [pow_two, pow_two, pow_two]",
+        "rw [add_right_comm]",
+        "rw [mul_add, add_mul, add_mul]",
+        "rw [two_mul, add_mul]",
+        "rw [mul_comm b a]",
+        "rw [← add_assoc, ← add_assoc]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Power",
+      "level": 10,
+      "title": "Fermat's Last Theorem",
+      "visualSkip": true,
+      "source": "NNG4/Game/Levels/Power/L10FLT.lean",
+      "commands": [
+        "xyzzy"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 1,
+      "title": "The rfl tactic",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L01rfl.lean",
+      "commands": [
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 2,
+      "title": "the rw tactic",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L02rw.lean",
+      "commands": [
+        "rw [h]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 3,
+      "title": "Numbers",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L03two_eq_ss0.lean",
+      "commands": [
+        "rw [two_eq_succ_one]",
+        "rw [one_eq_succ_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 4,
+      "title": "rewriting backwards",
+      "visualSkip": true,
+      "source": "NNG4/Game/Levels/Tutorial/L04rw_backwards.lean",
+      "commands": [
+        "rw [← one_eq_succ_zero]",
+        "rw [← two_eq_succ_one]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 5,
+      "title": "Adding zero",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L05add_zero.lean",
+      "commands": [
+        "rw [add_zero]",
+        "rw [add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 6,
+      "title": "Precision rewriting",
+      "visualSkip": true,
+      "source": "NNG4/Game/Levels/Tutorial/L06add_zero2.lean",
+      "commands": [
+        "rw [add_zero c]",
+        "rw [add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 7,
+      "title": "add_succ",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L07add_succ.lean",
+      "commands": [
+        "rw [one_eq_succ_zero]",
+        "rw [add_succ]",
+        "rw [add_zero]",
+        "rfl"
+      ]
+    },
+    {
+      "world": "Tutorial",
+      "level": 8,
+      "title": "2+2=4",
+      "visualSkip": false,
+      "source": "NNG4/Game/Levels/Tutorial/L08twoaddtwo.lean",
+      "commands": [
+        "nth_rewrite 2 [two_eq_succ_one]",
+        "rw [add_succ]",
+        "rw [one_eq_succ_zero]",
+        "rw [add_succ]",
+        "rw [add_zero]",
+        "rw [four_eq_succ_three]",
+        "rw [three_eq_succ_two]",
+        "rfl"
+      ]
+    }
+  ]
+}

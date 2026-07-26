@@ -3,11 +3,10 @@ set -euo pipefail
 
 out="${1:-browser-lean-libs}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-visual_test="$(cd "$root/../VisualTest" && pwd)"
 nng4="$root/../NNG4"
 
 rm -rf "$out"
-mkdir -p "$out/lean-lib" "$out/gamedata/VisualTest"
+mkdir -p "$out/lean-lib"
 
 copy_tree() {
   local source="$1"
@@ -30,7 +29,7 @@ copy_tree() {
 # build tree because imported modules must use the same pointer-width/githash.
 while IFS= read -r -d '' tree; do
   copy_tree "$tree" "dependency"
-done < <(find "$root/server/.lake/packages" "$visual_test/.lake/packages" \
+done < <(find "$root/server/.lake/packages" \
   -type d -path '*/.lake/build/lib/lean' -print0 2>/dev/null)
 
 # NNG4 has a separate Lake package directory. Only dependency build trees
@@ -44,11 +43,6 @@ if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
 fi
 
 copy_tree "$root/server/.lake/build/lib/lean" "GameServer"
-# VisualTest's generated level modules use the same top-level `Game` module
-# names as NNG4.  The browser executes level statements from generated JSON,
-# so none of those VisualTest modules are needed at runtime; only its game data
-# and the compact GameServer tactic implementation are required.  Omitting
-# them both saves space and lets NNG4 own `Game.*` in a combined artifact.
 
 if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
   copy_tree "$nng4/.lake/build/lib/lean" "NNG4"
@@ -56,10 +50,6 @@ if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
   if [[ -d "$nng4/.lake/gamedata" ]]; then
     cp -R "$nng4/.lake/gamedata/." "$out/gamedata/NNG4/"
   fi
-fi
-
-if [[ -d "$visual_test/.lake/gamedata" ]]; then
-  cp -R "$visual_test/.lake/gamedata/." "$out/gamedata/VisualTest/"
 fi
 
 find "$out/lean-lib" -type f -printf '%P\n' | LC_ALL=C sort > "$out/lean-lib-files.txt"
@@ -95,7 +85,6 @@ cat > "$out/build-info.json" <<EOF
   "leanGithash": "${CAULI_LEAN_SHA:?}",
   "leanBuildRunId": "${CAULI_LEAN_RUN_ID:?}",
   "lean4gameRef": "${LEAN4GAME_REF:-unknown}",
-  "visualTestRef": "$(git -C "$visual_test" rev-parse HEAD)",
   "nng4Ref": "$(if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then git -C "$nng4" rev-parse HEAD; else echo null; fi)",
   "oleanFiles": $olean_count,
   "irFiles": $ir_count

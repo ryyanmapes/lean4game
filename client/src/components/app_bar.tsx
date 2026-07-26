@@ -5,13 +5,11 @@ import * as React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faDownload, faUpload, faEraser, faBook, faBookOpen, faGlobe, faHome,
   faArrowRight, faArrowLeft, faXmark, faBars, faCode,
-  faCircleInfo, faTerminal, faGear, faLock, faLockOpen } from '@fortawesome/free-solid-svg-icons'
+  faCircleInfo, faTerminal, faGear, faSun } from '@fortawesome/free-solid-svg-icons'
 import { GameIdContext } from "../app"
 import { InputModeContext, PreferencesContext, WorldLevelIdContext } from "./infoview/context"
 import { GameInfo, useGetGameInfoQuery } from '../state/api'
-import { changeUnlockLevels, changedReadIntro, selectCompleted, selectDifficulty, selectProgress, selectUnlockLevels } from '../state/progress'
-import { saveState } from '../state/local_storage'
-import { store } from '../state/store'
+import { changedReadIntro, selectCompleted, selectDifficulty, selectProgress } from '../state/progress'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { Button } from './button'
 import { downloadProgress } from './popup/erase'
@@ -98,7 +96,7 @@ function PreviousButton() {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
   const {worldId, levelId} = React.useContext(WorldLevelIdContext)
-  return (levelId > 0 && <>
+  return (levelId > 1 && <>
     <Button disabled={levelId <= 0} inverted="true"
         to={`/${gameId}/world/${worldId}/level/${levelId - 1}`}
         title={t("previous level")}
@@ -164,28 +162,18 @@ export function PreferencesButton() {
   </Button>
 }
 
-function UnlockLevelsButton() {
-  const { t } = useTranslation()
-  const gameId = React.useContext(GameIdContext)
-  const dispatch = useAppDispatch()
-  const unlockLevels = useAppSelector(selectUnlockLevels(gameId))
-
-  function toggleUnlockLevels() {
-    dispatch(changeUnlockLevels({game: gameId, unlockLevels: !unlockLevels}))
-    saveState(store.getState().progress)
-    window.location.reload()
-  }
-
+function ThemeModeButton({isDropdown = false}: {isDropdown?: boolean}) {
+  const { isVisualLightMode, setIsVisualLightMode } = React.useContext(PreferencesContext)
+  const label = isVisualLightMode ? 'Switch to dark mode' : 'Switch to light mode'
   return <button
     type="button"
-    className={`btn btn-inverted unlock-levels-btn${unlockLevels ? ' active' : ''}`}
-    title={unlockLevels ? t("Turn off unlock levels") : t("Unlock all levels")}
-    aria-pressed={unlockLevels}
-    onClick={toggleUnlockLevels}>
-    <span className="unlock-levels-label">
-      <FontAwesomeIcon icon={unlockLevels ? faLockOpen : faLock} />&nbsp;{t("Unlock levels")}
-    </span>
-    <span className="unlock-levels-state">{unlockLevels ? t("On") : t("Off")}</span>
+    className={`btn btn-inverted theme-mode-btn${isVisualLightMode ? ' active' : ''}`}
+    title={label}
+    aria-label={label}
+    aria-pressed={isVisualLightMode}
+    onClick={() => setIsVisualLightMode(!isVisualLightMode)}>
+    <FontAwesomeIcon icon={faSun} />
+    {isDropdown && <>&nbsp;{isVisualLightMode ? 'Light' : 'Dark'}</>}
   </button>
 }
 
@@ -237,9 +225,9 @@ function HomeButton({isDropdown}) {
 
 function LandingPageButton() {
   const { t } = useTranslation()
-  return <Button inverted="false" title={t("back to games selection")} to="/">
+  return <a className="btn" title={t("back to games selection")} href="/">
     <FontAwesomeIcon icon={faArrowLeft} />&nbsp;<FontAwesomeIcon icon={faGlobe} />
-    </Button>
+    </a>
 }
 
 /** button in mobile level to toggle inventory.
@@ -269,7 +257,7 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
   const {mobile} = React.useContext(PreferencesContext)
   const [navOpen, setNavOpen] = useAtom(navOpenAtom)
 
-  return <div className="app-bar">
+  return <div className="app-bar welcome-app-bar">
     <div className='app-bar-left'>
       <LandingPageButton />
       <span className="app-bar-title"></span>
@@ -279,6 +267,7 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
     </div>
     <div className="nav-btns">
       {mobile && <MobileNavButtons pageNumber={pageNumber} setPageNumber={setPageNumber} />}
+      <ThemeModeButton />
       <MenuButton />
     </div>
     <div className={'menu dropdown' + (navOpen ? '' : ' hidden')}>
@@ -286,10 +275,8 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
       <EraseButton />
       <DownloadButton gameId={gameId} gameProgress={gameProgress}/>
       <UploadButton />
-      <UnlockLevelsButton />
       <ImpressumButton isDropdown={true} />
       <PrivacyButton isDropdown={true} />
-      <EraseButton />
       <PreferencesButton />
     </div>
   </div>
@@ -330,6 +317,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
           <PreviousButton />
           <HomeButton isDropdown={true} />
           <InputModeButton isDropdown={true}/>
+          <ThemeModeButton isDropdown />
           <GameInfoButton />
           <ImpressumButton isDropdown={true} />
           <PrivacyButton isDropdown={true} />
@@ -350,6 +338,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
           <PreviousButton  />
           <NextButton worldSize={gameInfo.data?.worldSize[worldId]} difficulty={difficulty} completed={completed} />
           <InputModeButton isDropdown={false}/>
+          <ThemeModeButton />
           <MenuButton  />
         </div>
         <div className={'menu dropdown' + (navOpen ? '' : ' hidden')}>

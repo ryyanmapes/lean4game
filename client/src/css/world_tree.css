@@ -1,3 +1,25 @@
+:root {
+  --world-locked: #999;
+  --world-level-locked: #bbb;
+  --world-path-complete: green;
+  --world-level-complete: #139e13;
+  --world-level-current: #1976d2;
+  --world-label-locked: #868686;
+  --world-label-complete: #0e770e;
+  --world-label-current: #1667b8;
+}
+
+.app[data-visual-theme='dark'] {
+  --world-locked: #435269;
+  --world-level-locked: #53647b;
+  --world-path-complete: #377c60;
+  --world-level-complete: #43a77a;
+  --world-level-current: #4a91c9;
+  --world-label-locked: #39475c;
+  --world-label-complete: #28664d;
+  --world-label-current: #286a9e;
+}
+
 svg .world-title-wrapper, svg .level-title-wrapper div {
   overflow: visible;
 }
@@ -34,6 +56,17 @@ svg .level-title {
 
 svg .level:hover .level-title {
   opacity: 1;
+}
+
+svg a.level,
+svg a.world {
+  cursor: pointer;
+}
+
+svg a.level:focus-visible circle,
+svg a.world:focus-visible circle {
+  stroke: #a9d5f4;
+  stroke-width: 3px;
 }
 
 svg .disabled {

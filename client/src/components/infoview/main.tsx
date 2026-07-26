@@ -137,7 +137,7 @@ function DualEditorMain({ worldId, levelId, level, worldSize }: { worldId: strin
  *
  * If `showLeanStatement` is true, it will additionally display the lean code.
  */
-function ExerciseStatement({ data, showLeanStatement = false }) {
+export function ExerciseStatement({ data, showLeanStatement = false }) {
   const { t : gT } = useGameTranslation()
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -421,7 +421,7 @@ function Command({ proof, i, deleteProof }: { proof: ProofState, i: number, dele
 // }, fastIsEqual)
 
 /** The tabs of goals that lean ahs after the command of this step has been processed */
-function GoalsTabs({ proofStep, last, onClick, onGoalChange=(n)=>{}}: { proofStep: InteractiveGoalsWithHints, last : boolean, onClick? : any, onGoalChange?: (n?: number) => void }) {
+export function GoalsTabs({ proofStep, last, onClick, onGoalChange=(n)=>{}}: { proofStep: InteractiveGoalsWithHints, last : boolean, onClick? : any, onGoalChange?: (n?: number) => void }) {
   let { t } = useTranslation()
   const {mobile} = React.useContext(PreferencesContext)
   const [selectedGoal, setSelectedGoal] = React.useState<number>(0)

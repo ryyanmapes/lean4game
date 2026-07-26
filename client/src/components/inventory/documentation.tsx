@@ -38,6 +38,8 @@ export function Documentation({ type } : {type : InventoryTab}) {
       icon={faXmark}
       onClick={closeDoc}
       inverted={true}
+      className="documentation-close"
+      title={t("Close")}
     />
     { difficulty == 1 && docTile.locked &&
       <NavButton

@@ -1,126 +1,366 @@
 import * as React from 'react'
-import { Link, useParams } from 'react-router-dom'
+import Split from 'react-split'
+import { useLocation, useParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import type { Diagnostic } from 'vscode-languageserver-types'
+
 import { GameIdContext } from '../app'
+import { useAppDispatch } from '../hooks'
 import { useGetGameInfoQuery, useLoadLevelQuery } from '../state/api'
-import type { InteractiveGoalWithHints, ProofState } from './infoview/rpc_api'
-import { Markdown } from './markdown'
+import {
+  changedInventory,
+  changeTypewriterMode,
+  levelCompleted,
+  selectInventory,
+  selectTypewriterMode,
+} from '../state/progress'
+import { store } from '../state/store'
 import { LocalWasmRpcClient } from '../visual/localWasmRpcClient'
+import { ClassicLoadingScreen } from './classic_loading_screen'
+import { LevelAppBar } from './app_bar'
+import {
+  DeletedChatContext,
+  InputModeContext,
+  PreferencesContext,
+  ProofContext,
+  SelectionContext,
+} from './infoview/context'
+import { ExerciseStatement, GoalsTabs } from './infoview/main'
+import type { GameHint, ProofState } from './infoview/rpc_api'
+import { InventoryPanel } from './inventory/inventory_panel'
+import { ChatPanel } from './level'
+
+import '../css/level.css'
+import '../css/infoview.css'
 import '../css/local-classic-level.css'
 
-function codeText(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value && typeof value === 'object' && 'text' in value) {
-    return String((value as { text?: unknown }).text ?? '')
-  }
-  return String(value ?? '')
+const emptyProof: ProofState = {
+  steps: [],
+  diagnostics: [],
+  completed: false,
+  completedWithWarnings: false,
 }
 
-function Goal({ state }: { state: InteractiveGoalWithHints }) {
-  return <section className="local-classic-goal">
-    {state.goal.hyps.map((hyp, index) => <div className="local-classic-hyp" key={`${hyp.names.join('-')}-${index}`}>
-      <span>{hyp.names.join(' ') || '_'}</span>
-      <b>:</b>
-      <code>{codeText(hyp.type)}</code>
-    </div>)}
-    <div className="local-classic-turnstile">âŠ¢</div>
-    <code className="local-classic-target">{codeText(state.goal.type)}</code>
-  </section>
+function rejectedCommandMessage(proofBody: string, detail: string) {
+  const command = proofBody.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).at(-1) ?? ''
+  return command
+    ? `Failed command\n: ${command}\n\n${detail || 'Lean rejected the command.'}`
+    : detail || 'Lean rejected the proof.'
+}
+
+function LocalExercisePanel({
+  level,
+  proofBody,
+  setProofBody,
+  proof,
+  checking,
+  error,
+  commandInput,
+  setCommandInput,
+  typewriterMode,
+  visible = true,
+}: {
+  level: any
+  proofBody: string
+  setProofBody: React.Dispatch<React.SetStateAction<string>>
+  proof: ProofState
+  checking: boolean
+  error: string
+  commandInput: string
+  setCommandInput: React.Dispatch<React.SetStateAction<string>>
+  typewriterMode: boolean
+  visible?: boolean
+}) {
+  const proofLines = proofBody.split(/\r?\n/u)
+
+  function executeCommand(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const command = commandInput.trim()
+    if (!command || checking || proof.completed) return
+    setProofBody(current => current.trim() ? `${current.trimEnd()}\n${command}` : command)
+    setCommandInput('')
+  }
+
+  function retryFrom(stepIndex: number, command: string) {
+    setProofBody(proofLines.slice(0, Math.max(0, stepIndex - 1)).join('\n'))
+    setCommandInput(command)
+  }
+
+  const proofSteps = proof.steps ?? []
+  const lastStepIndex = Math.max(0, proofSteps.length - 1)
+
+  return <div className={`exercise-panel ${visible ? '' : 'hidden'}`}>
+    <div className="exercise">
+      {typewriterMode ? <div className="typewriter-interface">
+        <div className="content">
+          <div className="world-image-container empty" />
+          <div className="tmp-pusher" />
+          <div className="proof">
+            <ExerciseStatement data={level} showLeanStatement />
+            {proofSteps.map((step, index) => <div className={`step step-${index}`} key={index}>
+              {step.command && <div className="command">
+                <div className="command-text">{step.command}</div>
+                <button type="button" className="undo-button btn btn-inverted"
+                  onClick={() => retryFrom(index, step.command)}>
+                  Retry
+                </button>
+              </div>}
+              {step.goals.length > 0 && <GoalsTabs proofStep={step}
+                last={index === lastStepIndex} />}
+            </div>)}
+            {error && <div className="message error"><pre>{error}</pre></div>}
+            {proof.completed && <div className="message information">
+              <strong>Level completed! 🎉</strong>
+            </div>}
+            <div className={`local-classic-status ${proof.completed ? 'is-complete' : ''}`}>
+              {checking ? 'Lean is checking…' : proof.completed ? 'Proof complete — checked by Lean' : 'Lean is ready'}
+            </div>
+          </div>
+        </div>
+        <form className="typewriter local-wasm-typewriter" onSubmit={executeCommand}>
+          <div className="typewriter-input-wrapper">
+            <input value={commandInput}
+              onChange={event => setCommandInput(event.target.value.replace(/[\r\n]/gu, ''))}
+              aria-label="Lean command"
+              disabled={checking || Boolean(proof.completed)}
+              autoComplete="off"
+              spellCheck={false} />
+          </div>
+          <button type="submit" className="btn btn-inverted"
+            disabled={checking || Boolean(proof.completed) || !commandInput.trim()}>
+            Execute
+          </button>
+        </form>
+        <textarea id="local-classic-proof" value={proofBody} readOnly hidden aria-hidden="true" />
+      </div> : <>
+        <ExerciseStatement data={level} showLeanStatement />
+        <textarea id="local-classic-proof" className="local-wasm-code-editor"
+          value={proofBody}
+          onChange={event => setProofBody(event.target.value)}
+          aria-label="Lean code"
+          spellCheck={false} />
+        <div className="local-wasm-editor-goals">
+          {proofSteps[lastStepIndex]?.goals.length > 0 &&
+            <GoalsTabs proofStep={proofSteps[lastStepIndex]} last />}
+          {error && <div className="message error"><pre>{error}</pre></div>}
+          <div className={`local-classic-status ${proof.completed ? 'is-complete' : ''}`}>
+            {checking ? 'Lean is checking…' : proof.completed ? 'Proof complete — checked by Lean' : 'Lean is ready'}
+          </div>
+        </div>
+      </>}
+    </div>
+  </div>
 }
 
 /**
- * Local counterpart of the classic NNG level page. The hosted application
- * continues to use Lean's websocket language server; the mounted /lean4game
- * build sends the whole tactic script to the persistent in-browser Lean
- * process and renders the resulting structured proof state.
+ * The original hosted Lean4Game level shell, backed by the persistent
+ * in-browser Lean process instead of the hosted WebSocket language server.
  */
 export default function LocalClassicLevel() {
   const gameId = React.useContext(GameIdContext)
+  const { mobile } = React.useContext(PreferencesContext)
   const params = useParams()
+  const location = useLocation()
+  const dispatch = useAppDispatch()
   const worldId = params.worldId ?? ''
-  const levelId = Number(params.levelId ?? 0)
+  const levelId = Number(params.levelId ?? 1)
   const level = useLoadLevelQuery({ game: gameId, world: worldId, level: levelId })
   const game = useGetGameInfoQuery({ game: gameId })
   const client = React.useMemo(() => new LocalWasmRpcClient(gameId, worldId, levelId), [gameId])
-  const [proof, setProof] = React.useState('')
-  const [state, setState] = React.useState<ProofState | null>(null)
+
+  const visualHandoff = (
+    location.state as {
+      visualProofHandoff?: {
+        gameId?: string
+        worldId?: string
+        levelId?: number
+        proofBody?: string
+      }
+    } | null
+  )?.visualProofHandoff
+  const handedOffProof =
+    visualHandoff?.gameId === gameId &&
+    visualHandoff.worldId === worldId &&
+    visualHandoff.levelId === levelId &&
+    typeof visualHandoff.proofBody === 'string'
+      ? visualHandoff.proofBody
+      : ''
+
+  const [proofBody, setProofBody] = React.useState(handedOffProof)
+  const [proof, setProof] = React.useState<ProofState>(emptyProof)
   const [checking, setChecking] = React.useState(true)
+  const [ready, setReady] = React.useState(false)
   const [error, setError] = React.useState('')
-  const revision = React.useRef(0)
+  const [commandInput, setCommandInput] = React.useState('')
+  const [deletedChat, setDeletedChat] = React.useState<GameHint[]>([])
+  const [showHelp, setShowHelp] = React.useState<Set<number>>(new Set())
+  const [selectedStep, setSelectedStep] = React.useState<number>()
+  const [interimDiags, setInterimDiags] = React.useState<Diagnostic[]>([])
+  const [crashed, setCrashed] = React.useState<Boolean>(false)
+  const [lockEditorMode, setLockEditorMode] = React.useState(false)
+  const [pageNumber, setPageNumber] = React.useState(0)
+  const [showLoadingChrome, setShowLoadingChrome] = React.useState(false)
+  const acceptedProofBody = React.useRef('')
+  const preserveRejectedError = React.useRef(false)
+
+  const typewriterMode = useSelector(selectTypewriterMode(gameId))
+  const setTypewriterMode: React.Dispatch<React.SetStateAction<boolean>> = value => {
+    const next = typeof value === 'function' ? value(typewriterMode) : value
+    dispatch(changeTypewriterMode({ game: gameId, typewriterMode: next }))
+  }
 
   React.useEffect(() => {
     let active = true
-    setProof('')
+    acceptedProofBody.current = ''
+    preserveRejectedError.current = false
+    setProofBody(handedOffProof)
+    setCommandInput('')
+    setReady(false)
     setChecking(true)
     setError('')
     client.loadProofState(worldId, levelId).then(next => {
-      if (active) setState(next)
+      if (!active) return
+      setProof(next)
+      setReady(true)
     }, reason => {
       if (active) setError(String(reason))
     }).finally(() => {
       if (active) setChecking(false)
     })
     return () => { active = false }
-  }, [client, worldId, levelId])
+  }, [client, handedOffProof, worldId, levelId])
+
+  React.useEffect(() => {
+    setShowLoadingChrome(false)
+    const timer = window.setTimeout(() => setShowLoadingChrome(true), 200)
+    return () => window.clearTimeout(timer)
+  }, [worldId, levelId])
 
   React.useEffect(() => () => client.close(), [client])
 
   React.useEffect(() => {
-    if (!level.data) return
-    const current = ++revision.current
+    if (!ready) return
+    let active = true
     const timer = window.setTimeout(async () => {
       setChecking(true)
-      setError('')
-      const next = await client.sendProofUpdate(proof)
-      if (current !== revision.current) return
-      if (next) setState(next)
-      else setError('Lean rejected this proof. Edit the last tactic and try again.')
-      setChecking(false)
-    }, 300)
-    return () => window.clearTimeout(timer)
-  }, [client, level.data, proof])
+      const keepRejectedError = preserveRejectedError.current
+      if (!keepRejectedError) setError('')
+      try {
+        const next = await client.sendProofUpdate(proofBody)
+        if (!active) return
+        if (next) {
+          acceptedProofBody.current = proofBody
+          setProof(next)
+          if (keepRejectedError) preserveRejectedError.current = false
+        } else {
+          const detail = client.getLastProofError()
+          setError(rejectedCommandMessage(proofBody, detail))
+          if (typewriterMode) {
+            const command = proofBody.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).at(-1) ?? ''
+            preserveRejectedError.current = true
+            setCommandInput(command)
+            setProofBody(acceptedProofBody.current)
+          }
+        }
+      } catch (reason) {
+        if (active) setError(String(reason))
+      } finally {
+        if (active) setChecking(false)
+      }
+    }, 250)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [client, proofBody, ready, typewriterMode])
 
-  if (!level.data || !game.data) return <main className="local-classic-loading">Loading levelâ€¦</main>
+  React.useEffect(() => {
+    if (!proof.completed || !level.data) return
+    dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
+    const unlocked = [
+      ...level.data.tactics,
+      ...level.data.lemmas,
+      ...level.data.definitions,
+    ].filter(tile => tile.new).map(tile => tile.name)
+    if (level.data.statementName) unlocked.push(level.data.statementName)
+    const inventory = selectInventory(gameId)(store.getState())
+    dispatch(changedInventory({
+      game: gameId,
+      inventory: [...inventory, ...unlocked].filter((item, index, all) => all.indexOf(item) === index),
+    }))
+  }, [dispatch, gameId, level.data, levelId, proof.completed, worldId])
 
-  const goals = state?.steps.at(-1)?.goals ?? []
+  const loadingWorldSize = game.data?.worldSize?.[worldId] ?? levelId
+  const loadingLevelTitle = `${mobile ? '' : 'Level'} ${levelId} / ${loadingWorldSize}` +
+    (level.data?.title ? ` : ${level.data.title}` : '')
+
+  if (!level.data || !game.data || !ready) {
+    return <ClassicLoadingScreen
+      worldTitle={game.data?.worlds.nodes[worldId]?.title}
+      levelTitle={loadingLevelTitle}
+      showChrome={showLoadingChrome}
+    />
+  }
+
   const worldSize = game.data.worldSize?.[worldId] ?? levelId
-  const available = [...level.data.tactics, ...level.data.lemmas, ...level.data.definitions]
-    .filter(item => !item.locked && !item.hidden)
+  const lastLevel = levelId >= worldSize
+  const levelTitle = `${mobile ? '' : 'Level'} ${levelId} / ${worldSize}` +
+    (level.data.title ? ` : ${level.data.title}` : '')
 
-  return <main className="local-classic-page">
-    <header className="local-classic-header">
-      <Link to={`/${gameId}`}>Natural Number Game</Link>
-      <span>{worldId} World Â· Level {levelId}</span>
-      <nav>
-        {levelId > 1 && <Link to={`/${gameId}/world/${worldId}/level/${levelId - 1}`}>Previous</Link>}
-        {levelId < worldSize && <Link to={`/${gameId}/world/${worldId}/level/${levelId + 1}`}>Next</Link>}
-      </nav>
-    </header>
-    <div className="local-classic-columns">
-      <article className="local-classic-lesson">
-        <p className="local-classic-kicker">{level.data.displayName ?? level.data.title}</p>
-        <h1>{level.data.title}</h1>
-        <Markdown>{level.data.introduction ?? ''}</Markdown>
-        <pre className="local-classic-statement">{level.data.descrText ?? level.data.descrFormat}</pre>
-        {available.length > 0 && <section className="local-classic-inventory">
-          <h2>Available tools</h2>
-          <div>{available.map(item => <code key={`${item.category}-${item.name}`}>{item.displayName || item.name}</code>)}</div>
-        </section>}
-      </article>
-      <section className="local-classic-workspace">
-        <label htmlFor="local-classic-proof">Tactic proof</label>
-        <textarea
-          id="local-classic-proof"
-          value={proof}
-          onChange={event => setProof(event.target.value)}
-          placeholder="Enter one Lean tactic per lineâ€¦"
-          spellCheck={false}
-        />
-        <div className={`local-classic-status ${state?.completed ? 'is-complete' : ''}`}>
-          {checking ? 'Lean is checkingâ€¦' : state?.completed ? 'Proof complete â€” checked by Lean' : error || 'Goals'}
-        </div>
-        {!state?.completed && goals.map((goal, index) => <Goal key={index} state={goal} />)}
-        {state?.completed && level.data.conclusion && <div className="local-classic-conclusion"><Markdown>{level.data.conclusion}</Markdown></div>}
-      </section>
-    </div>
-  </main>
+  const exercise = <LocalExercisePanel
+    level={level.data}
+    proofBody={proofBody}
+    setProofBody={setProofBody}
+    proof={proof}
+    checking={checking}
+    error={error}
+    commandInput={commandInput}
+    setCommandInput={setCommandInput}
+    typewriterMode={typewriterMode}
+  />
+
+  return <DeletedChatContext.Provider value={{ deletedChat, setDeletedChat, showHelp, setShowHelp }}>
+    <SelectionContext.Provider value={{ selectedStep, setSelectedStep }}>
+      <InputModeContext.Provider value={{
+        typewriterMode,
+        setTypewriterMode,
+        typewriterInput: commandInput,
+        setTypewriterInput: setCommandInput,
+        lockEditorMode,
+        setLockEditorMode,
+      }}>
+        <ProofContext.Provider value={{
+          proof,
+          setProof,
+          interimDiags,
+          setInterimDiags,
+          crashed,
+          setCrashed,
+        }}>
+          <LevelAppBar pageNumber={pageNumber} setPageNumber={setPageNumber}
+            isLoading={false} levelTitle={levelTitle} />
+          {mobile ? <div className="app-content level-mobile">
+            <LocalExercisePanel
+              level={level.data}
+              proofBody={proofBody}
+              setProofBody={setProofBody}
+              proof={proof}
+              checking={checking}
+              error={error}
+              commandInput={commandInput}
+              setCommandInput={setCommandInput}
+              typewriterMode={typewriterMode}
+              visible={pageNumber === 0}
+            />
+            <InventoryPanel levelInfo={level.data} visible={pageNumber === 1} />
+          </div> :
+            <Split minSize={0} snapOffset={200} sizes={[25, 50, 25]} className="app-content level">
+              <ChatPanel lastLevel={lastLevel} />
+              {exercise}
+              <InventoryPanel levelInfo={level.data} />
+            </Split>}
+        </ProofContext.Provider>
+      </InputModeContext.Provider>
+    </SelectionContext.Provider>
+  </DeletedChatContext.Provider>
 }

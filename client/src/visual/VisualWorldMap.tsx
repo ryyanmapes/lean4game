@@ -14,8 +14,6 @@ import {
   faDownload,
   faEraser,
   faGear,
-  faLock,
-  faLockOpen,
   faSun,
   faUpload,
   faXmark,
@@ -26,13 +24,12 @@ import cytoscape from 'cytoscape'
 import { GameIdContext } from '../app'
 import { PreferencesContext } from '../components/infoview/context'
 import { useGetGameInfoQuery } from '../state/api'
-import { selectCompleted, selectProgress, selectUnlockLevels, changeUnlockLevels } from '../state/progress'
+import { selectCompleted, selectProgress } from '../state/progress'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
 import { navOpenAtom } from '../store/navigation-atoms'
 import { popupAtom, PopupType } from '../store/popup-atoms'
-import { useAppDispatch, useAppSelector } from '../hooks'
-import { saveState } from '../state/local_storage'
+import { useAppSelector } from '../hooks'
 import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
@@ -150,7 +147,9 @@ interface LevelTooltipInfo {
   isRight: boolean
 }
 
-function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, unlocked, worldSize, palette, title, onHoverChange }: {
+type MapLevelMode = 'classic' | 'visual'
+
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, unlocked, worldSize, palette, title, onHoverChange, levelMode }: {
   world: string
   level: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -164,6 +163,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   palette: VisualMapPalette
   title?: string
   onHoverChange?: (info: LevelTooltipInfo | null) => void
+  levelMode: MapLevelMode
 }) {
   const gameId = React.useContext(GameIdContext)
   const navigate = useNavigate()
@@ -183,7 +183,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
     : s * position.y - Math.cos(visualIndex * betaSpiral(visualIndex)) * (R + 2 * r * (visualIndex - 1) / (NSPIRAL + 1))
 
   const fill = completed ? palette.completedLevel : unlocked ? palette.unlockedLevel : palette.lockedLevel
-  const to = `/${gameId}/world/${world}/level/${level}/visual`
+  const to = `/${gameId}/world/${world}/level/${level}${levelMode === 'visual' ? '/visual' : ''}`
   const isRight = x >= s * position.x
 
   return (
@@ -216,13 +216,14 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   )
 }
 
-function VisualWorldIcon({ world, title, position, completedLevels, worldSize, palette }: {
+function VisualWorldIcon({ world, title, position, completedLevels, worldSize, palette, levelMode }: {
   world: string
   title: string
   position: cytoscape.Position
   completedLevels: boolean[]
   worldSize: number
   palette: VisualMapPalette
+  levelMode: MapLevelMode
 }) {
   const gameId = React.useContext(GameIdContext)
   const navigate = useNavigate()
@@ -238,7 +239,7 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
 
   const fill = completed ? palette.completedWorld : unlocked ? palette.unlockedWorld : palette.lockedWorld
   const labelBg = completed ? palette.completedLabel : unlocked ? palette.unlockedLabel : palette.lockedLabel
-  const to = `/${gameId}/world/${world}/level/${nextLevel}/visual`
+  const to = `/${gameId}/world/${world}/level/${nextLevel}${levelMode === 'visual' ? '/visual' : ''}`
 
   return (
     <g
@@ -308,37 +309,27 @@ function VisualMapAppBar({
   isLightMode: boolean
   onToggleLightMode: () => void
 }) {
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
   const [navOpen, setNavOpen] = useAtom(navOpenAtom)
   const [, setPopup] = useAtom(popupAtom)
-  const dispatch = useAppDispatch()
-  const unlockLevels = useAppSelector(selectUnlockLevels(gameId))
   const gameProgress = useAppSelector(selectProgress(gameId))
 
   function closeMenu() {
     setNavOpen(false)
   }
 
-  function toggleUnlockLevels() {
-    dispatch(changeUnlockLevels({ game: gameId, unlockLevels: !unlockLevels }))
-    saveState(store.getState().progress)
-    window.location.reload()
-  }
-
   return (
     <div className="visual-map-appbar">
       <div className="visual-map-side">
-        <button
-          type="button"
+        <a
           className="visual-map-back-btn"
-          onClick={() => navigate('/')}
+          href="/"
           title={t('Home')}
           aria-label={t('Home')}
         >
           <FontAwesomeIcon icon={toIconProp(faArrowLeft)} />
-        </button>
+        </a>
       </div>
       <span className="visual-map-title">{gameTitle}</span>
       <div className="visual-map-side visual-map-actions">
@@ -365,9 +356,6 @@ function VisualMapAppBar({
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Upload')}
         </button>
-        <button onClick={toggleUnlockLevels} className={unlockLevels ? 'active' : ''}>
-          <FontAwesomeIcon icon={toIconProp(unlockLevels ? faLockOpen : faLock)} />&nbsp;{t('Unlock levels')}
-        </button>
         <button onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Erase')}
         </button>
@@ -385,7 +373,7 @@ function VisualMapAppBar({
   )
 }
 
-export function VisualWorldMap() {
+export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelMode }) {
   const gameId = React.useContext(GameIdContext)
   const { isVisualLightMode, setIsVisualLightMode } = React.useContext(PreferencesContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
@@ -508,6 +496,7 @@ export function VisualWorldMap() {
           completedLevels={completed[worldId]}
           worldSize={visibleCount(worldId)}
           palette={mapPalette}
+          levelMode={levelMode}
         />,
       )
       let visualIndex = 0
@@ -528,6 +517,7 @@ export function VisualWorldMap() {
             palette={mapPalette}
             title={levelTitles[worldId]?.[i]}
             onHoverChange={setLevelTooltip}
+            levelMode={levelMode}
           />,
         )
       }

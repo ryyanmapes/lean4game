@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useEffect } from 'react'
 import Split from 'react-split'
-import { Box, CircularProgress } from '@mui/material'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons'
 
@@ -14,6 +13,10 @@ import { PreferencesContext } from './infoview/context'
 import { WorldTreePanel } from './world_tree'
 
 import '../css/welcome.css'
+// The classic map uses the same navigation, prose, and KaTeX rules as a
+// level. Level routes are lazy-loaded in the local release, so import those
+// shared rules explicitly instead of relying on the level bundle to load them.
+import '../css/level.css'
 import { WelcomeAppBar } from './app_bar'
 import { Hint } from './hints'
 import i18next from 'i18next'
@@ -21,6 +24,8 @@ import { useTranslation } from 'react-i18next'
 import { useGameTranslation } from '../utils/translation'
 import { InventoryPanel } from './inventory/inventory_panel'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
+import { ClassicLoadingScreen } from './classic_loading_screen'
+import '../css/local-classic-level.css'
 
 
 /** the panel showing the game's introduction text */
@@ -38,8 +43,8 @@ function IntroductionPanel({introduction, setPageNumber}: {introduction: string,
   // let text: Array<string> = introduction.split(/\n(\s*\n)+/)
   let text: Array<string> = introduction ? [gT(introduction)] : []
 
-  return <div className="column chat-panel">
-    <div className="chat">
+  return <div className="column chat-panel" style={{paddingInline: '1rem'}}>
+    <div className="chat" style={{margin: 0, padding: '.75rem 0 1.5rem'}}>
       {text?.map(((t, i) =>
         t.trim() ?
           <Hint key={`intro-p-${i}`}
@@ -89,9 +94,7 @@ function Welcome() {
   }, [gameInfo.data?.title])
 
   return !gameInfo.data ?
-    <Box display="flex" alignItems="center" justifyContent="center" sx={{ height: "calc(100vh - 64px)" }}>
-      <CircularProgress />
-    </Box>
+    <ClassicLoadingScreen message="Loading game…" />
   : <>
     <WelcomeAppBar pageNumber={pageNumber} setPageNumber={setPageNumber} gameInfo={gameInfo.data} />
     <div className="app-content">
