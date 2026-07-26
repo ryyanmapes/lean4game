@@ -225,6 +225,41 @@ describe('VisualTest Level 2', () => {
     proofTreeShouldHighlightExactlyOneCurrentLeaf()
   })
 
+  it('defers goal rotation until an action is made on the browsed branch', () => {
+    clickGoal()
+    clickGoal()
+    clickGoal()
+    streamLabelShouldBe(1, 2)
+
+    cy.get('.proof-sidebar-tab').click()
+    cy.contains('.proof-sidebar-mode-btn', 'Interactive').click()
+    cy.get('.proof-sidebar-step-text').then(linesBeforeBrowse => {
+      expect([...linesBeforeBrowse].map(line => line.textContent?.trim())).not.to.include('rotate_left')
+      const stepCountBeforeBrowse = linesBeforeBrowse.length
+
+      clickNextStream()
+      clickPreviousStream()
+      clickNextStream()
+
+      cy.get('.proof-sidebar-step-text').should('have.length', stepCountBeforeBrowse)
+      clickHypViaHarness('h1')
+
+      cy.get('.proof-sidebar-step-text').then(lines => {
+        const proof = [...lines].map(line => line.textContent?.trim())
+        expect(proof.filter(line => line === 'rotate_left')).to.have.length(1)
+        expect(proof.at(-2)).to.equal('rotate_left')
+        expect(proof.at(-1)).to.equal('click_prop h1')
+      })
+
+      cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+      cy.get('.proof-sidebar-step-text').then(lines => {
+        const proof = [...lines].map(line => line.textContent?.trim())
+        expect(proof.filter(line => line === 'rotate_left')).to.have.length(1)
+        expect(proof.at(-2)).to.equal('rotate_left')
+      })
+    })
+  })
+
   it('splits h1 on the middle stream without jumping to the wrong goal', () => {
     buildThreeStreams()
 

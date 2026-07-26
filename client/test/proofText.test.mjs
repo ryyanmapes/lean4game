@@ -4,7 +4,9 @@ import test from 'node:test'
 
 const {
   buildStructuredProof,
+  commandForGoalAction,
   displayedProofLines,
+  rotationForGoal,
 } = await import('../../tmp-proof-text-tests/proofText.js')
 
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:
@@ -13,15 +15,54 @@ const {
 //   · rw [add_succ, add_succ, hd, add_succ]; rfl
 const completeAdditionFour = [
   { command: 'induction c with d hd', playTactic: 'induction c with d hd', leanTactic: 'induction c with d hd' },
-  { command: 'case zero => drag_rw_lhs [MyNat.add_zero]', playTactic: 'drag_rw_lhs [MyNat.add_zero]', leanTactic: null },
-  { command: 'case zero => drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: null },
-  { command: 'case zero => click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
-  { command: 'case succ => drag_rw_lhs [MyNat.add_succ]', playTactic: 'drag_rw_lhs [MyNat.add_succ]', leanTactic: null },
-  { command: 'case succ => drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: null },
-  { command: 'case succ => drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: null },
-  { command: 'case succ => drag_rw_rhs [MyNat.add_succ]', playTactic: 'drag_rw_rhs [MyNat.add_succ]', leanTactic: null },
-  { command: 'case succ => click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
+  { command: 'drag_rw_lhs [MyNat.add_zero]', playTactic: 'drag_rw_lhs [MyNat.add_zero]', leanTactic: null },
+  { command: 'drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: null },
+  { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
+  { command: 'drag_rw_lhs [MyNat.add_succ]', playTactic: 'drag_rw_lhs [MyNat.add_succ]', leanTactic: null },
+  { command: 'drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: null },
+  { command: 'drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: null },
+  { command: 'drag_rw_rhs [MyNat.add_succ]', playTactic: 'drag_rw_rhs [MyNat.add_succ]', leanTactic: null },
+  { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
 ]
+
+test('goal navigation is deferred until an action and records the shortest left rotation', () => {
+  assert.equal(rotationForGoal(['zero', 'succ', 'other'], 'zero'), null)
+  assert.equal(rotationForGoal(['zero', 'succ', 'other'], 'succ'), 'rotate_left')
+  assert.equal(rotationForGoal(['zero', 'succ', 'other'], 'other'), 'rotate_left 2')
+
+  assert.deepEqual(
+    commandForGoalAction('drag_rw_lhs [add_succ]', 'succ', ['zero', 'succ']),
+    {
+      command: 'rotate_left\ndrag_rw_lhs [add_succ]',
+      rotation: 'rotate_left',
+    },
+  )
+})
+
+test('both proof views show the committed rotation immediately before the cross-branch action', () => {
+  const steps = [
+    completeAdditionFour[0],
+    {
+      command: 'rotate_left\ndrag_rw_lhs [MyNat.add_succ]',
+      rotation: 'rotate_left',
+      playTactic: 'drag_rw_lhs [MyNat.add_succ]',
+      leanTactic: 'rw [MyNat.add_succ]',
+    },
+  ]
+
+  assert.deepEqual(displayedProofLines(steps, 'play'), [
+    'induction c with d hd',
+    'rotate_left',
+    'drag_rw_lhs [add_succ]',
+  ])
+  assert.deepEqual(displayedProofLines(steps, 'lean'), [
+    'induction c with d hd',
+    'rotate_left',
+    'rw [add_succ]',
+  ])
+  assert.equal(buildStructuredProof(steps, 'play').includes('case '), false)
+  assert.equal(buildStructuredProof(steps, 'lean').includes('case '), false)
+})
 
 async function authoredAtomicTactics() {
   const source = await readFile(new URL('./fixtures/nng4-addition-4-solution.lean', import.meta.url), 'utf8')
@@ -40,41 +81,36 @@ async function authoredAtomicTactics() {
   return tactics
 }
 
-test('interactive proof text groups a complete solution into one block per authored case', () => {
-  assert.equal(
-    buildStructuredProof(completeAdditionFour, 'play'),
-    `induction c with d hd
-case zero =>
-  drag_rw_lhs [MyNat.add_zero]
-  drag_rw_rhs_at [MyNat.add_zero] [2]
-  click_goal
-case succ =>
-  drag_rw_lhs [MyNat.add_succ]
-  drag_rw_rhs_at [MyNat.add_succ] [2]
-  drag_rw_lhs_at [hd] [1]
-  drag_rw_rhs [MyNat.add_succ]
-  click_goal`,
-  )
+test('interactive proof log contains one case-free line per player action', () => {
+  assert.deepEqual(displayedProofLines(completeAdditionFour, 'play'), [
+    'induction c with d hd',
+    'drag_rw_lhs [add_zero]',
+    'drag_rw_rhs_at [add_zero] [2]',
+    'click_goal',
+    'drag_rw_lhs [add_succ]',
+    'drag_rw_rhs_at [add_succ] [2]',
+    'drag_rw_lhs_at [hd] [1]',
+    'drag_rw_rhs [add_succ]',
+    'click_goal',
+  ])
 })
 
 test('core proof text contains the same atomic tactics as the authored NNG4 solution', async () => {
   const displayed = displayedProofLines(completeAdditionFour, 'lean')
   assert.deepEqual(displayed, [
     'induction c with d hd',
-    'case zero =>',
-    '  rw [add_zero]',
-    '  rw [add_zero]',
-    '  rfl',
-    'case succ =>',
-    '  rw [add_succ]',
-    '  rw [add_succ]',
-    '  rw [hd]',
-    '  rw [add_succ]',
-    '  rfl',
+    'rw [add_zero]',
+    'rw [add_zero]',
+    'rfl',
+    'rw [add_succ]',
+    'rw [add_succ]',
+    'rw [hd]',
+    'rw [add_succ]',
+    'rfl',
   ])
 
   assert.deepEqual(
-    displayed.map(line => line.trim()).filter(line => line && !line.startsWith('case ')),
+    displayed,
     await authoredAtomicTactics(),
   )
   assert.equal(displayed.some(line => line.includes('?')), false)

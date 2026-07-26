@@ -2,6 +2,7 @@ export interface ProofTextStep {
   command: string
   playTactic: string
   leanTactic: string | null
+  rotation?: string | null
 }
 
 interface FocusedCommand {
@@ -47,6 +48,24 @@ export function parseFocusedCommand(command: string): FocusedCommand {
 export function stripCasePrefixes(tactic: string | null | undefined): string | null {
   if (!tactic) return null
   return parseFocusedCommand(tactic).tactic || null
+}
+
+export function rotationForGoal(goalOrder: string[], targetGoalId: string): string | null {
+  const targetIndex = goalOrder.indexOf(targetGoalId)
+  if (targetIndex <= 0) return null
+  return targetIndex === 1 ? 'rotate_left' : `rotate_left ${targetIndex}`
+}
+
+export function commandForGoalAction(
+  playTactic: string,
+  targetGoalId: string,
+  goalOrder: string[],
+): { command: string; rotation: string | null } {
+  const rotation = rotationForGoal(goalOrder, targetGoalId)
+  return {
+    command: rotation ? `${rotation}\n${playTactic}` : playTactic,
+    rotation,
+  }
 }
 
 function getOrCreateCaseItem(block: ProofScriptBlock, label: string): ProofScriptBlock {
@@ -105,11 +124,10 @@ function leafForMode(step: ProofTextStep, mode: 'lean' | 'play'): string {
 }
 
 export function buildStructuredProof(steps: ProofTextStep[], mode: 'lean' | 'play'): string {
-  const commands = steps.map(step => {
-    const { casePath } = parseFocusedCommand(step.command)
-    return casePath.reduceRight((inner, label) => `case ${label} => ${inner}`, leafForMode(step, mode))
-  })
-  return serializeProofCommands(commands)
+  return steps.flatMap(step => [
+    ...(step.rotation ? [step.rotation] : []),
+    leafForMode(step, mode),
+  ]).filter(Boolean).join('\n')
 }
 
 export function shortenQualifiedNames(text: string): string {
@@ -117,6 +135,11 @@ export function shortenQualifiedNames(text: string): string {
 }
 
 export function displayedProofLines(steps: ProofTextStep[], mode: 'lean' | 'play'): string[] {
-  const proof = shortenQualifiedNames(buildStructuredProof(steps, mode))
-  return proof ? proof.split('\n') : []
+  return steps.flatMap(step => {
+    const display = shortenQualifiedNames(leafForMode(step, mode))
+    return [
+      ...(step.rotation ? [step.rotation] : []),
+      ...(display ? display.split('\n') : []),
+    ]
+  })
 }

@@ -28,7 +28,6 @@ import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
 import {
-  casePathForStream,
   cloneProofTree,
   collectActiveStreamIds,
   collectLiveStreamIds,
@@ -42,9 +41,9 @@ import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 import {
   buildStructuredProof,
+  commandForGoalAction,
   displayedProofLines,
   isVisualOnlyPlayTactic,
-  parseFocusedCommand,
   serializeProofCommands,
   shortenQualifiedNames,
   stripCasePrefixes,
@@ -360,6 +359,7 @@ interface ProofStepRecord {
   command: string
   playTactic: string
   leanTactic: string | null
+  rotation: string | null
   treeSnapshot: ProofStreamTreeNode
   canvasSnapshot: CanvasState
   activeStreamIdAfter: string | null
@@ -519,17 +519,13 @@ declare global {
   }
 }
 
-function focusCommandForStream(
+function actionCommandForStream(
   playTactic: string,
   stream: GoalStream | null,
-  tree: ProofStreamTreeNode,
-): string {
-  if (!stream) return playTactic
-  const casePath = casePathForStream(tree, stream.id)
-    ?.map(label => label.trim())
-    .filter(label => label.length > 0)
-    ?? []
-  return casePath.reduceRight((inner, caseName) => `case ${caseName} => ${inner}`, playTactic)
+  leanGoalOrder: string[],
+): { command: string; rotation: string | null } {
+  if (!stream) return { command: playTactic, rotation: null }
+  return commandForGoalAction(playTactic, stream.id, leanGoalOrder)
 }
 
 function parsedGoalEquality(stream: GoalStream) {
@@ -1129,9 +1125,8 @@ function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
   return buildStructuredProof(steps, 'lean')
 }
 
-function buildInteractiveProofLine(command: string, playTactic: string): string {
-  const { casePath } = parseFocusedCommand(command)
-  return casePath.reduceRight((inner, c) => `case ${c} => ${inner}`, playTactic)
+function buildInteractiveProofLine(rotation: string | null, playTactic: string): string {
+  return rotation ? `${rotation}\n${playTactic}` : playTactic
 }
 
 type TransformTarget =
@@ -1426,6 +1421,7 @@ export function VisualCanvas({
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>([])
+  const leanGoalOrderRef = useRef<string[]>(initialState.streams.map(stream => stream.id))
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [failingTheoremCopyId, setFailingTheoremCopyId] = useState<string | null>(null)
   const [solvedGoalId, setSolvedGoalId] = useState<string | null>(null)
@@ -1875,7 +1871,11 @@ export function VisualCanvas({
       ? canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null
       : null
     if (!focusedStream) return
-    const command = focusCommandForStream(playTactic, focusedStream, proofTree)
+    const { command, rotation } = actionCommandForStream(
+      playTactic,
+      focusedStream,
+      leanGoalOrderRef.current,
+    )
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setIsProcessing(true)
@@ -1906,7 +1906,7 @@ export function VisualCanvas({
     })
 
     if (handledBySyntheticReflexiveClick) {
-      onProofStep?.(buildInteractiveProofLine(command, playTactic))
+      onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,
         canvasState,
@@ -1941,6 +1941,7 @@ export function VisualCanvas({
 
     const annotation = lastStep?.annotation
     const leanCanvas = proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -1971,12 +1972,13 @@ export function VisualCanvas({
       command,
       playTactic,
       leanTactic,
+      rotation,
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
     }])
-    onProofStep?.(buildInteractiveProofLine(command, playTactic))
+    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
     if ((leanCanvas.completed || nextCanvas.completed) && options?.solvedGoalId) {
@@ -2019,6 +2021,7 @@ export function VisualCanvas({
 
     setIsProcessing(false)
     if (result === null) return false
+    leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
     const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
     const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
@@ -2664,7 +2667,11 @@ export function VisualCanvas({
       }
     }
 
-    const command = focusCommandForStream(playTactic, focusedStream, proofTree)
+    const { command, rotation } = actionCommandForStream(
+      playTactic,
+      focusedStream,
+      leanGoalOrderRef.current,
+    )
     closeReductionTooltip()
     setIsProcessing(true)
 
@@ -2687,6 +2694,7 @@ export function VisualCanvas({
     if (result === null) return false
 
     const leanCanvas = proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -2706,12 +2714,13 @@ export function VisualCanvas({
       command,
       playTactic,
       leanTactic,
+      rotation,
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
     }])
-    onProofStep?.(buildInteractiveProofLine(command, playTactic))
+    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
@@ -2776,7 +2785,11 @@ export function VisualCanvas({
     const focusedStream = transformTarget
       ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
       : null
-    const command = focusCommandForStream(playTactic, focusedStream, proofTree)
+    const { command, rotation } = actionCommandForStream(
+      playTactic,
+      focusedStream,
+      leanGoalOrderRef.current,
+    )
     closeReductionTooltip()
     setIsProcessing(true)
 
@@ -2802,6 +2815,7 @@ export function VisualCanvas({
     // render cycle — after rw, Lean assigns a new mvarId to the goal, so we must update the
     // tracked stream ID to the stream at the same index, otherwise TransformationView unmounts.
     const leanCanvas = proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -2889,12 +2903,13 @@ export function VisualCanvas({
       command,
       playTactic,
       leanTactic,
+      rotation,
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: transformTarget,
     }])
-    onProofStep?.(buildInteractiveProofLine(command, playTactic))
+    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
 
     if (shouldDeferGoalCompletionUntilClose) {
       // When the rewrite auto-completes the proof (e.g. rw [add_zero] closes "0 = 0" via rfl),
