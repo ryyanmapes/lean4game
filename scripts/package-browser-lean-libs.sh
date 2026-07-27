@@ -4,6 +4,7 @@ set -euo pipefail
 out="${1:-browser-lean-libs}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 nng4="$root/../NNG4"
+visualtest="$root/../VisualTest"
 
 rm -rf "$out"
 mkdir -p "$out/lean-lib"
@@ -52,6 +53,11 @@ if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then
   fi
 fi
 
+mkdir -p "$out/gamedata/VisualTest"
+if [[ -d "$visualtest/.lake/gamedata" ]]; then
+  cp -R "$visualtest/.lake/gamedata/." "$out/gamedata/VisualTest/"
+fi
+
 find "$out/lean-lib" -type f -printf '%P\n' | LC_ALL=C sort > "$out/lean-lib-files.txt"
 
 olean_count="$(find "$out/lean-lib" -type f -name '*.olean' | wc -l | tr -d ' ')"
@@ -86,6 +92,7 @@ cat > "$out/build-info.json" <<EOF
   "leanBuildRunId": "${CAULI_LEAN_RUN_ID:?}",
   "lean4gameRef": "${LEAN4GAME_REF:-unknown}",
   "nng4Ref": "$(if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then git -C "$nng4" rev-parse HEAD; else echo null; fi)",
+  "visualTestRef": "$(git -C "$visualtest" rev-parse HEAD)",
   "oleanFiles": $olean_count,
   "irFiles": $ir_count
 }
