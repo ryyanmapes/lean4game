@@ -230,6 +230,12 @@ jobs:
         run: |
           rm -f ../VisualTest/lake-manifest.json
           rm -rf ../VisualTest/.lake
+          # The checked-in browser facade deliberately makes `MakeGame` a
+          # no-op. Metadata generation needs the full command implementation;
+          # this checkout is ephemeral and only its JSON output is packaged.
+          sed -i 's/^import GameServer\.Browser$/import GameServer/' \
+            ../VisualTest/Game/Metadata.lean
+          grep -q '^import GameServer$' ../VisualTest/Game/Metadata.lean
           (cd ../VisualTest && "$LEAN_HOME/bin/lake" update --keep-toolchain)
 
       - name: Enable browser IR generation
@@ -277,33 +283,6 @@ jobs:
         working-directory: ../VisualTest
         run: |
           "$LEAN_HOME/bin/lake" build
-          # `MakeGame` writes metadata relative to the Lean process's current
-          # directory. Re-elaborate the already-built root module through
-          # `lake env` so that side effect is anchored in VisualTest rather
-          # than Lake's reusable-workflow workspace.
-          "$LEAN_HOME/bin/lake" env lean Game.lean
-
-          if [[ ! -s .lake/gamedata/game.json ]]; then
-            generated_game="$(
-              find "$GITHUB_WORKSPACE/.." -maxdepth 5 -type f \
-                -path '*/.lake/gamedata/game.json' -print0 \
-              | while IFS= read -r -d '' candidate; do
-                  if grep -q '"Visual Test"' "$candidate"; then
-                    printf '%s\n' "$candidate"
-                    break
-                  fi
-                done
-            )"
-            if [[ -z "$generated_game" ]]; then
-              echo '::error::VisualTest compiled, but MakeGame produced no discoverable game.json.'
-              find "$GITHUB_WORKSPACE/.." -maxdepth 5 -type f \
-                -path '*/.lake/gamedata/game.json' -print
-              exit 1
-            fi
-            echo "Normalizing VisualTest metadata from $generated_game"
-            mkdir -p .lake/gamedata
-            cp -R "$(dirname "$generated_game")/." .lake/gamedata/
-          fi
           test -s .lake/gamedata/game.json
 
       - name: Rebuild NNG4 against browser command surface
