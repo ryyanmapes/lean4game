@@ -282,6 +282,28 @@ jobs:
           # `lake env` so that side effect is anchored in VisualTest rather
           # than Lake's reusable-workflow workspace.
           "$LEAN_HOME/bin/lake" env lean Game.lean
+
+          if [[ ! -s .lake/gamedata/game.json ]]; then
+            generated_game="$(
+              find "$GITHUB_WORKSPACE/.." -maxdepth 5 -type f \
+                -path '*/.lake/gamedata/game.json' -print0 \
+              | while IFS= read -r -d '' candidate; do
+                  if grep -q '"Visual Test"' "$candidate"; then
+                    printf '%s\n' "$candidate"
+                    break
+                  fi
+                done
+            )"
+            if [[ -z "$generated_game" ]]; then
+              echo '::error::VisualTest compiled, but MakeGame produced no discoverable game.json.'
+              find "$GITHUB_WORKSPACE/.." -maxdepth 5 -type f \
+                -path '*/.lake/gamedata/game.json' -print
+              exit 1
+            fi
+            echo "Normalizing VisualTest metadata from $generated_game"
+            mkdir -p .lake/gamedata
+            cp -R "$(dirname "$generated_game")/." .lake/gamedata/
+          fi
           test -s .lake/gamedata/game.json
 
       - name: Rebuild NNG4 against browser command surface
