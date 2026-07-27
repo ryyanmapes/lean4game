@@ -250,6 +250,13 @@ jobs:
           node scripts/enable-browser-module-system.mjs \
             server/.lake/packages/batteries
 
+          node scripts/enable-browser-module-system.mjs --meta \
+            ../VisualTest/.lake/packages/importGraph \
+            ../VisualTest/.lake/packages/i18n \
+            ../VisualTest/.lake/packages/Cli
+          node scripts/enable-browser-module-system.mjs \
+            ../VisualTest/.lake/packages/batteries
+
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
             node scripts/enable-browser-module-system.mjs --meta \
               ../NNG4/.lake/packages/importGraph \
@@ -265,6 +272,7 @@ jobs:
 
           rm -rf server/.lake/build
           find server/.lake/packages -type d -path '*/.lake/build' -prune -exec rm -rf {} +
+          find ../VisualTest/.lake/packages -type d -path '*/.lake/build' -prune -exec rm -rf {} +
 
       - name: Build GameServer browser modules with Cauli Lean
         working-directory: server
