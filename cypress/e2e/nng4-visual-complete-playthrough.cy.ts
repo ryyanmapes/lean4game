@@ -168,13 +168,24 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
           }
         })
         cy.get('.proof-sidebar').should('have.class', 'open')
-        cy.contains('button', 'Continue in classic text mode', { timeout: LOAD_TIMEOUT })
+        cy.window().then(win => {
+          cy.stub(win, 'open').as('openClassic')
+        })
+        cy.contains('button', 'Export to classic mode', { timeout: LOAD_TIMEOUT })
           .scrollIntoView()
           .should('be.visible')
           .click()
 
-        cy.location('hash', { timeout: LOAD_TIMEOUT }).should('not.include', '/visual')
+        cy.get('@openClassic').should('have.been.calledOnce').then(openClassic => {
+          const [target, browsingContext, features] =
+            (openClassic as unknown as { getCall(index: number): { args: unknown[] } }).getCall(0).args
+          expect(browsingContext).to.equal('_blank')
+          expect(features).to.include('noopener')
+          cy.visit(String(target))
+        })
         cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
+          .should('have.class', 'local-wasm-code-editor')
+          .and('be.visible')
           .should('have.value', audit.proofBody)
         cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
           .should('contain.text', 'Proof complete')

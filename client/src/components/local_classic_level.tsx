@@ -41,6 +41,14 @@ const emptyProof: ProofState = {
   completedWithWarnings: false,
 }
 
+type VisualProofHandoff = {
+  gameId?: string
+  worldId?: string
+  levelId?: number
+  proofBody?: string
+  openInEditor?: boolean
+}
+
 function rejectedCommandMessage(proofBody: string, detail: string) {
   const command = proofBody.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).at(-1) ?? ''
   return command
@@ -168,16 +176,24 @@ export default function LocalClassicLevel() {
   const game = useGetGameInfoQuery({ game: gameId })
   const client = React.useMemo(() => new LocalWasmRpcClient(gameId, worldId, levelId), [gameId])
 
-  const visualHandoff = (
-    location.state as {
-      visualProofHandoff?: {
-        gameId?: string
-        worldId?: string
-        levelId?: number
-        proofBody?: string
-      }
-    } | null
-  )?.visualProofHandoff
+  const [visualHandoff] = React.useState<VisualProofHandoff | undefined>(() => {
+    const routeHandoff = (
+      location.state as { visualProofHandoff?: VisualProofHandoff } | null
+    )?.visualProofHandoff
+    if (routeHandoff) return routeHandoff
+
+    const token = new URLSearchParams(location.search).get('visualHandoff')
+    if (!token) return undefined
+    const storageKey = `visual-proof-handoff/${token}`
+    const rawHandoff = localStorage.getItem(storageKey)
+    localStorage.removeItem(storageKey)
+    if (!rawHandoff) return undefined
+    try {
+      return JSON.parse(rawHandoff) as VisualProofHandoff
+    } catch {
+      return undefined
+    }
+  })
   const handedOffProof =
     visualHandoff?.gameId === gameId &&
     visualHandoff.worldId === worldId &&
@@ -210,6 +226,12 @@ export default function LocalClassicLevel() {
   }
 
   React.useEffect(() => {
+    if (visualHandoff?.openInEditor) {
+      dispatch(changeTypewriterMode({ game: gameId, typewriterMode: false }))
+    }
+  }, [dispatch, gameId, visualHandoff?.openInEditor])
+
+  React.useEffect(() => {
     let active = true
     acceptedProofBody.current = ''
     preserveRejectedError.current = false
@@ -239,7 +261,7 @@ export default function LocalClassicLevel() {
   React.useEffect(() => () => client.close(), [client])
 
   React.useEffect(() => {
-    if (!ready) return
+    if (!ready || proofBody === acceptedProofBody.current) return
     let active = true
     const timer = window.setTimeout(async () => {
       setChecking(true)

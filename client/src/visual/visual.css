@@ -2025,11 +2025,11 @@
 .proof-sidebar-classic-btn {
   width: 100%;
   appearance: none;
-  border: 1px solid var(--visual-sidebar-active-border);
+  border: 1px solid var(--visual-glass-border);
   border-radius: 7px;
   padding: 0.55rem 0.7rem;
-  background: var(--visual-sidebar-active-bg);
-  color: var(--visual-sidebar-active-text);
+  background: var(--visual-glass-bg);
+  color: var(--visual-text-secondary);
   font: 700 0.75rem/1.25 var(--font-family), system-ui, sans-serif;
   cursor: pointer;
 }

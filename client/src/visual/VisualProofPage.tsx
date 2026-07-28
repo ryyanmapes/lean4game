@@ -117,17 +117,18 @@ export function VisualProofPage() {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
   const handleOpenClassic = useCallback((proofBody: string) => {
-    navigate(`/${gameId}/world/${worldId}/level/${levelId}`, {
-      state: {
-        visualProofHandoff: {
-          gameId,
-          worldId,
-          levelId,
-          proofBody,
-        },
-      },
-    })
-  }, [gameId, levelId, navigate, worldId])
+    const token = crypto.randomUUID()
+    localStorage.setItem(`visual-proof-handoff/${token}`, JSON.stringify({
+      gameId,
+      worldId,
+      levelId,
+      proofBody,
+      openInEditor: true,
+    }))
+    const target = new URL(window.location.href)
+    target.hash = `#/${gameId}/world/${worldId}/level/${levelId}?visualHandoff=${encodeURIComponent(token)}`
+    window.open(target.toString(), '_blank', 'noopener,noreferrer')
+  }, [gameId, levelId, worldId])
   const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {

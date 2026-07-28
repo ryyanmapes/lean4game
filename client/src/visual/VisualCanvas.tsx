@@ -3878,7 +3878,7 @@ export function VisualCanvas({
           className="proof-sidebar-classic-btn"
           onClick={() => onOpenClassic(serializeProofCommands(proofSteps.map(step => step.command)))}
         >
-          Continue in classic text mode
+          Export to classic mode
         </button>
       </div>
     )

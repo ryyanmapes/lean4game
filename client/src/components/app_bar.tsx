@@ -115,6 +115,7 @@ function InputModeButton({isDropdown}) {
 
   /** toggle input mode if allowed */
   function toggleInputMode(ev: React.MouseEvent) {
+    ev.preventDefault()
     if (!lockEditorMode){
       setTypewriterMode(!typewriterMode)
       closeNav()
