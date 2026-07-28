@@ -3641,7 +3641,10 @@ export function VisualCanvas({
       : theoremName
     const outcome = await handleRewrite(rewriteRef, isReverse, workingSide, path, expectedGoal)
     if (!outcome.success) {
-      throw new Error(`Rewrite with "${theoremName}" was rejected`)
+      const detail = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      throw new Error(
+        `Rewrite with "${theoremName}" was rejected${detail ? `: ${detail}` : ''}`,
+      )
     }
   }
 

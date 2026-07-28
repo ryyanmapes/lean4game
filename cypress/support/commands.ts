@@ -58,6 +58,22 @@ Cypress.Commands.add('map', { prevSubject: true }, (subject: unknown[], iteratee
     );
 });
 
+// The release launcher lives at `/`, while Lean4Game is served as a static
+// sub-application. Preserve the existing local-development routes by default,
+// but let live release runs redirect legacy `/#/...` visits to the configured
+// Lean4Game entry document.
+Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
+    const releaseEntry = Cypress.env('LEAN4GAME_ENTRY');
+    const resolvedUrl = (
+        releaseEntry
+        && typeof url === 'string'
+        && url.startsWith('/#/')
+    )
+        ? `${releaseEntry}${url.slice(1)}`
+        : url;
+    return originalFn(resolvedUrl, options);
+});
+
 Cypress.on('uncaught:exception', (err, runnable) => {
     // returning false here prevents Cypress from
     // failing the test

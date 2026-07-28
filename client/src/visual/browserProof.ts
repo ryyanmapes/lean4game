@@ -18,25 +18,20 @@ function browserCompatibleProof(proofBody: string): string {
       // are all discharged by that kernel-checked step directly.
       return `${tautoMatch[1]}simp_all`
     }
-    const addZeroMatch = line.match(
-      /^(\s*)drag_rw_(lhs|rhs)(?:_at)? \[(←\s*)?MyNat\.add_zero\](?: \[[\d,\s]*\])?\s*$/u,
+    const goalRewrite = line.match(
+      /^(\s*)drag_rw_(lhs|rhs)(_at)? \[(←\s*)?([^\]]+)\](?: \[([\d,\s]+)\])?\s*$/u,
     )
-    if (addZeroMatch) {
-      const [, indentation, side, reverse = ''] = addZeroMatch
-      // The Cauli snapshot's custom matcher reduces overloaded addition to
-      // `MyNat.add`, then mistakenly treats it as unary while following a
-      // nested visual path. Core `rw` under the selected equality side keeps
-      // this action formally checked and reaches the intended `b + 0`.
-      return `${indentation}conv => ${side}; rw [${reverse}MyNat.add_zero]`
-    }
-    const match = line.match(/^(\s*)drag_rw_(lhs|rhs) \[(.+)\]\s*$/u)
-    if (!match) return line
-    const [, indentation, , rule] = match
-    const trimmedRule = rule.trim()
-    if (trimmedRule === 'MyNat.add_succ') {
-      // The focused matcher in the Cauli build fails to instantiate the
-      // successor branch's exposed free variable. Core rw handles it correctly.
-      return `${indentation}rw [MyNat.add_succ]`
+    if (goalRewrite) {
+      const [, indentation, side, atSuffix = '', reverse = '', theorem, rawPath = ''] = goalRewrite
+      const path = rawPath.split(',').map(step => step.trim()).filter(Boolean)
+      if ((atSuffix.length > 0) !== (path.length > 0)) return line
+
+      // The purpose-linked Cauli matcher is unreliable for overloaded terms
+      // and some reverse rewrites. Compile the same explicitly selected
+      // side/path through Lean's core conv/rw machinery. The player's authored
+      // drag_rw command remains unchanged in both proof logs.
+      const navigation = path.map(step => `; arg ${step}`).join('')
+      return `${indentation}conv => ${side}${navigation}; rw [${reverse}${theorem.trim()}]`
     }
     return line
   }).join('\n')

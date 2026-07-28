@@ -23,7 +23,7 @@ case succ =>
   drag_rw_lhs [MyNat.add_succ]`),
     `induction n with d hd
 case succ =>
-  rw [MyNat.add_succ]
+  conv => lhs; rw [MyNat.add_succ]
   all_goals browser_report_state
   all_goals sorry`,
   )
@@ -42,7 +42,7 @@ case zero =>
   all_goals browser_report_state
   all_goals sorry
 case succ =>
-  rw [MyNat.add_succ]
+  conv => lhs; rw [MyNat.add_succ]
   all_goals browser_report_state
   all_goals sorry`,
   )
@@ -53,8 +53,15 @@ test('uses Lean core rewriting on the selected side for nested add_zero', () => 
     instrumentBrowserProof(`case zero =>
   drag_rw_rhs_at [MyNat.add_zero] [2]`),
     `case zero =>
-  conv => rhs; rw [MyNat.add_zero]
+  conv => rhs; arg 2; rw [MyNat.add_zero]
   all_goals browser_report_state
   all_goals sorry`,
+  )
+})
+
+test('uses Lean core rewriting for a reverse rewrite on the selected side', () => {
+  assert.equal(
+    instrumentBrowserProof('drag_rw_rhs [← MyNat.succ_eq_add_one]'),
+    'conv => rhs; rw [← MyNat.succ_eq_add_one]',
   )
 })

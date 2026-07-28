@@ -88,9 +88,14 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
     goalCard().should('have.class', 'transformable').dblclick()
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
 
-    visualHarness().then(harness =>
-      harness.rewriteGoalInTransform('succ_eq_add_one', 'right', undefined, true)
-    )
+    visualHarness().then(async harness => {
+      try {
+        await harness.rewriteGoalInTransform('succ_eq_add_one', 'right', undefined, true)
+      } catch (reason) {
+        const detail = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+        throw new Error(`${String(reason)}${detail ? `\nLean detail: ${detail}` : ''}`)
+      }
+    })
 
     cy.wait(900)
     cy.get('.tr-back-btn').should('be.visible')

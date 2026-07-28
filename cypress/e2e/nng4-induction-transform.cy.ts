@@ -137,13 +137,17 @@ describe('NNG4 Addition 1 induction transform mode', () => {
 
   it('applies a clicked rewrite rule when exactly one expression is highlighted', () => {
     visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
-    visualHarness().then(harness => harness.openGoalTransform())
+
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
+      expect($goal.attr('data-goal-text')).to.contain('0 + 0 = 0')
+      expect($goal).to.have.class('transformable')
+    }).dblclick()
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
     cy.get('.tr-swap-btn').click()
     cy.get('[data-rule-label="add_zero"]', { timeout: 60000 })
-      .trigger('mouseenter')
-    cy.get('.tr-expression-node.potential-target').should('have.length', 1)
+      .trigger('mouseover')
+    cy.get('.tr-expression-node.potential-target', { timeout: 60000 }).should('have.length', 1)
 
     cy.get('[data-rule-label="add_zero"]').click()
 
