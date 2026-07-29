@@ -420,6 +420,12 @@ interface HypGoalGuide {
   arrow: GuideArrow
 }
 
+interface HypInfoGuide {
+  info: VisualHypGoalInfo
+  style: React.CSSProperties
+  arrow: GuideArrow
+}
+
 interface ExpectedRewriteGoal {
   lhsStr: string
   rhsStr: string
@@ -493,6 +499,7 @@ interface VisualCanvasTestHarness {
     completed: boolean
     processing: boolean
     proofBody: string
+    coreProofBody: string
     coreLines: string[]
     interactiveLines: string[]
     visibleNames: string[]
@@ -1395,6 +1402,7 @@ export function VisualCanvas({
   const [mobilePage, setMobilePage] = useState<MobilePage>('main')
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
+  const [hypInfoGuides, setHypInfoGuides] = useState<HypInfoGuide[]>([])
   const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -3208,9 +3216,23 @@ export function VisualCanvas({
   )
   const activeHypGoalInfos = React.useMemo(
     () => (visualHypGoalInfos ?? []).filter(info =>
-      !proofGraphOccupiesMainView && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
+      info.target !== 'hyp' &&
+      !proofGraphOccupiesMainView &&
+      (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
     ),
     [displayGoalText, proofGraphOccupiesMainView, visualHypGoalInfos],
+  )
+  const activeHypInfos = React.useMemo(
+    () => (visualHypGoalInfos ?? []).filter(info => {
+      if (info.target !== 'hyp' || proofGraphOccupiesMainView) return false
+      const card = visibleHyps.find(candidate =>
+        candidate.hyp.names.includes(info.hyp) || candidate.hyp.playName === info.hyp
+      )
+      if (!card) return false
+      return !info.hypType ||
+        formatFormulaText(TaggedText_stripTags(card.hyp.type)) === formatFormulaText(info.hypType)
+    }),
+    [proofGraphOccupiesMainView, visibleHyps, visualHypGoalInfos],
   )
   const activeProofGraphInfos = React.useMemo(
     () => proofGraphVisible
@@ -3389,7 +3411,7 @@ export function VisualCanvas({
         const left = clampViewportValue(lineCenterX - guideWidth / 2, minLeft, maxLeft)
         const top = isPhonePortrait
           ? clampViewportValue(lineCenterY, minTop, maxTop)
-          : clampViewportValue(lineCenterY + 42, minTop, maxTop)
+          : clampViewportValue(Math.max(start.y, end.y) + 52, minTop, maxTop)
 
         nextGuides.push({
           info,
@@ -3430,6 +3452,75 @@ export function VisualCanvas({
       window.removeEventListener('scroll', updateGuides, true)
     }
   }, [activeHypGoalInfos, isPhonePortrait, layoutVersion, trayHeight, visibleHyps])
+
+  useLayoutEffect(() => {
+    const updateGuides = () => {
+      if (activeHypInfos.length === 0) {
+        setHypInfoGuides([])
+        return
+      }
+
+      const trayRect = document.getElementById(THEOREM_TRAY_ID)?.getBoundingClientRect()
+      const canvasRect = combiningCanvasRef.current?.getBoundingClientRect()
+      const nextGuides: HypInfoGuide[] = []
+      for (const info of activeHypInfos) {
+        const card = visibleHyps.find(candidate =>
+          candidate.hyp.names.includes(info.hyp) || candidate.hyp.playName === info.hyp
+        )
+        const sourceEl = card ? document.getElementById(card.id) : null
+        if (!sourceEl) continue
+
+        const sourceRect = sourceEl.getBoundingClientRect()
+        const guideWidth = Math.min(360, Math.max(260, window.innerWidth - 32))
+        const minLeft = (canvasRect?.left ?? 0) + 16
+        const maxLeft = Math.min(
+          window.innerWidth - guideWidth - 16,
+          (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
+        )
+        const left = clampViewportValue(
+          sourceRect.left + sourceRect.width / 2 - guideWidth / 2,
+          minLeft,
+          maxLeft,
+        )
+        const top = Math.min(
+          sourceRect.bottom + 76,
+          (trayRect?.top ?? window.innerHeight - trayHeight) - 112,
+        )
+
+        nextGuides.push({
+          info,
+          style: { left, top, width: guideWidth },
+          arrow: {
+            start: {
+              x: sourceRect.left + sourceRect.width / 2,
+              y: sourceRect.bottom + 8,
+            },
+            end: {
+              x: sourceRect.left + sourceRect.width / 2,
+              y: top - 12,
+            },
+            startPadding: 0,
+            endPadding: 0,
+            arc: 'down',
+          },
+        })
+      }
+      setHypInfoGuides(nextGuides)
+    }
+
+    updateGuides()
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateGuides)
+    if (observer && combiningCanvasRef.current) observer.observe(combiningCanvasRef.current)
+    window.addEventListener('resize', updateGuides)
+    window.addEventListener('scroll', updateGuides, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updateGuides)
+      window.removeEventListener('scroll', updateGuides, true)
+    }
+  }, [activeHypInfos, layoutVersion, trayHeight, visibleHyps])
 
   visualTestStateRef.current = {
     canvasState,
@@ -3697,6 +3788,7 @@ export function VisualCanvas({
       completed: visualTestStateRef.current.canvasCompleted,
       processing: isProcessing,
       proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
+      coreProofBody: buildStructuredLeanProof(proofSteps),
       coreLines,
       interactiveLines,
       visibleNames: streams.flatMap(stream =>
@@ -3876,7 +3968,7 @@ export function VisualCanvas({
         <button
           type="button"
           className="proof-sidebar-classic-btn"
-          onClick={() => onOpenClassic(serializeProofCommands(proofSteps.map(step => step.command)))}
+          onClick={() => onOpenClassic(buildStructuredLeanProof(proofSteps))}
         >
           Export to classic mode
         </button>
@@ -4253,6 +4345,14 @@ export function VisualCanvas({
               <React.Fragment key={`${guide.info.hyp}-goal-${index}`}>
                 <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
                 <div className="visual-info-callout combining-info hyp-goal-info" style={guide.style}>
+                  <VisualInfoText text={guide.info.text} />
+                </div>
+              </React.Fragment>
+            ))}
+            {hypInfoGuides.map((guide, index) => (
+              <React.Fragment key={`${guide.info.hyp}-info-${index}`}>
+                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
+                <div className="visual-info-callout combining-info hyp-info" style={guide.style}>
                   <VisualInfoText text={guide.info.text} />
                 </div>
               </React.Fragment>

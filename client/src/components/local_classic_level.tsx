@@ -16,6 +16,7 @@ import {
 } from '../state/progress'
 import { store } from '../state/store'
 import { LocalWasmRpcClient } from '../visual/localWasmRpcClient'
+import { useLeanLoadingProgress } from '../visual/useLeanLoadingProgress'
 import { ClassicLoadingScreen } from './classic_loading_screen'
 import { LevelAppBar } from './app_bar'
 import {
@@ -175,6 +176,7 @@ export default function LocalClassicLevel() {
   const level = useLoadLevelQuery({ game: gameId, world: worldId, level: levelId })
   const game = useGetGameInfoQuery({ game: gameId })
   const client = React.useMemo(() => new LocalWasmRpcClient(gameId, worldId, levelId), [gameId])
+  const leanLoadingProgress = useLeanLoadingProgress()
 
   const [visualHandoff] = React.useState<VisualProofHandoff | undefined>(() => {
     const routeHandoff = (
@@ -317,10 +319,15 @@ export default function LocalClassicLevel() {
     (level.data?.title ? ` : ${level.data.title}` : '')
 
   if (!level.data || !game.data || !ready) {
+    const loadingProgress = !level.data || !game.data
+      ? { value: 8, message: 'Loading game and level information…' }
+      : leanLoadingProgress
     return <ClassicLoadingScreen
       worldTitle={game.data?.worlds.nodes[worldId]?.title}
       levelTitle={loadingLevelTitle}
       showChrome={showLoadingChrome}
+      message={loadingProgress.message}
+      progress={loadingProgress.value}
     />
   }
 

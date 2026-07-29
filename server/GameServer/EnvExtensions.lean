@@ -290,6 +290,10 @@ deriving Inhabited, Repr, ToJson, FromJson
 structure VisualHypGoalInfo where
   hyp : String
   goal : Option String := none
+  /-- Where the callout arrow terminates. Older metadata defaults to the goal. -/
+  target : String := "goal"
+  /-- For hypothesis-anchored callouts, hide once the hypothesis type changes. -/
+  hypType : Option String := none
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 

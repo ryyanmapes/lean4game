@@ -10,6 +10,7 @@ type VisualLoadingScreenProps = {
   displayLevelId?: number
   levelTitle?: string | null
   message?: string
+  progress?: number | null
   showChrome?: boolean
   onWorldMap?: () => void
   hasPrev?: boolean
@@ -20,7 +21,13 @@ type VisualLoadingScreenProps = {
   phonePortrait?: boolean
 }
 
-export function HopLoadingIndicator({ message }: { message: string }) {
+export function HopLoadingIndicator({
+  message,
+  progress = null,
+}: {
+  message: string
+  progress?: number | null
+}) {
   return <>
     <div className="visual-loading-anim">
       <div className="hop-mask">
@@ -30,6 +37,19 @@ export function HopLoadingIndicator({ message }: { message: string }) {
       <div className="hop-ball-wrapper">
         <div className="hop-ball" />
       </div>
+    </div>
+    <div
+      className={`visual-loading-progress${progress == null ? ' indeterminate' : ''}`}
+      role="progressbar"
+      aria-label={message}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={progress == null ? undefined : Math.round(progress)}
+    >
+      <div
+        className="visual-loading-progress-fill"
+        style={progress == null ? undefined : { width: `${Math.max(0, Math.min(100, progress))}%` }}
+      />
     </div>
     <p className="visual-loading-text">{message}</p>
   </>
@@ -43,6 +63,7 @@ export function VisualLoadingScreen({
   displayLevelId,
   levelTitle,
   message = 'Connecting to Lean…',
+  progress = null,
   showChrome,
   onWorldMap,
   hasPrev = false,
@@ -82,7 +103,7 @@ export function VisualLoadingScreen({
           hideNav={!onWorldMap}
         />
       )}
-      <HopLoadingIndicator message={message} />
+      <HopLoadingIndicator message={message} progress={progress} />
     </div>
   )
 }

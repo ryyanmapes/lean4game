@@ -81,6 +81,10 @@ export interface VisualTacticHypInfo {
 export interface VisualHypGoalInfo {
   hyp: string
   goal?: string | null
+  /** Defaults to `goal`. `hyp` anchors the callout below the hypothesis itself. */
+  target?: 'goal' | 'hyp'
+  /** When targeting a hypothesis, only show while its type still matches this text. */
+  hypType?: string | null
   text: string
 }
 

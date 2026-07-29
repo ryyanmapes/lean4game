@@ -107,6 +107,8 @@ macro "VisualHypGoalInfo" ident str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualHypGoalInfoOnGoal" ident str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
+macro "VisualHypInfoOnHyp" ident str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
 macro "VisualProofGraphInfo" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualProofGraphInfoOnGoal" str "show" str : command =>

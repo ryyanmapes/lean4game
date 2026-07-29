@@ -13,11 +13,13 @@ export function ClassicLoadingScreen({
   worldTitle,
   levelTitle,
   message = 'Connecting to Lean…',
+  progress = null,
   showChrome,
 }: {
   worldTitle?: string | null
   levelTitle?: string | null
   message?: string
+  progress?: number | null
   showChrome?: boolean
 }) {
   const navigate = useNavigate()
@@ -59,7 +61,7 @@ export function ClassicLoadingScreen({
         </div>
       </div>
       <div className={`classic-loading-content${chromeVisible ? ' visible' : ''}`}>
-        {chromeVisible && <HopLoadingIndicator message={message} />}
+        {chromeVisible && <HopLoadingIndicator message={message} progress={progress} />}
       </div>
     </div>
   )

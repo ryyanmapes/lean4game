@@ -21,15 +21,48 @@ type PendingCompile = {
 
 type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?: string }
 
-const SNAPSHOT_URL = '/visual-lean/snapshots/game.snap.gz?v=nng4-browser-v2'
+// Bump this whenever the paired runtime/snapshot artifact changes. Lean
+// snapshots retain WASM function-table references, so mixing generations can
+// fail as a call_indirect signature mismatch (especially on long-lived mobile
+// browser caches).
+const BROWSER_RUNTIME_VERSION = 'nng4-browser-v3'
+const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=nng4-browser-v2${
+const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=${BROWSER_RUNTIME_VERSION}${
   typeof window !== 'undefined' && window.Cypress ? '&memoryMB=1536' : ''
 }`
 const WORKER_TIMEOUT_MS = 600_000
+
+export type LeanLoadingProgress = {
+  value: number | null
+  message: string
+}
+
+let leanLoadingProgress: LeanLoadingProgress = {
+  value: 0,
+  message: 'Preparing Lean…',
+}
+const leanLoadingListeners = new Set<(progress: LeanLoadingProgress) => void>()
+
+function reportLeanLoading(value: number | null, message: string) {
+  leanLoadingProgress = { value, message }
+  for (const listener of leanLoadingListeners) listener(leanLoadingProgress)
+}
+
+export function subscribeLeanLoadingProgress(
+  listener: (progress: LeanLoadingProgress) => void,
+) {
+  leanLoadingListeners.add(listener)
+  listener(leanLoadingProgress)
+  return () => leanLoadingListeners.delete(listener)
+}
+
+function formatLoadedBytes(bytes: number) {
+  return `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MB`
+}
 
 function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
   const goals: InteractiveGoalWithHints[] = []
@@ -87,9 +120,19 @@ class LocalLeanWorker {
         if (window.Cypress) {
           ;(window as typeof window & { __leanWorkerStatus?: unknown }).__leanWorkerStatus = msg
         }
-        if (msg.type === 'worker_boot') worker.postMessage({ type: 'load_library', files: [] })
-        else if (msg.type === 'library_received') worker.postMessage({ type: 'start_worker' })
+        if (msg.type === 'worker_boot') {
+          reportLeanLoading(5, 'Starting the Lean WebAssembly worker…')
+          worker.postMessage({ type: 'load_library', files: [] })
+        } else if (msg.type === 'library_received') {
+          reportLeanLoading(10, 'Loading the Lean WebAssembly runtime…')
+          worker.postMessage({ type: 'start_worker' })
+        } else if (msg.type === 'startup_stage') {
+          reportLeanLoading(18, `${String(msg.data ?? 'Starting Lean')}…`)
+        } else if (msg.type === 'progress') {
+          reportLeanLoading(24, String(msg.data ?? 'Loading the Lean runtime…'))
+        }
         else if (msg.type === 'worker_ready') {
+          reportLeanLoading(30, 'Downloading the Lean game snapshot…')
           this.loadSnapshot().then(() => {
             window.clearTimeout(timeout)
             resolve()
@@ -97,9 +140,24 @@ class LocalLeanWorker {
             window.clearTimeout(timeout)
             reject(error)
           })
+        } else if (msg.type === 'snapshot_progress') {
+          const received = Number(msg.received) || 0
+          const total = Number(msg.total) || 0
+          reportLeanLoading(
+            total > 0 ? 30 + Math.min(52, (received / total) * 52) : null,
+            `Loading the Lean game snapshot (${formatLoadedBytes(received)} loaded)…`,
+          )
         } else if (msg.type === 'snapshot_loaded') {
+          reportLeanLoading(84, 'Restoring the Lean game environment…')
           this.snapshotResolver?.(msg)
           this.snapshotResolver = null
+        } else if (msg.type === 'import_progress') {
+          const loaded = Number(msg.loaded) || 0
+          const total = Number(msg.total) || 1
+          reportLeanLoading(
+            84 + Math.min(10, (loaded / total) * 10),
+            `Loading Lean modules (${loaded} of ${total})…`,
+          )
         } else if (msg.type === 'stdout') {
           try {
             const value = JSON.parse(String(msg.data)) as WorkerDiagnostic
@@ -153,8 +211,15 @@ class LocalLeanWorker {
   private async compileNow(code: string): Promise<CompileResult> {
     await this.ensureReady()
     if (this.pendingCompile) throw new Error('A Lean proof is already being checked')
+    reportLeanLoading(96, 'Checking the level with Lean…')
     return new Promise<CompileResult>(resolve => {
-      this.pendingCompile = { diagnostics: [], resolve }
+      this.pendingCompile = {
+        diagnostics: [],
+        resolve: result => {
+          reportLeanLoading(100, 'Lean is ready')
+          resolve(result)
+        },
+      }
       this.worker!.postMessage({ type: 'compile', code, path: '/workspace/VisualLean.lean' })
     })
   }

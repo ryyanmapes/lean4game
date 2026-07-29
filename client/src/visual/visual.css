@@ -661,6 +661,38 @@
   max-width: min(22.5rem, calc(100vw - 2rem));
 }
 
+.visual-loading-progress {
+  width: min(260px, calc(100vw - 3rem));
+  height: 0.45rem;
+  margin-top: -1.4rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--visual-loading-ball-core) 48%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--visual-track-dot) 38%, transparent);
+}
+
+.visual-loading-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--visual-loading-ball-core);
+  box-shadow: 0 0 10px var(--visual-loading-ball-glow);
+  transition: width 180ms ease-out;
+}
+
+.visual-loading-progress.indeterminate .visual-loading-progress-fill {
+  width: 38%;
+  animation: visual-loading-progress-slide 1.25s ease-in-out infinite;
+}
+
+@keyframes visual-loading-progress-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(365%); }
+}
+
+.visual-page .hyp-info {
+  max-width: min(22.5rem, calc(100vw - 2rem));
+}
+
 .visual-page .goal-info-arrow {
   position: absolute;
   inset: 0;

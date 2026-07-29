@@ -17,6 +17,7 @@ import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './q
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
+import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity'])
@@ -187,6 +188,7 @@ export function VisualProofPage() {
   const [visualTactics, setVisualTactics] = useState<VisualTactic[]>([])
   const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
   const { getClient, disposeClient } = useVisualRpcClient()
+  const leanLoadingProgress = useLeanLoadingProgress()
 
   useEffect(() => {
     setShowLoadingChrome(false)
@@ -448,6 +450,9 @@ export function VisualProofPage() {
   const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
 
   if (!canvasState || !presentationReady) {
+    const loadingProgress = canvasState
+      ? { value: 98, message: 'Loading level information…' }
+      : leanLoadingProgress
     return <VisualLoadingScreen
       worldId={worldId}
       worldTitle={worldTitle ?? undefined}
@@ -455,6 +460,8 @@ export function VisualProofPage() {
       displayLevelId={displayLevelId}
       levelTitle={levelTitle}
       showChrome={showLoadingChrome}
+      message={loadingProgress.message}
+      progress={loadingProgress.value}
       onWorldMap={handleWorldMap}
       hasPrev={hasPrev}
       hasNext={hasNext}

@@ -20,6 +20,7 @@ interface ProofAudit {
   completed: boolean
   processing: boolean
   proofBody: string
+  coreProofBody: string
   coreLines: string[]
   interactiveLines: string[]
   visibleNames: string[]
@@ -186,7 +187,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
           .should('have.class', 'local-wasm-code-editor')
           .and('be.visible')
-          .should('have.value', audit.proofBody)
+          .should('have.value', audit.coreProofBody)
         cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
           .should('contain.text', 'Proof complete')
           .and('have.class', 'is-complete')

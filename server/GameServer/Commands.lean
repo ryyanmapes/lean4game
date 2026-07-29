@@ -221,6 +221,9 @@ def mkVisualHypGoalInfo (hyp : String) (goal : Option String) (text : String) :
     VisualHypGoalInfo :=
   { hyp := hyp, goal := goal, text := text }
 
+def mkVisualHypInfo (hyp hypType text : String) : VisualHypGoalInfo :=
+  { hyp := hyp, target := "hyp", hypType := some hypType, text := text }
+
 def mkVisualProofGraphInfo (goal : Option String) (text : String) :
     VisualProofGraphInfo :=
   { goal := goal, text := text }
@@ -363,6 +366,12 @@ elab "VisualHypGoalInfo " hyp:ident text:str : command => do
 while the current goal matches the supplied display text. -/
 elab "VisualHypGoalInfoOnGoal " hyp:ident goalText:str &"show" text:str : command => do
   let info := mkVisualHypGoalInfo hyp.getId.toString (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
+
+/-- Add Visual Lean-only guidance immediately below a hypothesis. The message
+disappears as soon as that hypothesis's displayed type changes. -/
+elab "VisualHypInfoOnHyp " hyp:ident hypType:str &"show" text:str : command => do
+  let info := mkVisualHypInfo hyp.getId.toString hypType.getString text.getString
   modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
 
 /-- Add Visual Lean-only instructional text to the left of the proof-stream graph.
