@@ -25,7 +25,7 @@ type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?
 // snapshots retain WASM function-table references, so mixing generations can
 // fail as a call_indirect signature mismatch (especially on long-lived mobile
 // browser caches).
-const BROWSER_RUNTIME_VERSION = 'nng4-browser-v3'
+const BROWSER_RUNTIME_VERSION = 'nng4-browser-v4'
 const WORKER_UI_VERSION = 'loading-footer-v1'
 const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'

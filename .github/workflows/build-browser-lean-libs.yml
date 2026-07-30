@@ -398,7 +398,7 @@ jobs:
 
           emcc -o "$visual_runtime/bin/lean.js" \
             "$kit/libleanmain.a" "$kit/libleanshell.a" "${objects[@]}" \
-            -L "$kit" -lleancpp -lInit -lStd -lLean -lnodefs.js -lleanrt "$kit/libuv.a" -lstdc++ \
+            -L "$kit" -lleancpp -lInit -lStd -lLean -lnodefs.js -lworkerfs.js -lleanrt "$kit/libuv.a" -lstdc++ \
             -sDISABLE_EXCEPTION_CATCHING=0 -pthread -sALLOW_MEMORY_GROWTH=1 \
             -sINCOMING_MODULE_JS_API=print,printErr,setStatus,locateFile,mainScriptUrlOrBlob,INITIAL_MEMORY,wasmMemory,noInitialRun,preRun,onRuntimeInitialized,onAbort,onExit,arguments,ENV \
             -s EXIT_RUNTIME=0 -s MAIN_MODULE=2 -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
@@ -409,6 +409,7 @@ jobs:
           ln -s "$WASM_HOME/lib/lean" "$visual_runtime/lib/lean"
           mkdir -p browser-lean-libs/runtime
           cp "$visual_runtime/bin/lean.js" "$visual_runtime/bin/lean.wasm" browser-lean-libs/runtime/
+          grep -q 'var WORKERFS = {' browser-lean-libs/runtime/lean.js
           ls -lh browser-lean-libs/runtime/*
 
       - name: Isolate NNG WebAssembly imports
