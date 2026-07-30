@@ -26,12 +26,13 @@ type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?
 // fail as a call_indirect signature mismatch (especially on long-lived mobile
 // browser caches).
 const BROWSER_RUNTIME_VERSION = 'nng4-browser-v3'
+const WORKER_UI_VERSION = 'loading-footer-v1'
 const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=${BROWSER_RUNTIME_VERSION}${
+const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=${BROWSER_RUNTIME_VERSION}&workerUi=${WORKER_UI_VERSION}${
   typeof window !== 'undefined' && window.Cypress ? '&memoryMB=1536' : ''
 }`
 const WORKER_TIMEOUT_MS = 600_000
@@ -143,9 +144,14 @@ class LocalLeanWorker {
         } else if (msg.type === 'snapshot_progress') {
           const received = Number(msg.received) || 0
           const total = Number(msg.total) || 0
+          const progress = total > 0
+            ? 30 + Math.min(52, (received / total) * 52)
+            : 30 + Math.min(46, (received / (512 * 1024 * 1024)) * 46)
           reportLeanLoading(
-            total > 0 ? 30 + Math.min(52, (received / total) * 52) : null,
-            `Loading the Lean game snapshot (${formatLoadedBytes(received)} loaded)…`,
+            progress,
+            total > 0
+              ? `Downloading Lean game snapshot (${formatLoadedBytes(received)} of ${formatLoadedBytes(total)})…`
+              : `Loading Lean game snapshot (${formatLoadedBytes(received)} loaded)…`,
           )
         } else if (msg.type === 'snapshot_loaded') {
           reportLeanLoading(84, 'Restoring the Lean game environment…')

@@ -1293,7 +1293,11 @@ function TheoremTray({
 
   // Emphasis: find which items are highlighted and where they live.
   const isEmphasized = (item: PropositionTheorem | VisualTactic) =>
-    emphasizeItems != null && emphasizeItems.includes(item.id)
+    emphasizeItems != null && (
+      emphasizeItems.includes(item.id) ||
+      ('name' in item && emphasizeItems.includes(item.name)) ||
+      ('label' in item && emphasizeItems.includes(item.label))
+    )
   const emphIndexes = items.reduce<number[]>((acc, item, i) => {
     if (isEmphasized(item)) acc.push(i)
     return acc
@@ -1450,7 +1454,15 @@ export function VisualCanvas({
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
   const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
-  const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>('theorems')
+  const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>(() =>
+    visualTactics.some(tactic =>
+      emphasizeItems?.includes(tactic.id) ||
+      emphasizeItems?.includes(tactic.name) ||
+      emphasizeItems?.includes(tactic.label)
+    )
+      ? 'tactics'
+      : 'theorems'
+  )
   const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
   const [isProcessing, setIsProcessing] = useState(false)
   const [trayHeight, setTrayHeight] = useState(0)

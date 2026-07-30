@@ -30,6 +30,21 @@ describe('Visual loading progress and Implication guidance', () => {
       .should('be.visible')
       .and('have.attr', 'aria-label')
       .and('match', /Lean|level|game|snapshot|runtime/i)
+    cy.get('[role="progressbar"]').then($bar => {
+      const rect = $bar[0]!.getBoundingClientRect()
+      expect(rect.width, 'footer loading bar is wide').to.be.greaterThan(500)
+      expect(
+        $bar[0]!.ownerDocument.defaultView!.innerHeight - rect.bottom,
+        'loading bar is anchored near the bottom of the viewport',
+      ).to.be.lessThan(70)
+      expect(Number($bar.attr('aria-valuenow')), 'loading progress is determinate')
+        .to.be.within(0, 100)
+    })
+    cy.contains(
+      '.visual-loading-text',
+      /Downloading Lean game snapshot \(\d+ MB of \d+ MB\)/,
+      { timeout: LOAD_TIMEOUT },
+    ).should('be.visible')
 
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     cy.contains('.hyp-goal-info', 'exactly matches the goal').should('be.visible')
@@ -90,5 +105,22 @@ describe('Visual loading progress and Implication guidance', () => {
       '.hyp-info',
       'You can enter hypotheses in Transformation Mode by double-clicking them.',
     ).should('not.exist')
+  })
+
+  it('opens playable Implication 5 on the highlighted revert tactic and spaces its note', () => {
+    // Authored level 6 is displayed as level 5 because authored level 5 is skipped.
+    cy.visit(levelUrl(6))
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.contains('.tr-tab-btn.active', 'Tactics').should('be.visible')
+    cy.get('[data-tactic-name="revert"]')
+      .should('be.visible')
+      .and('have.class', 'visual-emphasize')
+
+    cy.contains('.goal-info', 'Note that this process can be undone').within(() => {
+      cy.get('br').should('have.length.at.least', 2)
+      cy.contains('This will be important to perform induction over two variables!')
+        .should('not.exist')
+    })
   })
 })

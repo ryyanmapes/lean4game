@@ -23,11 +23,12 @@ type VisualLoadingScreenProps = {
 
 export function HopLoadingIndicator({
   message,
-  progress = null,
+  progress = 0,
 }: {
   message: string
   progress?: number | null
 }) {
+  const displayedProgress = Math.max(0, Math.min(100, progress ?? 0))
   return <>
     <div className="visual-loading-anim">
       <div className="hop-mask">
@@ -38,20 +39,22 @@ export function HopLoadingIndicator({
         <div className="hop-ball" />
       </div>
     </div>
-    <div
-      className={`visual-loading-progress${progress == null ? ' indeterminate' : ''}`}
-      role="progressbar"
-      aria-label={message}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={progress == null ? undefined : Math.round(progress)}
-    >
+    <div className="visual-loading-progress-region">
+      <p className="visual-loading-text">{message}</p>
       <div
-        className="visual-loading-progress-fill"
-        style={progress == null ? undefined : { width: `${Math.max(0, Math.min(100, progress))}%` }}
-      />
+        className="visual-loading-progress"
+        role="progressbar"
+        aria-label={message}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(displayedProgress)}
+      >
+        <div
+          className="visual-loading-progress-fill"
+          style={{ width: `${displayedProgress}%` }}
+        />
+      </div>
     </div>
-    <p className="visual-loading-text">{message}</p>
   </>
 }
 
