@@ -3,6 +3,9 @@ const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
 
 type VisualHarness = {
   openHypTransform(hypName: string): void
+  getCurrentStreamSnapshot(): {
+    hypTypes: Record<string, string>
+  }
   getTransformStatus(): {
     isOpen: boolean
     targetKind: 'goal' | 'hyp' | null
@@ -78,10 +81,16 @@ describe('Visual loading progress and Implication guidance', () => {
     cy.get('[data-hyp-name="h"]').then($hyp => {
       const hypRect = $hyp[0]!.getBoundingClientRect()
       cy.get('.hyp-info').then($info => {
+        const infoRect = $info[0]!.getBoundingClientRect()
         expect(
-          $info[0]!.getBoundingClientRect().top,
+          infoRect.top,
           'transformation hint is below h',
         ).to.be.greaterThan(hypRect.bottom + 45)
+        cy.get('.visual-instruction-arrow polygon').then($head => {
+          const tip = ($head.attr('points') ?? '').split(' ')[0]!.split(',').map(Number)
+          expect(tip[1], 'arrowhead points back toward h').to.be.lessThan(infoRect.top)
+          expect(tip[1], 'arrowhead ends immediately below h').to.be.closeTo(hypRect.bottom + 8, 2)
+        })
       })
     })
 
@@ -99,6 +108,19 @@ describe('Visual loading progress and Implication guidance', () => {
     cy.window().then(async win => {
       const harness = (win as HarnessWindow).__visualTestHarness!
       await harness!.rewriteHypInTransform('zero_add', 'left', [])
+    })
+    cy.window().should(win => {
+      const h = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes.h
+      expect(h).to.match(/^x\s*=\s*0\s*\+\s*y\s*\+\s*2$/)
+    })
+    cy.window().then(async win => {
+      const harness = (win as HarnessWindow).__visualTestHarness!
+      await harness.rewriteHypInTransform('zero_add', 'right')
+    })
+    cy.window().should(win => {
+      const h = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes.h
+      expect(h).to.match(/^x\s*=\s*y\s*\+\s*2$/)
+      expect(h).not.to.match(/0\s*\+\s*0\s*\+/)
     })
 
     cy.contains(

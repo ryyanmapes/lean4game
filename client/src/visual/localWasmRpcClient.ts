@@ -26,7 +26,7 @@ type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?
 // fail as a call_indirect signature mismatch (especially on long-lived mobile
 // browser caches).
 const BROWSER_RUNTIME_VERSION = 'nng4-browser-v4'
-const WORKER_UI_VERSION = 'loading-footer-v1'
+const WORKER_UI_VERSION = 'opfs-snapshot-v1'
 const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.

@@ -3505,15 +3505,15 @@ export function VisualCanvas({
           arrow: {
             start: {
               x: sourceRect.left + sourceRect.width / 2,
-              y: sourceRect.bottom + 8,
+              y: top - 12,
             },
             end: {
               x: sourceRect.left + sourceRect.width / 2,
-              y: top - 12,
+              y: sourceRect.bottom + 8,
             },
             startPadding: 0,
             endPadding: 0,
-            arc: 'down',
+            arc: 'none',
           },
         })
       }

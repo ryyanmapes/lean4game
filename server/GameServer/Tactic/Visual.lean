@@ -683,7 +683,6 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
     match sideOpt with
     | some sideIsRhs =>
       if ← tryFocusedRewrite h isRev sideIsRhs [] then return
-      if ← tryFocusedRewrite h (!isRev) sideIsRhs [] then return
     | none =>
       if ← tryRewrite h.raw isRev then return
       if ← tryRewrite h.raw (!isRev) then return
@@ -748,7 +747,6 @@ private def evalDragRwHypCore
     match sideOpt with
     | some sideIsRhs =>
       if ← tryFocusedRewriteHyp targetHyp h isRev sideIsRhs [] then return
-      if ← tryFocusedRewriteHyp targetHyp h (!isRev) sideIsRhs [] then return
     | none =>
       pure ()
     throwError "drag_rw: '{h.getId}' does not match any subterm in '{targetHyp.getId}'."

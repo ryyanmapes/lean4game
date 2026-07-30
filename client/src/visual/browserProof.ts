@@ -18,6 +18,20 @@ function browserCompatibleProof(proofBody: string): string {
       // are all discharged by that kernel-checked step directly.
       return `${tautoMatch[1]}simp_all`
     }
+    const hypRewrite = line.match(
+      /^(\s*)drag_rw_hyp_(lhs|rhs)(_at)?\s+([^\s]+)\s+\[(←\s*)?([^\]]+)\](?: \[([\d,\s]+)\])?\s*$/u,
+    )
+    if (hypRewrite) {
+      const [, indentation, side, atSuffix = '', hypothesis, reverse = '', theorem, rawPath = ''] = hypRewrite
+      const path = rawPath.split(',').map(step => step.trim()).filter(Boolean)
+      if ((atSuffix.length > 0) !== (path.length > 0)) return line
+
+      // Keep the player's explicitly chosen direction. The visual tactic's
+      // historical direction fallback could turn `zero_add` backwards and
+      // insert an extra `0 +` when the selected occurrence was nested.
+      const navigation = path.map(step => `; arg ${step}`).join('')
+      return `${indentation}conv at ${hypothesis} => ${side}${navigation}; rw [${reverse}${theorem.trim()}]`
+    }
     const goalRewrite = line.match(
       /^(\s*)drag_rw_(lhs|rhs)(_at)? \[(←\s*)?([^\]]+)\](?: \[([\d,\s]+)\])?\s*$/u,
     )
