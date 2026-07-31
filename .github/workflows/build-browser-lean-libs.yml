@@ -589,6 +589,14 @@ jobs:
 
           while IFS= read -r relative; do
             [[ -n "$relative" ]] || continue
+            # The exported browser importer probes richer editor/private olean
+            # levels when they are present, but gameplay uses neither private
+            # declarations nor server infotrees. Omitting these optional files
+            # is the major memory win; the stripped-runtime proof below is the
+            # correctness gate for that assumption.
+            case "$relative" in
+              *.olean.private|*.olean.server) continue ;;
+            esac
             source="$VISUAL_RUNTIME/lib/lean/$relative"
             if [[ -f "$source" ]]; then
               (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$relative" "$module_lib")
