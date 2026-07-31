@@ -563,7 +563,7 @@ jobs:
           module_runtime="$RUNNER_TEMP/mobile-module-runtime"
           module_lib="$profiles/module-lib"
           rm -rf "$module_work" "$module_runtime" "$module_lib"
-          mkdir -p "$module_work" "$module_runtime/bin" "$module_runtime/lib" "$module_lib"
+          mkdir -p "$module_work" "$module_runtime/bin" "$module_runtime/lib/lean" "$module_lib"
           cat > "$module_work/probe.lean" <<'LEAN'
           import GameServer.Tactic.Visual
           import Game.Browser.Runtime
@@ -597,7 +597,7 @@ jobs:
 
           cp "$VISUAL_RUNTIME/bin/lean.js" "$VISUAL_RUNTIME/bin/lean.wasm" \
             "$module_runtime/bin/"
-          cp -a "$module_lib/." "$module_runtime/lib/"
+          cp -a "$module_lib/." "$module_runtime/lib/lean/"
 
           echo 'Validating the proof against only the traced module closure...'
           node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
@@ -605,13 +605,18 @@ jobs:
 
           module_files="$(find "$module_lib" -type f | wc -l | tr -d ' ')"
           module_bytes="$(du -sb "$module_lib" | cut -f1)"
-          tar -C "$module_lib" -cf "$profiles/game-modules.tar" .
+          # USTAR keeps every path self-describing in its 512-byte header, so
+          # the browser can unpack the stream incrementally without buffering
+          # GNU long-name or PAX extension records.
+          tar --format=ustar -C "$module_lib" -cf "$profiles/game-modules.tar" .
           gzip -9 "$profiles/game-modules.tar"
           module_gzip_bytes="$(stat -c '%s' "$profiles/game-modules.tar.gz")"
           printf 'module-closure\t%s\t%s\n' "$module_bytes" "$module_gzip_bytes" \
             | tee -a "$profiles/sizes.tsv"
           printf '%s\n' "$module_files" > "$profiles/module-file-count.txt"
           cp "$module_work/opened-files.txt" "$profiles/opened-files.txt"
+          mkdir -p browser-lean-libs/modules
+          cp "$profiles/game-modules.tar.gz" browser-lean-libs/modules/
           echo "::notice title=Validated mobile module closure::$module_files files; $module_bytes bytes expanded; $module_gzip_bytes bytes gzip-compressed"
 
           {
