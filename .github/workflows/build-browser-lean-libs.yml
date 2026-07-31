@@ -593,6 +593,16 @@ jobs:
             if [[ -f "$source" ]]; then
               (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$relative" "$module_lib")
             fi
+            # IR is loaded lazily when an imported declaration is first
+            # executed. Keep it beside every opened olean even when this small
+            # proof did not happen to call that declaration during tracing.
+            if [[ "$relative" == *.olean ]]; then
+              for companion in "${relative%.olean}.ir" "${relative%.olean}.ir.sig"; do
+                if [[ -f "$VISUAL_RUNTIME/lib/lean/$companion" ]]; then
+                  (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$companion" "$module_lib")
+                fi
+              done
+            fi
           done < "$module_work/opened-files.txt"
 
           cp "$VISUAL_RUNTIME/bin/lean.js" "$VISUAL_RUNTIME/bin/lean.wasm" \

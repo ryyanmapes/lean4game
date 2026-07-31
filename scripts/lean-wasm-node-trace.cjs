@@ -59,17 +59,17 @@ globalThis.Module = {
     Module.ENV.LEAN_PATH = '/lib/lean';
     FS.chdir('/work');
 
-    // All module reads ultimately pass through open, but record the lookup
-    // APIs too so a successful metadata/stat probe is retained even if a
-    // future Emscripten build changes how it opens the file afterward.
-    for (const method of ['open', 'readFile', 'stat', 'lstat', 'lookupPath']) {
-      if (typeof FS[method] !== 'function') continue;
-      const original = FS[method];
-      FS[method] = function (...args) {
-        recordLibraryPath(args[0]);
-        return original.apply(this, args);
-      };
-    }
+    // Record successful opens, not metadata probes. The module loader checks
+    // for optional `.olean.private`/`.olean.server` companions with stat;
+    // treating those lookups as reads inflated the first closure by hundreds
+    // of megabytes even though exported-level browser imports never opened
+    // them.
+    const originalOpen = FS.open;
+    FS.open = function (...args) {
+      const stream = originalOpen.apply(this, args);
+      recordLibraryPath(args[0]);
+      return stream;
+    };
   }],
   onExit: (code) => { process.exitCode = code; },
   onAbort: (what) => { console.error('ABORT:', what); process.exit(3); },
