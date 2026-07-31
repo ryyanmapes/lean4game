@@ -559,6 +559,61 @@ jobs:
           build_profile tutorial-and-addition \
             $'import GameServer.Tactic.Visual\nimport Game.Levels.Addition'
 
+          module_work="$RUNNER_TEMP/mobile-module-work"
+          module_runtime="$RUNNER_TEMP/mobile-module-runtime"
+          module_lib="$profiles/module-lib"
+          rm -rf "$module_work" "$module_runtime" "$module_lib"
+          mkdir -p "$module_work" "$module_runtime/bin" "$module_runtime/lib" "$module_lib"
+          cat > "$module_work/probe.lean" <<'LEAN'
+          import GameServer.Tactic.Visual
+          import Game.Browser.Runtime
+
+          namespace MyNat
+
+          example (n : ℕ) : n + 0 = n := by
+            drag_rw_lhs [add_zero]
+            click_goal
+
+          example (P : Prop) : P → P := by
+            click_goal
+            exact h
+
+          end MyNat
+          LEAN
+
+          echo 'Tracing the exact loose-module closure used by WASM...'
+          node --stack-size=8192 scripts/lean-wasm-node-trace.cjs \
+            "$VISUAL_RUNTIME" "$module_work" "$module_work/opened-files.txt" \
+            /work/probe.lean
+          test -s "$module_work/opened-files.txt"
+
+          while IFS= read -r relative; do
+            [[ -n "$relative" ]] || continue
+            source="$VISUAL_RUNTIME/lib/lean/$relative"
+            if [[ -f "$source" ]]; then
+              (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$relative" "$module_lib")
+            fi
+          done < "$module_work/opened-files.txt"
+
+          cp "$VISUAL_RUNTIME/bin/lean.js" "$VISUAL_RUNTIME/bin/lean.wasm" \
+            "$module_runtime/bin/"
+          cp -a "$module_lib/." "$module_runtime/lib/"
+
+          echo 'Validating the proof against only the traced module closure...'
+          node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+            "$module_runtime" "$module_work" /work/probe.lean
+
+          module_files="$(find "$module_lib" -type f | wc -l | tr -d ' ')"
+          module_bytes="$(du -sb "$module_lib" | cut -f1)"
+          tar -C "$module_lib" -cf "$profiles/game-modules.tar" .
+          gzip -9 "$profiles/game-modules.tar"
+          module_gzip_bytes="$(stat -c '%s' "$profiles/game-modules.tar.gz")"
+          printf 'module-closure\t%s\t%s\n' "$module_bytes" "$module_gzip_bytes" \
+            | tee -a "$profiles/sizes.tsv"
+          printf '%s\n' "$module_files" > "$profiles/module-file-count.txt"
+          cp "$module_work/opened-files.txt" "$profiles/opened-files.txt"
+          echo "::notice title=Validated mobile module closure::$module_files files; $module_bytes bytes expanded; $module_gzip_bytes bytes gzip-compressed"
+
           {
             echo '### Experimental mobile snapshot profiles'
             echo
