@@ -23,6 +23,11 @@ on:
         required: false
         default: true
         type: boolean
+      experimental_size_profiles:
+        description: Build isolated minimal and Tutorial+Addition snapshot size probes
+        required: false
+        default: false
+        type: boolean
     secrets:
       CAULI_ARTIFACT_TOKEN:
         description: Token with Actions read access to cauli/lean4
@@ -48,6 +53,11 @@ on:
         description: Build and package ryyanmapes/NNG4
         required: true
         default: true
+        type: boolean
+      experimental_size_profiles:
+        description: Build isolated minimal and Tutorial+Addition snapshot size probes
+        required: true
+        default: false
         type: boolean
 
 concurrency:
@@ -497,6 +507,78 @@ jobs:
           rm -f .visual-snapshot-work/game.snap.deps
           gzip -9 browser-lean-libs/snapshots/game.snap
           ls -lh browser-lean-libs/snapshots/game.snap.gz
+
+      - name: Build experimental mobile snapshot size profiles
+        if: inputs.experimental_size_profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          profiles="$RUNNER_TEMP/mobile-snapshot-profiles"
+          mkdir -p "$profiles"
+
+          build_profile() {
+            name="$1"
+            imports="$2"
+            work="$RUNNER_TEMP/mobile-snapshot-$name"
+            rm -rf "$work"
+            mkdir -p "$work"
+
+            {
+              printf '%s\n\n' "$imports"
+              cat <<'LEAN'
+          example (n : Nat) : n = n := by
+            click_goal
+
+          example (P : Prop) : P → P := by
+            click_goal
+            exact h
+          LEAN
+            } > "$work/probe.lean"
+
+            echo "::group::Build $name snapshot"
+            node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+              "$VISUAL_RUNTIME" "$work" /work/probe.lean
+            node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+              "$VISUAL_RUNTIME" "$work" \
+              "--incr-header-save=/work/$name.snap" /work/probe.lean
+            test -s "$work/$name.snap"
+
+            raw_bytes="$(stat -c '%s' "$work/$name.snap")"
+            gzip -9 "$work/$name.snap"
+            gzip_bytes="$(stat -c '%s' "$work/$name.snap.gz")"
+            cp "$work/$name.snap.gz" "$profiles/"
+            printf '%s\t%s\t%s\n' "$name" "$raw_bytes" "$gzip_bytes" \
+              | tee -a "$profiles/sizes.tsv"
+            echo "::notice title=$name snapshot::$raw_bytes bytes expanded; $gzip_bytes bytes gzip-compressed"
+            echo "::endgroup::"
+          }
+
+          printf 'profile\texpanded_bytes\tgzip_bytes\n' > "$profiles/sizes.tsv"
+          build_profile visual-tactics-only \
+            'import GameServer.Tactic.Visual'
+          build_profile tutorial-and-addition \
+            $'import GameServer.Tactic.Visual\nimport Game.Levels.Addition'
+
+          {
+            echo '### Experimental mobile snapshot profiles'
+            echo
+            echo '| Profile | Expanded | gzip -9 |'
+            echo '|---|---:|---:|'
+            tail -n +2 "$profiles/sizes.tsv" | while IFS=$'\t' read -r name raw gzip_size; do
+              printf '| `%s` | %.1f MiB | %.1f MiB |\n' \
+                "$name" "$((raw / 1048576))" "$((gzip_size / 1048576))"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload experimental mobile snapshot profiles
+        if: inputs.experimental_size_profiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-mobile-snapshot-profiles-${{ env.CAULI_LEAN_SHA }}
+          path: ${{ runner.temp }}/mobile-snapshot-profiles
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
       - name: Remove build-only browser inputs
         run: |
