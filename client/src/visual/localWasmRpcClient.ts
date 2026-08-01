@@ -26,8 +26,14 @@ type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?
 // fail as a call_indirect signature mismatch (especially on long-lived mobile
 // browser caches).
 const BROWSER_RUNTIME_VERSION = 'nng4-browser-v4'
-const WORKER_UI_VERSION = 'opfs-snapshot-v1'
+const WORKER_UI_VERSION = 'mobile-modules-experiment-v1'
 const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${BROWSER_RUNTIME_VERSION}`
+const MODULE_BUNDLE_URL = `/visual-lean/modules/game-modules.tar.gz?v=${BROWSER_RUNTIME_VERSION}`
+// Preserve the proven desktop path. The loose-module loader remains opt-in
+// until it has passed real-device testing; place `?mobileModules=1` before the
+// hash route to select it.
+const USE_MOBILE_MODULE_BUNDLE = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('mobileModules') === '1'
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
@@ -107,6 +113,7 @@ class LocalLeanWorker {
   private readyPromise: Promise<void> | null = null
   private pendingCompile: PendingCompile | null = null
   private snapshotResolver: ((result: { success: boolean; error?: string }) => void) | null = null
+  private moduleBundleResolver: ((result: { success: boolean; error?: string }) => void) | null = null
   private operationQueue: Promise<void> = Promise.resolve()
 
   ensureReady(): Promise<void> {
@@ -133,8 +140,12 @@ class LocalLeanWorker {
           reportLeanLoading(24, String(msg.data ?? 'Loading the Lean runtime…'))
         }
         else if (msg.type === 'worker_ready') {
+          const loadEnvironment = USE_MOBILE_MODULE_BUNDLE
+            ? this.loadModuleBundle()
+            : this.loadSnapshot()
           reportLeanLoading(30, 'Downloading the Lean game snapshot…')
-          this.loadSnapshot().then(() => {
+          if (USE_MOBILE_MODULE_BUNDLE) reportLeanLoading(30, 'Downloading Lean modules...')
+          loadEnvironment.then(() => {
             window.clearTimeout(timeout)
             resolve()
           }, error => {
@@ -157,6 +168,22 @@ class LocalLeanWorker {
           reportLeanLoading(84, 'Restoring the Lean game environment…')
           this.snapshotResolver?.(msg)
           this.snapshotResolver = null
+        } else if (msg.type === 'module_bundle_progress') {
+          const received = Number(msg.received) || 0
+          const total = Number(msg.total) || 0
+          const progress = total > 0
+            ? 30 + Math.min(52, (received / total) * 52)
+            : 30
+          reportLeanLoading(
+            progress,
+            total > 0
+              ? `Downloading Lean modules (${formatLoadedBytes(received)} of ${formatLoadedBytes(total)})...`
+              : `Downloading Lean modules (${formatLoadedBytes(received)} loaded)...`,
+          )
+        } else if (msg.type === 'module_bundle_loaded') {
+          reportLeanLoading(84, 'Preparing Lean modules...')
+          this.moduleBundleResolver?.(msg)
+          this.moduleBundleResolver = null
         } else if (msg.type === 'import_progress') {
           const loaded = Number(msg.loaded) || 0
           const total = Number(msg.total) || 1
@@ -202,6 +229,15 @@ class LocalLeanWorker {
         ? resolve()
         : reject(new Error(result.error ?? 'Lean game snapshot failed to load'))
       this.worker!.postMessage({ type: 'load_snapshot', name: 'game.snap', url: SNAPSHOT_URL })
+    })
+  }
+
+  private loadModuleBundle(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.moduleBundleResolver = result => result.success
+        ? resolve()
+        : reject(new Error(result.error ?? 'Lean module bundle failed to load'))
+      this.worker!.postMessage({ type: 'load_module_bundle', url: MODULE_BUNDLE_URL })
     })
   }
 
