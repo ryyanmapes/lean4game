@@ -10,6 +10,10 @@ export default defineConfig({
     setupNodeEvents(on, config) {
       let visualNameIssues: unknown[] = []
       const reportPath = path.resolve('cypress/results/visual-name-audit.json')
+      const benchmarkPath = path.resolve(
+        'cypress/results',
+        `runtime-benchmark-${config.env.BENCHMARK_VARIANT ?? 'unknown'}.json`,
+      )
 
       on('before:run', () => {
         visualNameIssues = []
@@ -34,6 +38,11 @@ export default defineConfig({
           await fs.mkdir(path.dirname(reportPath), { recursive: true })
           await fs.writeFile(reportPath, `${JSON.stringify(visualNameIssues, null, 2)}\n`)
           return { path: reportPath, count: visualNameIssues.length }
+        },
+        async writeRuntimeBenchmark(result: unknown) {
+          await fs.mkdir(path.dirname(benchmarkPath), { recursive: true })
+          await fs.writeFile(benchmarkPath, `${JSON.stringify(result, null, 2)}\n`)
+          return { path: benchmarkPath }
         },
       })
       on('after:run', async () => {

@@ -136,7 +136,9 @@ class LocalLeanWorker {
         if (window.Cypress) {
           ;(window as typeof window & { __leanWorkerStatus?: unknown }).__leanWorkerStatus = msg
         }
-        if (msg.type === 'worker_boot') {
+        if (msg.type === 'runtime_memory') {
+          ;(window as typeof window & { __leanRuntimeMemoryBytes?: number }).__leanRuntimeMemoryBytes = Number(msg.bytes) || 0
+        } else if (msg.type === 'worker_boot') {
           reportLeanLoading(5, 'Starting the Lean WebAssembly worker…')
           worker.postMessage({ type: 'load_library', files: [] })
         } else if (msg.type === 'library_received') {

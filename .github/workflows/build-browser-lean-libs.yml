@@ -28,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      experimental_single_thread:
+        description: Link a true single-threaded runtime without SharedArrayBuffer
+        required: false
+        default: false
+        type: boolean
     secrets:
       CAULI_ARTIFACT_TOKEN:
         description: Token with Actions read access to cauli/lean4
@@ -56,6 +61,11 @@ on:
         type: boolean
       experimental_size_profiles:
         description: Build isolated minimal and Tutorial+Addition snapshot size probes
+        required: true
+        default: false
+        type: boolean
+      experimental_single_thread:
+        description: Link a true single-threaded runtime without SharedArrayBuffer
         required: true
         default: false
         type: boolean
@@ -360,6 +370,12 @@ jobs:
           echo "VISUAL_RUNTIME=$visual_runtime" >> "$GITHUB_ENV"
           tar --zstd -xf "$linkkit_archive" -C .visual-link
           kit="$PWD/.visual-link/linkkit"
+          compile_thread_flags=()
+          link_thread_flags=()
+          if [[ "${{ inputs.experimental_single_thread }}" != "true" ]]; then
+            compile_thread_flags=(-pthread)
+            link_thread_flags=(-pthread -sPTHREAD_POOL_SIZE=4)
+          fi
 
           (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
           node scripts/gen-visual-wasm-exports.mjs \
@@ -401,7 +417,7 @@ jobs:
             source="$module"
             object=".visual-link/$(basename "$module").o"
             test -f "$source"
-            emcc -pthread -DLEAN_EMSCRIPTEN -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
+            emcc "${compile_thread_flags[@]}" -DLEAN_EMSCRIPTEN -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
               -c "$source" -o "$object"
             objects+=("$object")
           done
@@ -409,18 +425,32 @@ jobs:
           emcc -o "$visual_runtime/bin/lean.js" \
             "$kit/libleanmain.a" "$kit/libleanshell.a" "${objects[@]}" \
             -L "$kit" -lleancpp -lInit -lStd -lLean -lnodefs.js -lworkerfs.js -lleanrt "$kit/libuv.a" -lstdc++ \
-            -sDISABLE_EXCEPTION_CATCHING=0 -pthread -sALLOW_MEMORY_GROWTH=1 \
+            -sDISABLE_EXCEPTION_CATCHING=0 "${link_thread_flags[@]}" -sALLOW_MEMORY_GROWTH=1 \
             -sINCOMING_MODULE_JS_API=print,printErr,setStatus,locateFile,mainScriptUrlOrBlob,INITIAL_MEMORY,wasmMemory,noInitialRun,preRun,onRuntimeInitialized,onAbort,onExit,arguments,ENV \
             -s EXIT_RUNTIME=0 -s MAIN_MODULE=2 -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
             -sEXPORTED_FUNCTIONS=@.visual-link/visual-exports.txt \
             -sEXPORTED_RUNTIME_METHODS=ccall,callMain,FS,ENV,getValue,setValue,stringToNewUTF8,UTF8ToString,runtimeKeepalivePush \
-            -s STACK_SIZE=16777216 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=4294967296 -sPTHREAD_POOL_SIZE=4
+            -s STACK_SIZE=16777216 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=4294967296
 
           ln -s "$WASM_HOME/lib/lean" "$visual_runtime/lib/lean"
           mkdir -p browser-lean-libs/runtime
           cp "$visual_runtime/bin/lean.js" "$visual_runtime/bin/lean.wasm" browser-lean-libs/runtime/
+          node --input-type=commonjs - <<'NODE'
+          const fs = require('fs')
+          const path = 'browser-lean-libs/build-info.json'
+          const info = JSON.parse(fs.readFileSync(path, 'utf8'))
+          info.runtimeThreads = process.env.SINGLE_THREAD === 'true' ? 0 : 4
+          fs.writeFileSync(path, `${JSON.stringify(info, null, 2)}\n`)
+          NODE
           grep -q 'var WORKERFS = {' browser-lean-libs/runtime/lean.js
+          if [[ "${{ inputs.experimental_single_thread }}" == "true" ]]; then
+            ! grep -q 'PThread' browser-lean-libs/runtime/lean.js
+          else
+            grep -q 'PThread' browser-lean-libs/runtime/lean.js
+          fi
           ls -lh browser-lean-libs/runtime/*
+        env:
+          SINGLE_THREAD: ${{ inputs.experimental_single_thread }}
 
       - name: Isolate NNG WebAssembly imports
         if: inputs.include_nng4
@@ -674,7 +704,7 @@ jobs:
       - name: Upload browser libraries
         uses: actions/upload-artifact@v4
         with:
-          name: visual-lean-libs-${{ env.CAULI_LEAN_SHA }}
+          name: visual-lean-libs-${{ env.CAULI_LEAN_SHA }}${{ inputs.experimental_single_thread && '-single-thread' || '' }}
           path: browser-lean-libs
           if-no-files-found: error
           compression-level: 6
