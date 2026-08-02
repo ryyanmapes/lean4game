@@ -97,11 +97,14 @@ describe('Visual Lean mobile layout', () => {
     cy.get('.tr-swap-btn').click()
     cy.get('.transform-info.rewrite-info', { timeout: 60_000 }).should('exist')
     cy.get('body').should($body => {
-      const info = $body.find('.transform-info.rewrite-info:visible').get(0)
+      // Cypress's visibility heuristic treats this fixed, pointer-events-none
+      // guide as covered by its own main-area ancestor even while it is
+      // visibly painted.  Assert its geometry directly instead.
+      const info = $body.find('.transform-info.rewrite-info').get(0)
       const expression = $body.find('.tr-expr-wrapper:visible').get(0)
       const undo = $body.find('.tr-transformation-overlay .tr-controls .tr-ctrl-btn:visible').get(0)
       const dock = $body.find('.tr-rule-dock:visible').get(0)
-      const arrowPath = $body.find('.visual-instruction-arrow:visible path').attr('d') ?? ''
+      const arrowPath = $body.find('.visual-instruction-arrow path').attr('d') ?? ''
       expect(info, 'rewrite guide callout').to.exist
       expect(expression, 'working expression').to.exist
       expect(dock, 'theorem tray').to.exist
