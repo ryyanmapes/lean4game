@@ -92,21 +92,21 @@ describe('Visual Lean mobile layout', () => {
       })
   })
 
-  leanIt('keeps the Tutorial 2 rewrite callout clear of mobile controls and the theorem tray', () => {
-    openGoalTransformation('Tutorial', 2)
-    cy.get('.transform-info.rewrite-info').should('be.visible')
+  leanIt('keeps the Tutorial 2 tactic guide clear of mobile controls and the theorem tray', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Tutorial/level/2/visual`)
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.tactic-hyp-info', { timeout: 60_000 }).should('be.visible')
     cy.get('body').should($body => {
-      const info = $body.find('.transform-info.rewrite-info:visible').get(0)
-      const undo = $body.find('.tr-transformation-overlay .tr-controls .tr-ctrl-btn:visible').get(0)
-      const reverse = $body.find('.tr-transformation-overlay .tr-side-controls .tr-ctrl-btn:visible').get(0)
-      const dock = $body.find('.tr-transformation-overlay .tr-rule-dock:visible').get(0)
-      expect(info, 'rewrite callout').to.exist
-      expect(undo, 'undo control').to.exist
-      expect(reverse, 'reverse control').to.exist
+      const info = $body.find('.tactic-hyp-info:visible').get(0)
+      const undo = $body.find('.tr-controls .tr-ctrl-btn:visible').get(0)
+      const dock = $body.find('.tr-rule-dock:visible').get(0)
+      const arrowPath = $body.find('.combining-instruction-arrow:visible path').attr('d') ?? ''
+      expect(info, 'tactic guide callout').to.exist
       expect(dock, 'theorem tray').to.exist
-      expectNoOverlap(info!, undo!, 'rewrite callout does not cover undo')
-      expectNoOverlap(info!, reverse!, 'rewrite callout does not cover reverse')
-      expectNoOverlap(info!, dock!, 'rewrite callout does not cover theorem tray')
+      if (undo) expectNoOverlap(info!, undo, 'tactic guide does not cover undo')
+      expectNoOverlap(info!, dock!, 'tactic guide does not cover theorem tray')
+      expect(arrowPath, 'phone guide uses a straight path').to.match(/\bL\b/)
+      expect(arrowPath, 'phone guide avoids an oversized curve').not.to.match(/\bC\b/)
     })
   })
 

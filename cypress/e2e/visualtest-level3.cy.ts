@@ -1,5 +1,5 @@
 const VISUALTEST_LEVEL3 = '/#/g/local/VisualTest/world/Prototype/level/3/visual'
-const VISUALTEST_LOAD_TIMEOUT = 120000
+const VISUALTEST_LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 120000)
 
 interface VisualTestHarness {
   dragHypToGoal(hypName: string): Promise<void>

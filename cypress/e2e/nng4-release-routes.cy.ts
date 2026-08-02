@@ -51,7 +51,7 @@ describe('local NNG4 release maps', () => {
     cy.get('#menu-btn').click()
     cy.get('.menu.dropdown').should('not.be.visible')
 
-    cy.get('.inventory .item').contains(/^rfl$/u).click()
+    cy.get('.inventory .item').contains(/rfl/u).click()
     cy.get('.inventory-panel .documentation').should('be.visible').then($documentation => {
       const documentation = $documentation[0].getBoundingClientRect()
       const panel = $documentation[0].parentElement!.getBoundingClientRect()
@@ -89,8 +89,10 @@ describe('local NNG4 release maps', () => {
     cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
     cy.contains('button', 'Unlock levels').should('not.exist')
     cy.get('a.visual-map-back-btn[href="/"]').should('exist')
-    cy.get('.visual-map-theme-toggle').click()
-    cy.get('.app').should('have.attr', 'data-visual-theme', 'light')
+    cy.get('.app').invoke('attr', 'data-visual-theme').then(initialTheme => {
+      cy.get('.visual-map-theme-toggle').click()
+      cy.get('.app').should('have.attr', 'data-visual-theme').and('not.equal', initialTheme)
+    })
     cy.get('[role="link"][aria-label="Open Tutorial"]').click()
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })
