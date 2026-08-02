@@ -64,13 +64,14 @@ Cypress.Commands.add('map', { prevSubject: true }, (subject: unknown[], iteratee
 // Lean4Game entry document.
 Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
     const releaseEntry = Cypress.env('LEAN4GAME_ENTRY');
-    const resolvedUrl = (
-        releaseEntry
-        && typeof url === 'string'
-        && url.startsWith('/#/')
-    )
-        ? `${releaseEntry}${url.slice(1)}`
-        : url;
+    let resolvedUrl = url;
+    if (releaseEntry && typeof url === 'string') {
+        if (url.startsWith('/#/')) {
+            resolvedUrl = `${releaseEntry}${url.slice(1)}`;
+        } else if (url.startsWith('/lean4game/index.html#/')) {
+            resolvedUrl = `${releaseEntry}${url.slice('/lean4game/index.html'.length)}`;
+        }
+    }
     return originalFn(resolvedUrl, options);
 });
 
