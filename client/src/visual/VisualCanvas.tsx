@@ -3318,7 +3318,9 @@ export function VisualCanvas({
           (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
         )
         const minCenterY = (canvasRect?.top ?? 0) + 96
-        const maxCenterY = (trayRect?.top ?? window.innerHeight - trayHeight) - 72
+        // A centered phone callout needs room for its own height and for the
+        // undo/mode controls immediately above the tray.
+        const maxCenterY = (trayRect?.top ?? window.innerHeight - trayHeight) - (isPhonePortrait ? 154 : 72)
         const goalCenterY = goalStatementRect
           ? rectCenter(goalStatementRect).y
           : goalCardEl
@@ -3341,7 +3343,10 @@ export function VisualCanvas({
             end,
             startPadding: 0,
             endPadding: 0,
-            arc: start.y > end.y ? 'up' : 'down',
+            // Long curved arrows wrap awkwardly around a phone-width callout.
+            // A straight source-to-target guide remains legible where the
+            // callout masks its middle section.
+            arc: isPhonePortrait ? 'none' : start.y > end.y ? 'up' : 'down',
           },
         })
       }
@@ -3438,7 +3443,7 @@ export function VisualCanvas({
             end,
             startPadding: 0,
             endPadding: 0,
-            arc: start.y > end.y ? 'up' : 'down',
+            arc: isPhonePortrait ? 'none' : start.y > end.y ? 'up' : 'down',
           },
         })
       }

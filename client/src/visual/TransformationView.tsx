@@ -104,7 +104,9 @@ export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideA
     x: base.x + ux * 4,
     y: base.y + uy * 4,
   }
-  const path = `M ${start.x} ${start.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${shaftEnd.x} ${shaftEnd.y}`
+  const path = arrow.arc === 'none'
+    ? `M ${start.x} ${start.y} L ${shaftEnd.x} ${shaftEnd.y}`
+    : `M ${start.x} ${start.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${shaftEnd.x} ${shaftEnd.y}`
   const arrowHeadPoints = [
     `${end.x},${end.y}`,
     `${base.x + px * headHalfWidth},${base.y + py * headHalfWidth}`,
@@ -564,9 +566,9 @@ export function TransformationView({
           const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
-          const guideWidth = 360
-          const margin = 34
           const viewportW = window.innerWidth
+          const guideWidth = isPhonePortrait ? Math.min(360, viewportW - 32) : 360
+          const margin = 34
           const lineLeft = Math.min(sourceRect.left, targetRect.left)
           const lineRight = Math.max(sourceRect.right, targetRect.right)
           const leftPos = lineLeft - guideWidth - margin
@@ -576,18 +578,37 @@ export function TransformationView({
           // Prefer whichever side has more room. If neither side has clearance,
           // clamp to the viewport edge with the most space.
           const preferLeft = fitsLeft && (!fitsRight || lineLeft > viewportW - lineRight)
-          const left = preferLeft
-            ? Math.max(16, leftPos)
-            : Math.min(viewportW - guideWidth - 16, rightPos)
+          const left = isPhonePortrait
+            ? (viewportW - guideWidth) / 2
+            : preferLeft
+              ? Math.max(16, leftPos)
+              : Math.min(viewportW - guideWidth - 16, rightPos)
+          const controlsTop = [
+            mainAreaRef.current?.parentElement?.querySelector<HTMLElement>('.tr-controls')?.getBoundingClientRect().top,
+            mainAreaRef.current?.parentElement?.querySelector<HTMLElement>('.tr-side-controls')?.getBoundingClientRect().top,
+            ruleDockRef.current?.getBoundingClientRect().top,
+          ].filter((value): value is number => value != null)
+          const phoneTop = Math.min(
+            midpoint.y,
+            (controlsTop.length ? Math.min(...controlsTop) : window.innerHeight) - 78,
+          )
           nextRewriteGuide = {
             info,
             style: {
               left,
-              top: midpoint.y,
+              top: isPhonePortrait ? phoneTop : midpoint.y,
               transform: 'translateY(-50%)',
               width: guideWidth,
             },
-            arrow: { start, end, startPadding: 48, endPadding: 60 },
+            arrow: isPhonePortrait
+              ? {
+                  start: { x: viewportW / 2, y: phoneTop - 64 },
+                  end,
+                  startPadding: 4,
+                  endPadding: 46,
+                  arc: 'none',
+                }
+              : { start, end, startPadding: 48, endPadding: 60 },
           }
           break
         }

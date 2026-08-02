@@ -244,6 +244,7 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
   return (
     <g
       className="visual-map-link"
+      data-world-id={world}
       role="link"
       tabIndex={0}
       aria-label={`Open ${title || world}`}
@@ -524,6 +525,20 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     }
   }
 
+  const rememberedWorld = typeof window === 'undefined'
+    ? null
+    : window.sessionStorage.getItem(`visual-map-focus:${gameId}`)
+  const visibleWorldIds = Object.keys(nodes)
+    .filter(worldId => visibleCount(worldId) > 0)
+    .sort((left, right) => {
+      const vertical = nodes[left].position.y - nodes[right].position.y
+      return vertical !== 0 ? vertical : nodes[left].position.x - nodes[right].position.x
+    })
+  const focusWorldId = rememberedWorld && visibleWorldIds.includes(rememberedWorld)
+    ? rememberedWorld
+    : visibleWorldIds.find(worldId => completed[worldId]?.slice(1).some(done => !done))
+      ?? visibleWorldIds[0]
+
   let R = 1.1 * r / Math.sin(Math.PI / (NMAX + 1))
   const padding = R + 2.1 * r
   // Extra horizontal space so tooltips on edge-of-map levels aren't clipped.
@@ -558,8 +573,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   // Phone portrait uses the natural SVG scale. Larger multipliers make the
   // initial centered view feel zoomed into one column instead of showing the
   // surrounding branches.
-  const phoneMapScale = 1.0
-  const phoneMapMinViewportScale = 1.0
+  const phoneMapScale = 1.75
+  const phoneMapMinViewportScale = 1.75
   // Desktop/tablet fill width by adding viewBox padding. Phone portrait should instead scale
   // the map itself so the world nodes remain tappable and the page scrolls vertically.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
@@ -572,39 +587,47 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     : 0
   const dx = contentDx != null ? contentDx + extraViewBoxUnits : null
 
-  const centerMapHorizontally = React.useCallback(() => {
+  const appliedFocusRef = React.useRef<string | null>(null)
+  const focusMap = React.useCallback(() => {
     const scrollEl = scrollRef.current
-    if (!scrollEl) return
-    const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth
-    if (maxScrollLeft <= 0) return
-    scrollEl.scrollLeft = maxScrollLeft / 2
-  }, [])
+    const svgEl = svgRef.current
+    if (!scrollEl || !svgEl) return false
+
+    if (!isPhonePortraitViewport || !focusWorldId) {
+      const maxScrollLeft = scrollEl.scrollWidth - scrollEl.clientWidth
+      if (maxScrollLeft > 0) scrollEl.scrollLeft = maxScrollLeft / 2
+      return true
+    }
+
+    const target = Array.from(svgEl.querySelectorAll<SVGGElement>('[data-world-id]'))
+      .find(element => element.dataset.worldId === focusWorldId)
+    if (!target) return false
+    const scrollRect = scrollEl.getBoundingClientRect()
+    // A world group also contains its orbiting level dots and label, so its
+    // bounding-box centre is not the visual centre of the world itself.
+    const targetRect = (target.querySelector<SVGGraphicsElement>('.world-circle') ?? target)
+      .getBoundingClientRect()
+    scrollEl.scrollLeft += targetRect.left + targetRect.width / 2 - (scrollRect.left + scrollRect.width / 2)
+    scrollEl.scrollTop += targetRect.top + targetRect.height / 2 - (scrollRect.top + scrollRect.height / 2)
+    scrollEl.dataset.focusWorld = focusWorldId
+    return true
+  }, [focusWorldId, isPhonePortraitViewport])
 
   React.useLayoutEffect(() => {
     if (!bounds) return
-    const rafId = window.requestAnimationFrame(centerMapHorizontally)
-    return () => window.cancelAnimationFrame(rafId)
-  }, [bounds, dx, centerMapHorizontally])
-
-  React.useEffect(() => {
-    if (!bounds) return
-
-    const handleResize = () => centerMapHorizontally()
-    window.addEventListener('resize', handleResize)
-
-    if (typeof ResizeObserver === 'undefined') {
-      return () => window.removeEventListener('resize', handleResize)
-    }
-
-    const observer = new ResizeObserver(() => centerMapHorizontally())
-    if (scrollRef.current) observer.observe(scrollRef.current)
-    if (svgRef.current) observer.observe(svgRef.current)
-
+    const focusKey = `${isPhonePortraitViewport ? 'phone' : 'wide'}:${focusWorldId ?? 'center'}`
+    if (appliedFocusRef.current === focusKey) return
+    let secondRaf = 0
+    const firstRaf = window.requestAnimationFrame(() => {
+      secondRaf = window.requestAnimationFrame(() => {
+        if (focusMap()) appliedFocusRef.current = focusKey
+      })
+    })
     return () => {
-      window.removeEventListener('resize', handleResize)
-      observer.disconnect()
+      window.cancelAnimationFrame(firstRaf)
+      window.cancelAnimationFrame(secondRaf)
     }
-  }, [bounds, centerMapHorizontally])
+  }, [bounds, dx, focusMap, focusWorldId, isPhonePortraitViewport])
 
   React.useEffect(() => {
     if (!gameInfo.data) return
@@ -651,7 +674,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         isLightMode={isVisualLightMode}
         onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
       />
-      <div className="visual-map-scroll" ref={scrollRef}>
+      <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg
           ref={svgRef}
           xmlns="http://www.w3.org/2000/svg"

@@ -114,6 +114,11 @@ export function VisualProofPage() {
   const { worldId, levelId } = useContext(WorldLevelIdContext)
   const solvingId = React.useMemo(() => createSolvingId(), [gameId, worldId, levelId])
   const navigate = useNavigate()
+  useEffect(() => {
+    // The map uses this to return the player to the world they just left,
+    // especially on phone layouts where only part of the graph is visible.
+    window.sessionStorage.setItem(`visual-map-focus:${gameId}`, worldId)
+  }, [gameId, worldId])
   const handleWorldMap = useCallback(() => {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
