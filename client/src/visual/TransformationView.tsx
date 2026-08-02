@@ -823,7 +823,10 @@ export function TransformationView({
         {isProcessing && <div className="tr-processing" />}
 
         {/* Main expression area */}
-        <div className="tr-main-area" ref={mainAreaRef}>
+        <div
+          className={`tr-main-area${reverseInfo || rewriteInfos.length > 0 ? ' has-transform-guide' : ''}`}
+          ref={mainAreaRef}
+        >
           {/* Static side label + swap button */}
           <div ref={staticGroupRef} className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}${isExprOverflowing ? ' pinned-top' : ''}`}>
             <span className="tr-static-label">

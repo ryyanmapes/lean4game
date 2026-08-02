@@ -92,17 +92,20 @@ describe('Visual Lean mobile layout', () => {
       })
   })
 
-  leanIt('keeps the Tutorial 2 tactic guide clear of mobile controls and the theorem tray', () => {
-    cy.visit(`${mountPath}#/g/local/NNG4/world/Tutorial/level/2/visual`)
-    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    cy.get('.tactic-hyp-info', { timeout: 60_000 }).should('be.visible')
+  leanIt('keeps the Tutorial 2 rewrite guide clear of mobile controls and the theorem tray', () => {
+    openGoalTransformation('Tutorial', 2)
+    cy.get('.tr-swap-btn').click()
+    cy.get('.transform-info.rewrite-info', { timeout: 60_000 }).should('exist')
     cy.get('body').should($body => {
-      const info = $body.find('.tactic-hyp-info:visible').get(0)
-      const undo = $body.find('.tr-controls .tr-ctrl-btn:visible').get(0)
+      const info = $body.find('.transform-info.rewrite-info:visible').get(0)
+      const expression = $body.find('.tr-expr-wrapper:visible').get(0)
+      const undo = $body.find('.tr-transformation-overlay .tr-controls .tr-ctrl-btn:visible').get(0)
       const dock = $body.find('.tr-rule-dock:visible').get(0)
-      const arrowPath = $body.find('.combining-instruction-arrow:visible path').attr('d') ?? ''
-      expect(info, 'tactic guide callout').to.exist
+      const arrowPath = $body.find('.visual-instruction-arrow:visible path').attr('d') ?? ''
+      expect(info, 'rewrite guide callout').to.exist
+      expect(expression, 'working expression').to.exist
       expect(dock, 'theorem tray').to.exist
+      expectNoOverlap(info!, expression!, 'rewrite guide does not cover the expression')
       if (undo) expectNoOverlap(info!, undo, 'tactic guide does not cover undo')
       expectNoOverlap(info!, dock!, 'tactic guide does not cover theorem tray')
       expect(arrowPath, 'phone guide uses a straight path').to.match(/\bL\b/)
@@ -115,9 +118,12 @@ describe('Visual Lean mobile layout', () => {
     cy.get('.transform-info.reverse-info').should('be.visible')
     cy.get('body').should($body => {
       const info = $body.find('.transform-info.reverse-info:visible').get(0)
+      const expression = $body.find('.tr-expr-wrapper:visible').get(0)
       const undo = $body.find('.tr-transformation-overlay .tr-controls .tr-ctrl-btn:visible').get(0)
       const reverse = $body.find('.tr-transformation-overlay .tr-side-controls .tr-ctrl-btn:visible').get(0)
       expect(info, 'reverse-direction callout').to.exist
+      expect(expression, 'working expression').to.exist
+      expectNoOverlap(info!, expression!, 'reverse-direction callout does not cover the expression')
       expectNoOverlap(info!, undo!, 'reverse-direction callout does not cover undo')
       expectNoOverlap(info!, reverse!, 'reverse-direction callout does not cover reverse')
     })

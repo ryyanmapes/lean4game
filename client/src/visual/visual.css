@@ -2496,6 +2496,14 @@
     transform: scale(var(--tr-expression-scale, 1.04));
   }
 
+  /* Leave a dedicated band between the expression and the dock for guided
+     transformation text.  Without this shift, taller iPhone callouts cover
+     the expression even though they remain clear of the bottom controls. */
+  .visual-page.phone-portrait.tr-transformation-overlay
+    .tr-main-area.has-transform-guide .tr-expr-wrapper {
+    transform: translateY(-3.5rem) scale(var(--tr-expression-scale, 1.04));
+  }
+
   .visual-page.phone-portrait.tr-transformation-overlay .transform-info.reverse-info {
     top: auto;
     bottom: calc(var(--tr-rule-dock-height, 0px) + 8.5rem);

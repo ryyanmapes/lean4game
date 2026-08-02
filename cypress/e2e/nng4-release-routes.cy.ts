@@ -70,7 +70,7 @@ describe('local NNG4 release maps', () => {
     cy.get('a[href*="/level/0"]').should('not.exist')
     cy.get('a.level title').contains(/rfl tactic/iu, { timeout: 30_000 })
 
-    cy.get('a[aria-label="Open Tutorial"]').click()
+    cy.get('a[aria-label="Open Tutorial World"]').click()
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1$/u)
     cy.location('hash').should('not.include', '/visual')
 
@@ -93,7 +93,7 @@ describe('local NNG4 release maps', () => {
       cy.get('.visual-map-theme-toggle').click()
       cy.get('.app').should('have.attr', 'data-visual-theme').and('not.equal', initialTheme)
     })
-    cy.get('[role="link"][aria-label="Open Tutorial"]').click()
+    cy.get('[role="link"][aria-label="Open Tutorial World"]').click({ force: true })
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })
 
