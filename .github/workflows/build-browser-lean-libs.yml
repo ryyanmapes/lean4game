@@ -375,6 +375,27 @@ jobs:
           if [[ "${{ inputs.experimental_single_thread }}" != "true" ]]; then
             compile_thread_flags=(-pthread)
             link_thread_flags=(-pthread -sPTHREAD_POOL_SIZE=4)
+          else
+          # The link-kit Lean runtime was compiled with LEAN_MULTI_THREAD,
+          # so its CLI normally runs main on a fresh pthread and starts a
+          # hardware-sized task pool.  A no-pthread Emscripten binary must
+          # keep main on the current worker and request zero task workers.
+          node --input-type=commonjs - .cauli-browser-host/scripts/lean-wasm-node.cjs <<'NODE'
+          const fs = require('fs')
+          const path = process.argv[2]
+          let source = fs.readFileSync(path, 'utf8')
+          let changes = 0
+          source = source.replace(
+            /const \[artifactDir, workDir, \.\.\.leanArgs\] = process\.argv\.slice\(2\);?/,
+            match => { changes++; return `${match}\nleanArgs.unshift('-j0');` },
+          )
+          source = source.replace(
+            /Module\.ENV\.LEAN_PATH = '\/lib\/lean';?/,
+            match => { changes++; return `${match}\n    Module.ENV.LEAN_MAIN_USE_THREAD = '0';` },
+          )
+          if (changes !== 2) throw new Error(`Expected two single-thread driver edits, made ${changes}`)
+          fs.writeFileSync(path, source)
+          NODE
           fi
 
           (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
