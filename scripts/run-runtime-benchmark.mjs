@@ -41,6 +41,10 @@ for (let sample = 1; sample <= sampleCount; sample += 1) {
   })
   try {
     page = await browser.newPage()
+    // The existing Cypress suite exposes its player bridge only when this
+    // marker is present. Set the same marker before React evaluates so this
+    // top-level, cross-origin-isolated transport exercises identical actions.
+    await page.evaluateOnNewDocument(() => { window.Cypress = {} })
     const session = await page.createCDPSession()
     await session.send('Network.enable')
     await session.send('Network.setCacheDisabled', { cacheDisabled: true })
