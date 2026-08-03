@@ -14,6 +14,7 @@ const executablePath = process.env.CHROME_PATH
 if (!executablePath) throw new Error('CHROME_PATH is required')
 
 const loadTimeout = Number(process.env.VISUAL_TIMEOUT ?? 600_000)
+const expectCrossOriginIsolated = process.env.EXPECT_CROSS_ORIGIN_ISOLATED !== 'false'
 const fixture = JSON.parse(await fs.readFile('cypress/fixtures/nng4-visual-solutions.json', 'utf8'))
 const solutions = fixture.solutions.filter(solution => !solution.visualSkip)
 const malformedNamePattern = /(?:_@|_internal|_hyg|^\?m(?:\.|$)|[†✝]|\uFFFD|Ãƒ|Ã‚|Ã¢)/u
@@ -25,6 +26,7 @@ const results = {
   expectedLevels: 66,
   completedLevels: 0,
   crossOriginIsolated: false,
+  sharedArrayBufferAvailable: false,
   queryPreserved: true,
   malformedNames: [],
   levels: [],
@@ -130,8 +132,17 @@ try {
   await page.goto(target, { waitUntil: 'domcontentloaded', timeout: loadTimeout })
   await waitForLevel(page, first)
   results.coldReadyMs = performance.now() - coldStarted
-  results.crossOriginIsolated = await page.evaluate(() => window.crossOriginIsolated)
-  if (!results.crossOriginIsolated) throw new Error('mobile module page is not cross-origin isolated')
+  const browserIsolation = await page.evaluate(() => ({
+    crossOriginIsolated: window.crossOriginIsolated,
+    sharedArrayBufferAvailable: typeof SharedArrayBuffer !== 'undefined',
+  }))
+  results.crossOriginIsolated = browserIsolation.crossOriginIsolated
+  results.sharedArrayBufferAvailable = browserIsolation.sharedArrayBufferAvailable
+  if (results.crossOriginIsolated !== expectCrossOriginIsolated) {
+    throw new Error(
+      `expected crossOriginIsolated=${expectCrossOriginIsolated}, got ${results.crossOriginIsolated}`,
+    )
+  }
 
   for (let solutionIndex = 0; solutionIndex < solutions.length; solutionIndex += 1) {
     const solution = solutions[solutionIndex]

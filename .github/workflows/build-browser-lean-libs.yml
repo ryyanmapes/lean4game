@@ -33,6 +33,21 @@ on:
         required: false
         default: false
         type: boolean
+      experimental_single_thread:
+        description: Consume the experimental no-pthread Lean toolchain
+        required: false
+        default: false
+        type: boolean
+      single_thread_lean_sha:
+        description: Commit in ryyanmapes/lean4 used for the experimental toolchain
+        required: false
+        default: 72a8f89f3126d2c149361d1285b000f5e77d7313
+        type: string
+      single_thread_lean_run_id:
+        description: Actions run containing matching single-thread Lean artifacts
+        required: false
+        default: '30858803276'
+        type: string
     secrets:
       CAULI_ARTIFACT_TOKEN:
         description: Token with Actions read access to cauli/lean4
@@ -69,6 +84,21 @@ on:
         required: true
         default: false
         type: boolean
+      experimental_single_thread:
+        description: Consume the experimental no-pthread Lean toolchain
+        required: true
+        default: false
+        type: boolean
+      single_thread_lean_sha:
+        description: Commit in ryyanmapes/lean4 used for the experimental toolchain
+        required: false
+        default: 72a8f89f3126d2c149361d1285b000f5e77d7313
+        type: string
+      single_thread_lean_run_id:
+        description: Actions run containing matching single-thread Lean artifacts
+        required: false
+        default: '30858803276'
+        type: string
 
 concurrency:
   group: browser-lean-libs-${{ github.ref }}
@@ -78,8 +108,9 @@ permissions:
   contents: read
 
 env:
-  CAULI_LEAN_SHA: 62b6a2291302d4bbeace37642a066b7510d0145c
-  CAULI_LEAN_RUN_ID: 29165653896
+  CAULI_LEAN_SHA: ${{ inputs.experimental_single_thread && inputs.single_thread_lean_sha || '62b6a2291302d4bbeace37642a066b7510d0145c' }}
+  CAULI_LEAN_RUN_ID: ${{ inputs.experimental_single_thread && inputs.single_thread_lean_run_id || '29165653896' }}
+  CAULI_LEAN_REPOSITORY: ${{ inputs.experimental_single_thread && 'ryyanmapes/lean4' || 'cauli/lean4' }}
   CAULI_LEAN_ARTIFACT: build-Linux 32bit
   CAULI_WASM_ARTIFACT: build-Web Assembly
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
@@ -131,7 +162,7 @@ jobs:
       - name: Check out matching Cauli Lean sources
         uses: actions/checkout@v4
         with:
-          repository: cauli/lean4
+          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
           ref: ${{ env.CAULI_LEAN_SHA }}
           path: .cauli-lean-source
 
@@ -156,7 +187,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: cauli/lean4
+          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
           run-id: ${{ env.CAULI_LEAN_RUN_ID }}
           name: ${{ env.CAULI_LEAN_ARTIFACT }}
           path: .cauli-toolchain-download
@@ -165,7 +196,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: cauli/lean4
+          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
           run-id: ${{ env.CAULI_LEAN_RUN_ID }}
           name: ${{ env.CAULI_WASM_ARTIFACT }}
           path: .cauli-wasm-download
@@ -174,7 +205,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: cauli/lean4
+          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
           run-id: ${{ env.CAULI_LEAN_RUN_ID }}
           name: linkkit-Web Assembly
           path: .cauli-linkkit-download
@@ -374,8 +405,14 @@ jobs:
           if [[ "${{ inputs.experimental_one_worker }}" == "true" ]]; then
             runtime_threads=1
           fi
-          compile_thread_flags=(-pthread)
-          link_thread_flags=(-pthread "-sPTHREAD_POOL_SIZE=$runtime_threads")
+          compile_thread_flags=()
+          link_thread_flags=()
+          if [[ "${{ inputs.experimental_single_thread }}" != "true" ]]; then
+            compile_thread_flags=(-pthread)
+            link_thread_flags=(-pthread "-sPTHREAD_POOL_SIZE=$runtime_threads")
+          else
+            runtime_threads=0
+          fi
 
           (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
           node scripts/gen-visual-wasm-exports.mjs \
@@ -440,17 +477,23 @@ jobs:
           const path = 'browser-lean-libs/build-info.json'
           const info = JSON.parse(fs.readFileSync(path, 'utf8'))
           info.runtimeThreads = Number(process.env.RUNTIME_THREADS)
+          info.singleThread = process.env.SINGLE_THREAD === 'true'
           fs.writeFileSync(path, `${JSON.stringify(info, null, 2)}\n`)
           const runtimePath = 'browser-lean-libs/runtime/lean.js'
           const runtime = fs.readFileSync(runtimePath, 'utf8')
           fs.writeFileSync(runtimePath, `self.__LEAN_RUNTIME_THREADS=${info.runtimeThreads};\n${runtime}`)
           NODE
           grep -q 'var WORKERFS = {' browser-lean-libs/runtime/lean.js
-          grep -q 'PThread' browser-lean-libs/runtime/lean.js
+          if [[ "${{ inputs.experimental_single_thread }}" == "true" ]]; then
+            ! grep -q 'PThread' browser-lean-libs/runtime/lean.js
+          else
+            grep -q 'PThread' browser-lean-libs/runtime/lean.js
+          fi
           grep -q '_lean_init_task_manager_using' browser-lean-libs/runtime/lean.js
           ls -lh browser-lean-libs/runtime/*
         env:
-          RUNTIME_THREADS: ${{ inputs.experimental_one_worker && '1' || '4' }}
+          RUNTIME_THREADS: ${{ inputs.experimental_single_thread && '0' || inputs.experimental_one_worker && '1' || '4' }}
+          SINGLE_THREAD: ${{ inputs.experimental_single_thread }}
 
       - name: Isolate NNG WebAssembly imports
         if: inputs.include_nng4
