@@ -28,6 +28,8 @@ const output = path.join('cypress/results', `runtime-benchmark-${variant}.json`)
 let failed = false
 
 for (let sample = 1; sample <= sampleCount; sample += 1) {
+  let page
+  const browserErrors = []
   const browser = await puppeteer.launch({
     executablePath,
     headless: true,
@@ -38,12 +40,12 @@ for (let sample = 1; sample <= sampleCount; sample += 1) {
     ],
   })
   try {
-    const page = await browser.newPage()
+    page = await browser.newPage()
     const session = await page.createCDPSession()
     await session.send('Network.enable')
     await session.send('Network.setCacheDisabled', { cacheDisabled: true })
-    const browserErrors = []
     page.on('pageerror', error => browserErrors.push(String(error)))
+    page.on('error', error => browserErrors.push(`page crashed: ${String(error)}`))
     page.on('console', message => {
       if (message.type() === 'error') browserErrors.push(message.text())
     })
@@ -89,10 +91,32 @@ for (let sample = 1; sample <= sampleCount; sample += 1) {
     })
   } catch (error) {
     failed = true
+    let pageState
+    if (page) {
+      try {
+        pageState = await page.evaluate(() => ({
+          location: window.location.href,
+          title: document.title,
+          readyState: document.readyState,
+          crossOriginIsolated: window.crossOriginIsolated,
+          wasmLinearMemoryBytes: window.__leanRuntimeMemoryBytes,
+          bodyText: document.body?.innerText.slice(-6000),
+        }))
+        await fs.mkdir('cypress/results', { recursive: true })
+        await page.screenshot({
+          path: path.join('cypress/results', `runtime-benchmark-${variant}-failure.png`),
+          fullPage: true,
+        })
+      } catch (diagnosticError) {
+        browserErrors.push(`diagnostic collection failed: ${String(diagnosticError)}`)
+      }
+    }
     results.push({
       variant,
       sample,
       error: error instanceof Error ? error.stack ?? error.message : String(error),
+      pageState,
+      browserErrors,
     })
     break
   } finally {
