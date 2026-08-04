@@ -21,27 +21,12 @@ type PendingCompile = {
 
 type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?: string }
 
-// Bump this whenever the paired runtime/snapshot artifact changes. Lean
-// snapshots retain WASM function-table references, so mixing generations can
-// fail as a call_indirect signature mismatch (especially on long-lived mobile
-// browser caches).
-const WORKER_UI_VERSION = 'mobile-modules-experiment-v1'
-// Preserve the proven desktop path. The loose-module loader remains opt-in
-// until it has passed real-device testing; place `?mobileModules=1` before the
-// hash route to select it.
-const USE_MOBILE_MODULE_BUNDLE = typeof window !== 'undefined'
-  && new URLSearchParams(window.location.search).get('mobileModules') === '1'
-const DESKTOP_RUNTIME_VERSION = 'nng4-browser-v4'
-// Keep the experiment in a separate browser cache namespace. Reusing the
-// desktop query key can pair a newly deployed worker with an older lean.js or
-// lean.wasm from a long-lived mobile cache, which manifests as call_indirect
-// signature mismatches before the module bundle is even requested.
-const MOBILE_MODULE_RUNTIME_VERSION = 'mobile-modules-v1'
-const BROWSER_RUNTIME_VERSION = USE_MOBILE_MODULE_BUNDLE
-  ? MOBILE_MODULE_RUNTIME_VERSION
-  : DESKTOP_RUNTIME_VERSION
-const SNAPSHOT_URL = `/visual-lean/snapshots/game.snap.gz?v=${DESKTOP_RUNTIME_VERSION}`
-const MODULE_BUNDLE_URL = `/visual-lean/modules/game-modules.tar.gz?v=${MOBILE_MODULE_RUNTIME_VERSION}`
+// Bump these together whenever the paired single-thread runtime or module
+// closure changes. A distinct cache namespace prevents long-lived mobile
+// browsers from pairing a newly deployed worker with an older WASM binary.
+const WORKER_UI_VERSION = 'single-thread-modules-v1'
+const BROWSER_RUNTIME_VERSION = 'single-thread-modules-v1'
+const MODULE_BUNDLE_URL = `/visual-lean/modules/game-modules.tar.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
@@ -150,12 +135,8 @@ class LocalLeanWorker {
           reportLeanLoading(24, String(msg.data ?? 'Loading the Lean runtime…'))
         }
         else if (msg.type === 'worker_ready') {
-          const loadEnvironment = USE_MOBILE_MODULE_BUNDLE
-            ? this.loadModuleBundle()
-            : this.loadSnapshot()
-          reportLeanLoading(30, 'Downloading the Lean game snapshot…')
-          if (USE_MOBILE_MODULE_BUNDLE) reportLeanLoading(30, 'Downloading Lean modules...')
-          loadEnvironment.then(() => {
+          reportLeanLoading(30, 'Downloading Lean modules...')
+          this.loadModuleBundle().then(() => {
             window.clearTimeout(timeout)
             resolve()
           }, error => {
@@ -231,15 +212,6 @@ class LocalLeanWorker {
       }
     })
     return this.readyPromise
-  }
-
-  private loadSnapshot(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.snapshotResolver = result => result.success
-        ? resolve()
-        : reject(new Error(result.error ?? 'Lean game snapshot failed to load'))
-      this.worker!.postMessage({ type: 'load_snapshot', name: 'game.snap', url: SNAPSHOT_URL })
-    })
   }
 
   private loadModuleBundle(): Promise<void> {

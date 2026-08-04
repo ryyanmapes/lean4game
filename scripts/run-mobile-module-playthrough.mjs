@@ -27,7 +27,7 @@ const results = {
   completedLevels: 0,
   crossOriginIsolated: false,
   sharedArrayBufferAvailable: false,
-  queryPreserved: true,
+  canonicalRoutePreserved: true,
   malformedNames: [],
   levels: [],
   browserErrors: [],
@@ -96,9 +96,9 @@ async function audit(page, solution, phase) {
       })
     }
   }
-  if (new URL(state.location).searchParams.get('mobileModules') !== '1') {
-    results.queryPreserved = false
-    throw new Error(`mobileModules=1 was lost at ${solution.world} ${solution.level}`)
+  if (new URL(state.location).searchParams.has('mobileModules')) {
+    results.canonicalRoutePreserved = false
+    throw new Error(`obsolete mobileModules selector appeared at ${solution.world} ${solution.level}`)
   }
   return state.audit
 }
@@ -127,7 +127,7 @@ try {
   })
 
   const first = solutions[0]
-  const target = `${baseUrl.replace(/\/$/u, '')}/lean4game/index.html?mobileModules=1${levelHash(first)}`
+  const target = `${baseUrl.replace(/\/$/u, '')}/lean4game/index.html${levelHash(first)}`
   const coldStarted = performance.now()
   await page.goto(target, { waitUntil: 'domcontentloaded', timeout: loadTimeout })
   await waitForLevel(page, first)
@@ -206,8 +206,8 @@ try {
   })
   await page.waitForFunction(() => Boolean(window.__mobileValidationOpenedUrl))
   const classicTarget = await page.evaluate(() => window.__mobileValidationOpenedUrl)
-  if (new URL(classicTarget).searchParams.get('mobileModules') !== '1') {
-    throw new Error('classic export dropped mobileModules=1')
+  if (new URL(classicTarget).searchParams.has('mobileModules')) {
+    throw new Error('classic export introduced the obsolete mobileModules selector')
   }
   await page.goto(classicTarget, { waitUntil: 'domcontentloaded', timeout: loadTimeout })
   await page.waitForSelector('#local-classic-proof.local-wasm-code-editor', { visible: true, timeout: loadTimeout })
