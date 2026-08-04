@@ -23,31 +23,6 @@ on:
         required: false
         default: true
         type: boolean
-      experimental_size_profiles:
-        description: Build isolated minimal and Tutorial+Addition snapshot size probes
-        required: false
-        default: false
-        type: boolean
-      experimental_one_worker:
-        description: Link a low-concurrency pthread runtime with one worker
-        required: false
-        default: false
-        type: boolean
-      experimental_single_thread:
-        description: Consume the experimental no-pthread Lean toolchain
-        required: false
-        default: false
-        type: boolean
-      single_thread_lean_sha:
-        description: Commit in ryyanmapes/lean4 used for the experimental toolchain
-        required: false
-        default: 72a8f89f3126d2c149361d1285b000f5e77d7313
-        type: string
-      single_thread_lean_run_id:
-        description: Actions run containing matching single-thread Lean artifacts
-        required: false
-        default: '30858803276'
-        type: string
     secrets:
       CAULI_ARTIFACT_TOKEN:
         description: Token with Actions read access to cauli/lean4
@@ -74,31 +49,6 @@ on:
         required: true
         default: true
         type: boolean
-      experimental_size_profiles:
-        description: Build isolated minimal and Tutorial+Addition snapshot size probes
-        required: true
-        default: false
-        type: boolean
-      experimental_one_worker:
-        description: Link a low-concurrency pthread runtime with one worker
-        required: true
-        default: false
-        type: boolean
-      experimental_single_thread:
-        description: Consume the experimental no-pthread Lean toolchain
-        required: true
-        default: false
-        type: boolean
-      single_thread_lean_sha:
-        description: Commit in ryyanmapes/lean4 used for the experimental toolchain
-        required: false
-        default: 72a8f89f3126d2c149361d1285b000f5e77d7313
-        type: string
-      single_thread_lean_run_id:
-        description: Actions run containing matching single-thread Lean artifacts
-        required: false
-        default: '30858803276'
-        type: string
 
 concurrency:
   group: browser-lean-libs-${{ github.ref }}
@@ -108,9 +58,9 @@ permissions:
   contents: read
 
 env:
-  CAULI_LEAN_SHA: ${{ inputs.experimental_single_thread && inputs.single_thread_lean_sha || '62b6a2291302d4bbeace37642a066b7510d0145c' }}
-  CAULI_LEAN_RUN_ID: ${{ inputs.experimental_single_thread && inputs.single_thread_lean_run_id || '29165653896' }}
-  CAULI_LEAN_REPOSITORY: ${{ inputs.experimental_single_thread && 'ryyanmapes/lean4' || 'cauli/lean4' }}
+  CAULI_LEAN_SHA: 72a8f89f3126d2c149361d1285b000f5e77d7313
+  CAULI_LEAN_RUN_ID: '30858803276'
+  CAULI_LEAN_REPOSITORY: ryyanmapes/lean4
   CAULI_LEAN_ARTIFACT: build-Linux 32bit
   CAULI_WASM_ARTIFACT: build-Web Assembly
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
@@ -401,18 +351,8 @@ jobs:
           echo "VISUAL_RUNTIME=$visual_runtime" >> "$GITHUB_ENV"
           tar --zstd -xf "$linkkit_archive" -C .visual-link
           kit="$PWD/.visual-link/linkkit"
-          runtime_threads=4
-          if [[ "${{ inputs.experimental_one_worker }}" == "true" ]]; then
-            runtime_threads=1
-          fi
           compile_thread_flags=()
           link_thread_flags=()
-          if [[ "${{ inputs.experimental_single_thread }}" != "true" ]]; then
-            compile_thread_flags=(-pthread)
-            link_thread_flags=(-pthread "-sPTHREAD_POOL_SIZE=$runtime_threads")
-          else
-            runtime_threads=0
-          fi
 
           (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
           node scripts/gen-visual-wasm-exports.mjs \
@@ -484,16 +424,12 @@ jobs:
           fs.writeFileSync(runtimePath, `self.__LEAN_RUNTIME_THREADS=${info.runtimeThreads};\n${runtime}`)
           NODE
           grep -q 'var WORKERFS = {' browser-lean-libs/runtime/lean.js
-          if [[ "${{ inputs.experimental_single_thread }}" == "true" ]]; then
-            ! grep -q 'PThread' browser-lean-libs/runtime/lean.js
-          else
-            grep -q 'PThread' browser-lean-libs/runtime/lean.js
-          fi
+          ! grep -q 'PThread' browser-lean-libs/runtime/lean.js
           grep -q '_lean_init_task_manager_using' browser-lean-libs/runtime/lean.js
           ls -lh browser-lean-libs/runtime/*
         env:
-          RUNTIME_THREADS: ${{ inputs.experimental_single_thread && '0' || inputs.experimental_one_worker && '1' || '4' }}
-          SINGLE_THREAD: ${{ inputs.experimental_single_thread }}
+          RUNTIME_THREADS: '0'
+          SINGLE_THREAD: 'true'
 
       - name: Isolate NNG WebAssembly imports
         if: inputs.include_nng4
@@ -581,8 +517,7 @@ jobs:
           gzip -9 browser-lean-libs/snapshots/game.snap
           ls -lh browser-lean-libs/snapshots/game.snap.gz
 
-      - name: Build experimental mobile snapshot size profiles
-        if: inputs.experimental_size_profiles
+      - name: Build canonical browser module closure
         shell: bash
         run: |
           set -euo pipefail
@@ -721,11 +656,10 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload experimental mobile snapshot profiles
-        if: inputs.experimental_size_profiles
+      - name: Upload module closure diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: experimental-mobile-snapshot-profiles-${{ env.CAULI_LEAN_SHA }}
+          name: browser-module-closure-diagnostics-${{ env.CAULI_LEAN_SHA }}
           path: ${{ runner.temp }}/mobile-snapshot-profiles
           if-no-files-found: error
           compression-level: 0
@@ -747,7 +681,7 @@ jobs:
       - name: Upload browser libraries
         uses: actions/upload-artifact@v4
         with:
-          name: visual-lean-libs-${{ env.CAULI_LEAN_SHA }}${{ inputs.experimental_one_worker && '-one-worker' || '' }}
+          name: visual-lean-libs-${{ env.CAULI_LEAN_SHA }}
           path: browser-lean-libs
           if-no-files-found: error
           compression-level: 6
