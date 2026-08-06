@@ -31,6 +31,13 @@ test('renders Lean natural-number zero constructors as the numeral 0', () => {
   assert.equal(formatFormulaText('zero_add n = n'), 'zero_add(n) = n')
 })
 
+test('removes Lean hygienic suffixes and dagger disambiguators from displayed formulas', () => {
+  assert.equal(
+    formatFormulaText('zero ≤ succ a† ∨ succ a._@._internal.0.2021293395._hygCtx._hyg.31 ≤ zero'),
+    `0 ≤ succ(a) ${OR} succ(a) ≤ 0`,
+  )
+})
+
 test('add_succ matches and rewrites the induction successor goal', () => {
   const goal = parse('0 + succ d')
   const lhs = parse('a + succ(d)')

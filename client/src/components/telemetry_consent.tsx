@@ -1,41 +1,66 @@
 import * as React from 'react'
-import { useAtom } from 'jotai'
-import { getConsentState, setConsent } from '../utils/telemetry'
-import { popupAtom, PopupType } from '../store/popup-atoms'
+import { getConsentState, setConsent, type ConsentState } from '../utils/telemetry'
 
-export function TelemetryConsent() {
-  const [visible, setVisible] = React.useState(() => getConsentState() === 'undecided')
-  const [, setPopup] = useAtom(popupAtom)
+export type TelemetryConsentGate = {
+  consentState: ConsentState
+  visible: boolean
+  shouldHold: boolean
+  accept: () => void
+  refuse: () => void
+  postpone: () => void
+}
 
-  if (!visible) return null
+/** Closing the question suppresses it for this loading screen only. */
+export function useTelemetryConsentGate(screenKey: string): TelemetryConsentGate {
+  const [consentState, setConsentState] = React.useState<ConsentState>(getConsentState)
+  const [postponedFor, setPostponedFor] = React.useState<string | null>(null)
 
-  const decide = (accepted: boolean) => {
+  const decide = React.useCallback((accepted: boolean) => {
     setConsent(accepted)
-    setVisible(false)
+    setConsentState(accepted ? 'accepted' : 'refused')
+  }, [])
+
+  const visible = consentState === 'undecided' && postponedFor !== screenKey
+  return {
+    consentState,
+    visible,
+    shouldHold: visible,
+    accept: () => decide(true),
+    refuse: () => decide(false),
+    postpone: () => setPostponedFor(screenKey),
   }
+}
+
+export function TelemetryConsent({ gate }: { gate: TelemetryConsentGate }) {
+  if (!gate.visible) return null
 
   return (
-    <div className="telemetry-banner" role="dialog" aria-label="Anonymous usage statistics">
-      <p className="telemetry-banner-text">
-        Help us improve the games by sharing pseudonymous usage statistics (level
-        starts, completions, proof steps, and undo actions). No personal data is
-        requested; proof commands are included. See our{' '}
-        <a
-          className="telemetry-banner-link"
-          onClick={(e) => { e.preventDefault(); setPopup(PopupType.privacy) }}
-          href="#"
-        >Privacy Policy</a>.
+    <div
+      className="telemetry-consent-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Anonymous telemetry permission"
+    >
+      <button
+        type="button"
+        className="telemetry-consent-close"
+        aria-label="Ask about telemetry later"
+        title="Ask later"
+        onClick={gate.postpone}
+      >×</button>
+      <p className="telemetry-consent-text">
+        Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anynomous telemetry helps us improve the program for future users.
       </p>
-      <div className="telemetry-banner-buttons">
+      <div className="telemetry-consent-buttons">
         <button
           type="button"
-          className="telemetry-banner-btn telemetry-banner-btn-refuse"
-          onClick={() => decide(false)}
+          className="telemetry-consent-button telemetry-consent-refuse"
+          onClick={gate.refuse}
         >Refuse</button>
         <button
           type="button"
-          className="telemetry-banner-btn telemetry-banner-btn-accept"
-          onClick={() => decide(true)}
+          className="telemetry-consent-button telemetry-consent-accept"
+          onClick={gate.accept}
         >Accept</button>
       </div>
     </div>

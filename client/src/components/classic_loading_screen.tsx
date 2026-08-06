@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { PreferencesContext } from './infoview/context'
 import { HopLoadingIndicator } from '../visual/VisualLoadingScreen'
+import { TelemetryConsent, type TelemetryConsentGate } from './telemetry_consent'
 
 import '../css/classic-loading.css'
 
@@ -15,12 +16,14 @@ export function ClassicLoadingScreen({
   message = 'Connecting to Lean…',
   progress = null,
   showChrome,
+  telemetryConsent,
 }: {
   worldTitle?: string | null
   levelTitle?: string | null
   message?: string
   progress?: number | null
   showChrome?: boolean
+  telemetryConsent?: TelemetryConsentGate
 }) {
   const navigate = useNavigate()
   const gameId = React.useContext(GameIdContext)
@@ -62,6 +65,7 @@ export function ClassicLoadingScreen({
       </div>
       <div className={`classic-loading-content${chromeVisible ? ' visible' : ''}`}>
         {chromeVisible && <HopLoadingIndicator message={message} progress={progress} />}
+        {chromeVisible && telemetryConsent && <TelemetryConsent gate={telemetryConsent} />}
       </div>
     </div>
   )

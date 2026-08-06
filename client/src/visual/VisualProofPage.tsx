@@ -18,6 +18,7 @@ import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
 import { useLeanLoadingProgress } from './useLeanLoadingProgress'
+import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity'])
@@ -204,6 +205,7 @@ export function VisualProofPage() {
   const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
   const { getClient, disposeClient } = useVisualRpcClient()
   const leanLoadingProgress = useLeanLoadingProgress()
+  const telemetryConsent = useTelemetryConsentGate(`${gameId}/${worldId}/${levelId}`)
 
   useEffect(() => {
     setShowLoadingChrome(false)
@@ -222,6 +224,21 @@ export function VisualProofPage() {
     }
   }, [])
   const startEventSentRef = useRef<string | null>(null)
+  const sendLevelStartTelemetry = useCallback(() => {
+    const startKey = `${gameId}/${worldId}/${levelId}`
+    if (startEventSentRef.current === startKey) return
+    const queued = sendTelemetry({
+      event_type: 'level_start',
+      game_id: gameId,
+      world_id: worldId,
+      level_id: levelId,
+      attempt_uuid: solvingId,
+      mode: 'visual',
+      sequence: telemetrySequence.current,
+      elapsed_ms: Date.now() - telemetryStartedAt,
+    })
+    if (queued) startEventSentRef.current = startKey
+  }, [gameId, levelId, solvingId, telemetryStartedAt, worldId])
 
   useEffect(() => {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
@@ -247,20 +264,7 @@ export function VisualProofPage() {
             return
           }
           setCanvasState(proofStateToCanvas(proof))
-          const startKey = `${gameId}/${worldId}/${levelId}`
-          if (startEventSentRef.current !== startKey) {
-            startEventSentRef.current = startKey
-            sendTelemetry({
-              event_type: 'level_start',
-              game_id: gameId,
-              world_id: worldId,
-              level_id: levelId,
-              attempt_uuid: solvingId,
-              mode: 'visual',
-              sequence: telemetrySequence.current,
-              elapsed_ms: Date.now() - telemetryStartedAt,
-            })
-          }
+          sendLevelStartTelemetry()
           return
         } catch (err) {
           lastError = err
@@ -280,7 +284,7 @@ export function VisualProofPage() {
     return () => {
       active = false
     }
-  }, [disposeClient, gameId, getClient, worldId, levelId, solvingId, telemetryStartedAt])
+  }, [disposeClient, gameId, getClient, worldId, levelId, sendLevelStartTelemetry, solvingId, telemetryStartedAt])
 
   // Callback passed to VisualCanvas: sends an updated proof body to Lean and
   // returns the new ProofState, or null on Lean error.
@@ -458,6 +462,12 @@ export function VisualProofPage() {
     return () => { active = false }
   }, [gameId, worldId, levelId])
 
+  useEffect(() => {
+    if (canvasState && presentationReady && telemetryConsent.consentState === 'accepted') {
+      sendLevelStartTelemetry()
+    }
+  }, [canvasState, presentationReady, sendLevelStartTelemetry, telemetryConsent.consentState])
+
   if (error) {
     return <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} style={{ color: 'var(--visual-error-text)' }}>Error: {error}</div>
   }
@@ -467,10 +477,13 @@ export function VisualProofPage() {
   const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
   const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
 
-  if (!canvasState || !presentationReady) {
-    const loadingProgress = canvasState
-      ? { value: 98, message: 'Loading level information…' }
-      : leanLoadingProgress
+  const contentReady = Boolean(canvasState && presentationReady)
+  if (!canvasState || !presentationReady || telemetryConsent.shouldHold) {
+    const loadingProgress = contentReady
+      ? { value: 100, message: 'Complete' }
+      : canvasState
+        ? { value: 98, message: 'Loading level information…' }
+        : leanLoadingProgress
     return <VisualLoadingScreen
       worldId={worldId}
       worldTitle={worldTitle ?? undefined}
@@ -487,6 +500,7 @@ export function VisualProofPage() {
       onPrev={levelId > 1 ? handlePreviousLevel : () => {}}
       onNext={handleNextLevel}
       phonePortrait={isPhonePortrait}
+      telemetryConsent={telemetryConsent}
     />
   }
 

@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { TelemetryConsent, type TelemetryConsentGate } from '../components/telemetry_consent'
 import { VisualHeader } from './VisualHeader'
 import './visual.css'
 
@@ -19,6 +20,7 @@ type VisualLoadingScreenProps = {
   onPrev?: () => void
   onNext?: () => void
   phonePortrait?: boolean
+  telemetryConsent?: TelemetryConsentGate
 }
 
 export function HopLoadingIndicator({
@@ -75,6 +77,7 @@ export function VisualLoadingScreen({
   onPrev = () => {},
   onNext = () => {},
   phonePortrait = false,
+  telemetryConsent,
 }: VisualLoadingScreenProps) {
   const [delayElapsed, setDelayElapsed] = React.useState(false)
   React.useEffect(() => {
@@ -107,6 +110,7 @@ export function VisualLoadingScreen({
         />
       )}
       <HopLoadingIndicator message={message} progress={progress} />
+      {telemetryConsent && <TelemetryConsent gate={telemetryConsent} />}
     </div>
   )
 }

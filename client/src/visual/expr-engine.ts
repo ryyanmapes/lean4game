@@ -2,6 +2,23 @@ import type { ExpressionNode, Op } from './expr-types'
 import type { ExprTree } from '../components/infoview/rpc_api'
 import { v4 as uuidv4 } from 'uuid'
 
+const GENERATED_NAME_SUFFIX = /\._@[^\s,():=<>+*\/\\|]+/gu
+const TRAILING_DAGGERS = /[†✝]+$/gu
+
+/** Keep Lean's internal hygienic suffixes out of player-facing names. */
+export function sanitizeLeanDisplayName(name: string): string {
+  const withoutDaggers = name.replace(TRAILING_DAGGERS, '')
+  const withoutGeneratedSuffix = withoutDaggers.replace(GENERATED_NAME_SUFFIX, '')
+  const sanitized = withoutGeneratedSuffix.replace(/[.]+$/u, '')
+  return sanitized || name
+}
+
+function sanitizeLeanDisplayText(text: string): string {
+  return text
+    .replace(GENERATED_NAME_SUFFIX, '')
+    .replace(/[†✝]+/gu, '')
+}
+
 // --- Parser ---
 
 interface BinaryOpInfo {
@@ -399,7 +416,8 @@ function normalizeNegatedFormalDifferences(text: string): string {
 }
 
 export function formatFormulaText(text: string): string {
-  const normalizedZero = text.replace(/\b(?:MyNat\.|Nat\.)zero\b/g, '0')
+  const normalizedDisplayNames = sanitizeLeanDisplayText(text)
+  const normalizedZero = normalizedDisplayNames.replace(/\b(?:(?:MyNat\.|Nat\.)?zero)\b/g, '0')
   const normalized = normalizeNegatedFormalDifferences(normalizedZero.replace(/\s+/g, ' ').trim())
   if (normalized.length === 0) return normalized
 

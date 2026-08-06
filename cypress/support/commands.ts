@@ -72,7 +72,23 @@ Cypress.Commands.overwrite('visit', (originalFn, url, options) => {
             resolvedUrl = `${releaseEntry}${url.slice('/lean4game/index.html'.length)}`;
         }
     }
-    return originalFn(resolvedUrl, options);
+    const requestedOptions = options ?? {};
+    const originalBeforeLoad = requestedOptions.onBeforeLoad;
+    return originalFn(resolvedUrl, {
+        ...requestedOptions,
+        onBeforeLoad(win) {
+            originalBeforeLoad?.(win);
+            // Most gameplay specs are not consent-dialog tests. Give them an
+            // explicit refusal so the release gate cannot obscure their target
+            // UI. Consent specs opt out and exercise the real undecided state.
+            if (
+                Cypress.env('TELEMETRY_PROMPT') !== true &&
+                !win.localStorage.getItem('telemetryConsent')
+            ) {
+                win.localStorage.setItem('telemetryConsent', 'refused');
+            }
+        },
+    });
 });
 
 Cypress.on('uncaught:exception', (err, runnable) => {

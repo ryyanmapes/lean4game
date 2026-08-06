@@ -4,11 +4,7 @@ import {
   isDerivedTheoremName,
   isHiddenDerivedTheoremName,
 } from './theoremNames'
-
-function sanitizeHypDisplayName(name: string): string {
-  const sanitized = name.replace(/\u271d+$/giu, '')
-  return sanitized || name
-}
+import { sanitizeLeanDisplayName } from './expr-engine'
 
 export function proofStateToCanvas(proof: ProofState | null | undefined): CanvasState {
   const steps = Array.isArray(proof?.steps) ? proof.steps : []
@@ -37,7 +33,7 @@ export function interactiveGoalsToStreams(goals: InteractiveGoalWithHints[]): Go
         .filter(({ name }) => !isHiddenDerivedTheoremName(name))
       const cards = filteredNames.map(({ name, nameIndex }) => {
         const isTheorem = isDerivedTheoremName(name)
-        const displayBase = sanitizeHypDisplayName(name)
+        const displayBase = sanitizeLeanDisplayName(name)
         let displayName = displayBase
         if (usedDisplayNames.has(displayName)) {
           let suffix = 2

@@ -71,6 +71,11 @@ export function VisualHeader({
 }: VisualHeaderProps) {
   const emphasizeMap = isCompleted && !hasNext
   const shownLevelId = displayLevelId ?? levelId
+  const formattedTitle = levelTitle ? titleCaseLevel(levelTitle) : ''
+  const levelLabel = (worldTitle ?? worldId)
+    ? `${worldTitle ?? worldId} - ${shownLevelId}`
+    : `Level ${shownLevelId}`
+  const splitLongTitle = Boolean(formattedTitle && `${levelLabel}: ${formattedTitle}`.length > 28)
 
   return (
     <div className={`visual-header${isCompleted ? ' completed' : ''}`}>
@@ -84,13 +89,16 @@ export function VisualHeader({
           </button>
         )}
       </div>
-      <div className="visual-header-center">
+      <div className={`visual-header-center${splitLongTitle ? ' split-title' : ''}`}>
         {previouslyCompleted && <span className="visual-header-check">✓</span>}
         <span className="visual-header-level">
-          {(worldTitle ?? worldId) ? `${worldTitle ?? worldId} - ${shownLevelId}` : `Level ${shownLevelId}`}
+          {levelLabel}
         </span>
         {levelTitle && (
-          <span className="visual-header-title">: {titleCaseLevel(levelTitle)}</span>
+          <>
+            <span className="visual-header-separator">:</span>
+            <span className="visual-header-title">{formattedTitle}</span>
+          </>
         )}
       </div>
       <div className="visual-header-side right">

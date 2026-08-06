@@ -58,6 +58,7 @@ export function setConsent(accepted: boolean): void {
       void flushTelemetry()
     } else {
       localStorage.removeItem(QUEUE_KEY)
+      localStorage.removeItem(LEGACY_USER_ID_KEY)
       expireCookie(USER_COOKIE)
     }
   } catch {}
@@ -122,7 +123,10 @@ export function createTelemetryId(): string {
 export const createSolvingId = createTelemetryId
 
 function telemetryEndpoint(): string {
-  const configured = String(import.meta.env.VITE_TELEMETRY_URL ?? '').trim()
+  const runtimeConfigured = typeof window !== 'undefined'
+    ? String((window as Window & { __LEAN_TELEMETRY_URL__?: string }).__LEAN_TELEMETRY_URL__ ?? '').trim()
+    : ''
+  const configured = runtimeConfigured || String(import.meta.env.VITE_TELEMETRY_URL ?? '').trim()
   return configured ? `${configured.replace(/\/$/u, '')}/v1/events` : ''
 }
 
@@ -151,10 +155,10 @@ function utf8Size(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength
 }
 
-export function sendTelemetry(event: TelemetryEvent): void {
+export function sendTelemetry(event: TelemetryEvent): boolean {
   const endpoint = telemetryEndpoint()
   const user_uuid = getOrCreateUserId()
-  if (!endpoint || !user_uuid) return
+  if (!endpoint || !user_uuid) return false
   const queued: QueuedEvent = {
     ...event,
     event_id: event.event_id ?? createTelemetryId(),
@@ -167,6 +171,7 @@ export function sendTelemetry(event: TelemetryEvent): void {
   if (queued.lean_script) queued.lean_script = queued.lean_script.slice(0, 256 * 1024)
   writeQueue([...readQueue(), queued])
   void flushTelemetry()
+  return true
 }
 
 export async function flushTelemetry(): Promise<void> {

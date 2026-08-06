@@ -303,5 +303,19 @@ export function buildForallSpecificationFromDisplay(
   mainText: string,
   forallFooter?: string,
 ): ForallSpecificationInfo | undefined {
-  return buildForallSpecification(mainText.trim(), parseForallFooterBinders(forallFooter))
+  const footerBinders = parseForallFooterBinders(forallFooter)
+  if (footerBinders.length > 0) {
+    return buildForallSpecification(mainText.trim(), footerBinders)
+  }
+
+  // Runtime hypotheses can arrive as one pretty-printed proposition instead
+  // of the split main/footer representation used by inventory theorems.
+  // Example: `∀ (y : ℕ), d ≤ y ∨ y ≤ d`.
+  let normalized = normalizeTheoremStatement(mainText)
+  if (!normalized.startsWith('\u2200')) return undefined
+  normalized = normalized.slice(1).trim()
+  const parsed = parseLeadingBinders(normalized)
+  const binders = parsed.binders.flatMap(expandBinderToken)
+  const body = parsed.rest.replace(/^,\s*/u, '').trim()
+  return buildForallSpecification(body, binders)
 }

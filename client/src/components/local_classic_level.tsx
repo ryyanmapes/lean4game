@@ -19,6 +19,7 @@ import { LocalWasmRpcClient } from '../visual/localWasmRpcClient'
 import { useLeanLoadingProgress } from '../visual/useLeanLoadingProgress'
 import { ClassicLoadingScreen } from './classic_loading_screen'
 import { createTelemetryId, sendTelemetry } from '../utils/telemetry'
+import { useTelemetryConsentGate } from './telemetry_consent'
 import { LevelAppBar } from './app_bar'
 import {
   DeletedChatContext,
@@ -202,10 +203,12 @@ export default function LocalClassicLevel() {
   const telemetrySequence = React.useRef(0)
   const telemetryStarted = React.useRef(false)
   const telemetryCompleted = React.useRef(false)
+  const telemetryStartSent = React.useRef(false)
   const level = useLoadLevelQuery({ game: gameId, world: worldId, level: levelId })
   const game = useGetGameInfoQuery({ game: gameId })
   const client = React.useMemo(() => new LocalWasmRpcClient(gameId, worldId, levelId), [gameId])
   const leanLoadingProgress = useLeanLoadingProgress()
+  const telemetryConsent = useTelemetryConsentGate(`${gameId}/${worldId}/${levelId}`)
 
   const [visualHandoff] = React.useState<VisualProofHandoff | undefined>(() => {
     const routeHandoff = (
@@ -232,6 +235,23 @@ export default function LocalClassicLevel() {
     typeof visualHandoff.proofBody === 'string'
       ? visualHandoff.proofBody
       : ''
+
+  const sendLevelStartTelemetry = React.useCallback(() => {
+    if (telemetryStartSent.current) return
+    const queued = sendTelemetry({
+      event_type: 'level_start',
+      game_id: gameId,
+      world_id: worldId,
+      level_id: levelId,
+      attempt_uuid: attemptId,
+      mode: 'classic',
+      sequence: telemetrySequence.current,
+      elapsed_ms: Date.now() - telemetryStartedAt,
+      initial_script: handedOffProof,
+      source_attempt_uuid: visualHandoff?.sourceAttemptId,
+    })
+    if (queued) telemetryStartSent.current = true
+  }, [attemptId, gameId, handedOffProof, levelId, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
 
   const [proofBody, setProofBody] = React.useState(handedOffProof)
   const [proof, setProof] = React.useState<ProofState>(emptyProof)
@@ -269,6 +289,7 @@ export default function LocalClassicLevel() {
     telemetryAcceptedProof.current = handedOffProof
     telemetryStarted.current = false
     telemetryCompleted.current = false
+    telemetryStartSent.current = false
     telemetrySequence.current = 0
     preserveRejectedError.current = false
     setProofBody(handedOffProof)
@@ -281,25 +302,20 @@ export default function LocalClassicLevel() {
       setProof(next)
       setReady(true)
       telemetryStarted.current = true
-      sendTelemetry({
-        event_type: 'level_start',
-        game_id: gameId,
-        world_id: worldId,
-        level_id: levelId,
-        attempt_uuid: attemptId,
-        mode: 'classic',
-        sequence: telemetrySequence.current,
-        elapsed_ms: Date.now() - telemetryStartedAt,
-        initial_script: handedOffProof,
-        source_attempt_uuid: visualHandoff?.sourceAttemptId,
-      })
+      sendLevelStartTelemetry()
     }, reason => {
       if (active) setError(String(reason))
     }).finally(() => {
       if (active) setChecking(false)
     })
     return () => { active = false }
-  }, [attemptId, client, gameId, handedOffProof, levelId, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
+  }, [attemptId, client, gameId, handedOffProof, levelId, sendLevelStartTelemetry, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
+
+  React.useEffect(() => {
+    if (ready && telemetryConsent.consentState === 'accepted') {
+      sendLevelStartTelemetry()
+    }
+  }, [ready, sendLevelStartTelemetry, telemetryConsent.consentState])
 
   React.useEffect(() => {
     setShowLoadingChrome(false)
@@ -398,16 +414,20 @@ export default function LocalClassicLevel() {
   const loadingLevelTitle = `${mobile ? '' : 'Level'} ${levelId} / ${loadingWorldSize}` +
     (level.data?.title ? ` : ${level.data.title}` : '')
 
-  if (!level.data || !game.data || !ready) {
-    const loadingProgress = !level.data || !game.data
-      ? { value: 8, message: 'Loading game and level information…' }
-      : leanLoadingProgress
+  const contentReady = Boolean(level.data && game.data && ready)
+  if (!level.data || !game.data || !ready || telemetryConsent.shouldHold) {
+    const loadingProgress = contentReady
+      ? { value: 100, message: 'Complete' }
+      : !level.data || !game.data
+        ? { value: 8, message: 'Loading game and level information…' }
+        : leanLoadingProgress
     return <ClassicLoadingScreen
       worldTitle={game.data?.worlds.nodes[worldId]?.title}
       levelTitle={loadingLevelTitle}
       showChrome={showLoadingChrome}
       message={loadingProgress.message}
       progress={loadingProgress.value}
+      telemetryConsent={telemetryConsent}
     />
   }
 

@@ -17,6 +17,7 @@ interface HypCardProps {
   clickTooltip?: string
   isTransformable?: boolean
   isConstructable?: boolean
+  constructOnSingleClick?: boolean
   animateMove?: boolean
   iffDirection?: IffDirection
   onClickAction?: () => void
@@ -35,6 +36,7 @@ export function HypCard({
   clickTooltip,
   isTransformable = false,
   isConstructable = false,
+  constructOnSingleClick = false,
   animateMove = false,
   iffDirection = 'forward',
   onClickAction,
@@ -103,6 +105,12 @@ export function HypCard({
   }, [])
 
   function handleClick() {
+    if (constructOnSingleClick && onDoubleClick) {
+      if (clickTimeoutRef.current !== null) window.clearTimeout(clickTimeoutRef.current)
+      clickTimeoutRef.current = null
+      onDoubleClick()
+      return
+    }
     if (!onClickAction) return
     if (onDoubleClick) {
       if (clickTimeoutRef.current !== null) {
@@ -134,9 +142,10 @@ export function HypCard({
       data-hyp-id={card.id}
       data-hyp-name={hypName}
       data-hyp-type={hypType}
+      data-constructable={String(isConstructable)}
       style={style}
       className={classes}
-      onClick={isInteractive && isClickable && !isDragging ? handleClick : undefined}
+      onClick={isInteractive && (isClickable || constructOnSingleClick) && !isDragging ? handleClick : undefined}
       onDoubleClick={isInteractive && (isTransformable || isConstructable) && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}

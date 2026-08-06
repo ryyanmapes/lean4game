@@ -4071,8 +4071,9 @@ export function VisualCanvas({
 
   function renderHypCard(card: HypCardType) {
     const clickAction = card.hyp.clickAction
-    const isClickable = hasClickAction(clickAction)
     const isConstructable = hypIsConstructable(card)
+    const opensConstructionOnTap = isPhonePortrait && isConstructable
+    const isClickable = hasClickAction(clickAction) || opensConstructionOnTap
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
     return (
       <HypCard
@@ -4089,7 +4090,12 @@ export function VisualCanvas({
         clickTooltip={clickAction?.tooltip}
         isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
         isConstructable={streamInteractionsEnabled && isConstructable}
-        onClickAction={streamInteractionsEnabled && isClickable && displayStream ? () => handleHypClick(displayStream.id, card.id, clickAction) : undefined}
+        constructOnSingleClick={streamInteractionsEnabled && opensConstructionOnTap}
+        onClickAction={streamInteractionsEnabled && isClickable && displayStream
+          ? opensConstructionOnTap
+            ? () => handleHypDoubleClick(displayStream.id, card.id)
+            : () => handleHypClick(displayStream.id, card.id, clickAction)
+          : undefined}
         onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
           ? () => handleHypDoubleClick(displayStream.id, card.id)
           : undefined}
@@ -4348,7 +4354,7 @@ export function VisualCanvas({
                         onClick={() => void handleGoalChoice(goalChoiceMenu.goalId, option.playTactic)}
                       >
                         <span className="or-tooltip-label">{option.label}</span>
-                        <span className="proposition">{option.previewText ?? option.label}</span>
+                        <span className="proposition">{formatFormulaText(option.previewText ?? option.label)}</span>
                       </button>
                     </React.Fragment>
                   ))}

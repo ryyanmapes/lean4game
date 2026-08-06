@@ -44,9 +44,14 @@ function isIntegerTheorem(theorem: PropositionTheorem): boolean {
   return theorem.theoremName.startsWith('MyInt.') || hasIntegerNotation(theorem.proposition)
 }
 
+function theoremCardSizeClass(theorem: PropositionTheorem): string {
+  const contentLength = `${theorem.label} ${theorem.proposition} ${theorem.forallFooter ?? ''}`.length
+  return contentLength > 54 ? ' theorem-card-compact' : contentLength > 38 ? ' theorem-card-snug' : ''
+}
+
 export function PropositionTheoremPreviewCard({ theorem, iffDirection }: { theorem: PropositionTheorem; iffDirection?: IffDirection }) {
   return (
-    <div className={`statement-card theorem-copy-card theorem-overlay-card${theorem.forallFooter ? ' has-forall-footer' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}`}>
+    <div className={`statement-card theorem-copy-card theorem-overlay-card${theorem.forallFooter ? ' has-forall-footer' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${theoremCardSizeClass(theorem)}`}>
       <PropositionTheoremContent theorem={theorem} iffDirection={iffDirection} />
     </div>
   )
@@ -74,7 +79,7 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDouble
       data-testid="theorem-tray-card"
       data-theorem-name={theorem.theoremName}
       style={style}
-      className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${emphasized ? ' visual-emphasize' : ''}`}
+      className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${theoremCardSizeClass(theorem)}${emphasized ? ' visual-emphasize' : ''}`}
       onDoubleClick={!isDragging ? onDoubleClick : undefined}
       onContextMenu={onContextMenu}
       {...listeners}
@@ -125,6 +130,7 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirecti
     isOver && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
     isIntegerTheorem(copy.theorem) ? 'int-theorem' : '',
+    theoremCardSizeClass(copy.theorem),
   ].filter(Boolean).join(' ')
 
   return (

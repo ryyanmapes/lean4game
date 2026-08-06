@@ -25,6 +25,7 @@ test('proposition theorems keep propositional binders in the body and numeric bi
   assert.deepEqual(display.forallSpecification, {
     varName: 'a',
     body: `${FORALL} (b : ${NAT}), succ a = succ b ${IMPLIES} a = b`,
+    isImplicit: false,
   })
 })
 
@@ -34,6 +35,7 @@ test('equality theorems only unpack one grouped forall binder at a time', () => 
   assert.deepEqual(display.forallSpecification, {
     varName: 'a',
     body: `${FORALL} (b : ${NAT}), a + b = b + a`,
+    isImplicit: false,
   })
 })
 
@@ -47,6 +49,7 @@ test('order hypotheses render as implication premises instead of forall binders'
   assert.deepEqual(display.forallSpecification, {
     varName: 'x',
     body: `${FORALL} (y : ${NAT}) (z : ${NAT}), x ${LE} y ${IMPLIES} y ${LE} z ${IMPLIES} x ${LE} z`,
+    isImplicit: false,
   })
 })
 
@@ -72,6 +75,7 @@ test('function-valued binders stay in the forall footer instead of becoming impl
   assert.deepEqual(display.forallSpecification, {
     varName: 'ε',
     body: `${FORALL} (a : ${NAT} ${IMPLIES} ${RAT}), ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
+    isImplicit: false,
   })
 })
 
@@ -88,6 +92,7 @@ test('proposition theorems can end in equalities while keeping value binders in 
   assert.deepEqual(display.forallSpecification, {
     varName: 'x',
     body: `${FORALL} (y : ${REAL}), x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
+    isImplicit: false,
   })
 })
 
@@ -99,6 +104,7 @@ test('workspace cards can reconstruct the next specification step from displayed
   assert.deepEqual(firstStep, {
     varName: 'a',
     body: `${FORALL} (b : ${NAT}), succ a = succ b ${IMPLIES} a = b`,
+    isImplicit: false,
   })
 
   const secondStep = buildForallSpecificationFromDisplay(
@@ -108,5 +114,17 @@ test('workspace cards can reconstruct the next specification step from displayed
   assert.deepEqual(secondStep, {
     varName: 'b',
     body: `succ chosen = succ b ${IMPLIES} chosen = b`,
+    isImplicit: false,
   })
+})
+
+test('runtime forall hypotheses can be specified without a separate footer', () => {
+  assert.deepEqual(
+    buildForallSpecificationFromDisplay(`${FORALL} (y : ${NAT}), d ${LE} y ∨ y ${LE} d`),
+    {
+      varName: 'y',
+      body: `d ${LE} y ∨ y ${LE} d`,
+      isImplicit: false,
+    },
+  )
 })
