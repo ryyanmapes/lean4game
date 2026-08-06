@@ -539,10 +539,15 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     : visibleWorldIds.find(worldId => completed[worldId]?.slice(1).some(done => !done))
       ?? visibleWorldIds[0]
 
+  const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   let R = 1.1 * r / Math.sin(Math.PI / (NMAX + 1))
   const padding = R + 2.1 * r
   // Extra horizontal space so tooltips on edge-of-map levels aren't clipped.
-  const hPadding = padding + 250
+  // Phones have no hover tooltip and should fit the complete graph width.
+  // Keep just enough room for the outer level orbit on phone. Reusing the
+  // desktop padding here makes the fitted graph's touch targets unnecessarily
+  // small even though phones never display the hover tooltip.
+  const hPadding = isPhonePortraitViewport ? R + 1.2 * r : padding + 250
 
   // Tooltip rendered last so it appears above all other SVG elements.
   if (levelTooltip) {
@@ -568,18 +573,12 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   }
 
   const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
-  const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
-  // Phone portrait uses the natural SVG scale. Larger multipliers make the
-  // initial centered view feel zoomed into one column instead of showing the
-  // surrounding branches.
-  const phoneMapScale = 1.75
-  const phoneMapMinViewportScale = 1.75
-  // Desktop/tablet fill width by adding viewBox padding. Phone portrait should instead scale
-  // the map itself so the world nodes remain tappable and the page scrolls vertically.
+  // Phone portrait fits the entire graph width into one fixed horizontal span;
+  // navigation is vertical-only. Desktop/tablet retain their fill-width view.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
     ? isPhonePortraitViewport
-      ? Math.max(naturalSvgDisplayWidth * phoneMapScale, viewportSize.width * phoneMapMinViewportScale)
+      ? Math.max(0, viewportSize.width - 32)
       : Math.max(naturalSvgDisplayWidth, viewportSize.width)
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
@@ -607,7 +606,9 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     // bounding-box centre is not the visual centre of the world itself.
     const targetRect = (target.querySelector<SVGGraphicsElement>('.world-circle') ?? target)
       .getBoundingClientRect()
-    scrollEl.scrollLeft += targetRect.left + targetRect.width / 2 - (scrollRect.left + scrollRect.width / 2)
+    // Horizontal placement is fixed: the fitted SVG always shows the complete
+    // graph width, so only move to the requested world's vertical position.
+    scrollEl.scrollLeft = 0
     scrollEl.scrollTop += targetRect.top + targetRect.height / 2 - (scrollRect.top + scrollRect.height / 2)
     scrollEl.dataset.focusWorld = focusWorldId
     return true

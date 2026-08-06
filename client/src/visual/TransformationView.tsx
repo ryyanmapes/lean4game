@@ -10,6 +10,7 @@ import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
+import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
 
 export interface EqualityHyp {
@@ -191,16 +192,16 @@ interface Props {
   onClose: () => void
   /** Number of rewrite steps applied in this transformation session (incremented by parent on each rewrite). */
   rewriteStepCount: number
-  /** Controlled reverse mode — lifted to parent so it survives remounts between rewrites. */
+  /** Controlled reverse mode — lifted to parent so it survives target changes. */
   isReverse: boolean
   onIsReverseChange: (v: boolean) => void
-  /** Controlled working side — lifted to parent so it survives remounts between rewrites. */
+  /** Controlled working side — lifted to parent so it survives target changes. */
   workingSide: 'left' | 'right'
   onWorkingSideChange: (v: 'left' | 'right') => void
-  /** Controlled selected tab — lifted to parent so it survives remounts between rewrites. */
+  /** Controlled selected tab — lifted to parent so it survives target changes. */
   selectedTab: string
   onSelectedTabChange: (v: string) => void
-  /** Remembered desired page per tab — lifted to parent so rewrites/remounts preserve it. */
+  /** Remembered desired page per tab — lifted to parent so target changes preserve it. */
   pageIndexByTab: Record<string, number>
   onPageIndexChange: (tabId: string, pageIndex: number) => void
   /** Optional header bar rendered at the top of the overlay. */
@@ -240,7 +241,7 @@ export function TransformationView({
   const [pageWidth, setPageWidth] = useState(() =>
     typeof window === 'undefined' ? 0 : Math.max(0, window.innerWidth - (isPhonePortrait ? 96 : 160))
   )
-  const [maxCardWidthsByTab, setMaxCardWidthsByTab] = useState<Record<string, number>>({})
+  const [cardWidthsByTab, setCardWidthsByTab] = useState<Record<string, Record<string, number>>>({})
   const [ruleDockHeight, setRuleDockHeight] = useState(0)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
@@ -327,19 +328,28 @@ export function TransformationView({
     return allRules.filter(r => r.dragId.startsWith('thm_') && r.category === selectedTab)
   }, [allRules, selectedTab])
 
-  // Use the widest rendered card seen for the current tab so pagination stays stable
-  // when reverse-mode text is narrower than forward-mode text.
+  // Track cards independently so each page can hold as many of its own cards
+  // as fit, rather than inheriting the width of the tab's widest theorem.
   useLayoutEffect(() => {
     const el = pageRef.current
     if (!el) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
     if (!cards.length) return
-    const max = cards.reduce((widest, card) => Math.max(widest, card.offsetWidth), 0)
-    setMaxCardWidthsByTab(prev => {
-      const prevMax = prev[selectedTab] ?? 0
-      const nextMax = Math.max(prevMax, max)
-      if (Math.abs(nextMax - prevMax) <= 0.5) return prev
-      return { ...prev, [selectedTab]: nextMax }
+    setCardWidthsByTab(prev => {
+      const previous = prev[selectedTab] ?? {}
+      const next = { ...previous }
+      let changed = false
+      cards.forEach(card => {
+        const id = card.dataset.ruleId
+        if (!id) return
+        const width = card.getBoundingClientRect().width
+        if (Math.abs((next[id] ?? 0) - width) > 0.5) {
+          next[id] = width
+          changed = true
+        }
+      })
+      if (!changed) return prev
+      return { ...prev, [selectedTab]: next }
     })
   }, [tabRules, selectedTab, isReverse, pageWidth, pageIndexByTab])
 
@@ -362,23 +372,17 @@ export function TransformationView({
   }, [selectedTab, tabRules.length, isProcessing])
 
   const GAP_PX = 12
-  const maxCardPx = maxCardWidthsByTab[selectedTab] ?? 0
   const hasRules = tabRules.length > 0
-  const estimatedCardPx = isPhonePortrait
-    ? Math.min(288, Math.max(180, pageWidth))
-    : 320
-  const paginationCardPx = maxCardPx > 0 ? maxCardPx : estimatedCardPx
-  const itemsPerPage = isPhonePortrait
-    ? 1
-    : (
-        (pageWidth > 0 && hasRules)
-          ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (paginationCardPx + GAP_PX)))
-          : 1
-      )
+  const measuredWidths = cardWidthsByTab[selectedTab] ?? {}
+  const hasMeasurements = tabRules.some(rule => measuredWidths[rule.dragId] > 0)
+  const pages = hasMeasurements
+    ? packAdaptivePages(tabRules.map(rule => measuredWidths[rule.dragId] ?? pageWidth), pageWidth, GAP_PX)
+    : [{ start: 0, end: tabRules.length }]
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
-  const totalPages = Math.max(1, Math.ceil(tabRules.length / itemsPerPage))
+  const totalPages = pages.length
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
-  const pageItems = tabRules.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageRange = pages[clampedPage] ?? { start: 0, end: 0 }
+  const pageItems = tabRules.slice(pageRange.start, pageRange.end)
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
     totalPages,
@@ -397,8 +401,8 @@ export function TransformationView({
     return acc
   }, [])
   const emphVisibleNow = pageItems.some(r => isEmphasizedRule(r))
-  const emphOnPrevPage = !emphVisibleNow && emphIndexesInTab.some(i => i < clampedPage * itemsPerPage)
-  const emphOnNextPage = !emphVisibleNow && emphIndexesInTab.some(i => i >= (clampedPage + 1) * itemsPerPage)
+  const emphOnPrevPage = !emphVisibleNow && emphIndexesInTab.some(i => i < pageRange.start)
+  const emphOnNextPage = !emphVisibleNow && emphIndexesInTab.some(i => i >= pageRange.end)
 
   const workingExpr = workingSide === 'right' ? rhs : lhs
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
@@ -722,8 +726,8 @@ export function TransformationView({
       node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
     )
 
-    // Send to Lean — it is the final arbiter. Visual update comes from remount
-    // with the fresh Lean state (TransformationView key changes on each rewrite).
+    // Send to Lean — it is the final arbiter. Keep the overlay mounted and
+    // update only the rewritten expression after Lean accepts the action.
     setIsProcessing(true)
     const rewrittenExpr = isThm
       ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)

@@ -1,4 +1,5 @@
-const NNG4_ADDITION_LEVEL1 = '/#/g/local/NNG4/world/Addition/level/1/visual'
+const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
+const NNG4_ADDITION_LEVEL1 = `${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`
 const LOAD_TIMEOUT = 600000
 
 interface VisualTestHarness {
@@ -218,7 +219,13 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     visualHarness().then(harness => harness.openGoalTransform())
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
-    visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
+    cy.get('.visual-page.tr-transformation-overlay').then($overlay => {
+      const originalOverlay = $overlay[0]!
+      visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
+      cy.get('.visual-page.tr-transformation-overlay').should($nextOverlay => {
+        expect($nextOverlay[0], 'rewrite does not remount and flash the overlay').to.equal(originalOverlay)
+      })
+    })
 
     visualHarness().then(harness => harness.getTransformStatus()).then(status => {
       expect(status.isOpen).to.equal(true)

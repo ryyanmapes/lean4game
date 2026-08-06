@@ -27,6 +27,7 @@ import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
+import { packAdaptivePages } from './adaptivePagination'
 import {
   cloneProofTree,
   collectActiveStreamIds,
@@ -1233,7 +1234,7 @@ function TheoremTray({
 
   const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
   const [pageWidth, setPageWidth] = useState(0)
-  const [maxCardPxByTab, setMaxCardPxByTab] = useState<Partial<Record<TrayTab, number>>>({})
+  const [cardWidthsByTab, setCardWidthsByTab] = useState<Partial<Record<TrayTab, Record<string, number>>>>({})
   const dockCardsRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
 
@@ -1256,29 +1257,44 @@ function TheoremTray({
     return () => observer.disconnect()
   }, [hasTray])
 
-  // Use max card width (not average) so no card ever overflows the page.
+  // Remember each rendered width independently so small cards can share a
+  // page even when the same tab also contains a much wider card.
   useLayoutEffect(() => {
     const el = pageRef.current
     if (!el || !visibleTab) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.statement-card'))
     if (!cards.length) return
-    const max = cards.reduce((m, c) => Math.max(m, c.offsetWidth), 0)
-    setMaxCardPxByTab(prev => {
-      const prevMax = prev[visibleTab] ?? 0
-      if (Math.abs(max - prevMax) <= 0.5) return prev
-      return { ...prev, [visibleTab]: max }
+    setCardWidthsByTab(prev => {
+      const previous = prev[visibleTab] ?? {}
+      const next = { ...previous }
+      let changed = false
+      cards.forEach(card => {
+        const id = (card.dataset.ruleId ?? card.id)
+          .replace(/^visual_tactic_/, '')
+          .replace(/^theorem_template_/, '')
+        if (!id) return
+        const width = card.getBoundingClientRect().width
+        if (Math.abs((next[id] ?? 0) - width) > 0.5) {
+          next[id] = width
+          changed = true
+        }
+      })
+      if (!changed) return prev
+      return { ...prev, [visibleTab]: next }
     })
-  }, [items, visibleTab])
+  }, [items, pageWidth, visibleTab])
 
   const GAP_PX = 12
-  const maxCardPx = visibleTab ? (maxCardPxByTab[visibleTab] ?? 0) : 0
-  const itemsPerPage = pageWidth > 0 && maxCardPx > 0
-    ? Math.max(1, Math.floor((pageWidth + GAP_PX) / (maxCardPx + GAP_PX)))
-    : Math.max(1, items.length)
-  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage))
+  const measuredWidths = visibleTab ? (cardWidthsByTab[visibleTab] ?? {}) : {}
+  const hasMeasurements = items.some(item => measuredWidths[item.id] > 0)
+  const pages = hasMeasurements
+    ? packAdaptivePages(items.map(item => measuredWidths[item.id] ?? pageWidth), pageWidth, GAP_PX)
+    : [{ start: 0, end: items.length }]
+  const totalPages = pages.length
   const desiredPage = visibleTab ? (pageIndexByTab[visibleTab] ?? 0) : 0
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
-  const pageItems = items.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageRange = pages[clampedPage] ?? { start: 0, end: 0 }
+  const pageItems = items.slice(pageRange.start, pageRange.end)
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
     totalPages,
@@ -1303,8 +1319,8 @@ function TheoremTray({
     return acc
   }, [])
   const emphVisibleNow = pageItems.some(item => isEmphasized(item))
-  const emphOnPrevPage = !emphVisibleNow && emphIndexes.some(i => i < clampedPage * itemsPerPage)
-  const emphOnNextPage = !emphVisibleNow && emphIndexes.some(i => i >= (clampedPage + 1) * itemsPerPage)
+  const emphOnPrevPage = !emphVisibleNow && emphIndexes.some(i => i < pageRange.start)
+  const emphOnNextPage = !emphVisibleNow && emphIndexes.some(i => i >= pageRange.end)
 
   return (
     <div
@@ -3031,8 +3047,8 @@ export function VisualCanvas({
     } else {
       setTransformTarget(null)
     }
-    // Increment version to force TransformationView remount with fresh props even
-    // when the stream id is unchanged (rw often keeps the same mvarId).
+    // Track accepted rewrites for undo availability without remounting the
+    // transformation overlay (which caused a full-screen flash on mobile).
     setTransformationVersion(v => v + 1)
 
     return { success: true, completed: false }
@@ -3302,10 +3318,18 @@ export function VisualCanvas({
           x: sourceCenter.x,
           y: trayRect ? Math.max(72, trayRect.top - 8) : sourceRect.top,
         }
-        const end = {
-          x: targetRect.right + 14,
-          y: targetRect.top + targetRect.height / 2,
-        }
+        // On a narrow portrait screen, terminate below the hypothesis. A
+        // side target can visually run into the goal above and make the guide
+        // look as though induction should be dragged to the goal instead.
+        const end = isPhonePortrait
+          ? {
+              x: targetRect.left + targetRect.width / 2,
+              y: targetRect.bottom + 14,
+            }
+          : {
+              x: targetRect.right + 14,
+              y: targetRect.top + targetRect.height / 2,
+            }
         const midpoint = {
           x: (start.x + end.x) / 2,
           y: (start.y + end.y) / 2,
@@ -4352,7 +4376,7 @@ export function VisualCanvas({
             />
             {tacticHypGuides.map((guide, index) => (
               <React.Fragment key={`${guide.info.tactic}-${guide.info.hyp}-${index}`}>
-                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
+                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow tactic-hyp-instruction-arrow" />
                 <div className="visual-info-callout combining-info tactic-hyp-info" style={guide.style}>
                   <VisualInfoText text={guide.info.text} />
                 </div>
@@ -4530,7 +4554,7 @@ export function VisualCanvas({
       {/* Transformation overlay — outside the canvas DndContext to avoid nesting */}
       {transformProps && (
         <TransformationView
-          key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}-${transformationVersion}`}
+          key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}`}
           style={visualPageStyle}
           relation={transformProps.relation}
           goalLhsStr={transformProps.goalLhsStr}

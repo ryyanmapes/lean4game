@@ -1,7 +1,9 @@
-const VISUALTEST_LEVEL2 = '/#/g/local/VisualTest/world/Prototype/level/2/visual'
+const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
+const VISUALTEST_LEVEL2 = `${mountPath}#/g/local/VisualTest/world/Prototype/level/2/visual`
 const VISUALTEST_LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 120000)
 
 interface VisualTestHarness {
+  clickGoal(playTactic?: string): Promise<void>
   dragHypToGoal(hypName: string): Promise<void>
   dragHypToHyp(sourceName: string, targetName: string): Promise<void>
   clickHyp(hypName: string): Promise<void>
@@ -64,7 +66,7 @@ function playLogEntries() {
 }
 
 function clickGoal() {
-  goalCard().click()
+  return visualHarness().then(harness => harness.clickGoal())
 }
 
 function lastPlayTacticShouldBe(playTactic: string) {
@@ -227,7 +229,9 @@ describe('VisualTest Level 2', () => {
 
   it('defers goal rotation until an action is made on the browsed branch', () => {
     clickGoal()
+    hypCard('h').should('be.visible')
     clickGoal()
+    hypCard('h1').should('be.visible')
     clickGoal()
     streamLabelShouldBe(1, 2)
 
@@ -244,7 +248,7 @@ describe('VisualTest Level 2', () => {
       cy.get('.proof-sidebar-step-text').should('have.length', stepCountBeforeBrowse)
       clickHypViaHarness('h1')
 
-      cy.get('.proof-sidebar-step-text').then(lines => {
+      cy.get('.proof-sidebar-step-text').should(lines => {
         const proof = [...lines].map(line => line.textContent?.trim())
         expect(proof.filter(line => line === 'rotate_left')).to.have.length(1)
         expect(proof.at(-2)).to.equal('rotate_left')
@@ -252,7 +256,7 @@ describe('VisualTest Level 2', () => {
       })
 
       cy.contains('.proof-sidebar-mode-btn', 'Core').click()
-      cy.get('.proof-sidebar-step-text').then(lines => {
+      cy.get('.proof-sidebar-step-text').should(lines => {
         const proof = [...lines].map(line => line.textContent?.trim())
         expect(proof.filter(line => line === 'rotate_left')).to.have.length(1)
         expect(proof.at(-2)).to.equal('rotate_left')

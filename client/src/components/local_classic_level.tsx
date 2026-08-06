@@ -18,6 +18,7 @@ import { store } from '../state/store'
 import { LocalWasmRpcClient } from '../visual/localWasmRpcClient'
 import { useLeanLoadingProgress } from '../visual/useLeanLoadingProgress'
 import { ClassicLoadingScreen } from './classic_loading_screen'
+import { createTelemetryId, sendTelemetry } from '../utils/telemetry'
 import { LevelAppBar } from './app_bar'
 import {
   DeletedChatContext,
@@ -48,13 +49,36 @@ type VisualProofHandoff = {
   levelId?: number
   proofBody?: string
   openInEditor?: boolean
+  sourceAttemptId?: string
+}
+
+function proofEdit(previous: string, next: string) {
+  const before = previous ? previous.split(/\r?\n/u) : []
+  const after = next ? next.split(/\r?\n/u) : []
+  let prefix = 0
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++
+  let suffix = 0
+  while (
+    suffix < before.length - prefix &&
+    suffix < after.length - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  ) suffix++
+  return {
+    fromLine: prefix,
+    removedLines: before.length - prefix - suffix,
+    inserted: after.slice(prefix, after.length - suffix).join('\n'),
+  }
 }
 
 function rejectedCommandMessage(proofBody: string, detail: string) {
   const command = proofBody.split(/\r?\n/u).map(line => line.trim()).filter(Boolean).at(-1) ?? ''
+  const syntaxHint = /^rw\s+(?!\[)/u.test(command) && !/expected\s+['`]\[['`]/u.test(detail)
+    ? "unexpected identifier; expected '['"
+    : ''
+  const diagnostic = [syntaxHint, detail].filter(Boolean).join('\n\n')
   return command
-    ? `Failed command\n: ${command}\n\n${detail || 'Lean rejected the command.'}`
-    : detail || 'Lean rejected the proof.'
+    ? `Failed command\n: ${command}\n\n${diagnostic || 'Lean rejected the command.'}`
+    : diagnostic || 'Lean rejected the proof.'
 }
 
 function LocalExercisePanel({
@@ -173,6 +197,11 @@ export default function LocalClassicLevel() {
   const dispatch = useAppDispatch()
   const worldId = params.worldId ?? ''
   const levelId = Number(params.levelId ?? 1)
+  const attemptId = React.useMemo(() => createTelemetryId(), [gameId, worldId, levelId])
+  const telemetryStartedAt = React.useMemo(() => Date.now(), [attemptId])
+  const telemetrySequence = React.useRef(0)
+  const telemetryStarted = React.useRef(false)
+  const telemetryCompleted = React.useRef(false)
   const level = useLoadLevelQuery({ game: gameId, world: worldId, level: levelId })
   const game = useGetGameInfoQuery({ game: gameId })
   const client = React.useMemo(() => new LocalWasmRpcClient(gameId, worldId, levelId), [gameId])
@@ -219,6 +248,7 @@ export default function LocalClassicLevel() {
   const [pageNumber, setPageNumber] = React.useState(0)
   const [showLoadingChrome, setShowLoadingChrome] = React.useState(false)
   const acceptedProofBody = React.useRef('')
+  const telemetryAcceptedProof = React.useRef(handedOffProof)
   const preserveRejectedError = React.useRef(false)
 
   const typewriterMode = useSelector(selectTypewriterMode(gameId))
@@ -236,6 +266,10 @@ export default function LocalClassicLevel() {
   React.useEffect(() => {
     let active = true
     acceptedProofBody.current = ''
+    telemetryAcceptedProof.current = handedOffProof
+    telemetryStarted.current = false
+    telemetryCompleted.current = false
+    telemetrySequence.current = 0
     preserveRejectedError.current = false
     setProofBody(handedOffProof)
     setCommandInput('')
@@ -246,13 +280,26 @@ export default function LocalClassicLevel() {
       if (!active) return
       setProof(next)
       setReady(true)
+      telemetryStarted.current = true
+      sendTelemetry({
+        event_type: 'level_start',
+        game_id: gameId,
+        world_id: worldId,
+        level_id: levelId,
+        attempt_uuid: attemptId,
+        mode: 'classic',
+        sequence: telemetrySequence.current,
+        elapsed_ms: Date.now() - telemetryStartedAt,
+        initial_script: handedOffProof,
+        source_attempt_uuid: visualHandoff?.sourceAttemptId,
+      })
     }, reason => {
       if (active) setError(String(reason))
     }).finally(() => {
       if (active) setChecking(false)
     })
     return () => { active = false }
-  }, [client, handedOffProof, worldId, levelId])
+  }, [attemptId, client, gameId, handedOffProof, levelId, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
 
   React.useEffect(() => {
     setShowLoadingChrome(false)
@@ -273,8 +320,27 @@ export default function LocalClassicLevel() {
         const next = await client.sendProofUpdate(proofBody)
         if (!active) return
         if (next) {
+          const previousAccepted = telemetryAcceptedProof.current
           acceptedProofBody.current = proofBody
+          telemetryAcceptedProof.current = proofBody
           setProof(next)
+          if (telemetryStarted.current && proofBody !== previousAccepted) {
+            const edit = proofEdit(previousAccepted, proofBody)
+            sendTelemetry({
+              event_type: 'proof_step',
+              game_id: gameId,
+              world_id: worldId,
+              level_id: levelId,
+              attempt_uuid: attemptId,
+              mode: 'classic',
+              sequence: ++telemetrySequence.current,
+              elapsed_ms: Date.now() - telemetryStartedAt,
+              step_type: 'edit',
+              from_line: edit.fromLine,
+              removed_lines: edit.removedLines,
+              command: edit.inserted,
+            })
+          }
           if (keepRejectedError) preserveRejectedError.current = false
         } else {
           const detail = client.getLastProofError()
@@ -296,7 +362,7 @@ export default function LocalClassicLevel() {
       active = false
       window.clearTimeout(timer)
     }
-  }, [client, proofBody, ready, typewriterMode])
+  }, [attemptId, client, gameId, levelId, proofBody, ready, telemetryStartedAt, typewriterMode, worldId])
 
   React.useEffect(() => {
     if (!proof.completed || !level.data) return
@@ -312,7 +378,21 @@ export default function LocalClassicLevel() {
       game: gameId,
       inventory: [...inventory, ...unlocked].filter((item, index, all) => all.indexOf(item) === index),
     }))
-  }, [dispatch, gameId, level.data, levelId, proof.completed, worldId])
+    if (!telemetryCompleted.current) {
+      telemetryCompleted.current = true
+      sendTelemetry({
+        event_type: 'level_complete',
+        game_id: gameId,
+        world_id: worldId,
+        level_id: levelId,
+        attempt_uuid: attemptId,
+        mode: 'classic',
+        sequence: ++telemetrySequence.current,
+        elapsed_ms: Date.now() - telemetryStartedAt,
+        lean_script: acceptedProofBody.current,
+      })
+    }
+  }, [attemptId, dispatch, gameId, level.data, levelId, proof.completed, telemetryStartedAt, worldId])
 
   const loadingWorldSize = game.data?.worldSize?.[worldId] ?? levelId
   const loadingLevelTitle = `${mobile ? '' : 'Level'} ${levelId} / ${loadingWorldSize}` +

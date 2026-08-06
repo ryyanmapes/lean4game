@@ -17,9 +17,9 @@ export function TelemetryConsent() {
   return (
     <div className="telemetry-banner" role="dialog" aria-label="Anonymous usage statistics">
       <p className="telemetry-banner-text">
-        Help us improve the games by sharing anonymous usage statistics (level
+        Help us improve the games by sharing pseudonymous usage statistics (level
         starts, completions, proof steps, and undo actions). No personal data is
-        collected. See our{' '}
+        requested; proof commands are included. See our{' '}
         <a
           className="telemetry-banner-link"
           onClick={(e) => { e.preventDefault(); setPopup(PopupType.privacy) }}

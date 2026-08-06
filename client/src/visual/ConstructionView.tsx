@@ -6,6 +6,7 @@ import {
 } from '@dnd-kit/core'
 import { formatFormulaText } from './expr-engine'
 import { useSwipePaging } from './useSwipePaging'
+import { packAdaptivePages } from './adaptivePagination'
 
 // ── Construction term types ───────────────────────────────────────────────────
 
@@ -213,6 +214,7 @@ function BrickCard({ brickId, label, disabled, onClick }: {
   return (
     <button
       ref={setNodeRef}
+      data-brick-id={brickId}
       className={`cn-brick${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
@@ -268,7 +270,7 @@ export function ConstructionView({
   const [doneError, setDoneError] = useState(false)
   const [activeBrickId, setActiveBrickId] = useState<string | null>(null)
   const [pageWidth, setPageWidth] = useState(0)
-  const [maxBrickWidthsByTab, setMaxBrickWidthsByTab] = useState<Partial<Record<CnTab, number>>>({})
+  const [brickWidthsByTab, setBrickWidthsByTab] = useState<Partial<Record<CnTab, Record<string, number>>>>({})
   const [pageIndexByTab, setPageIndexByTab] = useState<Partial<Record<CnTab, number>>>({})
   const pageRef = useRef<HTMLDivElement>(null)
   const formattedGoalBody = formatFormulaText(goalBody)
@@ -396,25 +398,36 @@ export function ConstructionView({
     if (!el) return
     const bricks = Array.from(el.querySelectorAll<HTMLElement>('.cn-brick'))
     if (!bricks.length) return
-    const max = bricks.reduce((widest, brick) => Math.max(widest, brick.offsetWidth), 0)
-    setMaxBrickWidthsByTab(prev => {
-      const prevMax = prev[selectedTab] ?? 0
-      const nextMax = Math.max(prevMax, max)
-      if (Math.abs(nextMax - prevMax) <= 0.5) return prev
-      return { ...prev, [selectedTab]: nextMax }
+    setBrickWidthsByTab(prev => {
+      const previous = prev[selectedTab] ?? {}
+      const next = { ...previous }
+      let changed = false
+      bricks.forEach(brick => {
+        const id = brick.dataset.brickId
+        if (!id) return
+        const width = brick.getBoundingClientRect().width
+        if (Math.abs((next[id] ?? 0) - width) > 0.5) {
+          next[id] = width
+          changed = true
+        }
+      })
+      if (!changed) return prev
+      return { ...prev, [selectedTab]: next }
     })
   }, [displayedBricks, selectedTab, pageWidth, pageIndexByTab])
 
   const BRICK_GAP_PX = 12
-  const maxBrickPx = maxBrickWidthsByTab[selectedTab] ?? 0
   const hasBricks = displayedBricks.length > 0
-  const itemsPerPage = (pageWidth > 0 && maxBrickPx > 0)
-    ? Math.max(1, Math.floor((pageWidth + BRICK_GAP_PX) / (maxBrickPx + BRICK_GAP_PX)))
-    : Math.max(1, displayedBricks.length)
+  const measuredWidths = brickWidthsByTab[selectedTab] ?? {}
+  const hasMeasurements = displayedBricks.some(brick => measuredWidths[brick.id] > 0)
+  const pages = hasMeasurements
+    ? packAdaptivePages(displayedBricks.map(brick => measuredWidths[brick.id] ?? pageWidth), pageWidth, BRICK_GAP_PX)
+    : [{ start: 0, end: displayedBricks.length }]
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
-  const totalPages = Math.max(1, Math.ceil(displayedBricks.length / itemsPerPage))
+  const totalPages = pages.length
   const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
-  const pageBricks = displayedBricks.slice(clampedPage * itemsPerPage, (clampedPage + 1) * itemsPerPage)
+  const pageRange = pages[clampedPage] ?? { start: 0, end: 0 }
+  const pageBricks = displayedBricks.slice(pageRange.start, pageRange.end)
 
   function setCurrentPage(page: number) {
     setPageIndexByTab(prev => prev[selectedTab] === page ? prev : { ...prev, [selectedTab]: page })

@@ -7,6 +7,14 @@ export default defineConfig({
   experimentalMemoryManagement: true,
   video: false,
   e2e: {
+    // These two fixtures exercise the old websocket-backed TestGame demo and
+    // its retired landing page. The shipped static client contains NNG4 and
+    // VisualTest only; keep the legacy specs in-tree for backend development,
+    // but do not include them in the release-browser suite.
+    excludeSpecPattern: [
+      'cypress/e2e/01-basic-interface.cy.ts',
+      'cypress/e2e/game-features.cy.ts',
+    ],
     setupNodeEvents(on, config) {
       let visualNameIssues: unknown[] = []
       const reportPath = path.resolve('cypress/results/visual-name-audit.json')

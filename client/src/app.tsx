@@ -41,6 +41,28 @@ function App() {
     i18n.changeLanguage(language)
   }, [language])
 
+  React.useEffect(() => {
+    const background = isVisualLightMode ? '#f8fafc' : '#0f172a'
+    const scheme = isVisualLightMode ? 'light' : 'dark'
+    document.documentElement.style.backgroundColor = background
+    document.documentElement.style.colorScheme = scheme
+    document.body.style.backgroundColor = background
+    let theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (!theme) {
+      theme = document.createElement('meta')
+      theme.name = 'theme-color'
+      document.head.appendChild(theme)
+    }
+    theme.content = background
+    let colorScheme = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
+    if (!colorScheme) {
+      colorScheme = document.createElement('meta')
+      colorScheme.name = 'color-scheme'
+      document.head.appendChild(colorScheme)
+    }
+    colorScheme.content = scheme
+  }, [isVisualLightMode])
+
   return (
     <div className="app" data-visual-theme={isVisualLightMode ? 'light' : 'dark'}>
       <GameIdContext.Provider value={gameId}>

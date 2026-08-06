@@ -113,6 +113,8 @@ export function VisualProofPage() {
   const gameId = useContext(GameIdContext)
   const { worldId, levelId } = useContext(WorldLevelIdContext)
   const solvingId = React.useMemo(() => createSolvingId(), [gameId, worldId, levelId])
+  const telemetryStartedAt = React.useMemo(() => Date.now(), [solvingId])
+  const telemetrySequence = useRef(0)
   const navigate = useNavigate()
   useEffect(() => {
     // The map uses this to return the player to the world they just left,
@@ -130,11 +132,12 @@ export function VisualProofPage() {
       levelId,
       proofBody,
       openInEditor: true,
+      sourceAttemptId: solvingId,
     }))
     const target = new URL(window.location.href)
     target.hash = `#/${gameId}/world/${worldId}/level/${levelId}?visualHandoff=${encodeURIComponent(token)}`
     window.open(target.toString(), '_blank', 'noopener,noreferrer')
-  }, [gameId, levelId, worldId])
+  }, [gameId, levelId, solvingId, worldId])
   const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {
@@ -147,22 +150,29 @@ export function VisualProofPage() {
         game_id: gameId,
         world_id: worldId,
         level_id: levelId,
-        solving_uuid: solvingId,
+        attempt_uuid: solvingId,
+        mode: 'visual',
+        sequence: ++telemetrySequence.current,
+        elapsed_ms: Date.now() - telemetryStartedAt,
         play_script: proof.playScript,
         lean_script: proof.leanScript,
       })
     }
-  }, [dispatch, gameId, worldId, levelId, solvingId])
+  }, [dispatch, gameId, worldId, levelId, solvingId, telemetryStartedAt])
   const handleProofStep = useCallback((interactiveLeanCode: string) => {
     sendTelemetry({
       event_type: 'proof_step',
       game_id: gameId,
       world_id: worldId,
       level_id: levelId,
-      solving_uuid: solvingId,
-      interactive_lean_code: interactiveLeanCode,
+      attempt_uuid: solvingId,
+      mode: 'visual',
+      sequence: ++telemetrySequence.current,
+      elapsed_ms: Date.now() - telemetryStartedAt,
+      step_type: interactiveLeanCode === 'undo' ? 'undo' : 'command',
+      command: interactiveLeanCode,
     })
-  }, [gameId, worldId, levelId, solvingId])
+  }, [gameId, worldId, levelId, solvingId, telemetryStartedAt])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [presentationReady, setPresentationReady] = useState(false)
@@ -245,7 +255,10 @@ export function VisualProofPage() {
               game_id: gameId,
               world_id: worldId,
               level_id: levelId,
-              solving_uuid: solvingId,
+              attempt_uuid: solvingId,
+              mode: 'visual',
+              sequence: telemetrySequence.current,
+              elapsed_ms: Date.now() - telemetryStartedAt,
             })
           }
           return
@@ -267,7 +280,7 @@ export function VisualProofPage() {
     return () => {
       active = false
     }
-  }, [disposeClient, gameId, getClient, worldId, levelId, solvingId])
+  }, [disposeClient, gameId, getClient, worldId, levelId, solvingId, telemetryStartedAt])
 
   // Callback passed to VisualCanvas: sends an updated proof body to Lean and
   // returns the new ProofState, or null on Lean error.

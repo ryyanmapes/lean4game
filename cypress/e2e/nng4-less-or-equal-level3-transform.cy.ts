@@ -1,4 +1,5 @@
-const NNG4_LESS_OR_EQUAL_LEVEL3 = '/#/g/local/NNG4/world/LessOrEqual/level/3/visual'
+const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
+const NNG4_LESS_OR_EQUAL_LEVEL3 = `${mountPath}#/g/local/NNG4/world/LessOrEqual/level/3/visual`
 const LOAD_TIMEOUT = 600000
 
 interface VisualTestHarness {

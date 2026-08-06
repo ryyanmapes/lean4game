@@ -43,7 +43,7 @@ describe('Visual Lean mobile layout', () => {
     cy.viewport(390, 844)
   })
 
-  mapIt('zooms and centers the first incomplete world while retaining two-axis panning', () => {
+  mapIt('fits every world horizontally and centers the first incomplete world with vertical-only scrolling', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/visual`, {
       onBeforeLoad(win) {
         win.localStorage.clear()
@@ -58,9 +58,8 @@ describe('Visual Lean mobile layout', () => {
         const mapRect = map.getBoundingClientRect()
         const world = map.querySelector<SVGGraphicsElement>('[data-world-id="Tutorial"] .world-circle')!
         const worldRect = world.getBoundingClientRect()
-        expect(worldRect.width, 'focused world is comfortably tappable').to.be.greaterThan(44)
-        expect(worldRect.left + worldRect.width / 2, 'focused world is horizontally centered')
-          .to.be.closeTo(mapRect.left + mapRect.width / 2, 12)
+        expect(worldRect.width, 'focused world is comfortably tappable').to.be.greaterThan(28)
+        expect(map.scrollLeft, 'initial world focus does not pan horizontally').to.equal(0)
         const verticalMetrics = JSON.stringify({
           paddingTop: getComputedStyle(map).paddingTop,
           scrollTop: map.scrollTop,
@@ -69,9 +68,31 @@ describe('Visual Lean mobile layout', () => {
         })
         expect(worldRect.top + worldRect.height / 2, `focused world is vertically centered: ${verticalMetrics}`)
           .to.be.closeTo(mapRect.top + mapRect.height / 2, 18)
-        expect(map.scrollWidth, 'map can pan horizontally').to.be.greaterThan(map.clientWidth)
+        expect(map.scrollWidth, 'map has no horizontal panning beyond browser rounding').to.be.at.most(map.clientWidth + 2)
         expect(map.scrollHeight, 'map can pan vertically').to.be.greaterThan(map.clientHeight)
+        Array.from(map.querySelectorAll<SVGGraphicsElement>('[data-world-id]')).forEach(group => {
+          const rect = group.getBoundingClientRect()
+          expect(rect.left, `${group.dataset.worldId} stays inside the left edge`).to.be.at.least(mapRect.left - 1)
+          expect(rect.right, `${group.dataset.worldId} stays inside the right edge`).to.be.at.most(mapRect.right + 1)
+        })
       })
+  })
+
+  leanIt('points the Addition 1 induction guide below the n hypothesis', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`)
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="n"]', { timeout: 60_000 }).then($hyp => {
+      const hypRect = $hyp[0]!.getBoundingClientRect()
+      cy.get('.tactic-hyp-instruction-arrow polygon', { timeout: 60_000 })
+        .invoke('attr', 'points')
+        .then(points => {
+          const [tip] = String(points).split(' ')
+          const [x, y] = tip.split(',').map(Number)
+          expect(x, 'arrow tip is horizontally aligned with n').to.be.closeTo(hypRect.left + hypRect.width / 2, 2)
+          expect(y, 'arrow tip is below n').to.be.greaterThan(hypRect.bottom)
+          expect(y, 'arrow tip remains close to n').to.be.lessThan(hypRect.bottom + 24)
+        })
+    })
   })
 
   mapIt('centers the world most recently visited when returning to the map', () => {
@@ -87,7 +108,9 @@ describe('Visual Lean mobile layout', () => {
         const worldRect = $map[0]!
           .querySelector<SVGGraphicsElement>('[data-world-id="Addition"] .world-circle')!
           .getBoundingClientRect()
-        expect(worldRect.left + worldRect.width / 2).to.be.closeTo(mapRect.left + mapRect.width / 2, 12)
+        expect($map[0]!.scrollLeft, 'returning to a world does not pan horizontally').to.equal(0)
+        expect(worldRect.left, 'remembered world stays inside the left edge').to.be.at.least(mapRect.left - 1)
+        expect(worldRect.right, 'remembered world stays inside the right edge').to.be.at.most(mapRect.right + 1)
         expect(worldRect.top + worldRect.height / 2).to.be.closeTo(mapRect.top + mapRect.height / 2, 18)
       })
   })
@@ -129,6 +152,20 @@ describe('Visual Lean mobile layout', () => {
       expectNoOverlap(info!, expression!, 'reverse-direction callout does not cover the expression')
       expectNoOverlap(info!, undo!, 'reverse-direction callout does not cover undo')
       expectNoOverlap(info!, reverse!, 'reverse-direction callout does not cover reverse')
+    })
+  })
+
+  leanIt('packs multiple small transformation rules onto a mobile page without overflow', () => {
+    openGoalTransformation('Tutorial', 3)
+    cy.get('.tr-rule-page-cards .tr-rule-card', { timeout: 60_000 })
+      .should('have.length.at.least', 2)
+    cy.get('.tr-rule-page').then($page => {
+      const pageRect = $page[0]!.getBoundingClientRect()
+      $page.find('.tr-rule-card').each((_, card) => {
+        const rect = card.getBoundingClientRect()
+        expect(rect.left, 'card stays inside the page').to.be.at.least(pageRect.left - 1)
+        expect(rect.right, 'card stays inside the page').to.be.at.most(pageRect.right + 1)
+      })
     })
   })
 })

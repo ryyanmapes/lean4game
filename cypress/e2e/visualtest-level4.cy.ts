@@ -1,4 +1,5 @@
-const VISUALTEST_LEVEL4 = '/#/g/local/VisualTest/world/Prototype/level/4/visual'
+const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
+const VISUALTEST_LEVEL4 = `${mountPath}#/g/local/VisualTest/world/Prototype/level/4/visual`
 const VISUALTEST_LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 120000)
 
 interface VisualTestHarness {

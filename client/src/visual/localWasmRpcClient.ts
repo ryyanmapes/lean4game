@@ -32,7 +32,10 @@ const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
 const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=${BROWSER_RUNTIME_VERSION}&workerUi=${WORKER_UI_VERSION}${
-  typeof window !== 'undefined' && window.Cypress ? '&memoryMB=1536' : ''
+  // Headless Chrome's fresh profile has no compiled-code cache and the full
+  // VisualTest environment can exceed a 1.5 GB fixed heap during its first
+  // import. Desktop Cypress has the address space for the release-sized heap.
+  typeof window !== 'undefined' && window.Cypress ? '&memoryMB=2048' : ''
 }`
 const WORKER_TIMEOUT_MS = 600_000
 
