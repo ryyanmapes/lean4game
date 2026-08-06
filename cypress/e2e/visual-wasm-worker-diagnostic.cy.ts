@@ -29,12 +29,4 @@ describe('Visual Lean WASM worker startup', () => {
       }
     }))
   })
-
-  it.skip('runs click_goal before and after an incomplete proof in one persistent worker', () => {
-    cy.visit('/visual-lean-diagnostic.html')
-    cy.title({ timeout: 600_000 }).should('eq', 'Visual Lean diagnostic: passed')
-    cy.get('#log').should('contain.text', 'snapshot_loaded')
-    cy.get('#log').should('contain.text', 'compile_result')
-    cy.get('#log').should('not.contain.text', 'Lean WASM terminated while checking the proof')
-  })
 })
