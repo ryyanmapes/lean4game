@@ -1468,8 +1468,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
         | return none
       let levelId := {game := game, world := p.worldId, level := p.levelId}
       let mut steps : Array <| InteractiveGoalsWithHints := #[]
-      let mut diag : Array InteractiveDiagnostic :=
-        PersistentArray.toArray (← doc.collectCurrentDiagnostics)
+      let mut diag : Array InteractiveDiagnostic := ← doc.diagnosticsRef.get
 
       -- Level is completed if there are no errors or warnings
       let completedWithWarnings : Bool := ¬ diag.any (·.severity? == some .error)

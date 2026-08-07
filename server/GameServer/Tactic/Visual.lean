@@ -1,5 +1,6 @@
 import Lean.Elab.Tactic.Basic
 import Lean.Elab.SyntheticMVars
+import Lean.Elab.Tactic.Rewrite
 import Lean.Meta.Tactic.Rewrite
 import Lean.Meta.Tactic.Replace
 import Lean.Meta.Tactic.Refl
@@ -51,31 +52,15 @@ private def tryTactic (stx : TSyntax `tactic) : TacticM Bool := do
     restoreState savedState
     return false
 
-/- The public `Lean.Elab.Tactic.Rewrite` module also registers and supports the
-entire `rw` surface language.  Visual Lean already has its own interaction
-syntax and only needs the small elaboration bridge to the kernel-checked Meta
-rewrite primitive, so keep that bridge here. -/
+/- Lean 4.28 exposes the rewrite elaboration bridge from
+`Lean.Elab.Tactic.Rewrite`; keep the visual wrapper so the interaction syntax
+remains isolated from Lean's `rw` surface syntax. -/
 private def elabVisualRewrite (mvarId : MVarId) (e : Expr) (stx : Syntax)
     (symm : Bool) : TacticM RewriteResult := do
-  let mvarCounterSaved := (← getMCtx).mvarCounter
-  let thm ← Term.elabTerm stx none true
-  if thm.hasSyntheticSorry then
-    throwAbortTactic
-  unless ← occursCheck mvarId thm do
-    throwErrorAt stx "Occurs check failed: Expression{indentExpr thm}\ncontains the goal {Expr.mvar mvarId}"
-  let result ← withInstancesTypeCheckNote e do
-    mvarId.rewrite e thm symm
-  let mctx ← getMCtx
-  let mvarIds := result.mvarIds.filter fun newMVarId =>
-    (mctx.getDecl newMVarId |>.index) >= mvarCounterSaved
-  pure { result with mvarIds }
+  Lean.Elab.Tactic.elabRewrite mvarId e stx symm
 
 private def finishVisualRewrite (result : RewriteResult) : MetaM RewriteResult := do
-  let mvarIds ← result.mvarIds.filterM (not <$> ·.isAssigned)
-  mvarIds.forM fun newMVarId => newMVarId.withContext do
-    if ← Meta.isProp (← newMVarId.getType) then
-      newMVarId.setKind .syntheticOpaque
-  pure { result with mvarIds }
+  Lean.Elab.Tactic.finishElabRewrite result
 
 private def rewriteVisualTarget (stx : Syntax) (symm : Bool) : TacticM Unit := do
   let result ← Term.withSynthesize <| withMainContext do
