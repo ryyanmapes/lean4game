@@ -84,8 +84,13 @@ jobs:
       - name: Build VisualTest game
         working-directory: ../VisualTest
         run: |
+          # VisualTest checks in the browser facade, where MakeGame is a no-op.
+          # Native Cypress tests need the full command to generate game.json.
+          sed -i 's/^import GameServer\.Browser$/import GameServer/' Game/Metadata.lean
+          grep -q '^import GameServer$' Game/Metadata.lean
           lake update
           lake build
+          test -s .lake/gamedata/game.json
 
       - name: Run Cypress tests (Development mode)
         run: npm run test
