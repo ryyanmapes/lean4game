@@ -555,6 +555,39 @@ test('drag_goal applying an induction hypothesis keeps the successor branch live
   assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [successorPremiseStream.id])
 })
 
+test('drag_goal with a tray theorem keeps an explicitly returned harder goal live', () => {
+  const before = stream('le-total-succ', 'succ(d2) = succ(d + c)', 'succ', [
+    hyp('le-total-h1', 'h1', 'd2 = d + c'),
+  ])
+  const after = stream('le-total-succ-next', 'succ(succ(d2)) = succ(succ(d + c))', 'succ', [
+    hyp('le-total-h1-next', 'h1', 'd2 = d + c'),
+  ])
+  const beforeTree = {
+    id: 'le-total-root',
+    streamId: before.id,
+    label: before.goal.userName,
+    completed: false,
+    children: [],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [before], completed: false },
+    { streams: [after], completed: false },
+    before,
+    'drag_goal succ_inj',
+    false,
+    before.id,
+    [after],
+  )
+
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [after.id])
+  assert.equal(result.nextActiveId, after.id)
+  assert.equal(findLeafForStream(result.nextTree, after.id)?.completed, false)
+  assert.equal(result.nextCanvas.completed, false)
+  assert.deepEqual(result.nextCanvas.streams.map(item => item.id), [after.id])
+})
+
 test('the full nested conjunction proof can reconcile from A through final C completion', () => {
   const splitHypType = 'And B (A -> B -> C)'
   const splitRightType = 'A -> B -> C'

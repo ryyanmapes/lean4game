@@ -2340,6 +2340,170 @@
     transition: none;
   }
 
+  .visual-page.phone-portrait .mobile-play-panel {
+    position: fixed;
+    left: 0.65rem;
+    right: 0.45rem;
+    top: calc(52px + 0.55rem + 2.25rem + 0.6rem + var(--mobile-goal-stack-height, 92px) + 0.55rem);
+    bottom: calc(var(--tray-height, 0px) + 0.25rem);
+    z-index: 18;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1px 1.3rem;
+    min-height: 4rem;
+    overflow: hidden;
+  }
+
+  .visual-page.phone-portrait .mobile-play-scroll {
+    grid-column: 1;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    touch-action: pan-y;
+  }
+
+  .visual-page.phone-portrait .mobile-play-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .visual-page.phone-portrait .mobile-play-scroll-content {
+    min-height: 100%;
+    padding: 0.2rem 0.45rem 0.4rem 0;
+  }
+
+  .visual-page.phone-portrait .mobile-play-natural-content {
+    min-height: 100%;
+  }
+
+  .visual-page.phone-portrait .mobile-scroll-deadspace {
+    height: 6rem;
+  }
+
+  .visual-page.phone-portrait .mobile-card-columns {
+    display: grid;
+    grid-template-columns: minmax(5.7rem, 0.34fr) minmax(0, 0.66fr);
+    min-height: 100%;
+  }
+
+  .visual-page.phone-portrait .mobile-card-column {
+    display: flex;
+    min-width: 0;
+    padding: 0 0.42rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .visual-page.phone-portrait .mobile-variable-column {
+    padding-left: 0.15rem;
+    border-right: 1px solid var(--visual-border-subtle);
+  }
+
+  .visual-page.phone-portrait .mobile-theorem-column {
+    padding-right: 0.25rem;
+  }
+
+  .visual-page.phone-portrait .mobile-list-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    touch-action: none;
+  }
+
+  .visual-page.phone-portrait .mobile-variable-column .mobile-list-card {
+    padding: 0.62rem 0.5rem;
+    text-align: center;
+  }
+
+  .visual-page.phone-portrait .mobile-variable-column .statement-card-main {
+    justify-content: center;
+  }
+
+  .visual-page.phone-portrait .mobile-variable-column .proposition,
+  .visual-page.phone-portrait .mobile-variable-column .hyp-name,
+  .visual-page.phone-portrait .mobile-variable-column .hyp-colon {
+    font-size: 0.88rem;
+  }
+
+  .visual-page.phone-portrait .mobile-reorder-divider {
+    position: relative;
+    height: 0.78rem;
+    min-height: 0.78rem;
+  }
+
+  .visual-page.phone-portrait .mobile-reorder-divider::after {
+    content: "";
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    top: 50%;
+    height: 1px;
+    background: color-mix(in srgb, var(--visual-text-muted) 30%, transparent);
+    border-radius: 999px;
+    transition: height 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  }
+
+  .visual-page.phone-portrait .mobile-reorder-divider.active::after {
+    height: 3px;
+    background: var(--visual-accent-soft);
+    box-shadow: 0 0 8px var(--visual-accent-glow);
+  }
+
+  .visual-page.phone-portrait .mobile-play-panel::after {
+    content: "";
+    grid-column: 2;
+    grid-row: 1;
+    background: var(--visual-border-subtle);
+  }
+
+  .visual-page.phone-portrait .mobile-scrollbar {
+    position: relative;
+    grid-column: 3;
+    grid-row: 1;
+    width: 100%;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--visual-scrollbar-track) 82%, transparent);
+    touch-action: none;
+  }
+
+  .visual-page.phone-portrait .mobile-scrollbar.scrollable {
+    box-shadow: inset 0 0 0 1px var(--visual-border-faint);
+  }
+
+  .visual-page.phone-portrait .mobile-scrollbar.drag-active {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--visual-accent) 10%, transparent) 0 33.333%,
+      transparent 33.333% 66.666%,
+      color-mix(in srgb, var(--visual-accent) 10%, transparent) 66.666% 100%
+    );
+  }
+
+  .visual-page.phone-portrait .mobile-scrollbar-thumb {
+    position: absolute;
+    left: 0.25rem;
+    right: 0.25rem;
+    min-height: 2.1rem;
+    border-radius: 999px;
+    background: var(--visual-scrollbar-thumb);
+    box-shadow: 0 2px 8px var(--visual-shadow-strong);
+  }
+
+  .visual-page.phone-portrait .mobile-below-goal-dialogues,
+  .visual-page.phone-portrait .mobile-scrolling-guides {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0 0.25rem 0.55rem;
+  }
+
+  .visual-page.phone-portrait .mobile-below-goal-dialogues .goal-info,
+  .visual-page.phone-portrait .mobile-scrolling-guide {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
   .visual-page.phone-portrait .mobile-page-links {
     position: fixed;
     top: calc(52px + 0.55rem);
@@ -2386,6 +2550,22 @@
     max-width: min(13rem, calc(50vw - 1.15rem));
   }
 
+  /* Touch browsers latch :hover onto the element that was just dragged.
+     Canvas cards should return to their neutral appearance after release. */
+  .visual-page.phone-portrait .combining-canvas > .statement-card:not(.goal):hover {
+    background: var(--glass-bg);
+    box-shadow: 0 8px 32px 0 var(--visual-shadow-strong);
+  }
+
+  .visual-page.phone-portrait .combining-canvas > .statement-card.theorem-copy-card:hover,
+  .visual-page.phone-portrait .combining-canvas > .statement-card.derived-theorem-card:hover {
+    background: rgba(52, 211, 153, 0.08);
+  }
+
+  .visual-page.phone-portrait .combining-canvas > .statement-card.int-theorem:hover {
+    background: rgba(96, 165, 250, 0.08);
+  }
+
   .visual-page.phone-portrait .theorem-tray-panel .statement-card:not(.goal) {
     max-width: 100%;
   }
@@ -2397,13 +2577,25 @@
   .visual-page.phone-portrait .statement-card.theorem-card-snug .proposition,
   .visual-page.phone-portrait .statement-card.theorem-card-snug .hyp-name,
   .visual-page.phone-portrait .statement-card.theorem-card-snug .hyp-colon {
-    font-size: 0.84rem;
+    font-size: 1rem;
   }
 
   .visual-page.phone-portrait .statement-card.theorem-card-compact .proposition,
   .visual-page.phone-portrait .statement-card.theorem-card-compact .hyp-name,
   .visual-page.phone-portrait .statement-card.theorem-card-compact .hyp-colon {
-    font-size: 0.72rem;
+    font-size: 1rem;
+  }
+
+  .visual-page.phone-portrait .statement-card.theorem-card-snug .statement-card-main,
+  .visual-page.phone-portrait .statement-card.theorem-card-compact .statement-card-main {
+    flex-wrap: wrap;
+  }
+
+  .visual-page.phone-portrait .statement-card.theorem-card-snug .statement-card-main > .proposition,
+  .visual-page.phone-portrait .statement-card.theorem-card-compact .statement-card-main > .proposition {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 0.12rem;
   }
 
   .visual-page.phone-portrait .statement-card:not(.goal) .proposition,

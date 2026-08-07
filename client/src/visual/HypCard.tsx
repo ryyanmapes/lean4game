@@ -18,6 +18,8 @@ interface HypCardProps {
   isTransformable?: boolean
   isConstructable?: boolean
   constructOnSingleClick?: boolean
+  showDropTarget?: boolean
+  mobileList?: boolean
   animateMove?: boolean
   iffDirection?: IffDirection
   onClickAction?: () => void
@@ -37,6 +39,8 @@ export function HypCard({
   isTransformable = false,
   isConstructable = false,
   constructOnSingleClick = false,
+  showDropTarget = false,
+  mobileList = false,
   animateMove = false,
   iffDirection = 'forward',
   onClickAction,
@@ -62,9 +66,9 @@ export function HypCard({
   }
 
   const style: React.CSSProperties = {
-    position: 'absolute',
-    left: positionOverride?.x ?? card.position.x,
-    top: positionOverride?.y ?? card.position.y,
+    position: mobileList ? 'relative' : 'absolute',
+    left: mobileList ? undefined : positionOverride?.x ?? card.position.x,
+    top: mobileList ? undefined : positionOverride?.y ?? card.position.y,
     transform: CSS.Translate.toString(transform),
     zIndex: isDragging ? 1000 : 10,
   }
@@ -74,12 +78,13 @@ export function HypCard({
     card.isTheorem ? 'derived-theorem-card' : '',
     card.hyp.forallFooter ? 'has-forall-footer' : '',
     isDragging ? 'dragging' : '',
-    isOver && !isDragging ? 'drop-target-active' : '',
+    isOver && showDropTarget && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
     isClickable ? 'clickable' : '',
     isTransformable ? 'transformable' : '',
     isConstructable ? 'constructable' : '',
     animateMove ? 'fly-in' : '',
+    mobileList ? 'mobile-list-card' : '',
   ].filter(Boolean).join(' ')
 
   const title = isClickable

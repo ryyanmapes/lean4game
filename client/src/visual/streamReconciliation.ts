@@ -1284,6 +1284,9 @@ export function reconcileProofTreeAfterInteraction(
     if (unmatchedExactFocusedStreams.length === 0) {
       return undefined
     }
+    if (playTactic?.startsWith('drag_goal ')) {
+      return unmatchedExactFocusedStreams
+    }
     const matchesFocusedBranch = unmatchedExactFocusedStreams.some(stream =>
       likelyFocusedContinuation(focusedStream, stream, playTactic)
     )
@@ -1380,7 +1383,16 @@ export function reconcileProofTreeAfterInteraction(
 
   const continuation = remaining.find(stream =>
     likelyFocusedContinuation(focusedStream, stream, playTactic)
-  ) ?? (canPromoteSingleRemainingStream && remaining.length === 1 ? remaining[0] : null)
+  ) ?? (
+    // The RPC's focusedGoals list is authoritative. In particular, applying a
+    // theorem from the tray can change the goal to a shape that the client
+    // cannot infer from a local hypothesis (for example, applying succ_inj to
+    // an equality that already has successors). Do not mistake that returned
+    // follow-up goal for a solved branch.
+    (trustedFocusedStreams !== undefined || canPromoteSingleRemainingStream) && remaining.length === 1
+      ? remaining[0]
+      : null
+  )
   if (continuation) {
     nextTree = replaceLeafStream(nextTree, focusedStream.id, continuation)
     nextActiveId = continuation.id

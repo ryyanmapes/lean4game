@@ -4,6 +4,7 @@ const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
 interface VisualHarness {
   runPlayerTactic(command: string): Promise<void>
   clickGoal(playTactic?: string): Promise<void>
+  moveHypTo(hypName: string, x: number, y: number): void
   getProofAudit(): {
     processing: boolean
     visibleNames: string[]
@@ -109,8 +110,16 @@ describe('Visual Lean advanced mobile regressions', { testIsolation: false }, ()
       expect($card[0]!.classList.contains('theorem-card-compact'), 'uses persistent compact class').to.equal(true)
       const cardRect = $card[0]!.getBoundingClientRect()
       const pageRect = $card[0]!.closest('.tr-rule-page')!.getBoundingClientRect()
+      const name = $card[0]!.querySelector<HTMLElement>('.hyp-name')!
+      const proposition = $card[0]!.querySelector<HTMLElement>('.proposition')!
+      const nameRect = name.getBoundingClientRect()
+      const propositionRect = proposition.getBoundingClientRect()
       expect(cardRect.left, 'card stays right of page start').to.be.at.least(pageRect.left - 1)
       expect(cardRect.right, 'card stays left of page end').to.be.at.most(pageRect.right + 1)
+      expect(propositionRect.top, 'long proposition wraps below its label and colon')
+        .to.be.at.least(nameRect.bottom - 1)
+      expect(parseFloat(getComputedStyle(proposition).fontSize), 'wrapped proposition keeps normal text size')
+        .to.be.at.least(15)
     })
   })
 
@@ -124,6 +133,23 @@ describe('Visual Lean advanced mobile regressions', { testIsolation: false }, ()
       expect(levelRect.bottom, 'world line remains inside header').to.be.at.most(headerRect.bottom)
       expect(titleRect.bottom, 'title line remains inside header').to.be.at.most(headerRect.bottom)
       expect($center.find('.visual-header-title:visible').first().text()).to.equal('mul_ne_zero')
+    })
+  })
+
+  it('uses the portrait-only variable/theorem columns without scrolling the goal', () => {
+    openLevel('Tutorial', 1)
+    cy.get('[data-testid="mobile-play-panel"]').should('be.visible')
+    cy.get('.mobile-variable-column [data-hyp-name="x"]').should('exist')
+    cy.get('.mobile-variable-column [data-hyp-name="q"]').should('exist')
+    cy.get('.mobile-theorem-column').should('exist')
+    cy.get('[data-testid="mobile-scrollbar"]').should('be.visible')
+    cy.get('.mobile-below-goal-dialogues .goal-info.below').should('be.visible')
+    cy.get('[data-testid="goal-card"]').then($goal => {
+      cy.get('[data-testid="mobile-play-scroll"]').then($scroll => {
+        expect($scroll[0]!.contains($goal[0]!), 'goal is outside the scrolling region').to.equal(false)
+        expect($scroll[0]!.contains(Cypress.$('.mobile-below-goal-dialogues .goal-info.below')[0]!), 'below-goal dialogue scrolls')
+          .to.equal(true)
+      })
     })
   })
 })

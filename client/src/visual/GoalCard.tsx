@@ -21,6 +21,8 @@ interface GoalCardProps {
   clickTooltip?: string
   isSolved?: boolean
   visualInfos?: VisualGoalInfo[]
+  showDropTarget?: boolean
+  infoPositions?: Array<'above' | 'below'>
 }
 
 export function GoalCard({
@@ -37,6 +39,8 @@ export function GoalCard({
   clickTooltip,
   isSolved,
   visualInfos = [],
+  showDropTarget = false,
+  infoPositions = ['above', 'below'],
 }: GoalCardProps) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isInteractive })
   const clickTimeoutRef = React.useRef<number | null>(null)
@@ -71,7 +75,7 @@ export function GoalCard({
     isTransformable ? 'transformable' : '',
     isConstructable ? 'constructable' : '',
     isClickable ? 'clickable' : '',
-    isOver ? 'drop-target-active' : '',
+    isOver && showDropTarget ? 'drop-target-active' : '',
     isSolved ? 'solved' : '',
   ].filter(Boolean).join(' ')
 
@@ -206,7 +210,7 @@ export function GoalCard({
 
   return (
     <div ref={wrapperRef} className="goal-card-with-info">
-      {renderInfo('above')}
+      {infoPositions.includes('above') && renderInfo('above')}
       <div
         id={id}
         ref={setCardNode}
@@ -223,7 +227,7 @@ export function GoalCard({
         <div className="goal-prefix">Goal</div>
         <span ref={propositionRef} className="proposition">{colorizeFormula(goalText)}</span>
       </div>
-      {renderInfo('below')}
+      {infoPositions.includes('below') && renderInfo('below')}
       {arrows.map(renderGoalInfoArrow)}
     </div>
   )

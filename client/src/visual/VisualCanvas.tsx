@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useState, useLayoutEffect, useCallback, useEffect, useRef } from 'react'
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, pointerWithin, rectIntersection, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
+import { DndContext, DragEndEvent, DragMoveEvent, DragOverlay, DragStartEvent, PointerSensor, pointerWithin, rectIntersection, useSensor, useSensors, useDroppable } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
@@ -387,6 +387,7 @@ interface InteractionOptions {
   consumedTheoremCopyIds?: string[]
   streamSplit?: boolean
   targetStreamId?: string
+  mobileInsertAfter?: string
 }
 
 interface GoalChoiceMenu {
@@ -471,6 +472,7 @@ interface VisualCanvasTestHarness {
   runPlayerTactic: (command: string) => Promise<void>
   dragHypToGoal: (hypName: string) => Promise<void>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
+  moveHypTo: (hypName: string, x: number, y: number) => void
   dragTacticToHyp: (tacticName: string, hypName: string) => Promise<void>
   clickHyp: (hypName: string) => Promise<void>
   clickGoal: (playTactic?: string) => Promise<void>
@@ -527,8 +529,71 @@ interface VisualCanvasTestHarness {
 }
 
 const THEOREM_TRAY_ID = 'theorem-tray'
+const MOBILE_DIVIDER_PREFIX = 'mobile-divider:'
 const REDUCTION_TOOLTIP_EXIT_MS = 140
 type TrayTab = 'tactics' | 'theorems'
+
+type MobileColumn = 'variables' | 'theorems'
+
+interface MobileVisualOrder {
+  variables: string[]
+  theorems: string[]
+}
+
+function hypMobileKey(card: HypCardType): string {
+  return `hyp:${card.hyp.playName ?? card.hyp.names[0] ?? card.id}`
+}
+
+function theoremCopyMobileKey(copy: PropositionTheoremCopy): string {
+  return `copy:${copy.id}`
+}
+
+function mobileOrderStorageKey(worldId: string, levelId: number): string {
+  return `visual-mobile-order/${worldId}/${levelId}`
+}
+
+function loadMobileVisualOrder(worldId: string, levelId: number): MobileVisualOrder {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(mobileOrderStorageKey(worldId, levelId)) ?? '{}') as Partial<MobileVisualOrder>
+    return {
+      variables: Array.isArray(parsed.variables) ? parsed.variables.filter(item => typeof item === 'string') : [],
+      theorems: Array.isArray(parsed.theorems) ? parsed.theorems.filter(item => typeof item === 'string') : [],
+    }
+  } catch {
+    return { variables: [], theorems: [] }
+  }
+}
+
+function initialMobileVisualOrder(
+  worldId: string,
+  levelId: number,
+  canvas: CanvasState,
+): MobileVisualOrder {
+  const stored = loadMobileVisualOrder(worldId, levelId)
+  const variables = [...stored.variables]
+  const theorems = [...stored.theorems]
+  for (const card of canvas.streams.flatMap(stream => stream.hyps)) {
+    const key = hypMobileKey(card)
+    const column = card.isTheorem ? theorems : variables
+    if (!column.includes(key)) column.push(key)
+  }
+  return { variables, theorems }
+}
+
+function MobileReorderDivider({ column, index }: { column: MobileColumn; index: number }) {
+  const id = `${MOBILE_DIVIDER_PREFIX}${column}:${index}`
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mobile-reorder-divider${isOver ? ' active' : ''}`}
+      data-testid="mobile-reorder-divider"
+      data-column={column}
+      data-index={String(index)}
+      aria-hidden="true"
+    />
+  )
+}
 
 declare global {
   interface Window {
@@ -1467,9 +1532,21 @@ export function VisualCanvas({
   const [animatedHyps, setAnimatedHyps] = useState<AnimatedHypMarker[]>([])
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
   const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>([])
+  const [mobileVisualOrder, setMobileVisualOrder] = useState<MobileVisualOrder>(() =>
+    initialMobileVisualOrder(worldId, levelId, initialState)
+  )
+  const mobileScrollRef = useRef<HTMLDivElement>(null)
+  const mobileNaturalContentRef = useRef<HTMLDivElement>(null)
+  const mobileScrollbarRef = useRef<HTMLDivElement>(null)
+  const mobileScrollbarDragRef = useRef<{ pointerId: number; grabOffset: number } | null>(null)
+  const mobileAutoScrollFrameRef = useRef<number | null>(null)
+  const pendingMobileInsertAfterRef = useRef<string | null>(null)
+  const [mobileScrollMetrics, setMobileScrollMetrics] = useState({ top: 0, client: 0, scroll: 0 })
+  const [mobileContentOverflows, setMobileContentOverflows] = useState(false)
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
   const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>(() =>
     visualTactics.some(tactic =>
       emphasizeItems?.includes(tactic.id) ||
@@ -1516,6 +1593,16 @@ export function VisualCanvas({
   // Stable game key for play log
   const logKey = `${worldId}/${levelId}`
   const comparisonTransformEnabled = worldAllowsComparisonTransform(worldId)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(mobileOrderStorageKey(worldId, levelId), JSON.stringify(mobileVisualOrder))
+    } catch {}
+  }, [levelId, mobileVisualOrder, worldId])
+
+  useEffect(() => {
+    setMobileVisualOrder(initialMobileVisualOrder(worldId, levelId, initialState))
+  }, [initialState, levelId, worldId])
 
   useEffect(() => {
     const html = document.documentElement
@@ -1918,6 +2005,7 @@ export function VisualCanvas({
       ? canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null
       : null
     if (!focusedStream) return false
+    pendingMobileInsertAfterRef.current = options?.mobileInsertAfter ?? null
     const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
@@ -1977,6 +2065,7 @@ export function VisualCanvas({
     }
 
     if (result === null) {
+      pendingMobileInsertAfterRef.current = null
       if (options?.placementHint) {
         clearPositionOverride(options.placementHint.hypId)
         setCanvasState(prev => updatePlacedHypPosition(prev, options.placementHint!, options.placementHint!.originalPosition))
@@ -2068,7 +2157,10 @@ export function VisualCanvas({
     const result = await onInteraction(newScript)
 
     setIsProcessing(false)
-    if (result === null) return false
+    if (result === null) {
+      pendingMobileInsertAfterRef.current = null
+      return false
+    }
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
     const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
@@ -2141,9 +2233,79 @@ export function VisualCanvas({
     const isTacticDrag = !!event.active.data.current?.visualTactic
     setGoalChoiceMenu(null)
     closeReductionTooltip()
+    setActiveDragId(String(event.active.id))
     setActiveDraggedTheorem(isTheoremDrag && theorem ? theorem : null)
     setActiveDraggedTheoremSourceId(isTheoremDrag ? String(event.active.id) : null)
     setActiveDraggedTactic(isTacticDrag && tactic ? tactic : null)
+  }
+
+  function stopMobileAutoScroll() {
+    if (mobileAutoScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(mobileAutoScrollFrameRef.current)
+      mobileAutoScrollFrameRef.current = null
+    }
+  }
+
+  function startMobileAutoScroll(direction: -1 | 1) {
+    if (mobileAutoScrollFrameRef.current !== null) return
+    const tick = () => {
+      const scroller = mobileScrollRef.current
+      if (!scroller) {
+        mobileAutoScrollFrameRef.current = null
+        return
+      }
+      scroller.scrollTop += direction * 8
+      mobileAutoScrollFrameRef.current = window.requestAnimationFrame(tick)
+    }
+    mobileAutoScrollFrameRef.current = window.requestAnimationFrame(tick)
+  }
+
+  function handleDragMove(event: DragMoveEvent) {
+    if (!isPhonePortrait || !activeDragId) return
+    const track = mobileScrollbarRef.current?.getBoundingClientRect()
+    const dragged = event.active.rect.current.translated
+    if (!track || !dragged) {
+      stopMobileAutoScroll()
+      return
+    }
+    const pointerX = dragged.left + dragged.width / 2
+    const pointerY = dragged.top + dragged.height / 2
+    if (pointerX < track.left - 12 || pointerX > track.right + 12 || pointerY < track.top || pointerY > track.bottom) {
+      stopMobileAutoScroll()
+      return
+    }
+    const third = track.height / 3
+    if (pointerY < track.top + third) startMobileAutoScroll(-1)
+    else if (pointerY > track.bottom - third) startMobileAutoScroll(1)
+    else stopMobileAutoScroll()
+  }
+
+  function moveHypCardTo(
+    activeId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) {
+    setCanvasState(prev => {
+      const canvasBounds = getCombiningCanvasBounds()
+      const obstacleIds = prev.streams.map(s => s.id)
+      const streams = prev.streams.map(stream => {
+        const moved = stream.hyps.map(h => {
+          if (h.id !== activeId) return h
+          return {
+            ...h,
+            userPlaced: true,
+            position: clampCanvasPosition(x, y, width, height, 0),
+          }
+        })
+        return {
+          ...stream,
+          hyps: resolveCollisions(moved, obstacleIds, canvasBounds, { phonePortrait: isPhonePortrait }),
+        }
+      })
+      return { ...prev, streams }
+    })
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -2151,6 +2313,8 @@ export function VisualCanvas({
     setActiveDraggedTheorem(null)
     setActiveDraggedTheoremSourceId(null)
     setActiveDraggedTactic(null)
+    setActiveDragId(null)
+    stopMobileAutoScroll()
     const activeId = active.id as string
     const overId = over?.id as string | undefined
     const theoremTemplate = active.data.current?.theoremTemplate
@@ -2163,6 +2327,48 @@ export function VisualCanvas({
     const sourceStream = canvasState.streams.find(s => s.hyps.some(h => h.id === activeId))
     const sourceCard = sourceStream?.hyps.find(h => h.id === activeId)
     const goalIds = new Set(canvasState.streams.map(s => s.id))
+    const draggedRect = active.rect.current.initial
+    const draggedWidth = draggedRect?.width ?? DEFAULT_WIDTH
+    const draggedHeight = draggedRect?.height ?? DEFAULT_HEIGHT
+
+    if (isPhonePortrait && overId?.startsWith(MOBILE_DIVIDER_PREFIX)) {
+      const [, columnValue, indexValue] = overId.split(':')
+      const column = columnValue as MobileColumn
+      const destinationIndex = Number(indexValue)
+      const sourceKey = sourceCard
+        ? hypMobileKey(sourceCard)
+        : sourceTheoremCopy
+          ? theoremCopyMobileKey(sourceTheoremCopy)
+          : null
+      const sourceColumn: MobileColumn | null = sourceCard
+        ? sourceCard.isTheorem ? 'theorems' : 'variables'
+        : sourceTheoremCopy
+          ? 'theorems'
+          : null
+      if (sourceKey && sourceColumn === column && Number.isFinite(destinationIndex)) {
+        setMobileVisualOrder(prev => {
+          const current = [...prev[column]]
+          const sourceIndex = current.indexOf(sourceKey)
+          if (sourceIndex < 0) return prev
+          current.splice(sourceIndex, 1)
+          const visibleKeys = (column === 'variables'
+            ? orderedMobileVariables.map(hypMobileKey)
+            : orderedMobileTheorems.map(item => item.key))
+            .filter(key => key !== sourceKey)
+          const clampedDestination = Math.max(0, Math.min(visibleKeys.length, destinationIndex))
+          const nextVisibleKey = visibleKeys[clampedDestination]
+          const previousVisibleKey = visibleKeys[clampedDestination - 1]
+          const insertionIndex = nextVisibleKey
+            ? Math.max(0, current.indexOf(nextVisibleKey))
+            : previousVisibleKey
+              ? current.indexOf(previousVisibleKey) + 1
+              : current.length
+          current.splice(Math.max(0, insertionIndex), 0, sourceKey)
+          return { ...prev, [column]: current }
+        })
+      }
+      return
+    }
 
     if (tacticTemplate) {
       if (tacticTemplate.name === 'revert' && goalIds.has(overId as string)) {
@@ -2246,7 +2452,11 @@ export function VisualCanvas({
             nameB: targetName,
             reverse,
           })
-          applyInteraction(playTactic, activeId, placementHint ? { placementHint } : undefined)
+          applyInteraction(playTactic, activeId, {
+            ...(placementHint ? { placementHint } : {}),
+            ...(targetCard?.isTheorem ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
+            ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
+          })
           return
         }
       }
@@ -2259,8 +2469,9 @@ export function VisualCanvas({
         ...clampCanvasPosition(
           startRect.left - bounds.left + delta.x,
           startRect.top - bounds.top + delta.y,
-          320,
-          220,
+          startRect.width,
+          startRect.height,
+          0,
         ),
       })
       return
@@ -2312,6 +2523,7 @@ export function VisualCanvas({
           })
           applyInteraction(playTactic, activeId, {
             consumedTheoremCopyIds: [targetTheoremCopy.id],
+            mobileInsertAfter: targetTheoremCopy ? theoremCopyMobileKey(targetTheoremCopy) : undefined,
           })
           return
         }
@@ -2357,6 +2569,7 @@ export function VisualCanvas({
         applyInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
+          ...(targetCard?.isTheorem ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
         })
       }
       return
@@ -2364,35 +2577,32 @@ export function VisualCanvas({
 
     // Otherwise just reposition the card
     if (isProcessing) return
+    if (isPhonePortrait && (sourceCard || sourceTheoremCopy)) return
     if (sourceTheoremCopy) {
       setTheoremCopies(prev => prev.map(copy => {
         if (copy.id !== sourceTheoremCopy.id) return copy
         return {
           ...copy,
-          position: clampCanvasPosition(copy.position.x + delta.x, copy.position.y + delta.y, 320, 50),
+          position: clampCanvasPosition(
+            copy.position.x + delta.x,
+            copy.position.y + delta.y,
+            draggedWidth,
+            draggedHeight,
+            0,
+          ),
         }
       }))
       return
     }
-    setCanvasState(prev => {
-      const canvasBounds = getCombiningCanvasBounds()
-      const obstacleIds = prev.streams.map(s => s.id)
-      const streams = prev.streams.map(stream => {
-        const moved = stream.hyps.map(h => {
-          if (h.id !== activeId) return h
-          return {
-            ...h,
-            userPlaced: true,
-            position: clampCanvasPosition(h.position.x + delta.x, h.position.y + delta.y, 250, 50),
-          }
-        })
-        return {
-          ...stream,
-          hyps: resolveCollisions(moved, obstacleIds, canvasBounds, { phonePortrait: isPhonePortrait }),
-        }
-      })
-      return { ...prev, streams }
-    })
+    if (sourceCard) {
+      moveHypCardTo(
+        activeId,
+        sourceCard.position.x + delta.x,
+        sourceCard.position.y + delta.y,
+        draggedWidth,
+        draggedHeight,
+      )
+    }
   }
 
   // ── Click handlers ──────────────────────────────────────────────────────────
@@ -2572,9 +2782,11 @@ export function VisualCanvas({
 
   function handleHypClick(streamId: string, cardId: string, clickAction?: ClickAction) {
     if (!hasClickAction(clickAction) || !clickAction.playTactic) return
+    const clickedCard = canvasState.streams.find(stream => stream.id === streamId)?.hyps.find(card => card.id === cardId)
     applyInteraction(clickAction.playTactic, cardId, {
       streamSplit: clickAction.streamSplit,
       targetStreamId: streamId,
+      mobileInsertAfter: clickedCard?.isTheorem ? hypMobileKey(clickedCard) : undefined,
     })
   }
 
@@ -2686,6 +2898,16 @@ export function VisualCanvas({
     const target = constructionTarget
     const focusedStream = canvasState.streams.find(s => s.id === target.streamId) ?? null
     if (!focusedStream) return false
+    pendingMobileInsertAfterRef.current = target.kind === 'forall_spec'
+      ? target.sourceKind === 'hyp'
+        ? (() => {
+            const source = focusedStream.hyps.find(card => interactionHypName(card) === target.sourceRef)
+            return source?.isTheorem ? hypMobileKey(source) : null
+          })()
+        : target.sourceKind === 'theorem_copy' && target.sourceId
+          ? `copy:${target.sourceId}`
+          : null
+      : null
 
     // Use a core Lean existential step rather than `use`, which may not be
     // imported in smaller test games such as VisualTest.
@@ -3230,6 +3452,95 @@ export function VisualCanvas({
   const currentStreamIndex = currentStream ? activeStreamIds.indexOf(currentStream.id) : -1
   const totalLeafCount = leafCount(proofTree)
   const visibleHyps = displayStream?.hyps ?? []
+  const mobileVariableCards = React.useMemo(
+    () => visibleHyps.filter(card => !card.isTheorem),
+    [visibleHyps],
+  )
+  const mobileTheoremItems = React.useMemo(
+    () => [
+      ...visibleHyps.filter(card => card.isTheorem).map(card => ({
+        key: hypMobileKey(card),
+        card,
+        copy: null as PropositionTheoremCopy | null,
+      })),
+      ...theoremCopies.map(copy => ({
+        key: theoremCopyMobileKey(copy),
+        card: null as HypCardType | null,
+        copy,
+      })),
+    ],
+    [theoremCopies, visibleHyps],
+  )
+
+  useEffect(() => {
+    const variableKeys = mobileVariableCards.map(hypMobileKey)
+    const theoremKeys = mobileTheoremItems.map(item => item.key)
+    setMobileVisualOrder(prev => {
+      const next: MobileVisualOrder = {
+        variables: prev.variables.filter(key => !theoremKeys.includes(key)),
+        theorems: prev.theorems.filter(key => !variableKeys.includes(key)),
+      }
+      const missingVariables = variableKeys.filter(key => !next.variables.includes(key))
+      const missingTheorems = theoremKeys.filter(key => !next.theorems.includes(key))
+      if (missingVariables.length > 0) next.variables = [...missingVariables, ...next.variables]
+      if (missingTheorems.length > 0) {
+        const anchor = pendingMobileInsertAfterRef.current
+        const anchorIndex = anchor ? next.theorems.indexOf(anchor) : -1
+        if (anchorIndex >= 0) {
+          next.theorems.splice(anchorIndex + 1, 0, ...missingTheorems)
+        } else {
+          next.theorems = [...missingTheorems, ...next.theorems]
+        }
+      }
+      pendingMobileInsertAfterRef.current = null
+      if (
+        next.variables.length === prev.variables.length &&
+        next.theorems.length === prev.theorems.length &&
+        next.variables.every((key, index) => key === prev.variables[index]) &&
+        next.theorems.every((key, index) => key === prev.theorems[index])
+      ) return prev
+      return next
+    })
+  }, [mobileTheoremItems, mobileVariableCards])
+
+  const orderedMobileVariables = React.useMemo(() => {
+    const rank = new Map(mobileVisualOrder.variables.map((key, index) => [key, index]))
+    return [...mobileVariableCards].sort((left, right) =>
+      (rank.get(hypMobileKey(left)) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(hypMobileKey(right)) ?? Number.MAX_SAFE_INTEGER)
+    )
+  }, [mobileVariableCards, mobileVisualOrder.variables])
+  const orderedMobileTheorems = React.useMemo(() => {
+    const rank = new Map(mobileVisualOrder.theorems.map((key, index) => [key, index]))
+    return [...mobileTheoremItems].sort((left, right) =>
+      (rank.get(left.key) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(right.key) ?? Number.MAX_SAFE_INTEGER)
+    )
+  }, [mobileTheoremItems, mobileVisualOrder.theorems])
+
+  useLayoutEffect(() => {
+    const scroller = mobileScrollRef.current
+    if (!isPhonePortrait || !scroller) return
+    const update = () => setMobileScrollMetrics({
+      top: scroller.scrollTop,
+      client: scroller.clientHeight,
+      scroll: scroller.scrollHeight,
+    })
+    const updateAll = () => {
+      update()
+      const natural = mobileNaturalContentRef.current
+      setMobileContentOverflows(Boolean(natural && natural.scrollHeight > scroller.clientHeight + 1))
+    }
+    updateAll()
+    scroller.addEventListener('scroll', update, { passive: true })
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateAll)
+    observer?.observe(scroller)
+    if (mobileNaturalContentRef.current) observer?.observe(mobileNaturalContentRef.current)
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      observer?.disconnect()
+    }
+  }, [isPhonePortrait, orderedMobileTheorems, orderedMobileVariables, visualGoalInfos])
   const streamInteractionsEnabled = currentStreamIsLive && !currentStreamIsCompleted && !canvasState.completed
   const proofGraphVisible = totalLeafCount > 1
   const proofGraphOccupiesMainView = proofGraphVisible && !isPhonePortrait
@@ -3647,7 +3958,10 @@ export function VisualCanvas({
     })
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
-    await latestApplyInteraction(playTactic, sourceCard.id)
+    await latestApplyInteraction(playTactic, sourceCard.id, {
+      targetStreamId: stream.id,
+      mobileInsertAfter: targetCard.isTheorem ? hypMobileKey(targetCard) : undefined,
+    })
   }
 
   async function applyTestDragTacticToHyp(tacticName: string, hypName: string) {
@@ -3821,6 +4135,13 @@ export function VisualCanvas({
     return lastTransformRewriteDebugRef.current
   }
 
+  function moveTestHypTo(hypName: string, x: number, y: number) {
+    const stream = requireInteractiveCurrentStream()
+    const card = requireHypCard(stream, hypName)
+    const rect = document.getElementById(card.id)?.getBoundingClientRect()
+    moveHypCardTo(card.id, x, y, rect?.width ?? DEFAULT_WIDTH, rect?.height ?? DEFAULT_HEIGHT)
+  }
+
   function getProofAudit() {
     const streams = visualTestStateRef.current.canvasState.streams
     const coreLines = displayedProofLines(proofSteps, 'lean')
@@ -3902,6 +4223,7 @@ export function VisualCanvas({
       runPlayerTactic: applyTestPlayerTactic,
       dragHypToGoal: applyTestDragHypToGoal,
       dragHypToHyp: applyTestDragHypToHyp,
+      moveHypTo: moveTestHypTo,
       dragTacticToHyp: applyTestDragTacticToHyp,
       clickHyp: applyTestClickHyp,
       clickGoal: applyTestClickGoal,
@@ -4069,7 +4391,7 @@ export function VisualCanvas({
     )
   }
 
-  function renderHypCard(card: HypCardType) {
+  function renderHypCard(card: HypCardType, mobileList = false) {
     const clickAction = card.hyp.clickAction
     const isConstructable = hypIsConstructable(card)
     const opensConstructionOnTap = isPhonePortrait && isConstructable
@@ -4091,6 +4413,8 @@ export function VisualCanvas({
         isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
         isConstructable={streamInteractionsEnabled && isConstructable}
         constructOnSingleClick={streamInteractionsEnabled && opensConstructionOnTap}
+        showDropTarget={activeDragId !== null && activeDragId !== card.id}
+        mobileList={mobileList}
         onClickAction={streamInteractionsEnabled && isClickable && displayStream
           ? opensConstructionOnTap
             ? () => handleHypDoubleClick(displayStream.id, card.id)
@@ -4108,7 +4432,7 @@ export function VisualCanvas({
 
   function shouldIgnoreMobileSwipe(target: EventTarget | null) {
     return target instanceof HTMLElement && Boolean(target.closest(
-      'button, a, input, textarea, select, [role="button"], .statement-card, .theorem-tray-panel, .or-tooltip, .defeq-tooltip, .tr-controls',
+      'button, a, input, textarea, select, [role="button"], .statement-card, .theorem-tray-panel, .or-tooltip, .defeq-tooltip, .tr-controls, .mobile-play-panel',
     ))
   }
 
@@ -4145,6 +4469,93 @@ export function VisualCanvas({
     }
   }
 
+  const mobileMaxScroll = Math.max(0, mobileScrollMetrics.scroll - mobileScrollMetrics.client)
+  const mobileThumbPercent = mobileScrollMetrics.scroll > 0
+    ? Math.max(10, Math.min(100, mobileScrollMetrics.client / mobileScrollMetrics.scroll * 100))
+    : 100
+  const mobileThumbTopPercent = mobileMaxScroll > 0
+    ? mobileScrollMetrics.top / mobileMaxScroll * (100 - mobileThumbPercent)
+    : 0
+
+  function updateScrollFromScrollbarPointer(clientY: number, grabOffset: number) {
+    const track = mobileScrollbarRef.current
+    const scroller = mobileScrollRef.current
+    const thumb = track?.querySelector<HTMLElement>('.mobile-scrollbar-thumb')
+    if (!track || !scroller || !thumb) return
+    const trackRect = track.getBoundingClientRect()
+    const thumbRect = thumb.getBoundingClientRect()
+    const available = Math.max(1, trackRect.height - thumbRect.height)
+    const thumbTop = Math.max(0, Math.min(available, clientY - trackRect.top - grabOffset))
+    scroller.scrollTop = thumbTop / available * Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  }
+
+  function handleScrollbarPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (activeDragId || mobileMaxScroll <= 0) return
+    const thumb = event.currentTarget.querySelector<HTMLElement>('.mobile-scrollbar-thumb')
+    if (!thumb) return
+    const thumbRect = thumb.getBoundingClientRect()
+    const grabbedThumb = event.target instanceof HTMLElement && Boolean(event.target.closest('.mobile-scrollbar-thumb'))
+    const grabOffset = grabbedThumb ? event.clientY - thumbRect.top : thumbRect.height / 2
+    mobileScrollbarDragRef.current = { pointerId: event.pointerId, grabOffset }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    updateScrollFromScrollbarPointer(event.clientY, grabOffset)
+    event.preventDefault()
+  }
+
+  function handleScrollbarPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = mobileScrollbarDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    updateScrollFromScrollbarPointer(event.clientY, drag.grabOffset)
+    event.preventDefault()
+  }
+
+  function handleScrollbarPointerEnd(event: React.PointerEvent<HTMLDivElement>) {
+    if (mobileScrollbarDragRef.current?.pointerId !== event.pointerId) return
+    mobileScrollbarDragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  function renderActiveGoal(infoPositions: Array<'above' | 'below'> = ['above', 'below']) {
+    if (!displayStream) return null
+    const stream = displayStream
+    const liveGoalStream = currentStream && currentStream.id === stream.id ? currentStream : stream
+    const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
+    const isClickable = hasClickAction(clickAction)
+    const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
+    const isConstructable = goalIsConstructable(liveGoalStream)
+    return (
+      <GoalCard
+        key={stream.id}
+        id={stream.id}
+        goal={stream.goal}
+        isInteractive={streamInteractionsEnabled}
+        isTransformable={streamInteractionsEnabled && isTransformable}
+        isConstructable={streamInteractionsEnabled && isConstructable}
+        isClickable={streamInteractionsEnabled && isClickable}
+        clickTooltip={clickAction?.tooltip}
+        isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
+        visualInfos={visualGoalInfos}
+        infoPositions={infoPositions}
+        showDropTarget={activeDragId !== null}
+        onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
+        onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
+        onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms, streamHypNames(liveGoalStream))}
+        onMouseLeave={() => handleReductionMouseLeave(stream.id)}
+      />
+    )
+  }
+
+  const mobileBelowGoalInfos = displayStream
+    ? visualGoalInfos.filter(info => {
+        if (info.position !== 'below') return false
+        if (info.goal && formatFormulaText(info.goal) !== displayGoalText) return false
+        const hypTypes = displayStream.goal.hyps.map(hyp => formatFormulaText(TaggedText_stripTags(hyp.type)))
+        if (info.requireHypType && !hypTypes.includes(formatFormulaText(info.requireHypType))) return false
+        if (info.excludeHypType && hypTypes.includes(formatFormulaText(info.excludeHypType))) return false
+        return true
+      })
+    : []
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -4153,11 +4564,14 @@ export function VisualCanvas({
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
         onDragCancel={() => {
           setActiveDraggedTheorem(null)
           setActiveDraggedTheoremSourceId(null)
           setActiveDraggedTactic(null)
+          setActiveDragId(null)
+          stopMobileAutoScroll()
           closeReductionTooltip()
         }}
       >
@@ -4269,12 +4683,13 @@ export function VisualCanvas({
 
 
           <div className="combining-canvas" data-testid="combining-canvas" ref={combiningCanvasRef}>
-            {visibleHyps.map(renderHypCard)}
-            {theoremCopies.map(copy => (
+            {!isPhonePortrait && visibleHyps.map(card => renderHypCard(card))}
+            {!isPhonePortrait && theoremCopies.map(copy => (
               <PropositionTheoremCopyCard
                 key={copy.id}
                 copy={copy}
                 isFailing={failingTheoremCopyId === copy.id}
+                showDropTarget={activeDragId !== null && activeDragId !== copy.id}
                 iffDirection={getIffDirection(copy.id)}
                 onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(copy.theorem) && currentStream
                   ? () => handleTheoremCopyDoubleClick(copy.id, currentStream.id)
@@ -4288,36 +4703,87 @@ export function VisualCanvas({
               ref={goalsContainerRef}
               style={goalsTopOverride != null ? { top: `${goalsTopOverride}px`, transform: 'none' } : undefined}
             >
-              {displayStream && (() => {
-                const stream = displayStream
-                const liveGoalStream =
-                  currentStream && currentStream.id === stream.id
-                    ? currentStream
-                    : stream
-                const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
-                const isClickable = hasClickAction(clickAction)
-                const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
-                const isConstructable = goalIsConstructable(liveGoalStream)
-                return (
-                  <GoalCard
-                    key={stream.id}
-                    id={stream.id}
-                    goal={stream.goal}
-                    isInteractive={streamInteractionsEnabled}
-                    isTransformable={streamInteractionsEnabled && isTransformable}
-                    isConstructable={streamInteractionsEnabled && isConstructable}
-                    isClickable={streamInteractionsEnabled && isClickable}
-                    clickTooltip={clickAction?.tooltip}
-                    isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
-                    visualInfos={visualGoalInfos}
-                    onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
-                    onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
-                    onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms, streamHypNames(liveGoalStream))}
-                    onMouseLeave={() => handleReductionMouseLeave(stream.id)}
-                  />
-                )
-              })()}
+              {renderActiveGoal(isPhonePortrait ? ['above'] : ['above', 'below'])}
             </div>
+            {isPhonePortrait && (
+              <div className="mobile-play-panel" data-testid="mobile-play-panel">
+                <div className="mobile-play-scroll" ref={mobileScrollRef} data-testid="mobile-play-scroll">
+                  <div className="mobile-play-scroll-content">
+                    <div className="mobile-play-natural-content" ref={mobileNaturalContentRef}>
+                    {mobileBelowGoalInfos.length > 0 && (
+                      <div className="mobile-below-goal-dialogues">
+                        {mobileBelowGoalInfos.map((info, index) => (
+                          <div key={index} className="visual-info-callout goal-info below">
+                            <VisualInfoText text={info.text} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(tacticHypGuides.length > 0 || hypGoalGuides.length > 0 || hypInfoGuides.length > 0) && (
+                      <div className="mobile-scrolling-guides">
+                        {[...tacticHypGuides, ...hypGoalGuides, ...hypInfoGuides].map((guide, index) => (
+                          <div key={index} className="visual-info-callout mobile-scrolling-guide">
+                            <VisualInfoText text={guide.info.text} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mobile-card-columns">
+                      <section className="mobile-card-column mobile-variable-column" aria-label="Variables">
+                        <MobileReorderDivider column="variables" index={0} />
+                        {orderedMobileVariables.map((card, index) => (
+                          <React.Fragment key={hypMobileKey(card)}>
+                            {renderHypCard(card, true)}
+                            <MobileReorderDivider column="variables" index={index + 1} />
+                          </React.Fragment>
+                        ))}
+                      </section>
+                      <section className="mobile-card-column mobile-theorem-column" aria-label="Theorems">
+                        <MobileReorderDivider column="theorems" index={0} />
+                        {orderedMobileTheorems.map((item, index) => (
+                          <React.Fragment key={item.key}>
+                            {item.card
+                              ? renderHypCard(item.card, true)
+                              : item.copy && (
+                                  <PropositionTheoremCopyCard
+                                    copy={item.copy}
+                                    mobileList
+                                    isFailing={failingTheoremCopyId === item.copy.id}
+                                    showDropTarget={activeDragId !== null && activeDragId !== item.copy.id}
+                                    iffDirection={getIffDirection(item.copy.id)}
+                                    onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(item.copy.theorem) && currentStream
+                                      ? () => handleTheoremCopyDoubleClick(item.copy!.id, currentStream.id)
+                                      : undefined}
+                                    onContextMenu={(event) => handleTheoremCardContextMenu(event, item.copy!.id, item.copy!.theorem)}
+                                  />
+                                )}
+                            <MobileReorderDivider column="theorems" index={index + 1} />
+                          </React.Fragment>
+                        ))}
+                      </section>
+                    </div>
+                    </div>
+                    {mobileContentOverflows && <div className="mobile-scroll-deadspace" aria-hidden="true" />}
+                  </div>
+                </div>
+                <div
+                  ref={mobileScrollbarRef}
+                  className={`mobile-scrollbar${mobileMaxScroll > 0 ? ' scrollable' : ''}${activeDragId ? ' drag-active' : ''}`}
+                  data-testid="mobile-scrollbar"
+                  onPointerDown={handleScrollbarPointerDown}
+                  onPointerMove={handleScrollbarPointerMove}
+                  onPointerUp={handleScrollbarPointerEnd}
+                  onPointerCancel={handleScrollbarPointerEnd}
+                >
+                  {mobileMaxScroll > 0 && (
+                    <div
+                      className="mobile-scrollbar-thumb"
+                      style={{ height: `${mobileThumbPercent}%`, top: `${mobileThumbTopPercent}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
             {reductionTooltip && (
               <div
                 className={`defeq-tooltip${reductionTooltip.isClosing ? ' closing' : ''}`}
@@ -4380,7 +4846,7 @@ export function VisualCanvas({
               }}
               emphasizeItems={emphasizeItems}
             />
-            {tacticHypGuides.map((guide, index) => (
+            {!isPhonePortrait && tacticHypGuides.map((guide, index) => (
               <React.Fragment key={`${guide.info.tactic}-${guide.info.hyp}-${index}`}>
                 <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow tactic-hyp-instruction-arrow" />
                 <div className="visual-info-callout combining-info tactic-hyp-info" style={guide.style}>
@@ -4388,7 +4854,7 @@ export function VisualCanvas({
                 </div>
               </React.Fragment>
             ))}
-            {hypGoalGuides.map((guide, index) => (
+            {!isPhonePortrait && hypGoalGuides.map((guide, index) => (
               <React.Fragment key={`${guide.info.hyp}-goal-${index}`}>
                 <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
                 <div className="visual-info-callout combining-info hyp-goal-info" style={guide.style}>
@@ -4396,7 +4862,7 @@ export function VisualCanvas({
                 </div>
               </React.Fragment>
             ))}
-            {hypInfoGuides.map((guide, index) => (
+            {!isPhonePortrait && hypInfoGuides.map((guide, index) => (
               <React.Fragment key={`${guide.info.hyp}-info-${index}`}>
                 <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
                 <div className="visual-info-callout combining-info hyp-info" style={guide.style}>
@@ -4409,7 +4875,7 @@ export function VisualCanvas({
             <div
               className="tr-controls"
               style={{
-                bottom: `calc(2rem + ${trayHeight}px)`,
+                bottom: `calc(${isPhonePortrait ? '0.65rem' : '2rem'} + ${trayHeight}px)`,
               }}
             >
               <button
