@@ -58,6 +58,9 @@ jobs:
       - name: Checkout VisualTest
         run: git clone https://github.com/ryyanmapes/VisualTest ../VisualTest
 
+      - name: Checkout NNG4
+        run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -89,6 +92,13 @@ jobs:
           node -e "const fs = require('fs'); const p = 'Game/Metadata.lean'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/^import GameServer\.Browser$/m, 'import GameServer'))"
           grep -q '^import GameServer$' Game/Metadata.lean
           lake update
+          lake build
+          test -s .lake/gamedata/game.json
+
+      - name: Build NNG4 game
+        working-directory: ../NNG4
+        run: |
+          lake exe cache get
           lake build
           test -s .lake/gamedata/game.json
 

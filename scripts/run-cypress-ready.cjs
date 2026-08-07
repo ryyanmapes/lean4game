@@ -14,6 +14,7 @@ const resources = [
   httpGetResource('/'),
   httpGetResource('/data/g/test/TestGame/game.json'),
   httpGetResource('/data/g/local/VisualTest/game.json'),
+  httpGetResource('/data/g/local/NNG4/game.json'),
 ]
 
 async function main() {
