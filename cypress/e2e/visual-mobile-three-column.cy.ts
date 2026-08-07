@@ -53,6 +53,17 @@ describe('portrait-phone three-column play space', () => {
     cy.get('.mobile-variable-column [data-hyp-name="q"]').should('exist')
     cy.get('.mobile-theorem-column').should('exist')
     cy.get('[data-testid="mobile-scrollbar"]').should('be.visible')
+    cy.get('[data-testid="visual-proof-page"]').should($page => {
+      expect(getComputedStyle($page[0]!).position, 'portrait root avoids WKWebView fixed-layer hit-test offsets')
+        .to.equal('absolute')
+    })
+    cy.get('.theorem-tray-panel').should($tray => {
+      expect(getComputedStyle($tray[0]!).position, 'tray shares the portrait root coordinate space')
+        .to.equal('absolute')
+      const rect = $tray[0]!.getBoundingClientRect()
+      const hit = $tray[0]!.ownerDocument.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 20)
+      expect(hit?.closest('.theorem-tray-panel'), 'painted tray and hit target agree').to.equal($tray[0])
+    })
     cy.get('[data-testid="goal-card"]').then($goal => {
       cy.get('[data-testid="mobile-play-scroll"]').then($scroll => {
         expect($scroll[0]!.contains($goal[0]!), 'goal is outside scrolling body').to.equal(false)
@@ -65,6 +76,9 @@ describe('portrait-phone three-column play space', () => {
   it('reorders only through dividers and restores the visual order after reload', () => {
     openTutorialOne()
     visibleVariableNames().should('deep.equal', ['x', 'q'])
+    cy.get('.mobile-variable-column [data-testid="mobile-reorder-divider"]').first().should($divider => {
+      expect($divider[0]!.getBoundingClientRect().height, 'divider touch target height').to.be.at.least(17)
+    })
     dragCardToDivider('q', 0)
     visibleVariableNames().should('deep.equal', ['q', 'x'])
     cy.reload()

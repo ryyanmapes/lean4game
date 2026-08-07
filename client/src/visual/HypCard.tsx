@@ -52,6 +52,7 @@ export function HypCard({
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
     id: card.id,
     disabled: !isInteractive,
+    data: { hypCard: true, card },
   })
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -71,6 +72,7 @@ export function HypCard({
     top: mobileList ? undefined : positionOverride?.y ?? card.position.y,
     transform: CSS.Translate.toString(transform),
     zIndex: isDragging ? 1000 : 10,
+    visibility: isDragging && mobileList ? 'hidden' : undefined,
   }
 
   const classes = [
@@ -98,8 +100,6 @@ export function HypCard({
       : undefined
   const hypName = card.hyp.names[0] ?? ''
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
-  const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
-  const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
 
   React.useEffect(() => {
     return () => {
@@ -158,6 +158,17 @@ export function HypCard({
       {...(isInteractive ? listeners : {})}
       {...(isInteractive ? attributes : {})}
     >
+      <HypCardContent card={card} iffDirection={iffDirection} />
+    </div>
+  )
+}
+
+function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType; iffDirection?: IffDirection }) {
+  const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
+  const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
+  const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
+  return (
+    <>
       <div className="statement-card-main">
         <span className="hyp-name">{card.hyp.names.join(', ')}</span>
         <span className="hyp-colon">:</span>
@@ -172,6 +183,14 @@ export function HypCard({
             : colorizeFormula(forallFooter)}
         </div>
       )}
+    </>
+  )
+}
+
+export function HypCardPreviewCard({ card, iffDirection }: { card: HypCardType; iffDirection?: IffDirection }) {
+  return (
+    <div className={`statement-card mobile-list-card hyp-overlay-card${card.isTheorem ? ' derived-theorem-card' : ''}${card.hyp.forallFooter ? ' has-forall-footer' : ''}`}>
+      <HypCardContent card={card} iffDirection={iffDirection} />
     </div>
   )
 }

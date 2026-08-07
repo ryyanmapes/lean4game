@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
 import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { ClickAction, ClickActionOption, InteractiveGoalsWithHints, ProofState } from '../components/infoview/rpc_api'
-import { HypCard } from './HypCard'
+import { HypCard, HypCardPreviewCard } from './HypCard'
 import { GoalCard } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
@@ -544,6 +544,13 @@ function hypMobileKey(card: HypCardType): string {
   return `hyp:${card.hyp.playName ?? card.hyp.names[0] ?? card.id}`
 }
 
+/** Mobile columns separate data variables from propositions. `isTheorem` only
+ * marks generated theorem cards, while Lean's `isAssumption` covers ordinary
+ * proposition hypotheses such as `hd : P`. */
+function isMobileTheoremCard(card: HypCardType): boolean {
+  return Boolean(card.isTheorem || card.hyp.isAssumption)
+}
+
 function theoremCopyMobileKey(copy: PropositionTheoremCopy): string {
   return `copy:${copy.id}`
 }
@@ -574,7 +581,7 @@ function initialMobileVisualOrder(
   const theorems = [...stored.theorems]
   for (const card of canvas.streams.flatMap(stream => stream.hyps)) {
     const key = hypMobileKey(card)
-    const column = card.isTheorem ? theorems : variables
+    const column = isMobileTheoremCard(card) ? theorems : variables
     if (!column.includes(key)) column.push(key)
   }
   return { variables, theorems }
@@ -1540,10 +1547,12 @@ export function VisualCanvas({
   const mobileScrollbarRef = useRef<HTMLDivElement>(null)
   const mobileScrollbarDragRef = useRef<{ pointerId: number; grabOffset: number } | null>(null)
   const mobileAutoScrollFrameRef = useRef<number | null>(null)
+  const mobileDragPointerOriginRef = useRef<{ x: number; y: number } | null>(null)
   const pendingMobileInsertAfterRef = useRef<string | null>(null)
   const [mobileScrollMetrics, setMobileScrollMetrics] = useState({ top: 0, client: 0, scroll: 0 })
   const [mobileContentOverflows, setMobileContentOverflows] = useState(false)
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
+  const [activeDraggedHyp, setActiveDraggedHyp] = useState<HypCardType | null>(null)
   const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -1830,8 +1839,14 @@ export function VisualCanvas({
 
   const collisionDetection = useCallback<CollisionDetection>((args) => {
     const pointerCollisions = pointerWithin(args)
+    if (isPhonePortrait) {
+      const dividerCollisions = pointerCollisions.filter(collision =>
+        String(collision.id).startsWith(MOBILE_DIVIDER_PREFIX)
+      )
+      return dividerCollisions.length > 0 ? dividerCollisions : pointerCollisions
+    }
     return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
-  }, [])
+  }, [isPhonePortrait])
 
   useEffect(() => {
     const navigableIds = collectActiveStreamIds(proofTree)
@@ -2231,10 +2246,25 @@ export function VisualCanvas({
     const tactic = event.active.data.current?.tactic as VisualTactic | undefined
     const isTheoremDrag = !!event.active.data.current?.theoremTemplate || !!event.active.data.current?.theoremCopy
     const isTacticDrag = !!event.active.data.current?.visualTactic
+    const draggedHyp = event.active.data.current?.hypCard
+      ? event.active.data.current.card as HypCardType
+      : null
+    const activator = event.activatorEvent
+    if (activator instanceof MouseEvent) {
+      mobileDragPointerOriginRef.current = { x: activator.clientX, y: activator.clientY }
+    } else if (activator instanceof TouchEvent && activator.touches.length > 0) {
+      mobileDragPointerOriginRef.current = {
+        x: activator.touches[0]!.clientX,
+        y: activator.touches[0]!.clientY,
+      }
+    } else {
+      mobileDragPointerOriginRef.current = null
+    }
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setActiveDragId(String(event.active.id))
     setActiveDraggedTheorem(isTheoremDrag && theorem ? theorem : null)
+    setActiveDraggedHyp(isPhonePortrait ? draggedHyp : null)
     setActiveDraggedTheoremSourceId(isTheoremDrag ? String(event.active.id) : null)
     setActiveDraggedTactic(isTacticDrag && tactic ? tactic : null)
   }
@@ -2263,13 +2293,13 @@ export function VisualCanvas({
   function handleDragMove(event: DragMoveEvent) {
     if (!isPhonePortrait || !activeDragId) return
     const track = mobileScrollbarRef.current?.getBoundingClientRect()
-    const dragged = event.active.rect.current.translated
-    if (!track || !dragged) {
+    const origin = mobileDragPointerOriginRef.current
+    if (!track || !origin) {
       stopMobileAutoScroll()
       return
     }
-    const pointerX = dragged.left + dragged.width / 2
-    const pointerY = dragged.top + dragged.height / 2
+    const pointerX = origin.x + event.delta.x
+    const pointerY = origin.y + event.delta.y
     if (pointerX < track.left - 12 || pointerX > track.right + 12 || pointerY < track.top || pointerY > track.bottom) {
       stopMobileAutoScroll()
       return
@@ -2311,9 +2341,11 @@ export function VisualCanvas({
   function handleDragEnd(event: DragEndEvent) {
     const { delta, active, over } = event
     setActiveDraggedTheorem(null)
+    setActiveDraggedHyp(null)
     setActiveDraggedTheoremSourceId(null)
     setActiveDraggedTactic(null)
     setActiveDragId(null)
+    mobileDragPointerOriginRef.current = null
     stopMobileAutoScroll()
     const activeId = active.id as string
     const overId = over?.id as string | undefined
@@ -2341,7 +2373,7 @@ export function VisualCanvas({
           ? theoremCopyMobileKey(sourceTheoremCopy)
           : null
       const sourceColumn: MobileColumn | null = sourceCard
-        ? sourceCard.isTheorem ? 'theorems' : 'variables'
+        ? isMobileTheoremCard(sourceCard) ? 'theorems' : 'variables'
         : sourceTheoremCopy
           ? 'theorems'
           : null
@@ -2454,7 +2486,7 @@ export function VisualCanvas({
           })
           applyInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
-            ...(targetCard?.isTheorem ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
+            ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
           })
           return
@@ -2569,7 +2601,7 @@ export function VisualCanvas({
         applyInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
-          ...(targetCard?.isTheorem ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
+          ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
         })
       }
       return
@@ -2786,7 +2818,7 @@ export function VisualCanvas({
     applyInteraction(clickAction.playTactic, cardId, {
       streamSplit: clickAction.streamSplit,
       targetStreamId: streamId,
-      mobileInsertAfter: clickedCard?.isTheorem ? hypMobileKey(clickedCard) : undefined,
+      mobileInsertAfter: clickedCard && isMobileTheoremCard(clickedCard) ? hypMobileKey(clickedCard) : undefined,
     })
   }
 
@@ -2902,7 +2934,7 @@ export function VisualCanvas({
       ? target.sourceKind === 'hyp'
         ? (() => {
             const source = focusedStream.hyps.find(card => interactionHypName(card) === target.sourceRef)
-            return source?.isTheorem ? hypMobileKey(source) : null
+            return source && isMobileTheoremCard(source) ? hypMobileKey(source) : null
           })()
         : target.sourceKind === 'theorem_copy' && target.sourceId
           ? `copy:${target.sourceId}`
@@ -3453,12 +3485,12 @@ export function VisualCanvas({
   const totalLeafCount = leafCount(proofTree)
   const visibleHyps = displayStream?.hyps ?? []
   const mobileVariableCards = React.useMemo(
-    () => visibleHyps.filter(card => !card.isTheorem),
+    () => visibleHyps.filter(card => !isMobileTheoremCard(card)),
     [visibleHyps],
   )
   const mobileTheoremItems = React.useMemo(
     () => [
-      ...visibleHyps.filter(card => card.isTheorem).map(card => ({
+      ...visibleHyps.filter(isMobileTheoremCard).map(card => ({
         key: hypMobileKey(card),
         card,
         copy: null as PropositionTheoremCopy | null,
@@ -3960,7 +3992,7 @@ export function VisualCanvas({
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
     await latestApplyInteraction(playTactic, sourceCard.id, {
       targetStreamId: stream.id,
-      mobileInsertAfter: targetCard.isTheorem ? hypMobileKey(targetCard) : undefined,
+      mobileInsertAfter: isMobileTheoremCard(targetCard) ? hypMobileKey(targetCard) : undefined,
     })
   }
 
@@ -4568,9 +4600,11 @@ export function VisualCanvas({
         onDragEnd={handleDragEnd}
         onDragCancel={() => {
           setActiveDraggedTheorem(null)
+          setActiveDraggedHyp(null)
           setActiveDraggedTheoremSourceId(null)
           setActiveDraggedTactic(null)
           setActiveDragId(null)
+          mobileDragPointerOriginRef.current = null
           stopMobileAutoScroll()
           closeReductionTooltip()
         }}
@@ -4959,7 +4993,9 @@ export function VisualCanvas({
             </section>
           )}
           <DragOverlay dropAnimation={null}>
-            {activeDraggedTheorem
+            {activeDraggedHyp
+              ? <HypCardPreviewCard card={activeDraggedHyp} iffDirection={getIffDirection(activeDraggedHyp.id)} />
+              : activeDraggedTheorem
               ? <PropositionTheoremPreviewCard theorem={activeDraggedTheorem} iffDirection={getIffDirection(activeDraggedTheoremSourceId ?? `theorem_template_${activeDraggedTheorem.id}`)} />
               : activeDraggedTactic
                 ? <VisualTacticPreviewCard tactic={activeDraggedTactic} />
