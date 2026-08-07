@@ -49,6 +49,9 @@ import {
   shortenQualifiedNames,
   stripCasePrefixes,
 } from './proofText'
+import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
+
+export { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 
 import './visual.css'
 
@@ -1234,8 +1237,6 @@ type ConstructionTarget =
       sourceId?: string
       prompt: ForallSpecificationInfo
     }
-
-export const VISUAL_PROOF_AUTOSAVE_VERSION = 1
 
 export interface VisualProofResumeState {
   version: typeof VISUAL_PROOF_AUTOSAVE_VERSION
@@ -3566,10 +3567,10 @@ export function VisualCanvas({
       ?? null
   const currentStreamIndex = currentStream ? activeStreamIds.indexOf(currentStream.id) : -1
   const incompleteStreamIds = new Set(liveStreamIds)
-  const hasIncompleteStreamLeft = currentStreamIndex > 0 && activeStreamIds
+  const hasIncompleteStreamLeft = currentStreamIsCompleted && currentStreamIndex > 0 && activeStreamIds
     .slice(0, currentStreamIndex)
     .some(streamId => incompleteStreamIds.has(streamId))
-  const hasIncompleteStreamRight = currentStreamIndex >= 0 && activeStreamIds
+  const hasIncompleteStreamRight = currentStreamIsCompleted && currentStreamIndex >= 0 && activeStreamIds
     .slice(currentStreamIndex + 1)
     .some(streamId => incompleteStreamIds.has(streamId))
   const totalLeafCount = leafCount(proofTree)

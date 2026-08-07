@@ -479,6 +479,8 @@
 
 .visual-page .statement-card.variable-card,
 .visual-page .statement-card.variable-only-tactic {
+  --bevel-border-color: var(--glass-border);
+  position: relative;
   clip-path: polygon(
     0.65rem 0,
     calc(100% - 0.65rem) 0,
@@ -489,6 +491,38 @@
     0 calc(100% - 0.65rem),
     0 0.65rem
   );
+}
+
+.visual-page .statement-card.variable-only-tactic {
+  --bevel-border-color: var(--visual-danger-border);
+}
+
+.visual-page .statement-card.variable-card::after,
+.visual-page .statement-card.variable-only-tactic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 1.3rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top right / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom right / 0.65rem 0.65rem no-repeat;
+}
+
+.visual-page .statement-card.variable-card.drop-target-active,
+.visual-page .statement-card.variable-only-tactic.drop-target-active {
+  --bevel-border-color: var(--visual-drop-target-border);
+}
+
+.visual-page .statement-card.variable-card.drag-fail,
+.visual-page .statement-card.variable-only-tactic.drag-fail {
+  --bevel-border-color: var(--visual-danger);
 }
 
 .visual-page .statement-card:hover {
@@ -999,14 +1033,10 @@
   flex-wrap: wrap;
 }
 
-.visual-page .statement-card-main.colon-line-break .hyp-colon {
-  display: none;
-}
-
-.visual-page .statement-card-main.colon-line-break .proposition {
-  flex-basis: 100%;
-  width: 100%;
-  margin-top: 0.12rem;
+.visual-page .statement-card-label {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
 }
 
 .visual-page .hyp-name {
@@ -2980,6 +3010,21 @@
   .visual-page.phone-portrait .statement-card:hover {
     filter: none;
     outline: none;
+    background: var(--glass-bg);
+  }
+
+  .visual-page.phone-portrait .statement-card.theorem-copy-card:hover,
+  .visual-page.phone-portrait .statement-card.theorem-tray-card:hover,
+  .visual-page.phone-portrait .statement-card.derived-theorem-card:hover {
+    background: rgba(52, 211, 153, 0.08);
+  }
+
+  .visual-page.phone-portrait .statement-card.int-theorem:hover {
+    background: rgba(96, 165, 250, 0.08);
+  }
+
+  .visual-page.phone-portrait .statement-card.tactic-tray-card:hover {
+    background: var(--visual-danger-bg);
   }
 
   .visual-page.phone-portrait .statement-card.goal:hover,
@@ -2988,6 +3033,11 @@
   .visual-page.phone-portrait .statement-card.goal.transformable:hover {
     background: var(--glass-bg);
     box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
+  }
+
+  .visual-page.phone-portrait .statement-card.goal.solved:hover {
+    border-color: var(--visual-success);
+    box-shadow: 0 0 30px var(--visual-success-glow), 0 0 60px var(--visual-success-glow);
   }
 
   .visual-page.phone-portrait .statement-card.clickable:not(.goal):hover:not(.dragging),
@@ -3297,9 +3347,10 @@
 
   .visual-map-scroll {
     justify-content: center;
-    /* Give even the first/last world enough scroll runway to sit at the
-       visual centre of a phone viewport. */
-    padding: max(8rem, calc(50dvh - 2.5rem)) 0.75rem;
+    /* The SVG already includes room for each world's level orbit and label.
+       Keep a small touch-friendly margin without allowing the first/last
+       worlds to scroll through half a viewport of empty space. */
+    padding: 3rem 0.75rem 4rem;
     overflow-x: hidden;
     overflow-y: auto;
     touch-action: pan-y;
@@ -3345,6 +3396,26 @@
 .visual-map-page .world-title {
   color: var(--visual-text-on-accent);
   font-weight: 600;
+}
+
+.visual-map-page .visual-ending-world {
+  cursor: default;
+  pointer-events: none;
+}
+
+.visual-map-page .ending-world-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.visual-map-page .ending-world-count {
+  margin: 0;
+  color: var(--visual-text-on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 /* Dark scrollbars for the map scroll area */

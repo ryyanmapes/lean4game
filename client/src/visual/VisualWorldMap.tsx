@@ -35,6 +35,7 @@ import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
 import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
 import { titleCaseLevel } from './VisualHeader'
+import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 import './visual.css'
 
 const r = 16
@@ -74,6 +75,8 @@ function measureLevelTooltipText(text: string): number {
 interface VisualMapPalette {
   lockedLevel: string
   unlockedLevel: string
+  startedLevel: string
+  unlockedLevelOutline: string
   completedLevel: string
   lockedWorld: string
   unlockedWorld: string
@@ -87,7 +90,9 @@ interface VisualMapPalette {
 
 const DARK_MAP_PALETTE: VisualMapPalette = {
   lockedLevel: '#475569',
-  unlockedLevel: '#8b5cf6',
+  unlockedLevel: '#475569',
+  startedLevel: '#8b5cf6',
+  unlockedLevelOutline: '#8b5cf6',
   completedLevel: '#10b981',
   lockedWorld: '#334155',
   unlockedWorld: '#6d28d9',
@@ -101,7 +106,9 @@ const DARK_MAP_PALETTE: VisualMapPalette = {
 
 const LIGHT_MAP_PALETTE: VisualMapPalette = {
   lockedLevel: '#94a3b8',
-  unlockedLevel: '#6366f1',
+  unlockedLevel: '#cbd5e1',
+  startedLevel: '#6366f1',
+  unlockedLevelOutline: '#6366f1',
   completedLevel: '#10b981',
   lockedWorld: '#cbd5e1',
   unlockedWorld: '#818cf8',
@@ -149,7 +156,7 @@ interface LevelTooltipInfo {
 
 type MapLevelMode = 'classic' | 'visual'
 
-function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, unlocked, worldSize, palette, title, onHoverChange, levelMode }: {
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, title, onHoverChange, levelMode }: {
   world: string
   level: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -158,6 +165,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   visualIndex: number
   position: cytoscape.Position
   completed: boolean
+  started: boolean
   unlocked: boolean
   worldSize: number
   palette: VisualMapPalette
@@ -182,7 +190,14 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
     ? s * position.y - Math.cos(visualIndex * beta) * R
     : s * position.y - Math.cos(visualIndex * betaSpiral(visualIndex)) * (R + 2 * r * (visualIndex - 1) / (NSPIRAL + 1))
 
-  const fill = completed ? palette.completedLevel : unlocked ? palette.unlockedLevel : palette.lockedLevel
+  const fill = completed
+    ? palette.completedLevel
+    : started
+      ? palette.startedLevel
+      : unlocked
+        ? palette.unlockedLevel
+        : palette.lockedLevel
+  const stroke = !completed && !started && unlocked ? palette.unlockedLevelOutline : 'none'
   const to = `/${gameId}/world/${world}/level/${level}${levelMode === 'visual' ? '/visual' : ''}`
   const isRight = x >= s * position.x
 
@@ -197,7 +212,15 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
       onMouseEnter={() => onHoverChange?.({ x, y, title: title ?? `Level ${displayLevel}`, isRight })}
       onMouseLeave={() => onHoverChange?.(null)}
     >
-      <circle fill={fill} cx={x} cy={y} r={r} />
+      <circle
+        className={`level-circle${started ? ' saved-progress' : ''}${!completed && !started && unlocked ? ' unlocked-outline' : ''}`}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={stroke === 'none' ? 0 : 4}
+        cx={x}
+        cy={y}
+        r={stroke === 'none' ? r : r - 2}
+      />
       <foreignObject
         className="level-title-wrapper"
         x={x}
@@ -214,6 +237,136 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
       </foreignObject>
     </g>
   )
+}
+
+function endingProgressArc(cx: number, cy: number, radius: number, progress: number) {
+  const clamped = Math.max(0, Math.min(1, progress))
+  if (clamped <= 0) return null
+  if (clamped >= 1) {
+    return <circle cx={cx} cy={cy} r={radius} fill="none" stroke="currentColor" strokeWidth={10} />
+  }
+  const startAngle = -Math.PI / 2
+  const endAngle = startAngle + clamped * Math.PI * 2
+  const x1 = cx + Math.cos(startAngle) * radius
+  const y1 = cy + Math.sin(startAngle) * radius
+  const x2 = cx + Math.cos(endAngle) * radius
+  const y2 = cy + Math.sin(endAngle) * radius
+  const largeArc = clamped > 0.5 ? 1 : 0
+  return (
+    <path
+      d={`M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={10}
+      strokeLinecap="butt"
+    />
+  )
+}
+
+function VisualEndingWorldIcon({ position, completedLevels, totalLevels, palette }: {
+  position: cytoscape.Position
+  completedLevels: number
+  totalLevels: number
+  palette: VisualMapPalette
+}) {
+  const cx = s * position.x
+  const cy = s * position.y
+  const radius = 54
+  const progress = totalLevels > 0 ? completedLevels / totalLevels : 0
+  const complete = totalLevels > 0 && completedLevels === totalLevels
+  return (
+    <g
+      className={`visual-ending-world${complete ? ' complete' : ' locked'}`}
+      data-world-id="Ending"
+      aria-label={`Ending World, ${completedLevels} of ${totalLevels} levels completed`}
+      aria-disabled="true"
+    >
+      <circle
+        className="ending-world-hollow"
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill="none"
+        stroke={palette.lockedWorld}
+        strokeWidth={10}
+      />
+      <g className="ending-world-progress" style={{ color: complete ? palette.completedWorld : palette.startedLevel }}>
+        {endingProgressArc(cx, cy, radius, progress)}
+      </g>
+      <foreignObject x={cx - 90} y={cy + radius + 18} width="180px" height="3.4em" style={{ overflow: 'visible' }}>
+        <div className="world-label ending-world-label" style={{ backgroundColor: palette.lockedLabel }}>
+          <p className="world-title" style={{ fontSize: `${MINFONT}px` }}>Ending World</p>
+          <p className="ending-world-count">{completedLevels} / {totalLevels}</p>
+        </div>
+      </foreignObject>
+    </g>
+  )
+}
+
+type WorldLayoutNode = { position: cytoscape.Position; data: { title?: string } }
+
+/** Deliberate NNG4 presentation grid; game dependency data still owns the paths. */
+export function applyNng4VisualLayout(
+  rawNodes: Record<string, WorldLayoutNode>,
+  rawBounds?: { x1: number; x2: number; y1: number; y2: number },
+) {
+  const nodes: Record<string, WorldLayoutNode> = { ...rawNodes }
+  if (!rawBounds || !rawNodes.Tutorial || !rawNodes.Addition) {
+    return { nodes, bounds: rawBounds ? { ...rawBounds } : undefined, endingPosition: null }
+  }
+
+  const width = Math.max(120, rawBounds.x2 - rawBounds.x1)
+  const left = rawBounds.x1
+  const center = left + width / 2
+  const at = (fraction: number) => left + width * fraction
+  const graphHeight = Math.max(180, rawBounds.y2 - rawBounds.y1)
+  const rowGap = graphHeight / 4
+  const row = (index: number) => rawBounds.y1 + rowGap * index
+  const place = (id: string, x: number, y: number) => {
+    if (rawNodes[id]) nodes[id] = { ...rawNodes[id], position: { x, y } }
+  }
+
+  place('Tutorial', center, row(0))
+  place('Addition', center, row(1))
+  place('Multiplication', at(1 / 3), row(2))
+  place('Implication', at(2 / 3), row(2))
+  place('Power', at(1 / 5), row(3))
+  place('AdvAddition', at(2 / 3), row(3))
+  place('Algorithm', at(9 / 10), row(3))
+  place('LessOrEqual', at(2 / 3), row(4))
+  place('AdvMultiplication', center, row(5))
+
+  const endingPosition = { x: center, y: row(6) }
+  return {
+    nodes,
+    bounds: { ...rawBounds, x1: left, x2: left + width, y1: row(0), y2: endingPosition.y },
+    endingPosition,
+  }
+}
+
+function hasUnfinishedVisualAutosave(gameId: string, worldId: string, levelId: number): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const raw = window.localStorage.getItem(`visual-proof-autosave/${gameId}/${worldId}/${levelId}`)
+    if (!raw) return false
+    const stored = JSON.parse(raw) as {
+      version?: unknown
+      gameId?: unknown
+      worldId?: unknown
+      levelId?: unknown
+      session?: { version?: unknown; proofBody?: unknown; proofSteps?: unknown }
+    }
+    return stored.version === VISUAL_PROOF_AUTOSAVE_VERSION &&
+      stored.gameId === gameId &&
+      stored.worldId === worldId &&
+      stored.levelId === levelId &&
+      stored.session?.version === VISUAL_PROOF_AUTOSAVE_VERSION &&
+      typeof stored.session.proofBody === 'string' &&
+      stored.session.proofBody.trim().length > 0 &&
+      Array.isArray(stored.session.proofSteps)
+  } catch {
+    return false
+  }
 }
 
 function VisualWorldIcon({ world, title, position, completedLevels, worldSize, palette, levelMode }: {
@@ -383,6 +536,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const svgRef = React.useRef<SVGSVGElement>(null)
   const mapPalette = isVisualLightMode ? LIGHT_MAP_PALETTE : DARK_MAP_PALETTE
   const { worlds, worldSize, skippedLevels, title } = gameInfo.data ?? {}
+  // Subscribe so completion/import updates redraw the imperative selector results below.
+  useAppSelector(selectProgress(gameId))
 
   const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
   const [levelTooltip, setLevelTooltip] = React.useState<LevelTooltipInfo | null>(null)
@@ -423,35 +578,12 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const rawLayout: { nodes: Record<string, { position: cytoscape.Position; data: { title?: string } }>; bounds?: { x1: number; x2: number; y1: number; y2: number } } =
     worlds ? computeWorldLayout(worlds) : { nodes: {} }
 
-  // NNG4-specific position overrides: straighten the center column and balance the branches.
-  // rawNodes positions come from klay; we override x only, keeping klay's y ordering.
-  const rawNodes = rawLayout.nodes
-  const nodes: typeof rawNodes = { ...rawNodes }
-  // bounds may need expanding if an override moves a node outside the klay bounding box.
-  let bounds = rawLayout.bounds ? { ...rawLayout.bounds } : undefined
-
-  // Center column: Tutorial and Addition align with klay's LessOrEqual x (the convergence point).
-  if (rawNodes['Tutorial'] && rawNodes['LessOrEqual']) {
-    nodes['Tutorial'] = { ...rawNodes['Tutorial'], position: { ...rawNodes['Tutorial'].position, x: rawNodes['LessOrEqual'].position.x } }
-  }
-  if (rawNodes['Addition'] && rawNodes['LessOrEqual']) {
-    nodes['Addition'] = { ...rawNodes['Addition'], position: { ...rawNodes['Addition'].position, x: rawNodes['LessOrEqual'].position.x } }
-  }
-  // Right column: Implication and LessOrEqual align with AdvAddition.
-  if (rawNodes['Implication'] && rawNodes['AdvAddition']) {
-    nodes['Implication'] = { ...rawNodes['Implication'], position: { ...rawNodes['Implication'].position, x: rawNodes['AdvAddition'].position.x } }
-  }
-  if (rawNodes['LessOrEqual'] && rawNodes['AdvAddition']) {
-    nodes['LessOrEqual'] = { ...rawNodes['LessOrEqual'], position: { ...rawNodes['LessOrEqual'].position, x: rawNodes['AdvAddition'].position.x } }
-  }
-  // Left column: Power shifts further left of Multiplication so it doesn't crowd it.
-  // Expand bounds.x1 so the SVG viewBox isn't clipped.
-  if (rawNodes['Power'] && rawNodes['Multiplication'] && rawNodes['LessOrEqual']) {
-    const colSpan = rawNodes['LessOrEqual'].position.x - rawNodes['Multiplication'].position.x
-    const newPowerX = rawNodes['Multiplication'].position.x - colSpan * 0.4
-    nodes['Power'] = { ...rawNodes['Power'], position: { ...rawNodes['Power'].position, x: newPowerX } }
-    if (bounds && newPowerX < bounds.x1) bounds = { ...bounds, x1: newPowerX }
-  }
+  const arrangedLayout = isNng4Game(gameId)
+    ? applyNng4VisualLayout(rawLayout.nodes, rawLayout.bounds)
+    : { nodes: { ...rawLayout.nodes }, bounds: rawLayout.bounds ? { ...rawLayout.bounds } : undefined, endingPosition: null }
+  const nodes = arrangedLayout.nodes
+  const bounds = arrangedLayout.bounds
+  const endingPosition = arrangedLayout.endingPosition
 
   const isSkipped = (worldId: string, level: number) =>
     skippedLevels?.[worldId]?.includes(level) ?? false
@@ -462,6 +594,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   }
 
   const completed: Record<string, boolean[]> = {}
+  const started: Record<string, boolean[]> = {}
   const svgElements: React.ReactNode[] = []
 
   if (worlds && worldSize) {
@@ -469,6 +602,9 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       // Treat skipped levels as completed so they don't block world unlock/completion.
       completed[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
         i === 0 || isSkipped(worldId, i) || selectCompleted(gameId, worldId, i)(store.getState()),
+      )
+      started[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
+        i > 0 && !completed[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
       )
     }
 
@@ -483,6 +619,34 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
           source={nodes[edge[0]]}
           target={nodes[edge[1]]}
           unlocked={sourceCompleted}
+          palette={mapPalette}
+        />,
+      )
+    }
+
+    const totalVisibleLevels = Object.keys(nodes).reduce(
+      (total, worldId) => total + visibleCount(worldId),
+      0,
+    )
+    const totalCompletedLevels = Object.keys(nodes).reduce(
+      (total, worldId) => total + completed[worldId].slice(1).filter(Boolean).length - (skippedLevels?.[worldId]?.length ?? 0),
+      0,
+    )
+
+    if (endingPosition && nodes.Power && nodes.AdvMultiplication) {
+      svgElements.push(
+        <VisualWorldPath
+          key="path_Power-->Ending"
+          source={nodes.Power}
+          target={{ position: endingPosition }}
+          unlocked={completed.Power.slice(1).every(Boolean)}
+          palette={mapPalette}
+        />,
+        <VisualWorldPath
+          key="path_AdvMultiplication-->Ending"
+          source={nodes.AdvMultiplication}
+          target={{ position: endingPosition }}
+          unlocked={completed.AdvMultiplication.slice(1).every(Boolean)}
           palette={mapPalette}
         />,
       )
@@ -518,6 +682,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             visualIndex={visualIndex}
             position={position}
             completed={completed[worldId][i]}
+            started={started[worldId][i]}
             unlocked={completed[worldId][i - 1]}
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
@@ -527,6 +692,18 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
           />,
         )
       }
+    }
+
+    if (endingPosition) {
+      svgElements.push(
+        <VisualEndingWorldIcon
+          key="world-Ending"
+          position={endingPosition}
+          completedLevels={totalCompletedLevels}
+          totalLevels={totalVisibleLevels}
+          palette={mapPalette}
+        />,
+      )
     }
   }
 

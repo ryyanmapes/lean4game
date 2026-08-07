@@ -465,10 +465,15 @@ syntax (name := drag_rw_hyp_lhs) "drag_rw_hyp_lhs" ident "[" ("←")? ident "]" 
 syntax (name := drag_rw_hyp_rhs_at) "drag_rw_hyp_rhs_at" ident "[" ("←")? ident "]" "[" num,* "]" : tactic
 syntax (name := drag_rw_hyp_lhs_at) "drag_rw_hyp_lhs_at" ident "[" ("←")? ident "]" "[" num,* "]" : tactic
 
-private def visibleArityForConst (name : Name) : Option Nat :=
-  match name with
-  | ``HAdd.hAdd | ``HMul.hMul | ``HSub.hSub | ``HDiv.hDiv => some 2
-  | _ => none
+private partial def explicitArity (type : Expr) : Nat :=
+  match type with
+  | .forallE _ _ body binderInfo =>
+      (if binderInfo.isExplicit then 1 else 0) + explicitArity body
+  | _ => 0
+
+private def visibleArityForConst (name : Name) : MetaM Nat := do
+  let info ← getConstInfo name
+  pure <| max 1 (explicitArity info.type)
 
 private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
   match path with
@@ -476,11 +481,10 @@ private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
   | k :: rest =>
     let e' ← withReducible (whnf e)
     let flat := e'.getAppArgs
-    let head := e'.getAppFn.constName?
-    let va :=
-      match head >>= visibleArityForConst with
-      | some v => v
-      | none => 1
+    let constArity ← match e'.getAppFn.constName? with
+      | some name => visibleArityForConst name
+      | none => pure 1
+    let va := min flat.size constArity
     let idx := flat.size - va + k - 1
     if h : idx < flat.size then
       navigateToSubterm flat[idx] rest
@@ -610,11 +614,10 @@ private partial def focusedRewriteExpr
     let fn := e'.getAppFn
     if flat.isEmpty then
       throwError "drag_rw: path position {k} out of range (node has 0 visible children)"
-    let head := fn.constName?
-    let va :=
-      match head >>= visibleArityForConst with
-      | some v => v
-      | none => 1
+    let constArity ← match fn.constName? with
+      | some name => visibleArityForConst name
+      | none => pure 1
+    let va := min flat.size constArity
     if k == 0 || k > va then
       throwError "drag_rw: path position {k} out of range (node has {va} visible children)"
     let idx := flat.size - va + k - 1
@@ -924,6 +927,17 @@ section Regression
 
 private theorem add_zero_local (a : Nat) : a + 0 = a := by
   simp
+
+private def directAddLocal (a b : Nat) : Nat := a + b
+
+private theorem directAdd_zero_local (a : Nat) : directAddLocal a 0 = a := by
+  simp [directAddLocal]
+
+-- Direct game-defined binary operators must expose both operands to visual paths.
+-- This is the shape of `MyNat.add`, and regresses reverse `add_zero` on the RHS.
+example (x y : Nat) : directAddLocal x y = directAddLocal x (directAddLocal y 0) := by
+  drag_rw_rhs_at [← directAdd_zero_local] [2]
+  rfl
 
 example (y : Nat) : y + 2 = (y + 0) + 2 := by
   drag_rw_lhs_at [← add_zero_local] [1]

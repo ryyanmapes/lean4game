@@ -485,8 +485,9 @@ export function ConstructionView({
                 <span className="cn-propose-var">{varName}</span>
                 {' '}
                 <span className="cn-propose-keyword">such that</span>
-                {' '}
-                <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+                <span className="cn-propose-body-line">
+                  <span className="cn-propose-body proposition">{formattedGoalBody}</span>
+                </span>
               </>
             )}
           </div>

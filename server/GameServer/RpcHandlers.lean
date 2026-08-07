@@ -236,11 +236,15 @@ private def freshDerivedTheoremName (base : String) : MetaM Name := do
   let base := if base.isEmpty then "theorem" else base
   freshUserName s!"{derivedTheoremPrefix}{base}"
 
-private def visibleArityForConst (name : Name) : Option Nat :=
-  match name with
-  | ``HAdd.hAdd | ``HMul.hMul | ``HSub.hSub | ``HDiv.hDiv => some 2
-  | ``LE.le | ``LT.lt | ``GE.ge | ``GT.gt => some 2
-  | _ => none
+private partial def explicitArity (type : Expr) : Nat :=
+  match type with
+  | .forallE _ _ body binderInfo =>
+      (if binderInfo.isExplicit then 1 else 0) + explicitArity body
+  | _ => 0
+
+private def visibleArityForConst (name : Name) : MetaM Nat := do
+  let info ← getConstInfo name
+  pure <| max 1 (explicitArity info.type)
 
 private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
   match path with
@@ -249,10 +253,10 @@ private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
     let e' ← withReducible (whnf e)
     let flat := e'.getAppArgs
     let fn := e'.getAppFn
-    let va : Nat :=
-      match fn.constName? >>= visibleArityForConst with
-      | some v => v
-      | none   => 1
+    let constArity ← match fn.constName? with
+      | some name => visibleArityForConst name
+      | none => pure 1
+    let va := min flat.size constArity
     if k == 0 || k > va then
       throwError "drag_rw annotation: path position {k} out of range (node has {va} visible children)"
     let idx := flat.size - va + k - 1
@@ -519,10 +523,10 @@ private def visibleChildren (e : Expr) : MetaM (Array Expr) := do
   let flat := e'.getAppArgs
   if flat.isEmpty then
     return #[]
-  let visibleArity :=
-    match e'.getAppFn.constName? >>= visibleArityForConst with
-    | some v => min v flat.size
-    | none => 1
+  let constArity ← match e'.getAppFn.constName? with
+    | some name => visibleArityForConst name
+    | none => pure 1
+  let visibleArity := min flat.size constArity
   if visibleArity == 0 then
     return #[]
   pure <| flat.extract (flat.size - visibleArity) flat.size
