@@ -96,9 +96,11 @@ interface PropositionTheoremCopyCardProps {
   iffDirection?: IffDirection
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
+  showDropTarget?: boolean
+  mobileList?: boolean
 }
 
-export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirection, onDoubleClick, onContextMenu }: PropositionTheoremCopyCardProps) {
+export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirection, onDoubleClick, onContextMenu, showDropTarget = false, mobileList = false }: PropositionTheoremCopyCardProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: copy.id,
     data: { theoremCopy: true, theorem: copy.theorem },
@@ -114,9 +116,9 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirecti
   }
 
   const style: React.CSSProperties = {
-    position: 'absolute',
-    left: copy.position.x,
-    top: copy.position.y,
+    position: mobileList ? 'relative' : 'absolute',
+    left: mobileList ? undefined : copy.position.x,
+    top: mobileList ? undefined : copy.position.y,
     zIndex: isDragging ? 1000 : 10,
     visibility: isDragging ? 'hidden' : undefined,
   }
@@ -127,10 +129,11 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirecti
     copy.theorem.forallFooter ? 'has-forall-footer' : '',
     copy.theorem.forallSpecification ? 'constructable' : '',
     isDragging ? 'dragging' : '',
-    isOver && !isDragging ? 'drop-target-active' : '',
+    isOver && showDropTarget && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
     isIntegerTheorem(copy.theorem) ? 'int-theorem' : '',
     theoremCardSizeClass(copy.theorem),
+    mobileList ? 'mobile-list-card' : '',
   ].filter(Boolean).join(' ')
 
   return (
