@@ -86,7 +86,7 @@ jobs:
         run: |
           # VisualTest checks in the browser facade, where MakeGame is a no-op.
           # Native Cypress tests need the full command to generate game.json.
-          sed -i 's/^import GameServer\.Browser$/import GameServer/' Game/Metadata.lean
+          node -e "const fs = require('fs'); const p = 'Game/Metadata.lean'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/^import GameServer\.Browser$/m, 'import GameServer'))"
           grep -q '^import GameServer$' Game/Metadata.lean
           lake update
           lake build
