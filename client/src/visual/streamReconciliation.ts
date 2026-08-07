@@ -1235,6 +1235,7 @@ export function reconcileProofTreeAfterInteraction(
   streamSplit: boolean,
   currentActiveId: string | null,
   exactFocusedStreams?: GoalStream[] | null,
+  autoNavigateCompletedBranches = false,
 ): ReconciledTreeState {
   let nextTree = beforeTree
   let nextActiveId = currentActiveId
@@ -1373,9 +1374,14 @@ export function reconcileProofTreeAfterInteraction(
     }
     nextTree = completeLeafStream(nextTree, focusedStream.id)
     const nextCanvas = buildNextCanvas([])
+    const hasUnfinishedBranch = collectLiveStreamIds(nextTree).length > 0
     return {
       nextTree,
-      nextActiveId: pickNextLiveStreamId(nextTree, focusedStream.id, nextCanvas),
+      nextActiveId: !hasUnfinishedBranch
+        ? null
+        : autoNavigateCompletedBranches
+          ? pickNextLiveStreamId(nextTree, focusedStream.id, nextCanvas)
+          : focusedStream.id,
       focusedStreams: [],
       nextCanvas,
     }
@@ -1431,6 +1437,11 @@ export function reconcileProofTreeAfterInteraction(
 
   nextTree = completeLeafStream(nextTree, focusedStream.id)
   const nextCanvas = buildNextCanvas([])
-  nextActiveId = pickNextLiveStreamId(nextTree, focusedStream.id, nextCanvas)
+  const hasUnfinishedBranch = collectLiveStreamIds(nextTree).length > 0
+  nextActiveId = !hasUnfinishedBranch
+    ? null
+    : autoNavigateCompletedBranches
+      ? pickNextLiveStreamId(nextTree, focusedStream.id, nextCanvas)
+      : focusedStream.id
   return { nextTree, nextActiveId, focusedStreams: [], nextCanvas }
 }

@@ -6,6 +6,7 @@ import type { HypCard as HypCardType } from './types'
 import { formatFormulaText } from './expr-engine'
 import { colorizeFormula } from './colorizeFormula'
 import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
+import { StatementCardLine } from './StatementCardLine'
 
 interface HypCardProps {
   card: HypCardType
@@ -77,6 +78,7 @@ export function HypCard({
 
   const classes = [
     'statement-card',
+    !card.hyp.isAssumption && !card.isTheorem ? 'variable-card' : '',
     card.isTheorem ? 'derived-theorem-card' : '',
     card.hyp.forallFooter ? 'has-forall-footer' : '',
     isDragging ? 'dragging' : '',
@@ -169,13 +171,10 @@ function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType;
   const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
   return (
     <>
-      <div className="statement-card-main">
-        <span className="hyp-name">{card.hyp.names.join(', ')}</span>
-        <span className="hyp-colon">:</span>
-        <span className="proposition">
-          {isIff ? renderFormulaWithIffArrow(hypType, iffDirection) : colorizeFormula(hypType)}
-        </span>
-      </div>
+      <StatementCardLine
+        name={card.hyp.names.join(', ')}
+        proposition={isIff ? renderFormulaWithIffArrow(hypType, iffDirection) : colorizeFormula(hypType)}
+      />
       {forallFooter && (
         <div className="statement-forall-footer">
           {hasIffNotation(forallFooter) && isIff
@@ -189,7 +188,7 @@ function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType;
 
 export function HypCardPreviewCard({ card, iffDirection }: { card: HypCardType; iffDirection?: IffDirection }) {
   return (
-    <div className={`statement-card mobile-list-card hyp-overlay-card${card.isTheorem ? ' derived-theorem-card' : ''}${card.hyp.forallFooter ? ' has-forall-footer' : ''}`}>
+    <div className={`statement-card mobile-list-card hyp-overlay-card${!card.hyp.isAssumption && !card.isTheorem ? ' variable-card' : ''}${card.isTheorem ? ' derived-theorem-card' : ''}${card.hyp.forallFooter ? ' has-forall-footer' : ''}`}>
       <HypCardContent card={card} iffDirection={iffDirection} />
     </div>
   )

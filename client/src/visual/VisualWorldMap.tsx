@@ -387,8 +387,13 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
   const [levelTooltip, setLevelTooltip] = React.useState<LevelTooltipInfo | null>(null)
   const [viewportSize, setViewportSize] = React.useState(getViewportSize)
+  const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   React.useEffect(() => {
-    const onResize = () => setViewportSize(getViewportSize())
+    const onResize = () => {
+      const next = getViewportSize()
+      setViewportSize(next)
+      if (next.width <= 720 && next.height >= next.width) setLevelTooltip(null)
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -517,7 +522,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
             title={levelTitles[worldId]?.[i]}
-            onHoverChange={setLevelTooltip}
+            onHoverChange={isPhonePortraitViewport ? undefined : setLevelTooltip}
             levelMode={levelMode}
           />,
         )
@@ -539,7 +544,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     : visibleWorldIds.find(worldId => completed[worldId]?.slice(1).some(done => !done))
       ?? visibleWorldIds[0]
 
-  const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   let R = 1.1 * r / Math.sin(Math.PI / (NMAX + 1))
   const padding = R + 2.1 * r
   // Extra horizontal space so tooltips on edge-of-map levels aren't clipped.

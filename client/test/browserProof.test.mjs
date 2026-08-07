@@ -65,3 +65,14 @@ test('uses Lean core rewriting for a reverse rewrite on the selected side', () =
     'conv => rhs; rw [← MyNat.succ_eq_add_one]',
   )
 })
+
+test('does not descend through add_zero wildcard arguments when rewriting in reverse', () => {
+  assert.equal(
+    instrumentBrowserProof('drag_rw_rhs_at [← MyNat.add_zero] [1]'),
+    'conv => rhs; rw [← MyNat.add_zero]',
+  )
+  assert.equal(
+    instrumentBrowserProof('drag_rw_hyp_lhs_at h [← add_zero] [2, 1]'),
+    'conv at h => lhs; rw [← add_zero]',
+  )
+})

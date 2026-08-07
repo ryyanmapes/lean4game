@@ -58,6 +58,12 @@ svg .level:hover .level-title {
   opacity: 1;
 }
 
+@media (hover: none), (pointer: coarse) {
+  svg .level:hover .level-title {
+    opacity: 0;
+  }
+}
+
 svg a.level,
 svg a.world {
   cursor: pointer;

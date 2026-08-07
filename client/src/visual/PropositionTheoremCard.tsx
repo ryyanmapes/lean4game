@@ -4,6 +4,7 @@ import type { PropositionTheorem, PropositionTheoremCopy } from './types'
 import { formatFormulaText } from './expr-engine'
 import { colorizeFormula, hasIntegerNotation } from './colorizeFormula'
 import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
+import { StatementCardLine } from './StatementCardLine'
 
 function PropositionTheoremContent({
   theorem,
@@ -15,13 +16,10 @@ function PropositionTheoremContent({
 
   return (
     <>
-      <div className="statement-card-main">
-        <span className="hyp-name">{theorem.label}</span>
-        <span className="hyp-colon">:</span>
-        <span className="proposition">
-          {isIff ? renderFormulaWithIffArrow(proposition, iffDirection) : colorizeFormula(proposition)}
-        </span>
-      </div>
+      <StatementCardLine
+        name={theorem.label}
+        proposition={isIff ? renderFormulaWithIffArrow(proposition, iffDirection) : colorizeFormula(proposition)}
+      />
       {forallFooter && (
         <div className="statement-forall-footer">
           {isIff && hasIffNotation(forallFooter)

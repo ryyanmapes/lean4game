@@ -165,7 +165,7 @@ function findHyp(stream, name) {
   )
 }
 
-test('completing the middle branch updates the sibling C stream instead of duplicating it', () => {
+test('completing the middle branch keeps it selected and updates sibling C without duplication', () => {
   const { streamA, streamB, staleSiblingC, refreshedSiblingC } = baseStreams()
   const beforeTree = baseTree({ streamA, streamB, staleSiblingC })
   const beforeCanvas = {
@@ -191,13 +191,30 @@ test('completing the middle branch updates the sibling C stream instead of dupli
   assertUniqueIds(activeIds)
   assert.deepEqual(activeIds, [streamA.id, streamB.id, refreshedSiblingC.id])
   assert.deepEqual(collectLiveStreamIds(result.nextTree), [streamA.id, refreshedSiblingC.id])
-  assert.equal(result.nextActiveId, refreshedSiblingC.id)
+  assert.equal(result.nextActiveId, streamB.id)
 
   const completedMiddleLeaf = findLeafForStream(result.nextTree, streamB.id)
   assert.ok(completedMiddleLeaf)
   assert.equal(completedMiddleLeaf.completed, true)
 
   assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [streamA.id, refreshedSiblingC.id])
+})
+
+test('completed branches can still opt into automatic navigation', () => {
+  const { streamA, streamB, staleSiblingC, refreshedSiblingC } = baseStreams()
+  const result = reconcileProofTreeAfterInteraction(
+    baseTree({ streamA, streamB, staleSiblingC }),
+    { streams: [streamA, streamB, staleSiblingC], completed: false },
+    { streams: [refreshedSiblingC], completed: false },
+    streamB,
+    'drag_goal left',
+    false,
+    streamB.id,
+    undefined,
+    true,
+  )
+
+  assert.equal(result.nextActiveId, refreshedSiblingC.id)
 })
 
 test('a sibling-only canvas result does not steal focus from the middle B branch after click_prop', () => {
@@ -310,7 +327,7 @@ test('a sibling C stream from focused goals cannot be reused for both right-hand
   const activeIds = collectActiveStreamIds(result.nextTree)
   assertUniqueIds(activeIds)
   assert.deepEqual(activeIds, [streamA.id, streamB.id, refreshedSiblingC.id])
-  assert.equal(result.nextActiveId, refreshedSiblingC.id)
+  assert.equal(result.nextActiveId, streamB.id)
 
   const completedMiddleLeaf = findLeafForStream(result.nextTree, streamB.id)
   assert.ok(completedMiddleLeaf)
@@ -318,7 +335,7 @@ test('a sibling C stream from focused goals cannot be reused for both right-hand
   assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [streamA.id, refreshedSiblingC.id])
 })
 
-test('empty focused goals after drag_goal still complete stream 2 and advance to C', () => {
+test('empty focused goals after drag_goal complete stream 2 without auto-navigation', () => {
   const { streamA, streamB, staleSiblingC } = baseStreams()
   const beforeTree = treeAfterFirstLeafSolved({ streamA, streamB, staleSiblingC })
   const beforeCanvas = {
@@ -345,7 +362,7 @@ test('empty focused goals after drag_goal still complete stream 2 and advance to
   assertUniqueIds(activeIds)
   assert.deepEqual(activeIds, [streamA.id, streamB.id, staleSiblingC.id])
   assert.deepEqual(collectLiveStreamIds(result.nextTree), [staleSiblingC.id])
-  assert.equal(result.nextActiveId, staleSiblingC.id)
+  assert.equal(result.nextActiveId, streamB.id)
 
   const completedMiddleLeaf = findLeafForStream(result.nextTree, streamB.id)
   assert.ok(completedMiddleLeaf)
@@ -400,7 +417,7 @@ test('empty focused goals after click_prop on the C stream still synthesize the 
   assert.equal(findLeafForStream(result.nextTree, streamC.id)?.completed, false)
 })
 
-test('reflexive click_goal ignores a stale 0 = 0 continuation and advances to the sibling stream', () => {
+test('reflexive click_goal ignores a stale continuation and keeps the completed arm selected', () => {
   const zeroStream = stream('refl-zero', '0 = 0', 'zero', [])
   const succStream = stream('refl-succ', 'succ n = succ n', 'succ', [
     hyp('refl-ih', 'ih', 'n = n'),
@@ -453,7 +470,7 @@ test('reflexive click_goal ignores a stale 0 = 0 continuation and advances to th
   )
 
   assert.deepEqual(collectLiveStreamIds(result.nextTree), [succStream.id])
-  assert.equal(result.nextActiveId, succStream.id)
+  assert.equal(result.nextActiveId, zeroStream.id)
   assert.equal(findLeafForStream(result.nextTree, zeroStream.id)?.completed, true)
   assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [refreshedSucc.id])
 })
@@ -625,7 +642,7 @@ test('the full nested conjunction proof can reconcile from A through final C com
 
   assert.deepEqual(collectLiveStreamIds(afterA.nextTree), [streamB.id, streamC.id])
   assert.deepEqual(afterA.nextCanvas.streams.map(stream => stream.id), [streamB.id, streamC.id])
-  assert.equal(afterA.nextActiveId, streamB.id)
+  assert.equal(afterA.nextActiveId, streamA.id)
   assert.equal(findLeafForStream(afterA.nextTree, streamA.id)?.completed, true)
 
   const afterBSplit = reconcileProofTreeAfterInteraction(
@@ -638,7 +655,7 @@ test('the full nested conjunction proof can reconcile from A through final C com
     streamB,
     'click_prop h2',
     false,
-    afterA.nextActiveId,
+    streamB.id,
     [streamC],
   )
 
@@ -659,13 +676,13 @@ test('the full nested conjunction proof can reconcile from A through final C com
     splitB,
     'drag_goal left',
     false,
-    afterBSplit.nextActiveId,
+    splitB.id,
     [streamC],
   )
 
   assert.deepEqual(collectLiveStreamIds(afterBComplete.nextTree), [streamC.id])
   assert.deepEqual(afterBComplete.nextCanvas.streams.map(stream => stream.id), [streamC.id])
-  assert.equal(afterBComplete.nextActiveId, streamC.id)
+  assert.equal(afterBComplete.nextActiveId, splitB.id)
   assert.equal(findLeafForStream(afterBComplete.nextTree, splitB.id)?.completed, true)
 
   const afterCSplit = reconcileProofTreeAfterInteraction(
@@ -678,7 +695,7 @@ test('the full nested conjunction proof can reconcile from A through final C com
     streamC,
     'click_prop h2',
     false,
-    afterBComplete.nextActiveId,
+    streamC.id,
   )
 
   assert.equal(afterCSplit.focusedStreams.length, 1)

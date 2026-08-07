@@ -6,13 +6,17 @@ function isClickOnlyTactic(tactic: VisualTactic) {
   return tactic.activation === 'goal_click'
 }
 
+function isVariableOnlyTactic(tactic: VisualTactic) {
+  return tactic.name === 'revert' || tactic.name === 'induction'
+}
+
 function VisualTacticContent({ tactic }: { tactic: VisualTactic }) {
   return <span className="tactic-label">{tactic.label}</span>
 }
 
 export function VisualTacticPreviewCard({ tactic }: { tactic: VisualTactic }) {
   return (
-    <div className="statement-card tactic-tray-card tactic-overlay-card">
+    <div className={`statement-card tactic-tray-card tactic-overlay-card${isVariableOnlyTactic(tactic) ? ' variable-only-tactic' : ''}`}>
       <VisualTacticContent tactic={tactic} />
     </div>
   )
@@ -45,7 +49,7 @@ export function VisualTacticTemplateCard({
       data-tactic-name={tactic.name}
       data-tactic-activation={tactic.activation ?? 'drag'}
       style={style}
-      className={`statement-card tactic-tray-card${clickOnly ? ' tactic-ellipse-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}${emphasized ? ' visual-emphasize' : ''}`}
+      className={`statement-card tactic-tray-card${isVariableOnlyTactic(tactic) ? ' variable-only-tactic' : ''}${clickOnly ? ' tactic-ellipse-card' : ''}${disabled ? ' disabled' : ''}${isDragging ? ' dragging' : ''}${emphasized ? ' visual-emphasize' : ''}`}
       onClick={clickOnly && !disabled ? onClick : undefined}
       {...(!clickOnly && !disabled ? listeners : {})}
       {...(!clickOnly && !disabled ? attributes : {})}

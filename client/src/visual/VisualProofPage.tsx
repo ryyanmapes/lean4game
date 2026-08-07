@@ -7,7 +7,8 @@ import { useAppSelector, useAppDispatch } from '../hooks'
 import { selectCompleted, levelCompleted } from '../state/progress'
 import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
-import { VisualCanvas } from './VisualCanvas'
+import { VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
+import type { VisualProofResumeState } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
 import { VisualLoadingScreen } from './VisualLoadingScreen'
 import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
@@ -34,6 +35,47 @@ const LEVEL_DATA_RETRY_DELAY_MS = 1000
 // Warm snapshot-backed transitions often finish within a frame or two. Avoid
 // flashing the full loading animation for those fast paths.
 const LOADING_CHROME_DELAY_MS = 200
+
+interface StoredVisualProof {
+  version: typeof VISUAL_PROOF_AUTOSAVE_VERSION
+  gameId: string
+  worldId: string
+  levelId: number
+  session: VisualProofResumeState
+}
+
+function visualProofStorageKey(gameId: string, worldId: string, levelId: number) {
+  return `visual-proof-autosave/${gameId}/${worldId}/${levelId}`
+}
+
+function loadVisualProofAutosave(gameId: string, worldId: string, levelId: number): VisualProofResumeState | null {
+  const key = visualProofStorageKey(gameId, worldId, levelId)
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const stored = JSON.parse(raw) as Partial<StoredVisualProof>
+    if (
+      stored.version !== VISUAL_PROOF_AUTOSAVE_VERSION ||
+      stored.gameId !== gameId ||
+      stored.worldId !== worldId ||
+      stored.levelId !== levelId ||
+      stored.session?.version !== VISUAL_PROOF_AUTOSAVE_VERSION ||
+      typeof stored.session.proofBody !== 'string' ||
+      !Array.isArray(stored.session.proofSteps)
+    ) {
+      localStorage.removeItem(key)
+      return null
+    }
+    return stored.session
+  } catch {
+    try { localStorage.removeItem(key) } catch {}
+    return null
+  }
+}
+
+function discardVisualProofAutosave(gameId: string, worldId: string, levelId: number) {
+  try { localStorage.removeItem(visualProofStorageKey(gameId, worldId, levelId)) } catch {}
+}
 
 function delay(ms: number) {
   return new Promise<void>(resolve => window.setTimeout(resolve, ms))
@@ -175,6 +217,7 @@ export function VisualProofPage() {
     })
   }, [gameId, worldId, levelId, solvingId, telemetryStartedAt])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
+  const [resumeState, setResumeState] = useState<VisualProofResumeState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [presentationReady, setPresentationReady] = useState(false)
   const [showLoadingChrome, setShowLoadingChrome] = useState(false)
@@ -206,6 +249,20 @@ export function VisualProofPage() {
   const { getClient, disposeClient } = useVisualRpcClient()
   const leanLoadingProgress = useLeanLoadingProgress()
   const telemetryConsent = useTelemetryConsentGate(`${gameId}/${worldId}/${levelId}`)
+  const handleAutosave = useCallback((session: VisualProofResumeState) => {
+    try {
+      const stored: StoredVisualProof = {
+        version: VISUAL_PROOF_AUTOSAVE_VERSION,
+        gameId,
+        worldId,
+        levelId,
+        session,
+      }
+      localStorage.setItem(visualProofStorageKey(gameId, worldId, levelId), JSON.stringify(stored))
+    } catch {
+      // Storage may be disabled or full; gameplay should continue normally.
+    }
+  }, [gameId, levelId, worldId])
 
   useEffect(() => {
     setShowLoadingChrome(false)
@@ -243,6 +300,7 @@ export function VisualProofPage() {
   useEffect(() => {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
     setCanvasState(null)
+    setResumeState(null)
     setError(null)
     if (!worldId || !levelId) return
 
@@ -263,7 +321,24 @@ export function VisualProofPage() {
           if (!active) {
             return
           }
-          setCanvasState(proofStateToCanvas(proof))
+          const initialCanvas = proofStateToCanvas(proof)
+          const saved = loadVisualProofAutosave(gameId, worldId, levelId)
+          let validatedResume: VisualProofResumeState | null = null
+          if (saved && saved.proofBody.trim().length > 0) {
+            try {
+              const restoredProof = await client.sendProofUpdate(saved.proofBody)
+              if (restoredProof !== null) {
+                validatedResume = saved
+              } else {
+                discardVisualProofAutosave(gameId, worldId, levelId)
+              }
+            } catch {
+              discardVisualProofAutosave(gameId, worldId, levelId)
+            }
+          }
+          if (!active) return
+          setResumeState(validatedResume)
+          setCanvasState(initialCanvas)
           sendLevelStartTelemetry()
           return
         } catch (err) {
@@ -531,6 +606,8 @@ export function VisualProofPage() {
       onLevelCompleted={handleLevelCompleted}
       onProofStep={handleProofStep}
       onOpenClassic={handleOpenClassic}
+      resumeState={resumeState}
+      onAutosave={handleAutosave}
     />
   )
 }

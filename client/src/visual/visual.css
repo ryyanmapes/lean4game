@@ -477,6 +477,20 @@
   white-space: normal;
 }
 
+.visual-page .statement-card.variable-card,
+.visual-page .statement-card.variable-only-tactic {
+  clip-path: polygon(
+    0.65rem 0,
+    calc(100% - 0.65rem) 0,
+    100% 0.65rem,
+    100% calc(100% - 0.65rem),
+    calc(100% - 0.65rem) 100%,
+    0.65rem 100%,
+    0 calc(100% - 0.65rem),
+    0 0.65rem
+  );
+}
+
 .visual-page .statement-card:hover {
   background: var(--visual-glass-bg-hover);
 }
@@ -850,6 +864,12 @@
   cursor: default;
 }
 
+.visual-page .stream-nav-btn.toward-incomplete:not(:disabled) {
+  border-color: rgba(250, 204, 21, 0.72);
+  box-shadow: 0 0 7px 2px rgba(250, 204, 21, 0.42);
+  color: #fde68a;
+}
+
 .visual-page .stream-label {
   font-size: 0.72rem;
   color: var(--text-secondary);
@@ -977,6 +997,16 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
+}
+
+.visual-page .statement-card-main.colon-line-break .hyp-colon {
+  display: none;
+}
+
+.visual-page .statement-card-main.colon-line-break .proposition {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 0.12rem;
 }
 
 .visual-page .hyp-name {
@@ -2256,7 +2286,8 @@
        entire phone UI in one absolute coordinate space instead. */
     position: absolute;
     width: 100%;
-    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
   }
 
   .visual-page.phone-portrait .goals-container,
@@ -2374,7 +2405,7 @@
     bottom: calc(var(--tray-height, 0px) + 0.25rem);
     z-index: 18;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 1px 1.3rem;
+    grid-template-columns: minmax(0, 1fr) 0.5rem 1.3rem;
     min-height: 4rem;
     overflow: hidden;
   }
@@ -2481,6 +2512,8 @@
     grid-column: 2;
     grid-row: 1;
     background: var(--visual-border-subtle);
+    width: 1px;
+    justify-self: center;
   }
 
   .visual-page.phone-portrait .mobile-scrollbar {
@@ -2543,10 +2576,41 @@
     left: 0.75rem;
     right: 0.75rem;
     z-index: 42;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(5.4rem, 1fr) auto minmax(5.4rem, 1fr);
+    align-items: center;
     gap: 0.6rem;
     pointer-events: none;
+  }
+
+  .visual-page.phone-portrait .mobile-page-link.proof-link {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .visual-page.phone-portrait .mobile-page-link.graph-link {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .visual-page.phone-portrait .mobile-branch-navigator {
+    grid-column: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.28rem;
+    pointer-events: auto;
+    color: var(--visual-text-muted);
+    font-family: var(--font-family), system-ui, sans-serif;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  .visual-page.phone-portrait .mobile-branch-navigator .stream-nav-btn {
+    min-width: 1.7rem;
+    width: 1.7rem;
+    height: 1.8rem;
+    padding: 0;
   }
 
   .visual-page.phone-portrait .mobile-page-link {
@@ -2682,7 +2746,7 @@
   }
 
   .visual-page.phone-portrait .mobile-side-page {
-    position: fixed;
+    position: absolute;
     inset: 0;
     z-index: 82;
     display: flex;
@@ -2908,6 +2972,31 @@
 
   .visual-page.phone-portrait .visual-instruction-arrow path {
     stroke-width: 3;
+  }
+}
+
+@media (max-width: 720px) and (orientation: portrait) and (hover: none),
+       (max-width: 720px) and (orientation: portrait) and (pointer: coarse) {
+  .visual-page.phone-portrait .statement-card:hover {
+    filter: none;
+    outline: none;
+  }
+
+  .visual-page.phone-portrait .statement-card.goal:hover,
+  .visual-page.phone-portrait .statement-card.goal.clickable:hover,
+  .visual-page.phone-portrait .statement-card.goal.constructable:hover,
+  .visual-page.phone-portrait .statement-card.goal.transformable:hover {
+    background: var(--glass-bg);
+    box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
+  }
+
+  .visual-page.phone-portrait .statement-card.clickable:not(.goal):hover:not(.dragging),
+  .visual-page.phone-portrait .statement-card.constructable:not(.goal):hover:not(.dragging) {
+    box-shadow: 0 8px 32px 0 var(--visual-shadow-strong);
+  }
+
+  .visual-page.phone-portrait .proof-tree-diagram svg g:hover circle {
+    filter: none;
   }
 }
 

@@ -388,6 +388,7 @@ interface InteractionOptions {
   streamSplit?: boolean
   targetStreamId?: string
   mobileInsertAfter?: string
+  mobileInsertPlacement?: 'after' | 'replace'
 }
 
 interface GoalChoiceMenu {
@@ -587,13 +588,13 @@ function initialMobileVisualOrder(
   return { variables, theorems }
 }
 
-function MobileReorderDivider({ column, index }: { column: MobileColumn; index: number }) {
+function MobileReorderDivider({ column, index, enabled }: { column: MobileColumn; index: number; enabled: boolean }) {
   const id = `${MOBILE_DIVIDER_PREFIX}${column}:${index}`
-  const { setNodeRef, isOver } = useDroppable({ id })
+  const { setNodeRef, isOver } = useDroppable({ id, disabled: !enabled })
   return (
     <div
       ref={setNodeRef}
-      className={`mobile-reorder-divider${isOver ? ' active' : ''}`}
+      className={`mobile-reorder-divider${enabled ? ' enabled' : ''}${isOver && enabled ? ' active' : ''}`}
       data-testid="mobile-reorder-divider"
       data-column={column}
       data-index={String(index)}
@@ -1234,6 +1235,21 @@ type ConstructionTarget =
       prompt: ForallSpecificationInfo
     }
 
+export const VISUAL_PROOF_AUTOSAVE_VERSION = 1
+
+export interface VisualProofResumeState {
+  version: typeof VISUAL_PROOF_AUTOSAVE_VERSION
+  proofBody: string
+  proofSteps: ProofStepRecord[]
+  proofTree: ProofStreamTreeNode
+  canvasState: CanvasState
+  displayCanvasState: CanvasState
+  streamSnapshots: Record<string, GoalStream>
+  activeStreamId: string | null
+  theoremCopies: PropositionTheoremCopy[]
+  savedAt: number
+}
+
 interface VisualCanvasProps {
   initialState: CanvasState
   theoremEqualityHyps: EqualityHyp[]
@@ -1263,6 +1279,8 @@ interface VisualCanvasProps {
   onLevelCompleted?: (proof?: { playScript: string; leanScript: string }) => void
   onProofStep?: (interactiveLeanCode: string) => void
   onOpenClassic?: (proofBody: string) => void
+  resumeState?: VisualProofResumeState | null
+  onAutosave?: (state: VisualProofResumeState) => void
 }
 
 function TheoremTray({
@@ -1482,7 +1500,7 @@ export function VisualCanvas({
   initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onOpenClassic
+  onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
@@ -1495,16 +1513,21 @@ export function VisualCanvas({
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
   const [hypInfoGuides, setHypInfoGuides] = useState<HypInfoGuide[]>([])
-  const [canvasState, setCanvasState] = useState<CanvasState>(initialState)
+  const [canvasState, setCanvasState] = useState<CanvasState>(() => resumeState?.canvasState ?? initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
-  const [displayCanvasState, setDisplayCanvasState] = useState<CanvasState>(initialState)
+  const [displayCanvasState, setDisplayCanvasState] = useState<CanvasState>(() => resumeState?.displayCanvasState ?? initialState)
   const [streamSnapshots, setStreamSnapshots] = useState<Record<string, GoalStream>>(() =>
-    Object.fromEntries(initialState.streams.map(stream => [stream.id, stream]))
+    resumeState?.streamSnapshots ?? Object.fromEntries(initialState.streams.map(stream => [stream.id, stream]))
   )
+  const preserveRestoredCopiesRef = useRef(Boolean(resumeState))
   const initialProofTreeRef = useRef<ProofStreamTreeNode>(createInitialProofTree(initialState.streams[0]))
-  const [proofTree, setProofTree] = useState<ProofStreamTreeNode>(() => cloneProofTree(initialProofTreeRef.current))
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(initialState.streams[0]?.id ?? null)
+  const [proofTree, setProofTree] = useState<ProofStreamTreeNode>(() =>
+    resumeState?.proofTree ?? cloneProofTree(initialProofTreeRef.current)
+  )
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(() =>
+    resumeState?.activeStreamId ?? initialState.streams[0]?.id ?? null
+  )
   useEffect(() => {
     if (canvasState.streams.length > 0) setDisplayCanvasState(canvasState)
   }, [canvasState])
@@ -1519,6 +1542,10 @@ export function VisualCanvas({
     })
   }, [canvasState.streams])
   useEffect(() => {
+    if (preserveRestoredCopiesRef.current) {
+      preserveRestoredCopiesRef.current = false
+      return
+    }
     setTheoremCopies([])
     setFailingTheoremCopyId(null)
   }, [propositionTheorems])
@@ -1531,14 +1558,14 @@ export function VisualCanvas({
   const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
-  const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>([])
-  const leanGoalOrderRef = useRef<string[]>(initialState.streams.map(stream => stream.id))
+  const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
+  const leanGoalOrderRef = useRef<string[]>((resumeState?.canvasState ?? initialState).streams.map(stream => stream.id))
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [failingTheoremCopyId, setFailingTheoremCopyId] = useState<string | null>(null)
   const [solvedGoalId, setSolvedGoalId] = useState<string | null>(null)
   const [animatedHyps, setAnimatedHyps] = useState<AnimatedHypMarker[]>([])
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
-  const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>([])
+  const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>(() => resumeState?.theoremCopies ?? [])
   const [mobileVisualOrder, setMobileVisualOrder] = useState<MobileVisualOrder>(() =>
     initialMobileVisualOrder(worldId, levelId, initialState)
   )
@@ -1548,7 +1575,11 @@ export function VisualCanvas({
   const mobileScrollbarDragRef = useRef<{ pointerId: number; grabOffset: number } | null>(null)
   const mobileAutoScrollFrameRef = useRef<number | null>(null)
   const mobileDragPointerOriginRef = useRef<{ x: number; y: number } | null>(null)
-  const pendingMobileInsertAfterRef = useRef<string | null>(null)
+  const pendingMobileInsertionRef = useRef<{
+    anchorKey: string
+    placement: 'after' | 'replace'
+    anchorIndex: number
+  } | null>(null)
   const [mobileScrollMetrics, setMobileScrollMetrics] = useState({ top: 0, client: 0, scroll: 0 })
   const [mobileContentOverflows, setMobileContentOverflows] = useState(false)
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
@@ -1610,6 +1641,25 @@ export function VisualCanvas({
   }, [levelId, mobileVisualOrder, worldId])
 
   useEffect(() => {
+    if (!onAutosave || isProcessing || pendingTransformSync !== null) return
+    const timer = window.setTimeout(() => {
+      onAutosave({
+        version: VISUAL_PROOF_AUTOSAVE_VERSION,
+        proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
+        proofSteps,
+        proofTree,
+        canvasState,
+        displayCanvasState,
+        streamSnapshots,
+        activeStreamId,
+        theoremCopies,
+        savedAt: Date.now(),
+      })
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [activeStreamId, canvasState, displayCanvasState, isProcessing, onAutosave, pendingTransformSync, proofSteps, proofTree, streamSnapshots, theoremCopies])
+
+  useEffect(() => {
     setMobileVisualOrder(initialMobileVisualOrder(worldId, levelId, initialState))
   }, [initialState, levelId, worldId])
 
@@ -1620,11 +1670,21 @@ export function VisualCanvas({
     const prevBodyOverflow = body.style.overflow
     const prevHtmlOverscrollBehavior = html.style.overscrollBehavior
     const prevBodyOverscrollBehavior = body.style.overscrollBehavior
+    const prevHtmlHeight = html.style.height
+    const prevBodyHeight = body.style.height
+    const prevBodyPosition = body.style.position
+    const prevBodyInset = body.style.inset
+    const prevBodyWidth = body.style.width
 
     html.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
     html.style.overscrollBehavior = 'none'
     body.style.overscrollBehavior = 'none'
+    html.style.height = '100%'
+    body.style.height = '100dvh'
+    body.style.position = 'fixed'
+    body.style.inset = '0'
+    body.style.width = '100%'
 
     const handleResize = () => {
       setLayoutVersion(version => version + 1)
@@ -1638,6 +1698,11 @@ export function VisualCanvas({
       body.style.overflow = prevBodyOverflow
       html.style.overscrollBehavior = prevHtmlOverscrollBehavior
       body.style.overscrollBehavior = prevBodyOverscrollBehavior
+      html.style.height = prevHtmlHeight
+      body.style.height = prevBodyHeight
+      body.style.position = prevBodyPosition
+      body.style.inset = prevBodyInset
+      body.style.width = prevBodyWidth
     }
   }, [])
 
@@ -2020,7 +2085,13 @@ export function VisualCanvas({
       ? canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null
       : null
     if (!focusedStream) return false
-    pendingMobileInsertAfterRef.current = options?.mobileInsertAfter ?? null
+    pendingMobileInsertionRef.current = options?.mobileInsertAfter
+      ? {
+          anchorKey: options.mobileInsertAfter,
+          placement: options.mobileInsertPlacement ?? 'after',
+          anchorIndex: mobileVisualOrder.theorems.indexOf(options.mobileInsertAfter),
+        }
+      : null
     const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
@@ -2080,7 +2151,7 @@ export function VisualCanvas({
     }
 
     if (result === null) {
-      pendingMobileInsertAfterRef.current = null
+      pendingMobileInsertionRef.current = null
       if (options?.placementHint) {
         clearPositionOverride(options.placementHint.hypId)
         setCanvasState(prev => updatePlacedHypPosition(prev, options.placementHint!, options.placementHint!.originalPosition))
@@ -2173,7 +2244,7 @@ export function VisualCanvas({
 
     setIsProcessing(false)
     if (result === null) {
-      pendingMobileInsertAfterRef.current = null
+      pendingMobileInsertionRef.current = null
       return false
     }
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
@@ -2601,7 +2672,11 @@ export function VisualCanvas({
         applyInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
-          ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
+          ...(targetCard && isMobileTheoremCard(targetCard)
+            ? { mobileInsertAfter: hypMobileKey(targetCard) }
+            : targetTheoremCopy
+              ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) }
+              : {}),
         })
       }
       return
@@ -2819,6 +2894,7 @@ export function VisualCanvas({
       streamSplit: clickAction.streamSplit,
       targetStreamId: streamId,
       mobileInsertAfter: clickedCard && isMobileTheoremCard(clickedCard) ? hypMobileKey(clickedCard) : undefined,
+      mobileInsertPlacement: clickAction.streamSplit ? 'replace' : 'after',
     })
   }
 
@@ -2930,7 +3006,7 @@ export function VisualCanvas({
     const target = constructionTarget
     const focusedStream = canvasState.streams.find(s => s.id === target.streamId) ?? null
     if (!focusedStream) return false
-    pendingMobileInsertAfterRef.current = target.kind === 'forall_spec'
+    const constructionAnchor = target.kind === 'forall_spec'
       ? target.sourceKind === 'hyp'
         ? (() => {
             const source = focusedStream.hyps.find(card => interactionHypName(card) === target.sourceRef)
@@ -2939,6 +3015,13 @@ export function VisualCanvas({
         : target.sourceKind === 'theorem_copy' && target.sourceId
           ? `copy:${target.sourceId}`
           : null
+      : null
+    pendingMobileInsertionRef.current = constructionAnchor
+      ? {
+          anchorKey: constructionAnchor,
+          placement: 'after',
+          anchorIndex: mobileVisualOrder.theorems.indexOf(constructionAnchor),
+        }
       : null
 
     // Use a core Lean existential step rather than `use`, which may not be
@@ -3482,6 +3565,13 @@ export function VisualCanvas({
       ?? renderCanvasState.streams[0]
       ?? null
   const currentStreamIndex = currentStream ? activeStreamIds.indexOf(currentStream.id) : -1
+  const incompleteStreamIds = new Set(liveStreamIds)
+  const hasIncompleteStreamLeft = currentStreamIndex > 0 && activeStreamIds
+    .slice(0, currentStreamIndex)
+    .some(streamId => incompleteStreamIds.has(streamId))
+  const hasIncompleteStreamRight = currentStreamIndex >= 0 && activeStreamIds
+    .slice(currentStreamIndex + 1)
+    .some(streamId => incompleteStreamIds.has(streamId))
   const totalLeafCount = leafCount(proofTree)
   const visibleHyps = displayStream?.hyps ?? []
   const mobileVariableCards = React.useMemo(
@@ -3516,15 +3606,27 @@ export function VisualCanvas({
       const missingTheorems = theoremKeys.filter(key => !next.theorems.includes(key))
       if (missingVariables.length > 0) next.variables = [...missingVariables, ...next.variables]
       if (missingTheorems.length > 0) {
-        const anchor = pendingMobileInsertAfterRef.current
-        const anchorIndex = anchor ? next.theorems.indexOf(anchor) : -1
+        const insertion = pendingMobileInsertionRef.current
+        const anchorIndex = insertion
+          ? next.theorems.indexOf(insertion.anchorKey)
+          : -1
         if (anchorIndex >= 0) {
-          next.theorems.splice(anchorIndex + 1, 0, ...missingTheorems)
+          next.theorems.splice(
+            anchorIndex + (insertion?.placement === 'replace' ? 0 : 1),
+            0,
+            ...missingTheorems,
+          )
+        } else if (insertion && insertion.anchorIndex >= 0) {
+          const fallbackIndex = Math.min(
+            next.theorems.length,
+            insertion.anchorIndex + (insertion.placement === 'replace' ? 0 : 1),
+          )
+          next.theorems.splice(fallbackIndex, 0, ...missingTheorems)
         } else {
           next.theorems = [...missingTheorems, ...next.theorems]
         }
       }
-      pendingMobileInsertAfterRef.current = null
+      pendingMobileInsertionRef.current = null
       if (
         next.variables.length === prev.variables.length &&
         next.theorems.length === prev.theorems.length &&
@@ -3549,6 +3651,11 @@ export function VisualCanvas({
       (rank.get(right.key) ?? Number.MAX_SAFE_INTEGER)
     )
   }, [mobileTheoremItems, mobileVisualOrder.theorems])
+  const mobileReorderColumn: MobileColumn | null = activeDraggedHyp
+    ? isMobileTheoremCard(activeDraggedHyp) ? 'theorems' : 'variables'
+    : activeDraggedTheoremSourceId && theoremCopies.some(copy => copy.id === activeDraggedTheoremSourceId)
+      ? 'theorems'
+      : null
 
   useLayoutEffect(() => {
     const scroller = mobileScrollRef.current
@@ -4392,7 +4499,7 @@ export function VisualCanvas({
           {currentStream && (
             <div className="stream-navigator" data-testid="stream-navigator">
               <button
-                className="stream-nav-btn"
+                className={`stream-nav-btn${hasIncompleteStreamLeft ? ' toward-incomplete' : ''}`}
                 data-testid="stream-nav-prev"
                 onClick={goLeft}
                 disabled={currentStreamIndex <= 0}
@@ -4409,7 +4516,7 @@ export function VisualCanvas({
                 Stream {currentStreamIndex + 1} of {activeStreamIds.length}
               </div>
               <button
-                className="stream-nav-btn"
+                className={`stream-nav-btn${hasIncompleteStreamRight ? ' toward-incomplete' : ''}`}
                 data-testid="stream-nav-next"
                 onClick={goRight}
                 disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
@@ -4649,6 +4756,29 @@ export function VisualCanvas({
               <span>&lt;</span>
               <span>Proof</span>
             </button>
+            {currentStream && activeStreamIds.length > 1 && (
+              <div className="mobile-branch-navigator" data-testid="mobile-branch-navigator">
+                <button
+                  type="button"
+                  className={`stream-nav-btn${hasIncompleteStreamLeft ? ' toward-incomplete' : ''}`}
+                  onClick={goLeft}
+                  disabled={currentStreamIndex <= 0}
+                  aria-label="Previous proof stream"
+                >
+                  &lt;
+                </button>
+                <span>Stream {currentStreamIndex + 1} of {activeStreamIds.length}</span>
+                <button
+                  type="button"
+                  className={`stream-nav-btn${hasIncompleteStreamRight ? ' toward-incomplete' : ''}`}
+                  onClick={goRight}
+                  disabled={currentStreamIndex < 0 || currentStreamIndex >= activeStreamIds.length - 1}
+                  aria-label="Next proof stream"
+                >
+                  &gt;
+                </button>
+              </div>
+            )}
             {proofGraphVisible && (
               <button
                 type="button"
@@ -4683,7 +4813,7 @@ export function VisualCanvas({
                   {currentStream && (
                     <div className="stream-navigator" data-testid="stream-navigator">
                       <button
-                        className="stream-nav-btn"
+                        className={`stream-nav-btn${hasIncompleteStreamLeft ? ' toward-incomplete' : ''}`}
                         data-testid="stream-nav-prev"
                         onClick={goLeft}
                         disabled={currentStreamIndex <= 0}
@@ -4700,7 +4830,7 @@ export function VisualCanvas({
                         Stream {currentStreamIndex + 1} of {activeStreamIds.length}
                       </div>
                       <button
-                        className="stream-nav-btn"
+                        className={`stream-nav-btn${hasIncompleteStreamRight ? ' toward-incomplete' : ''}`}
                         data-testid="stream-nav-next"
                         onClick={goRight}
                         disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
@@ -4764,16 +4894,16 @@ export function VisualCanvas({
                     )}
                     <div className="mobile-card-columns">
                       <section className="mobile-card-column mobile-variable-column" aria-label="Variables">
-                        <MobileReorderDivider column="variables" index={0} />
+                        <MobileReorderDivider column="variables" index={0} enabled={mobileReorderColumn === 'variables'} />
                         {orderedMobileVariables.map((card, index) => (
                           <React.Fragment key={hypMobileKey(card)}>
                             {renderHypCard(card, true)}
-                            <MobileReorderDivider column="variables" index={index + 1} />
+                            <MobileReorderDivider column="variables" index={index + 1} enabled={mobileReorderColumn === 'variables'} />
                           </React.Fragment>
                         ))}
                       </section>
                       <section className="mobile-card-column mobile-theorem-column" aria-label="Theorems">
-                        <MobileReorderDivider column="theorems" index={0} />
+                        <MobileReorderDivider column="theorems" index={0} enabled={mobileReorderColumn === 'theorems'} />
                         {orderedMobileTheorems.map((item, index) => (
                           <React.Fragment key={item.key}>
                             {item.card
@@ -4791,7 +4921,7 @@ export function VisualCanvas({
                                     onContextMenu={(event) => handleTheoremCardContextMenu(event, item.copy!.id, item.copy!.theorem)}
                                   />
                                 )}
-                            <MobileReorderDivider column="theorems" index={index + 1} />
+                            <MobileReorderDivider column="theorems" index={index + 1} enabled={mobileReorderColumn === 'theorems'} />
                           </React.Fragment>
                         ))}
                       </section>
@@ -4938,6 +5068,7 @@ export function VisualCanvas({
                 onPrev={onPreviousLevel ?? (() => {})}
                 onNext={onNextLevel ?? (() => {})}
                 onWorldMap={onWorldMap ?? (() => {})}
+                hideNav
               />
               <div className="mobile-side-return-links proof-return">
                 <button
@@ -4975,6 +5106,7 @@ export function VisualCanvas({
                 onPrev={onPreviousLevel ?? (() => {})}
                 onNext={onNextLevel ?? (() => {})}
                 onWorldMap={onWorldMap ?? (() => {})}
+                hideNav
               />
               <div className="mobile-side-return-links graph-return">
                 <button
