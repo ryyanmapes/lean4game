@@ -219,9 +219,10 @@ jobs:
           # editable document.  The pinned Cauli browser compiler predates that
           # field and exposes the same data through collectCurrentDiagnostics.
           # Keep this compatibility edit confined to the ephemeral CI checkout.
-          sed -i 's/doc\.diagnosticsRef\.get/doc.collectCurrentDiagnostics/' \
+          sed -i 's/← doc\.diagnosticsRef\.get/PersistentArray.toArray (← doc.collectCurrentDiagnostics)/' \
             server/GameServer/RpcHandlers.lean
-          grep -q 'doc.collectCurrentDiagnostics' server/GameServer/RpcHandlers.lean
+          grep -q 'PersistentArray.toArray (← doc.collectCurrentDiagnostics)' \
+            server/GameServer/RpcHandlers.lean
           ! grep -q 'doc\.diagnosticsRef\.get' server/GameServer/RpcHandlers.lean
 
       - name: Adapt NNG4 package configuration to Cauli Lake
