@@ -106,6 +106,7 @@ async function audit(page, solution, phase) {
 const browser = await puppeteer.launch({
   executablePath,
   headless: true,
+  protocolTimeout: loadTimeout,
   args: [
     '--no-sandbox',
     '--disable-dev-shm-usage',
