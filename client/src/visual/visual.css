@@ -480,7 +480,12 @@
 .visual-page .statement-card.variable-card,
 .visual-page .statement-card.variable-only-tactic {
   --bevel-border-color: var(--glass-border);
+  --bevel-fill: var(--glass-bg);
   position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  background: var(--bevel-border-color);
   clip-path: polygon(
     0.65rem 0,
     calc(100% - 0.65rem) 0,
@@ -495,24 +500,33 @@
 
 .visual-page .statement-card.variable-only-tactic {
   --bevel-border-color: var(--visual-danger-border);
+  --bevel-fill: var(--visual-danger-bg);
 }
 
-.visual-page .statement-card.variable-card::after,
-.visual-page .statement-card.variable-only-tactic::after {
+.visual-page .statement-card.variable-card::before,
+.visual-page .statement-card.variable-only-tactic::before {
   content: '';
   position: absolute;
-  inset: 0;
-  z-index: 2;
+  inset: 1px;
+  z-index: -1;
   pointer-events: none;
-  background:
-    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 1.3rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top right / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom right / 0.65rem 0.65rem no-repeat;
+  background: var(--bevel-fill);
+  clip-path: polygon(
+    0.61rem 0,
+    calc(100% - 0.61rem) 0,
+    100% 0.61rem,
+    100% calc(100% - 0.61rem),
+    calc(100% - 0.61rem) 100%,
+    0.61rem 100%,
+    0 calc(100% - 0.61rem),
+    0 0.61rem
+  );
+}
+
+.visual-page .statement-card.variable-card:hover,
+.visual-page .statement-card.variable-only-tactic:hover {
+  background: var(--bevel-border-color);
+  --bevel-fill: var(--visual-glass-bg-hover);
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,
@@ -523,6 +537,26 @@
 .visual-page .statement-card.variable-card.drag-fail,
 .visual-page .statement-card.variable-only-tactic.drag-fail {
   --bevel-border-color: var(--visual-danger);
+}
+
+.visual-page .statement-atomic-form {
+  margin-top: 0.24rem;
+  color: var(--visual-text-muted);
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-size: 0.72em;
+  font-weight: 400;
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: inherit;
+}
+
+.visual-page .statement-atomic-form.measuring-only {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .visual-page .statement-card:hover {
@@ -1433,6 +1467,22 @@
   color: var(--visual-text-primary);
   border-color: var(--visual-glass-border);
   background: var(--visual-glass-bg-hover);
+}
+
+.visual-header-prev-btn,
+.visual-header-next-btn {
+  min-width: 6.6rem;
+}
+
+.visual-header-nav-btn:disabled,
+.visual-header-nav-btn:disabled:hover {
+  color: var(--visual-text-muted);
+  border-color: var(--visual-border-faint);
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.45;
+  cursor: default;
+  animation: none;
 }
 
 .visual-header-nav-btn.emphasized {
@@ -2410,6 +2460,10 @@
     line-height: 1;
   }
 
+  .visual-page.phone-portrait .visual-header-nav-btn:disabled::before {
+    content: "" !important;
+  }
+
   .visual-page.phone-portrait .visual-header-map-btn::before,
   .visual-page.phone-portrait .visual-header-prev-btn::before {
     content: "←";
@@ -2586,6 +2640,11 @@
     box-shadow: 0 18px 40px var(--visual-shadow-strong);
   }
 
+  .visual-page.phone-portrait .variable-overlay-card .statement-card-main {
+    justify-content: center;
+    text-align: center;
+  }
+
   .visual-page.phone-portrait .mobile-below-goal-dialogues,
   .visual-page.phone-portrait .mobile-scrolling-guides {
     display: grid;
@@ -2757,6 +2816,7 @@
     border-radius: 10px;
     white-space: normal;
     text-align: center;
+    box-shadow: 0 0 22px rgba(234, 179, 8, 0.4), 0 0 42px rgba(234, 179, 8, 0.18);
   }
 
   .visual-page.phone-portrait .statement-card.goal .proposition {
@@ -3005,6 +3065,16 @@
   }
 }
 
+.visual-header-nav-btn.emphasized:disabled,
+.visual-header-nav-btn.emphasized:disabled:hover {
+  color: var(--visual-text-muted);
+  border-color: var(--visual-border-faint);
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.45;
+  animation: none;
+}
+
 @media (max-width: 720px) and (orientation: portrait) and (hover: none),
        (max-width: 720px) and (orientation: portrait) and (pointer: coarse) {
   .visual-page.phone-portrait .statement-card:hover {
@@ -3032,7 +3102,7 @@
   .visual-page.phone-portrait .statement-card.goal.constructable:hover,
   .visual-page.phone-portrait .statement-card.goal.transformable:hover {
     background: var(--glass-bg);
-    box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
+    box-shadow: 0 0 22px rgba(234, 179, 8, 0.4), 0 0 42px rgba(234, 179, 8, 0.18);
   }
 
   .visual-page.phone-portrait .statement-card.goal.solved:hover {

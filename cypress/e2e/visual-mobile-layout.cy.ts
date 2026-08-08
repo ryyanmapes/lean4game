@@ -75,7 +75,19 @@ describe('Visual Lean mobile layout', () => {
           expect(rect.left, `${group.dataset.worldId} stays inside the left edge`).to.be.at.least(mapRect.left - 1)
           expect(rect.right, `${group.dataset.worldId} stays inside the right edge`).to.be.at.most(mapRect.right + 1)
         })
+        const endingBackground = map.querySelector<SVGCircleElement>('.ending-world-background')
+        expect(endingBackground, 'Ending World masks paths through its hollow center').to.exist
+        expect(endingBackground?.getAttribute('fill')).not.to.equal('none')
       })
+  })
+
+  leanIt('keeps unavailable level navigation as an empty disabled button', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Tutorial/level/1/visual`)
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.visual-header-prev-btn')
+      .should('be.disabled')
+      .and('have.text', '')
+    cy.get('.visual-header-next-btn').should('not.be.disabled')
   })
 
   leanIt('points the Addition 1 induction guide below the n hypothesis', () => {

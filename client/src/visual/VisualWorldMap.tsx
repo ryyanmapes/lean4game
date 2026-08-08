@@ -73,6 +73,7 @@ function measureLevelTooltipText(text: string): number {
 }
 
 interface VisualMapPalette {
+  background: string
   lockedLevel: string
   unlockedLevel: string
   startedLevel: string
@@ -89,6 +90,7 @@ interface VisualMapPalette {
 }
 
 const DARK_MAP_PALETTE: VisualMapPalette = {
+  background: '#0f172a',
   lockedLevel: '#475569',
   unlockedLevel: '#475569',
   startedLevel: '#8b5cf6',
@@ -105,6 +107,7 @@ const DARK_MAP_PALETTE: VisualMapPalette = {
 }
 
 const LIGHT_MAP_PALETTE: VisualMapPalette = {
+  background: '#f8fafc',
   lockedLevel: '#94a3b8',
   unlockedLevel: '#cbd5e1',
   startedLevel: '#6366f1',
@@ -281,6 +284,7 @@ function VisualEndingWorldIcon({ position, completedLevels, totalLevels, palette
       aria-label={`Ending World, ${completedLevels} of ${totalLevels} levels completed`}
       aria-disabled="true"
     >
+      <circle className="ending-world-background" cx={cx} cy={cy} r={radius + 5} fill={palette.background} />
       <circle
         className="ending-world-hollow"
         cx={cx}
@@ -309,18 +313,21 @@ type WorldLayoutNode = { position: cytoscape.Position; data: { title?: string } 
 export function applyNng4VisualLayout(
   rawNodes: Record<string, WorldLayoutNode>,
   rawBounds?: { x1: number; x2: number; y1: number; y2: number },
+  compact = false,
 ) {
   const nodes: Record<string, WorldLayoutNode> = { ...rawNodes }
   if (!rawBounds || !rawNodes.Tutorial || !rawNodes.Addition) {
     return { nodes, bounds: rawBounds ? { ...rawBounds } : undefined, endingPosition: null }
   }
 
-  const width = Math.max(120, rawBounds.x2 - rawBounds.x1)
-  const left = rawBounds.x1
+  const rawWidth = Math.max(120, rawBounds.x2 - rawBounds.x1)
+  const rawCenter = rawBounds.x1 + rawWidth / 2
+  const width = compact ? rawWidth * 0.8 : rawWidth
+  const left = rawCenter - width / 2
   const center = left + width / 2
   const at = (fraction: number) => left + width * fraction
   const graphHeight = Math.max(180, rawBounds.y2 - rawBounds.y1)
-  const rowGap = graphHeight / 4
+  const rowGap = graphHeight / 4 * (compact ? 0.78 : 1)
   const row = (index: number) => rawBounds.y1 + rowGap * index
   const place = (id: string, x: number, y: number) => {
     if (rawNodes[id]) nodes[id] = { ...rawNodes[id], position: { x, y } }
@@ -579,7 +586,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     worlds ? computeWorldLayout(worlds) : { nodes: {} }
 
   const arrangedLayout = isNng4Game(gameId)
-    ? applyNng4VisualLayout(rawLayout.nodes, rawLayout.bounds)
+    ? applyNng4VisualLayout(rawLayout.nodes, rawLayout.bounds, isPhonePortraitViewport)
     : { nodes: { ...rawLayout.nodes }, bounds: rawLayout.bounds ? { ...rawLayout.bounds } : undefined, endingPosition: null }
   const nodes = arrangedLayout.nodes
   const bounds = arrangedLayout.bounds

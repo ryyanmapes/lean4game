@@ -7,6 +7,7 @@ import { formatFormulaText } from './expr-engine'
 import { colorizeFormula } from './colorizeFormula'
 import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
 import { StatementCardLine } from './StatementCardLine'
+import { AtomicForm } from './AtomicForm'
 
 interface HypCardProps {
   card: HypCardType
@@ -27,6 +28,7 @@ interface HypCardProps {
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
   onMouseLeave?: () => void
+  atomicContextNames?: string[]
 }
 
 export function HypCard({
@@ -48,6 +50,7 @@ export function HypCard({
   onDoubleClick,
   onContextMenu,
   onMouseLeave,
+  atomicContextNames = [],
 }: HypCardProps) {
   const clickTimeoutRef = React.useRef<number | null>(null)
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
@@ -160,12 +163,12 @@ export function HypCard({
       {...(isInteractive ? listeners : {})}
       {...(isInteractive ? attributes : {})}
     >
-      <HypCardContent card={card} iffDirection={iffDirection} />
+      <HypCardContent card={card} iffDirection={iffDirection} atomicContextNames={atomicContextNames} />
     </div>
   )
 }
 
-function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType; iffDirection?: IffDirection }) {
+function HypCardContent({ card, iffDirection = 'forward', atomicContextNames = [] }: { card: HypCardType; iffDirection?: IffDirection; atomicContextNames?: string[] }) {
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
   const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
   const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
@@ -175,6 +178,7 @@ function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType;
         name={card.hyp.names.join(', ')}
         proposition={isIff ? renderFormulaWithIffArrow(hypType, iffDirection) : colorizeFormula(hypType)}
       />
+      <AtomicForm displayText={hypType} reductionForms={card.hyp.reductionForms} contextNames={atomicContextNames} />
       {forallFooter && (
         <div className="statement-forall-footer">
           {hasIffNotation(forallFooter) && isIff
@@ -188,7 +192,7 @@ function HypCardContent({ card, iffDirection = 'forward' }: { card: HypCardType;
 
 export function HypCardPreviewCard({ card, iffDirection }: { card: HypCardType; iffDirection?: IffDirection }) {
   return (
-    <div className={`statement-card mobile-list-card hyp-overlay-card${!card.hyp.isAssumption && !card.isTheorem ? ' variable-card' : ''}${card.isTheorem ? ' derived-theorem-card' : ''}${card.hyp.forallFooter ? ' has-forall-footer' : ''}`}>
+    <div className={`statement-card mobile-list-card hyp-overlay-card${!card.hyp.isAssumption && !card.isTheorem ? ' variable-card variable-overlay-card' : ''}${card.isTheorem ? ' derived-theorem-card' : ''}${card.hyp.forallFooter ? ' has-forall-footer' : ''}`}>
       <HypCardContent card={card} iffDirection={iffDirection} />
     </div>
   )

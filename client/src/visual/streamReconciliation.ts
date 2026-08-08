@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { CanvasState, GoalStream, HypCard as HypCardType } from './types'
-import { parse, printExpression } from './expr-engine'
+import { parse, printExpression, sanitizeLeanDisplayName } from './expr-engine'
 import {
   branchLeafStream,
   collectActiveStreamIds,
@@ -416,7 +416,7 @@ function rawHypName(card: HypCardType): string {
 }
 
 function displayNameForRawHyp(rawName: string): string {
-  return rawName
+  return sanitizeLeanDisplayName(rawName)
 }
 
 function theoremBaseForCard(card: HypCardType): string {

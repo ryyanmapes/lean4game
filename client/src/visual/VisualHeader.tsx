@@ -102,17 +102,19 @@ export function VisualHeader({
         )}
       </div>
       <div className="visual-header-side right">
-        {!hideNav && hasPrev && (
-          <button className="visual-header-nav-btn visual-header-prev-btn" onClick={onPrev}>
-            ← Previous level
+        {!hideNav && (
+          <button className="visual-header-nav-btn visual-header-prev-btn" onClick={onPrev} disabled={!hasPrev} aria-label={hasPrev ? 'Previous level' : 'No previous level'}>
+            {hasPrev ? '← Previous level' : null}
           </button>
         )}
-        {!hideNav && hasNext && (
+        {!hideNav && (
           <button
             className={`visual-header-nav-btn visual-header-next-btn${isCompleted ? ' emphasized' : ''}`}
             onClick={onNext}
+            disabled={!hasNext}
+            aria-label={hasNext ? 'Next level' : 'No next level'}
           >
-            Next level →
+            {hasNext ? 'Next level →' : null}
           </button>
         )}
       </div>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { contextualizeReductionForms } from '../../tmp-exists-display-tests/existsDisplay.js'
+import { contextualizeReductionForms, selectAtomicReductionForm } from '../../tmp-exists-display-tests/existsDisplay.js'
 
 test('adds the implication form below a negated equality', () => {
   assert.deepEqual(
@@ -26,4 +26,11 @@ test('parenthesizes a negated implication before adding False', () => {
     contextualizeReductionForms(['\u00ac (P \u2192 Q)'], []),
     ['\u00ac (P \u2192 Q)', '(P \u2192 Q) \u2192 False'],
   )
+})
+
+test('selects atomic forms only for negation, inequality, and less-or-equal cards', () => {
+  assert.equal(selectAtomicReductionForm('x ≠ y', ['¬ x = y'], []), 'x = y → False')
+  assert.equal(selectAtomicReductionForm('¬ P', ['¬ P'], []), 'P → False')
+  assert.equal(selectAtomicReductionForm('x ≤ y', ['∃ c, y = x + c'], []), '∃ c, y = x + c')
+  assert.equal(selectAtomicReductionForm('x = y', ['x = y'], []), null)
 })

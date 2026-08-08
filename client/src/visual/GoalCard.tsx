@@ -6,6 +6,7 @@ import { formatFormulaText } from './expr-engine'
 import { colorizeFormula } from './colorizeFormula'
 import { VisualInfoText } from './VisualInfoText'
 import type { VisualGoalInfo } from './types'
+import { AtomicForm } from './AtomicForm'
 
 interface GoalCardProps {
   id: string
@@ -23,6 +24,8 @@ interface GoalCardProps {
   visualInfos?: VisualGoalInfo[]
   showDropTarget?: boolean
   infoPositions?: Array<'above' | 'below'>
+  atomicContextNames?: string[]
+  reductionForms?: string[]
 }
 
 export function GoalCard({
@@ -41,6 +44,8 @@ export function GoalCard({
   visualInfos = [],
   showDropTarget = false,
   infoPositions = ['above', 'below'],
+  atomicContextNames = [],
+  reductionForms,
 }: GoalCardProps) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isInteractive })
   const clickTimeoutRef = React.useRef<number | null>(null)
@@ -226,6 +231,7 @@ export function GoalCard({
       >
         <div className="goal-prefix">Goal</div>
         <span ref={propositionRef} className="proposition">{colorizeFormula(goalText)}</span>
+        <AtomicForm displayText={goalText} reductionForms={reductionForms} contextNames={atomicContextNames} />
       </div>
       {infoPositions.includes('below') && renderInfo('below')}
       {arrows.map(renderGoalInfoArrow)}

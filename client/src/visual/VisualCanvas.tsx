@@ -619,7 +619,13 @@ function actionCommandForStream(
   leanGoalOrder: string[],
 ): { command: string; rotation: string | null } {
   if (!stream) return { command: playTactic, rotation: null }
-  return commandForGoalAction(playTactic, stream.id, leanGoalOrder)
+  // A literal reflexive equality has a canonical core tactic. Using `rfl`
+  // directly avoids relying on the custom click tactic while replaying a
+  // partially completed cases/induction proof with sibling goals.
+  const command = playTactic === 'click_goal' && goalIsReflexiveEquality(stream)
+    ? 'rfl'
+    : playTactic
+  return commandForGoalAction(command, stream.id, leanGoalOrder)
 }
 
 function parsedGoalEquality(stream: GoalStream) {
@@ -2818,14 +2824,11 @@ export function VisualCanvas({
   function handleHypContextMenu(
     event: React.MouseEvent<HTMLDivElement>,
     card: HypCardType,
-    contextNames: string[],
   ) {
     if (hypCardIsIff(card)) {
       event.preventDefault()
       toggleIffDirection(card.id)
-      return
     }
-    handleReductionContextMenu(event, card.id, card.hyp.reductionForms, contextNames)
   }
 
   function handleTheoremCardContextMenu(
@@ -4563,8 +4566,8 @@ export function VisualCanvas({
         onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
           ? () => handleHypDoubleClick(displayStream.id, card.id)
           : undefined}
-        onContextMenu={(event) => handleHypContextMenu(event, card, streamHypNames(displayStream))}
-        onMouseLeave={() => handleReductionMouseLeave(card.id)}
+        onContextMenu={hypCardIsIff(card) ? (event) => handleHypContextMenu(event, card) : undefined}
+        atomicContextNames={streamHypNames(displayStream)}
         iffDirection={getIffDirection(card.id)}
       />
     )
@@ -4677,10 +4680,10 @@ export function VisualCanvas({
         visualInfos={visualGoalInfos}
         infoPositions={infoPositions}
         showDropTarget={activeDragId !== null}
+        atomicContextNames={streamHypNames(liveGoalStream)}
+        reductionForms={stream.reductionForms}
         onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
         onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
-        onContextMenu={(event) => handleReductionContextMenu(event, stream.id, stream.reductionForms, streamHypNames(liveGoalStream))}
-        onMouseLeave={() => handleReductionMouseLeave(stream.id)}
       />
     )
   }

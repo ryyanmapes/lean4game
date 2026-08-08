@@ -105,6 +105,29 @@ describe('Visual Lean advanced mobile regressions', { testIsolation: false }, ()
     })
   })
 
+  it('solves the reflexive zero arm created by cases with a goal tap', () => {
+    openLevel('LessOrEqual', 10)
+    run('cases x with y')
+
+    cy.get('[data-testid="goal-card"]', { timeout: 60_000 }).click()
+    cy.get('[data-testid="goal-choice-option"][data-play-tactic="click_goal_left"]', { timeout: 60_000 })
+      .click()
+    cy.get('[data-testid="goal-card"][data-goal-text="0 = 0"]', { timeout: 60_000 })
+      .should('be.visible')
+      .click()
+    cy.window({ timeout: 60_000 }).should(win => {
+      const bridge = (win as HarnessWindow).__visualTestHarness
+      expect(bridge?.getProofAudit().processing, 'reflexive goal tap has finished').to.equal(false)
+    })
+    cy.get('[data-testid="goal-card"][data-goal-text="0 = 0"]')
+      .should('have.class', 'solved')
+    cy.get('[data-hyp-name], [data-hyp-type], [data-goal-text], .tr-rule-card')
+      .should($elements => {
+        expect($elements.text(), 'case branches never expose Lean hygienic suffixes')
+          .not.to.match(/(?:_@|_internal|_hyg)/u)
+      })
+  })
+
   it('keeps long theorem cards inside the tray and uses a stable compact size', () => {
     openLevel('AdvMultiplication', 7)
     cy.get('.tr-tab-btn').contains('Theorems').click()

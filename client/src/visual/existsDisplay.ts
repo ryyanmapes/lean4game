@@ -132,3 +132,31 @@ export function contextualizeReductionForms(forms: string[], contextNames: Itera
 
   return expandedForms
 }
+
+/** Pick the useful definition-level form for compact, always-visible card context. */
+export function selectAtomicReductionForm(
+  displayText: string,
+  forms: string[] | undefined,
+  contextNames: Iterable<string>,
+): string | null {
+  const displayed = displayText.trim()
+  const isNegation = displayed.startsWith('¬') || displayed.includes('≠')
+  const isLeq = displayed.includes('≤')
+  if ((!isNegation && !isLeq) || !forms?.length) return null
+
+  const contextualized = contextualizeReductionForms(forms, contextNames)
+  if (isNegation) {
+    for (let idx = contextualized.length - 1; idx >= 0; idx -= 1) {
+      const form = contextualized[idx]
+      if (form?.includes('→ False')) return form
+    }
+    return null
+  }
+  for (let idx = contextualized.length - 1; idx >= 0; idx -= 1) {
+    const form = contextualized[idx]
+    if (!form) continue
+    const trimmed = form.trim()
+    if (trimmed.startsWith('∃') || trimmed.startsWith('Exists ')) return form
+  }
+  return null
+}

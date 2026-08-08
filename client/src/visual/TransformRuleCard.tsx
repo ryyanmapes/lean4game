@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { parse, printDisplayExpression } from './expr-engine'
+import { formatFormulaText, parse, printDisplayExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { OverflowMarquee } from './OverflowMarquee'
 
@@ -21,11 +21,11 @@ interface EqualityHypCardProps {
 }
 
 function formatRuleExpr(expr: string, node?: ExpressionNode): string {
-  if (node) return printDisplayExpression(node)
+  if (node) return formatFormulaText(printDisplayExpression(node))
   try {
-    return printDisplayExpression(parse(expr))
+    return formatFormulaText(printDisplayExpression(parse(expr)))
   } catch {
-    return expr
+    return formatFormulaText(expr)
   }
 }
 
