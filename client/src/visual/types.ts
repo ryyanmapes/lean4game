@@ -37,6 +37,7 @@ export interface PropositionTheorem {
   theoremName: string
   label: string
   proposition: string
+  reductionForms?: string[]
   forallFooter?: string
   forallSpecification?: ForallSpecificationInfo
 }

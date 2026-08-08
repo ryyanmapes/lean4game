@@ -978,6 +978,10 @@ example : 0 + 0 = 0 := by
   drag_rw_lhs [Nat.add_zero]
   click_goal
 
+example (x : Nat) : x = x + 0 := by
+  drag_rw_lhs [← Nat.add_zero]
+  rfl
+
 example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
   drag_rw_lhs [Nat.mul_add]
   rfl
@@ -1074,6 +1078,15 @@ example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
   have thm_local : P → Q := hpq
   drag_to hp thm_local
   exact thm_local
+
+private theorem zeroNeOneLocal : (0 : Nat) ≠ 1 := by
+  intro h
+  cases h
+
+example (h : (0 : Nat) = 1) : False := by
+  have thm_zeroNeOneLocal : (0 : Nat) ≠ 1 := zeroNeOneLocal
+  drag_to h thm_zeroNeOneLocal
+  exact thm_zeroNeOneLocal
 
 example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
   have thm_f : P → Q := hpq

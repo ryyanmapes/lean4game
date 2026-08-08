@@ -477,6 +477,7 @@ interface VisualCanvasTestHarness {
   runPlayerTactic: (command: string) => Promise<void>
   dragHypToGoal: (hypName: string) => Promise<void>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
+  copyTheoremToCanvas: (theoremName: string) => void
   moveHypTo: (hypName: string, x: number, y: number) => void
   dragTacticToHyp: (tacticName: string, hypName: string) => Promise<void>
   clickHyp: (hypName: string) => Promise<void>
@@ -4112,6 +4113,12 @@ export function VisualCanvas({
     })
   }
 
+  function copyTestTheoremToCanvas(theoremName: string) {
+    const theorem = propositionTheorems.find(candidate => candidate.theoremName === theoremName)
+    if (!theorem) throw new Error(`Could not find proposition theorem "${theoremName}"`)
+    flushSync(() => createTheoremCopy(theorem, { x: 96, y: 96 }))
+  }
+
   async function applyTestDragTacticToHyp(tacticName: string, hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const targetCard = requireHypCard(stream, hypName)
@@ -4371,6 +4378,7 @@ export function VisualCanvas({
       runPlayerTactic: applyTestPlayerTactic,
       dragHypToGoal: applyTestDragHypToGoal,
       dragHypToHyp: applyTestDragHypToHyp,
+      copyTheoremToCanvas: copyTestTheoremToCanvas,
       moveHypTo: moveTestHypTo,
       dragTacticToHyp: applyTestDragTacticToHyp,
       clickHyp: applyTestClickHyp,

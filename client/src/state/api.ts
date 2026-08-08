@@ -24,6 +24,7 @@ export interface GameInfo {
   info: null|string,
   worlds: null|{nodes: {[id:string]: {id: string, title: string, introduction: string, image: string}}, edges: string[][]},
   worldSize: null|{[key: string]: number},
+  skippedLevels?: {[key: string]: number[]},
   authors: null|string[],
   conclusion: null|string,
   tile: null|GameTile,

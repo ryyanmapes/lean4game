@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next'
 import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
 import { titleCaseLevel } from './VisualHeader'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
+import { computeVisualProgressFrontier } from './visualWorldProgress'
 import './visual.css'
 
 const r = 16
@@ -376,11 +377,12 @@ function hasUnfinishedVisualAutosave(gameId: string, worldId: string, levelId: n
   }
 }
 
-function VisualWorldIcon({ world, title, position, completedLevels, worldSize, palette, levelMode }: {
+function VisualWorldIcon({ world, title, position, completedLevels, nextLevel, worldSize, palette, levelMode }: {
   world: string
   title: string
   position: cytoscape.Position
   completedLevels: boolean[]
+  nextLevel: number | null
   worldSize: number
   palette: VisualMapPalette
   levelMode: MapLevelMode
@@ -394,12 +396,11 @@ function VisualWorldIcon({ world, title, position, completedLevels, worldSize, p
 
   const unlocked = completedLevels[0]
   const completed = completedLevels.slice(1).every(Boolean)
-  let nextLevel: number = completedLevels.findIndex(c => !c)
-  if (nextLevel <= 1) nextLevel = 1
+  const targetLevel = nextLevel ?? 1
 
   const fill = completed ? palette.completedWorld : unlocked ? palette.unlockedWorld : palette.lockedWorld
   const labelBg = completed ? palette.completedLabel : unlocked ? palette.unlockedLabel : palette.lockedLabel
-  const to = `/${gameId}/world/${world}/level/${nextLevel}${levelMode === 'visual' ? '/visual' : ''}`
+  const to = `/${gameId}/world/${world}/level/${targetLevel}${levelMode === 'visual' ? '/visual' : ''}`
 
   return (
     <g
@@ -605,11 +606,17 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const svgElements: React.ReactNode[] = []
 
   if (worlds && worldSize) {
-    for (const worldId in nodes) {
-      // Treat skipped levels as completed so they don't block world unlock/completion.
-      completed[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
-        i === 0 || isSkipped(worldId, i) || selectCompleted(gameId, worldId, i)(store.getState()),
-      )
+    const worldIds = Object.keys(nodes)
+    const progressFrontier = computeVisualProgressFrontier({
+      worldIds,
+      edges: worlds.edges,
+      worldSizes: worldSize,
+      skippedLevels: skippedLevels ?? {},
+      isCompleted: (worldId, level) => selectCompleted(gameId, worldId, level)(store.getState()),
+    })
+
+    for (const worldId of worldIds) {
+      completed[worldId] = progressFrontier.completedLevels[worldId]
       started[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
         i > 0 && !completed[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
       )
@@ -671,6 +678,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
           title={nodes[worldId].data.title || worldId}
           position={position}
           completedLevels={completed[worldId]}
+          nextLevel={progressFrontier.nextLevels[worldId]}
           worldSize={visibleCount(worldId)}
           palette={mapPalette}
           levelMode={levelMode}
@@ -690,7 +698,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             position={position}
             completed={completed[worldId][i]}
             started={started[worldId][i]}
-            unlocked={completed[worldId][i - 1]}
+            unlocked={progressFrontier.highlightedLevels[worldId] === i}
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
             title={levelTitles[worldId]?.[i]}

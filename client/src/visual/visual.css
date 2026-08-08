@@ -509,10 +509,10 @@
     linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
     linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
     linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.85px), var(--bevel-border-color) 50%, transparent calc(50% + 0.85px)) top left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.85px), var(--bevel-border-color) 50%, transparent calc(50% + 0.85px)) top right / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.85px), var(--bevel-border-color) 50%, transparent calc(50% + 0.85px)) bottom left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.85px), var(--bevel-border-color) 50%, transparent calc(50% + 0.85px)) bottom right / 0.65rem 0.65rem no-repeat;
+    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) top left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) top right / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) bottom left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) bottom right / 0.65rem 0.65rem no-repeat;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,

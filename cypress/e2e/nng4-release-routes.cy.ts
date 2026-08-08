@@ -97,6 +97,17 @@ describe('local NNG4 release maps', () => {
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })
 
+  it('keeps erase confirmation concise and offers no combined download action', () => {
+    cy.visit('/lean4game/index.html#/g/local/NNG4/visual')
+    cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
+    cy.get('.visual-map-menu-btn').click()
+    cy.contains('.visual-map-dropdown button', 'Erase').click()
+    cy.contains('h2', 'Delete Progress?').should('be.visible')
+    cy.contains('Deleting progress will delete all your proofs').should('not.exist')
+    cy.contains('button', 'Download & Delete').should('not.exist')
+    cy.contains('button', 'Delete Progress').should('exist')
+  })
+
   it('redirects the removed embedded selector to the release root', () => {
     cy.visit('/lean4game/index.html#/')
     cy.location('pathname', { timeout: 30_000 }).should('equal', '/')

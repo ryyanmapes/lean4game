@@ -160,3 +160,23 @@ export function selectAtomicReductionForm(
   }
   return null
 }
+
+/** Infer the two definition-level forms that Visual Lean teaches directly in
+ * proposition theorem metadata. Static theorem docs do not carry RPC reduction
+ * forms, so theorem tray/copy cards need this small surface-syntax bridge. */
+export function inferAtomicReductionForms(displayText: string): string[] {
+  const displayed = displayText.trim()
+  const notEqual = /^(.*?)\s*≠\s*(.*?)$/u.exec(displayed)
+  if (notEqual) {
+    const [, lhs = '', rhs = ''] = notEqual
+    return [`${lhs.trim()} = ${rhs.trim()} → False`]
+  }
+
+  const lessOrEqual = /^(.*?)\s*≤\s*(.*?)$/u.exec(displayed)
+  if (lessOrEqual) {
+    const [, lhs = '', rhs = ''] = lessOrEqual
+    return [`∃ c, ${rhs.trim()} = ${lhs.trim()} + c`]
+  }
+
+  return []
+}

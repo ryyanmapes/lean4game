@@ -66,13 +66,20 @@ test('uses Lean core rewriting for a reverse rewrite on the selected side', () =
   )
 })
 
-test('does not descend through add_zero wildcard arguments when rewriting in reverse', () => {
+test('preserves selected paths through reverse add_zero rewrites', () => {
   assert.equal(
     instrumentBrowserProof('drag_rw_rhs_at [← MyNat.add_zero] [1]'),
-    'conv => rhs; rw [← MyNat.add_zero]',
+    'conv => rhs; arg 1; rw [← MyNat.add_zero]',
   )
   assert.equal(
     instrumentBrowserProof('drag_rw_hyp_lhs_at h [← add_zero] [2, 1]'),
-    'conv at h => lhs; rw [← add_zero]',
+    'conv at h => lhs; arg 2; arg 1; rw [← add_zero]',
+  )
+})
+
+test('keeps the selected side path when expanding a variable with reverse add_zero', () => {
+  assert.equal(
+    instrumentBrowserProof('drag_rw_rhs_at [← add_zero] [2]'),
+    'conv => rhs; arg 2; rw [← add_zero]',
   )
 })

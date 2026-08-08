@@ -30,13 +30,7 @@ function browserCompatibleProof(proofBody: string): string {
       // historical direction fallback could turn `zero_add` backwards and
       // insert an extra `0 +` when the selected occurrence was nested.
       const normalizedTheorem = theorem.trim()
-      // In the reverse direction the RHS of add_zero is a bare wildcard. The
-      // display tree therefore supplies a path that is more specific than the
-      // Cauli elaborated arithmetic tree. Side-scoped core rw still rewrites
-      // the expression the player selected and correctly produces `a + 0`.
-      const navigation = reverse && /(?:^|\.)add_zero$/u.test(normalizedTheorem)
-        ? ''
-        : path.map(step => `; arg ${step}`).join('')
+      const navigation = path.map(step => `; arg ${step}`).join('')
       return `${indentation}conv at ${hypothesis} => ${side}${navigation}; rw [${reverse}${normalizedTheorem}]`
     }
     const goalRewrite = line.match(
@@ -52,9 +46,7 @@ function browserCompatibleProof(proofBody: string): string {
       // side/path through Lean's core conv/rw machinery. The player's authored
       // drag_rw command remains unchanged in both proof logs.
       const normalizedTheorem = theorem.trim()
-      const navigation = reverse && /(?:^|\.)add_zero$/u.test(normalizedTheorem)
-        ? ''
-        : path.map(step => `; arg ${step}`).join('')
+      const navigation = path.map(step => `; arg ${step}`).join('')
       return `${indentation}conv => ${side}${navigation}; rw [${reverse}${normalizedTheorem}]`
     }
     return line

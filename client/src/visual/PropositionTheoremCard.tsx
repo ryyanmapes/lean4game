@@ -5,6 +5,7 @@ import { formatFormulaText } from './expr-engine'
 import { colorizeFormula, hasIntegerNotation } from './colorizeFormula'
 import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
 import { StatementCardLine } from './StatementCardLine'
+import { AtomicForm } from './AtomicForm'
 
 function PropositionTheoremContent({
   theorem,
@@ -20,6 +21,7 @@ function PropositionTheoremContent({
         name={theorem.label}
         proposition={isIff ? renderFormulaWithIffArrow(proposition, iffDirection) : colorizeFormula(proposition)}
       />
+      <AtomicForm displayText={proposition} reductionForms={theorem.reductionForms} />
       {forallFooter && (
         <div className="statement-forall-footer">
           {isIff && hasIffNotation(forallFooter)

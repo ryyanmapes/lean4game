@@ -15,6 +15,7 @@ import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
+import { inferAtomicReductionForms } from './existsDisplay'
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
@@ -515,6 +516,7 @@ export function VisualProofPage() {
               theoremName: thm.name,
               label: thm.displayName || thm.name,
               proposition: theoremDisplay.mainText,
+              reductionForms: inferAtomicReductionForms(theoremDisplay.mainText),
               forallFooter: theoremDisplay.forallFooter,
               forallSpecification: theoremDisplay.forallSpecification,
             })

@@ -2,10 +2,9 @@
  * @fileOverview
 */
 import * as React from 'react'
-import { useSelector } from 'react-redux'
 import { GameIdContext } from '../../app'
 import { useAppDispatch } from '../../hooks'
-import { deleteProgress, selectProgress } from '../../state/progress'
+import { deleteProgress } from '../../state/progress'
 import { clearGameVisualProgress } from '../../state/gameProgressStorage'
 import { downloadFile } from '../world_tree'
 import { Trans, useTranslation } from 'react-i18next'
@@ -66,7 +65,6 @@ export function downloadProgress(gameId: string, gameProgress: any, ev: React.Mo
 export function ErasePopup () {
   let { t } = useTranslation()
   const gameId = useContext(GameIdContext)
-  const gameProgress = useSelector(selectProgress(gameId))
   const dispatch = useAppDispatch()
   const [, setPopup] = useAtom(popupAtom)
 
@@ -76,29 +74,15 @@ export function ErasePopup () {
     setPopup(null)
   }
 
-  const downloadAndErase = (ev) => {
-    downloadProgress(gameId, gameProgress, ev)
-    eraseProgress()
-  }
-
   return <>
     <h2>{t("Delete Progress?")}</h2>
     <Trans>
       <p>Do you want to delete your saved progress irreversibly?</p>
       <p>This clears progress for this game only. Saves and settings for other games are not affected.</p>
     </Trans>
-    <Trans>
-      <p>
-        Deleting progress will delete all your proofs and your collected inventory! It's recommended
-        to download your progress first.
-      </p>
-    </Trans>
     <div className='settings-buttons'>
       <button type="button" className="visual-modal-button danger" onClick={eraseProgress}>
         {t("Delete Progress")}
-      </button>
-      <button type="button" className="visual-modal-button" onClick={downloadAndErase}>
-        {t("Download & Delete")}
       </button>
       <button type="button" className="visual-modal-button secondary" onClick={() => setPopup(null)}>
         {t("Cancel")}

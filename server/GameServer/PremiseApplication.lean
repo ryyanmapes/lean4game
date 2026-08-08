@@ -24,7 +24,11 @@ private partial def buildApplicationFromAssignments
   if idx >= assignedArgs.size then
     return fnExpr
 
-  let currentType ← withReducible (whnf currentType)
+  -- The proposition itself may be a definition such as `Not`. The binder
+  -- search below uses `forallMetaTelescopeReducing`, so build the application
+  -- at the same transparency level; otherwise a matched `h : a = b` can leave
+  -- `notProof : a ≠ b` unapplied.
+  let currentType ← whnf currentType
   match currentType with
   | .forallE binderName domain body binderInfo =>
       if idx == selectedIdx then

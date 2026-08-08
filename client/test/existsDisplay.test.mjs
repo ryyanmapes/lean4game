@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { contextualizeReductionForms, selectAtomicReductionForm } from '../../tmp-exists-display-tests/existsDisplay.js'
+import { contextualizeReductionForms, inferAtomicReductionForms, selectAtomicReductionForm } from '../../tmp-exists-display-tests/existsDisplay.js'
 
 test('adds the implication form below a negated equality', () => {
   assert.deepEqual(
@@ -33,4 +33,17 @@ test('selects atomic forms only for negation, inequality, and less-or-equal card
   assert.equal(selectAtomicReductionForm('¬ P', ['¬ P'], []), 'P → False')
   assert.equal(selectAtomicReductionForm('x ≤ y', ['∃ c, y = x + c'], []), '∃ c, y = x + c')
   assert.equal(selectAtomicReductionForm('x = y', ['x = y'], []), null)
+})
+
+test('accepts the expanded Exists form emitted for less-or-equal statements', () => {
+  assert.equal(
+    selectAtomicReductionForm('x ≤ y', ['Exists fun c => y = x + c'], []),
+    'Exists fun c => y = x + c',
+  )
+})
+
+test('infers atomic forms for static proposition theorem cards', () => {
+  assert.deepEqual(inferAtomicReductionForms('0 ≠ 1'), ['0 = 1 → False'])
+  assert.deepEqual(inferAtomicReductionForms('a ≤ b'), ['∃ c, b = a + c'])
+  assert.deepEqual(inferAtomicReductionForms('a = b'), [])
 })
