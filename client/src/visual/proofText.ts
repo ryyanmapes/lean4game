@@ -68,6 +68,21 @@ export function commandForGoalAction(
   }
 }
 
+/** Convert visual goal-click actions into the stable core tactic used for replay. */
+export function coreCommandForGoalClick(
+  playTactic: string,
+  clickTooltip?: string,
+  isReflexiveEquality = false,
+): string {
+  if (
+    playTactic === 'click_goal' &&
+    (isReflexiveEquality || clickTooltip?.trim().toLowerCase() === 'click to complete')
+  ) {
+    return 'rfl'
+  }
+  return playTactic
+}
+
 function getOrCreateCaseItem(block: ProofScriptBlock, label: string): ProofScriptBlock {
   const existing = block.items.find(item => item.kind === 'case' && item.label === label)
   if (existing?.kind === 'case') return existing.block

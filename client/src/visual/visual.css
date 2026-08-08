@@ -480,12 +480,7 @@
 .visual-page .statement-card.variable-card,
 .visual-page .statement-card.variable-only-tactic {
   --bevel-border-color: var(--glass-border);
-  --bevel-fill: var(--glass-bg);
   position: relative;
-  isolation: isolate;
-  border: 0;
-  border-radius: 0;
-  background: var(--bevel-border-color);
   clip-path: polygon(
     0.65rem 0,
     calc(100% - 0.65rem) 0,
@@ -500,33 +495,24 @@
 
 .visual-page .statement-card.variable-only-tactic {
   --bevel-border-color: var(--visual-danger-border);
-  --bevel-fill: var(--visual-danger-bg);
 }
 
-.visual-page .statement-card.variable-card::before,
-.visual-page .statement-card.variable-only-tactic::before {
+.visual-page .statement-card.variable-card::after,
+.visual-page .statement-card.variable-only-tactic::after {
   content: '';
   position: absolute;
-  inset: 1px;
-  z-index: -1;
+  inset: 0;
+  z-index: 2;
   pointer-events: none;
-  background: var(--bevel-fill);
-  clip-path: polygon(
-    0.61rem 0,
-    calc(100% - 0.61rem) 0,
-    100% 0.61rem,
-    100% calc(100% - 0.61rem),
-    calc(100% - 0.61rem) 100%,
-    0.61rem 100%,
-    0 calc(100% - 0.61rem),
-    0 0.61rem
-  );
-}
-
-.visual-page .statement-card.variable-card:hover,
-.visual-page .statement-card.variable-only-tactic:hover {
-  background: var(--bevel-border-color);
-  --bevel-fill: var(--visual-glass-bg-hover);
+  background:
+    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 1.3rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) top right / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.7px), var(--bevel-border-color) 50%, transparent calc(50% + 0.7px)) bottom right / 0.65rem 0.65rem no-repeat;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,
@@ -2446,6 +2432,7 @@
 
   .visual-page.phone-portrait .visual-header-nav-btn {
     width: 2.35rem;
+    min-width: 2.35rem;
     height: 2rem;
     padding: 0;
     font-size: 0;

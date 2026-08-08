@@ -43,6 +43,7 @@ import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 import {
   buildStructuredProof,
   commandForGoalAction,
+  coreCommandForGoalClick,
   displayedProofLines,
   isVisualOnlyPlayTactic,
   serializeProofCommands,
@@ -622,9 +623,11 @@ function actionCommandForStream(
   // A literal reflexive equality has a canonical core tactic. Using `rfl`
   // directly avoids relying on the custom click tactic while replaying a
   // partially completed cases/induction proof with sibling goals.
-  const command = playTactic === 'click_goal' && goalIsReflexiveEquality(stream)
-    ? 'rfl'
-    : playTactic
+  const command = coreCommandForGoalClick(
+    playTactic,
+    stream.goal.clickAction?.tooltip,
+    goalIsReflexiveEquality(stream),
+  )
   return commandForGoalAction(command, stream.id, leanGoalOrder)
 }
 

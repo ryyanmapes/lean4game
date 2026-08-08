@@ -322,7 +322,7 @@ export function applyNng4VisualLayout(
 
   const rawWidth = Math.max(120, rawBounds.x2 - rawBounds.x1)
   const rawCenter = rawBounds.x1 + rawWidth / 2
-  const width = compact ? rawWidth * 0.8 : rawWidth
+  const width = compact ? rawWidth * 0.62 : rawWidth
   const left = rawCenter - width / 2
   const center = left + width / 2
   const at = (fraction: number) => left + width * fraction

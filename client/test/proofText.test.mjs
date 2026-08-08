@@ -5,9 +5,17 @@ import test from 'node:test'
 const {
   buildStructuredProof,
   commandForGoalAction,
+  coreCommandForGoalClick,
   displayedProofLines,
   rotationForGoal,
 } = await import('../../tmp-proof-text-tests/proofText.js')
+
+test('a directly completable goal click replays as rfl without reparsing display text', () => {
+  assert.equal(coreCommandForGoalClick('click_goal', 'Click to complete'), 'rfl')
+  assert.equal(coreCommandForGoalClick('click_goal', undefined, true), 'rfl')
+  assert.equal(coreCommandForGoalClick('click_goal', 'Click to introduce variable'), 'click_goal')
+  assert.equal(coreCommandForGoalClick('click_goal_left', 'Click to complete'), 'click_goal_left')
+})
 
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:
 //   induction c with d hd
