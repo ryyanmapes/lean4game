@@ -126,6 +126,7 @@
     "test:visual-exists-display": ".\\node_modules\\.bin\\tsc.cmd client\\src\\visual\\existsDisplay.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-exists-display-tests --skipLibCheck --esModuleInterop && node --test client/test/existsDisplay.test.mjs",
     "test:visual-proof-text": ".\\node_modules\\.bin\\tsc.cmd client\\src\\visual\\proofText.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-proof-text-tests --skipLibCheck --esModuleInterop && node --test client/test/proofText.test.mjs",
     "test:visual-adaptive-pagination": ".\\node_modules\\.bin\\tsc.cmd client\\src\\visual\\adaptivePagination.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-adaptive-pagination-tests --skipLibCheck --esModuleInterop && node --test client/test/adaptivePagination.test.mjs",
+    "test:game-progress-storage": ".\\node_modules\\.bin\\tsc.cmd client\\src\\state\\gameProgressStorage.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-game-storage-tests --skipLibCheck --esModuleInterop && node --test client/test/gameProgressStorage.test.mjs",
     "test:visual-browser-proof": "node scripts/run-browser-proof-tests.mjs",
     "test:visual-complete-fixture": "node scripts/generate-nng4-visual-solutions.mjs",
     "test:visual-complete-playthrough": "node scripts/generate-nng4-visual-solutions.mjs && node scripts/run-cypress.cjs run --spec cypress/e2e/nng4-visual-complete-playthrough.cy.ts --browser chrome --config baseUrl=http://127.0.0.1:5173 --env VISUAL_TIMEOUT=180000",

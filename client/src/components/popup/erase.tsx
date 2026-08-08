@@ -5,14 +5,13 @@ import * as React from 'react'
 import { useSelector } from 'react-redux'
 import { GameIdContext } from '../../app'
 import { useAppDispatch } from '../../hooks'
-import { deleteLevelProgress, deleteProgress, deleteWorldProgress, selectProgress } from '../../state/progress'
+import { deleteProgress, selectProgress } from '../../state/progress'
+import { clearGameVisualProgress } from '../../state/gameProgressStorage'
 import { downloadFile } from '../world_tree'
-import { Button } from '../button'
 import { Trans, useTranslation } from 'react-i18next'
 import { useContext } from 'react'
 import { useAtom } from 'jotai'
 import { popupAtom } from '../../store/popup-atoms'
-import { WorldLevelIdContext } from '../infoview/context'
 
 /** download the current progress (i.e. what's saved in the browser store) */
 export function downloadProgress(gameId: string, gameProgress: any, ev: React.MouseEvent) {
@@ -67,58 +66,43 @@ export function downloadProgress(gameId: string, gameProgress: any, ev: React.Mo
 export function ErasePopup () {
   let { t } = useTranslation()
   const gameId = useContext(GameIdContext)
-   const {worldId, levelId} = React.useContext(WorldLevelIdContext)
-  // const { setPage } = useContext(PageContext)
   const gameProgress = useSelector(selectProgress(gameId))
   const dispatch = useAppDispatch()
   const [, setPopup] = useAtom(popupAtom)
 
-  const eraseProgress = (ev) => {
+  const eraseProgress = () => {
     dispatch(deleteProgress({game: gameId}))
+    try { clearGameVisualProgress(gameId) } catch {}
     setPopup(null)
-    // setPage(0) // TODO: fix me
-    // ev.preventDefault() // TODO: this is a hack to prevent the buttons below from opening a link
-  }
-
-  function eraseLevel (ev) {
-    dispatch(deleteLevelProgress({game: gameId, world: worldId, level: levelId}))
-    setPopup(null)
-    ev.preventDefault()
-  }
-
-  function eraseWorld (ev) {
-    dispatch(deleteWorldProgress({game: gameId, world: worldId}))
-    setPopup(null)
-    ev.preventDefault()
   }
 
   const downloadAndErase = (ev) => {
     downloadProgress(gameId, gameProgress, ev)
-    eraseProgress(ev)
+    eraseProgress()
   }
 
   return <>
     <h2>{t("Delete Progress?")}</h2>
     <Trans>
       <p>Do you want to delete your saved progress irreversibly?</p>
+      <p>This clears progress for this game only. Saves and settings for other games are not affected.</p>
     </Trans>
-    <div className='settings-buttons'>
-      <Button onClick={levelId && eraseLevel} to="" disabled={!levelId} >{t("Delete this Level")}</Button>
-      <Button onClick={worldId && eraseWorld} to="" disabled={!worldId} >{t("Delete this World")}</Button>
-      <Button onClick={eraseProgress} to={`/${gameId}/`}>{t("Delete Everything")}</Button>
-    </div>
     <Trans>
       <p>
-        Deleting everything will delete all your proofs and your collected inventory! It's recommended
+        Deleting progress will delete all your proofs and your collected inventory! It's recommended
         to download your progress first.
-      </p>
-      <p>
-        (Saves from other games are not deleted.)
       </p>
     </Trans>
     <div className='settings-buttons'>
-      <Button onClick={downloadAndErase} to={`/${gameId}/`}>{t("Download & Delete everything")}</Button>
-      <Button onClick={(ev) => {setPopup(null); ev.preventDefault()}} to="">{t("Cancel")}</Button>
+      <button type="button" className="visual-modal-button danger" onClick={eraseProgress}>
+        {t("Delete Progress")}
+      </button>
+      <button type="button" className="visual-modal-button" onClick={downloadAndErase}>
+        {t("Download & Delete")}
+      </button>
+      <button type="button" className="visual-modal-button secondary" onClick={() => setPopup(null)}>
+        {t("Cancel")}
+      </button>
     </div>
   </>
 }

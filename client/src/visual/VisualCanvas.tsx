@@ -560,13 +560,13 @@ function theoremCopyMobileKey(copy: PropositionTheoremCopy): string {
   return `copy:${copy.id}`
 }
 
-function mobileOrderStorageKey(worldId: string, levelId: number): string {
-  return `visual-mobile-order/${worldId}/${levelId}`
+function mobileOrderStorageKey(gameId: string, worldId: string, levelId: number): string {
+  return `visual-mobile-order/${gameId}/${worldId}/${levelId}`
 }
 
-function loadMobileVisualOrder(worldId: string, levelId: number): MobileVisualOrder {
+function loadMobileVisualOrder(gameId: string, worldId: string, levelId: number): MobileVisualOrder {
   try {
-    const parsed = JSON.parse(localStorage.getItem(mobileOrderStorageKey(worldId, levelId)) ?? '{}') as Partial<MobileVisualOrder>
+    const parsed = JSON.parse(localStorage.getItem(mobileOrderStorageKey(gameId, worldId, levelId)) ?? '{}') as Partial<MobileVisualOrder>
     return {
       variables: Array.isArray(parsed.variables) ? parsed.variables.filter(item => typeof item === 'string') : [],
       theorems: Array.isArray(parsed.theorems) ? parsed.theorems.filter(item => typeof item === 'string') : [],
@@ -577,11 +577,12 @@ function loadMobileVisualOrder(worldId: string, levelId: number): MobileVisualOr
 }
 
 function initialMobileVisualOrder(
+  gameId: string,
   worldId: string,
   levelId: number,
   canvas: CanvasState,
 ): MobileVisualOrder {
-  const stored = loadMobileVisualOrder(worldId, levelId)
+  const stored = loadMobileVisualOrder(gameId, worldId, levelId)
   const variables = [...stored.variables]
   const theorems = [...stored.theorems]
   for (const card of canvas.streams.flatMap(stream => stream.hyps)) {
@@ -1261,6 +1262,7 @@ export interface VisualProofResumeState {
 }
 
 interface VisualCanvasProps {
+  gameId: string
   initialState: CanvasState
   theoremEqualityHyps: EqualityHyp[]
   propositionTheorems: PropositionTheorem[]
@@ -1507,7 +1509,7 @@ function TheoremTray({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VisualCanvas({
-  initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
+  gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave
@@ -1577,7 +1579,7 @@ export function VisualCanvas({
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
   const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>(() => resumeState?.theoremCopies ?? [])
   const [mobileVisualOrder, setMobileVisualOrder] = useState<MobileVisualOrder>(() =>
-    initialMobileVisualOrder(worldId, levelId, initialState)
+    initialMobileVisualOrder(gameId, worldId, levelId, initialState)
   )
   const mobileScrollRef = useRef<HTMLDivElement>(null)
   const mobileNaturalContentRef = useRef<HTMLDivElement>(null)
@@ -1641,14 +1643,14 @@ export function VisualCanvas({
   const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<boolean>) | null>(null)
 
   // Stable game key for play log
-  const logKey = `${worldId}/${levelId}`
+  const logKey = `${gameId}/${worldId}/${levelId}`
   const comparisonTransformEnabled = worldAllowsComparisonTransform(worldId)
 
   useEffect(() => {
     try {
-      localStorage.setItem(mobileOrderStorageKey(worldId, levelId), JSON.stringify(mobileVisualOrder))
+      localStorage.setItem(mobileOrderStorageKey(gameId, worldId, levelId), JSON.stringify(mobileVisualOrder))
     } catch {}
-  }, [levelId, mobileVisualOrder, worldId])
+  }, [gameId, levelId, mobileVisualOrder, worldId])
 
   useEffect(() => {
     if (!onAutosave || isProcessing || pendingTransformSync !== null) return
@@ -1670,8 +1672,8 @@ export function VisualCanvas({
   }, [activeStreamId, canvasState, displayCanvasState, isProcessing, onAutosave, pendingTransformSync, proofSteps, proofTree, streamSnapshots, theoremCopies])
 
   useEffect(() => {
-    setMobileVisualOrder(initialMobileVisualOrder(worldId, levelId, initialState))
-  }, [initialState, levelId, worldId])
+    setMobileVisualOrder(initialMobileVisualOrder(gameId, worldId, levelId, initialState))
+  }, [gameId, initialState, levelId, worldId])
 
   useEffect(() => {
     const html = document.documentElement

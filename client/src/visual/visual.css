@@ -3378,6 +3378,14 @@
   color: var(--visual-accent-soft);
 }
 
+.visual-map-dropdown button.danger {
+  color: var(--visual-danger);
+}
+
+.visual-map-dropdown button.danger:hover {
+  background: var(--visual-danger-bg);
+}
+
 /* Map scroll area */
 .visual-map-scroll {
   flex: 1;

@@ -517,7 +517,7 @@ function VisualMapAppBar({
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Upload')}
         </button>
-        <button onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
+        <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Erase')}
         </button>
         <button onClick={() => { setPopup(PopupType.preferences); closeMenu() }}>

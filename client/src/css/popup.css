@@ -14,7 +14,9 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--visual-proof-overlay, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 2;
 }
 
@@ -30,13 +32,25 @@
   min-width: max(50%, 300px);
   max-width: 60ch;
   max-height: 80%;
-  overflow: scroll;
-  background: #fff;
+  overflow: auto;
+  background: var(--visual-surface-panel, #fff);
+  border: 1px solid var(--visual-glass-border, rgba(148, 163, 184, 0.3));
+  box-shadow: 0 20px 60px var(--visual-shadow-panel, rgba(0, 0, 0, 0.3));
   z-index: 3;
   padding: 2em;
   border-radius: 1em;
   text-align: left;
-  color: var(--vscode-breadcrumb-foreground);
+  color: var(--visual-text-bright, var(--vscode-breadcrumb-foreground));
+}
+
+.modal h2,
+.modal h3 {
+  color: var(--visual-text-primary, currentColor);
+}
+
+.modal p,
+.modal label {
+  color: var(--visual-text-secondary, currentColor);
 }
 
 .modal input[type="text"] {
@@ -62,14 +76,14 @@
 .modal-close {
   float: right;
   scale: 2;
-  color: var(--vscode-breadcrumb-foreground);
+  color: var(--visual-text-secondary, var(--vscode-breadcrumb-foreground));
   cursor: pointer;
 }
 
 .modal-close:hover {
   float: right;
   scale: 2;
-  color: var(--vscode-breadcrumb-focusForeground);
+  color: var(--visual-text-primary, var(--vscode-breadcrumb-focusForeground));
 }
 
 .modal table {
@@ -104,4 +118,90 @@
 .modal .nav-button {
   float: right;
   font-size: 1.5rem;
+}
+
+.settings-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.visual-modal-button,
+.modal .btn {
+  min-height: 2.5rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--visual-choice-border, rgba(99, 102, 241, 0.35));
+  border-radius: 0.55rem;
+  background: var(--visual-choice-bg, rgba(99, 102, 241, 0.1));
+  color: var(--visual-accent-strong, #4f46e5);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  margin: 0;
+}
+
+.visual-modal-button:hover,
+.modal .btn:hover {
+  border-color: var(--visual-choice-border-hover, #6366f1);
+  background: var(--visual-choice-bg-hover, rgba(99, 102, 241, 0.18));
+}
+
+.visual-modal-button.secondary {
+  border-color: var(--visual-glass-border, rgba(148, 163, 184, 0.3));
+  background: var(--visual-glass-bg, transparent);
+  color: var(--visual-text-bright, currentColor);
+}
+
+.visual-modal-button.danger {
+  border-color: var(--visual-danger-border, rgba(220, 38, 38, 0.35));
+  background: var(--visual-danger-bg, rgba(220, 38, 38, 0.1));
+  color: var(--visual-danger, #dc2626);
+}
+
+.modal input,
+.modal .MuiInputBase-root,
+.modal .MuiSelect-icon,
+.modal .MuiFormControlLabel-label,
+.modal .MuiTypography-root {
+  color: var(--visual-text-bright, currentColor);
+}
+
+.modal input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--visual-glass-border, rgba(148, 163, 184, 0.3));
+  border-radius: 0.45rem;
+  background: var(--visual-glass-bg, transparent);
+  color: var(--visual-text-bright, currentColor);
+  cursor: pointer;
+}
+
+.modal .MuiSlider-root,
+.modal .MuiSwitch-switchBase.Mui-checked {
+  color: var(--visual-accent, #6366f1);
+}
+
+.modal .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track {
+  background-color: var(--visual-accent, #6366f1);
+}
+
+@media (max-width: 600px) {
+  .modal {
+    width: calc(100% - 2rem);
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100% - 2rem);
+    padding: 1.25rem;
+  }
+
+  .settings-buttons {
+    flex-direction: column;
+  }
+
+  .visual-modal-button {
+    width: 100%;
+  }
 }

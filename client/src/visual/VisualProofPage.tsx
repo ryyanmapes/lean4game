@@ -581,6 +581,7 @@ export function VisualProofPage() {
 
   return (
     <VisualCanvas
+      gameId={gameId}
       initialState={canvasState}
       theoremEqualityHyps={theoremEqualityHyps}
       propositionTheorems={propositionTheorems}
