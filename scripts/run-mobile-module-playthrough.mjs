@@ -117,7 +117,10 @@ const browser = await puppeteer.launch({
 let page
 try {
   page = await browser.newPage()
-  await page.evaluateOnNewDocument(() => { window.Cypress = {} })
+  await page.evaluateOnNewDocument(() => {
+    window.Cypress = {}
+    window.localStorage.setItem('telemetryConsent', 'refused')
+  })
   const session = await page.createCDPSession()
   await session.send('Network.enable')
   await session.send('Network.setCacheDisabled', { cacheDisabled: true })
