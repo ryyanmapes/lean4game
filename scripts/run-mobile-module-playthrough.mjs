@@ -63,6 +63,39 @@ async function waitForLevel(page, solution) {
   )
 }
 
+async function ensureInteractiveStream(page) {
+  for (let attempt = 0; attempt < solutions.length; attempt += 1) {
+    const navigation = await page.evaluate(() => {
+      const harness = window.__visualTestHarness
+      if (!harness) return { status: 'unavailable' }
+      try {
+        harness.getCurrentStreamSnapshot()
+        return { status: 'ready' }
+      } catch {
+        const label = document.querySelector('[data-testid="stream-nav-label"]')
+        const button = document.querySelector(
+          '[data-testid="stream-navigator"] button.toward-incomplete:not(:disabled)',
+        )
+        if (!(button instanceof HTMLButtonElement)) return { status: 'unavailable' }
+        const previousStreamId = label?.getAttribute('data-current-stream-id') ?? ''
+        button.click()
+        return { status: 'navigating', previousStreamId }
+      }
+    })
+    if (navigation.status === 'ready') return
+    if (navigation.status !== 'navigating') {
+      throw new Error('No interactive or navigable incomplete stream is available')
+    }
+    await page.waitForFunction(
+      previousStreamId => document.querySelector('[data-testid="stream-nav-label"]')
+        ?.getAttribute('data-current-stream-id') !== previousStreamId,
+      { timeout: loadTimeout },
+      navigation.previousStreamId,
+    )
+  }
+  throw new Error('Could not navigate to an incomplete proof stream')
+}
+
 async function audit(page, solution, phase) {
   await page.waitForFunction(
     () => window.__visualTestHarness && !window.__visualTestHarness.getProofAudit().processing,
@@ -159,6 +192,7 @@ try {
 
     for (let commandIndex = 0; commandIndex < solution.commands.length; commandIndex += 1) {
       const command = solution.commands[commandIndex]
+      await ensureInteractiveStream(page)
       await page.evaluate(async playerCommand => {
         await window.__visualTestHarness.runPlayerTactic(playerCommand)
       }, command)
@@ -191,29 +225,32 @@ try {
 
   const last = results.levels.at(-1)
   await page.evaluate(() => {
-    window.__mobileValidationOpenedUrl = ''
-    window.open = url => {
-      window.__mobileValidationOpenedUrl = String(url)
-      return null
-    }
     const sidebar = document.querySelector('.proof-sidebar')
     if (sidebar && !sidebar.classList.contains('open')) {
       document.querySelector('.proof-sidebar-tab')?.click()
     }
   })
-  await page.waitForFunction(() => document.querySelector('.proof-sidebar')?.classList.contains('open'))
+  await page.waitForFunction(
+    () => document.querySelector('.proof-sidebar')?.classList.contains('open'),
+    { timeout: loadTimeout },
+  )
+  const classicTargetPromise = browser.waitForTarget(
+    target => target.url().includes('visualHandoff='),
+    { timeout: loadTimeout },
+  )
   await page.evaluate(() => {
     const button = Array.from(document.querySelectorAll('button'))
       .find(candidate => candidate.textContent?.includes('Export to classic mode'))
     if (!button) throw new Error('Export to classic mode button is missing')
     button.click()
   })
-  await page.waitForFunction(() => Boolean(window.__mobileValidationOpenedUrl))
-  const classicTarget = await page.evaluate(() => window.__mobileValidationOpenedUrl)
-  if (new URL(classicTarget).searchParams.has('mobileModules')) {
+  const classicTarget = await classicTargetPromise
+  if (classicTarget.url().includes('mobileModules')) {
     throw new Error('classic export introduced the obsolete mobileModules selector')
   }
-  await page.goto(classicTarget, { waitUntil: 'domcontentloaded', timeout: loadTimeout })
+  const classicPage = await classicTarget.page()
+  if (!classicPage) throw new Error('classic export did not open a browser page')
+  page = classicPage
   await page.waitForSelector('#local-classic-proof.local-wasm-code-editor', { visible: true, timeout: loadTimeout })
   await page.waitForFunction(
     () => document.querySelector('.local-classic-status')?.textContent?.includes('Proof complete'),

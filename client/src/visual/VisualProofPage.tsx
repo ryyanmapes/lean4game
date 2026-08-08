@@ -168,7 +168,7 @@ export function VisualProofPage() {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
   const handleOpenClassic = useCallback((proofBody: string) => {
-    const token = crypto.randomUUID()
+    const token = createSolvingId()
     localStorage.setItem(`visual-proof-handoff/${token}`, JSON.stringify({
       gameId,
       worldId,
