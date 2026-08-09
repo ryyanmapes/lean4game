@@ -597,9 +597,9 @@ private partial def focusedRewriteExpr
     -- already selected the exact expression, so instantiate the equality at
     -- that expression and use its proof directly.
     let thmType ← withReducible (whnf (← inferType thm))
-    if let some (_, lhs, rhs) ← matchEq? thmType then
-      let from := if symm then rhs else lhs
-      let to := if symm then lhs else rhs
+    if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
+      let from := if symm then rightExpr else leftExpr
+      let to := if symm then leftExpr else rightExpr
       if ← isDefEq e from then
         let eNew ← instantiateMVars to
         let thm ← instantiateMVars thm
@@ -939,7 +939,7 @@ private inductive VisualRewriteNat where
 private instance : OfNat VisualRewriteNat 0 where
   ofNat := .zero
 
-private opaque visualRewriteAdd : VisualRewriteNat → VisualRewriteNat → VisualRewriteNat
+private axiom visualRewriteAdd : VisualRewriteNat → VisualRewriteNat → VisualRewriteNat
 
 private instance : Add VisualRewriteNat where
   add := visualRewriteAdd
