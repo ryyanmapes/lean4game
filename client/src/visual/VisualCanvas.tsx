@@ -2234,12 +2234,16 @@ export function VisualCanvas({
     const leanError = result === null
       ? sessionStorage.getItem('visual-last-lean-error') ?? ''
       : ''
+    const confirmedNoGoalsCompletion =
+      result === null &&
+      playTactic === 'click_goal' &&
+      /no goals to be solved/iu.test(leanError)
     const handledByConfirmedGoalCompletion =
       result === null &&
       playTactic === 'click_goal' &&
       (
         (goalIsReflexiveEquality(focusedStream) && !focusedStream.goal.mvarId) ||
-        /no goals to be solved/iu.test(leanError)
+        confirmedNoGoalsCompletion
       )
 
     setIsProcessing(false)
@@ -2261,6 +2265,14 @@ export function VisualCanvas({
 
     if (handledByConfirmedGoalCompletion) {
       onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
+      // "No goals to be solved" is Lean's authoritative statement about the
+      // complete accumulated script. Do not make that fact contingent on
+      // matching a final stale canvas stream: the stale stream is precisely
+      // why the player had a goal card left to click.
+      if (confirmedNoGoalsCompletion && options?.solvedGoalId) {
+        freezeCompletedProof(canvasState, options.solvedGoalId)
+        return true
+      }
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,
         canvasState,
