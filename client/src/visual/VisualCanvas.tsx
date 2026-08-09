@@ -2231,16 +2231,22 @@ export function VisualCanvas({
 
     const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
     const result = await onInteraction(newScript)
-    const handledBySyntheticReflexiveClick =
+    const leanError = result === null
+      ? sessionStorage.getItem('visual-last-lean-error') ?? ''
+      : ''
+    const handledByConfirmedReflexiveCompletion =
       result === null &&
       playTactic === 'click_goal' &&
       goalIsReflexiveEquality(focusedStream) &&
-      !focusedStream.goal.mvarId
+      (
+        !focusedStream.goal.mvarId ||
+        /no goals to be solved/iu.test(leanError)
+      )
 
     setIsProcessing(false)
 
     const lastStep = result?.steps.at(-1)
-    const leanTactic = options?.leanTacticOverride ?? (handledBySyntheticReflexiveClick
+    const leanTactic = options?.leanTacticOverride ?? (handledByConfirmedReflexiveCompletion
       ? 'rfl'
       : result
       ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream, lastStep)
@@ -2251,10 +2257,10 @@ export function VisualCanvas({
       timestamp: Date.now(),
       playTactic,
       leanTactic,
-      succeeded: result !== null || handledBySyntheticReflexiveClick,
+      succeeded: result !== null || handledByConfirmedReflexiveCompletion,
     })
 
-    if (handledBySyntheticReflexiveClick) {
+    if (handledByConfirmedReflexiveCompletion) {
       onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,

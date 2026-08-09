@@ -73,11 +73,13 @@ describe('NNG4 implication and definition display regressions', () => {
 
     // After `use 0`, select the left-hand side of `x = x + 0` with the visual
     // arrow control, then drag reverse add_zero directly onto that displayed
-    // `x`, as a player does. The exact scoped rewrite closes the proof, and
-    // stale focused-goal metadata must not resurrect an already-solved goal.
+    // `x`, as a player does, then click the returned reflexive goal. If the
+    // relay retained stale goal metadata, Lean's "no goals" response confirms
+    // that the preceding rewrite already completed the proof.
     performPlayerGestures([
       'use 0',
       { rewrite: 'rw [\u2190 add_zero]', side: 'left' },
+      'rfl',
     ])
   })
 })
