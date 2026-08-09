@@ -9,6 +9,7 @@ interface VisualHarness {
 }
 
 type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
+type PlayerGesture = string | { rewrite: string; side: 'left' | 'right' }
 
 function visualHarness() {
   return cy.window({ timeout: 60_000 }).then(win => {
@@ -18,10 +19,13 @@ function visualHarness() {
   })
 }
 
-function performPlayerGestures(commands: string[]) {
+function performPlayerGestures(commands: PlayerGesture[]) {
   cy.window({ timeout: LOAD_TIMEOUT }).then(async win => {
     const player = new CompletePlaythroughDriver(win)
-    for (const command of commands) await player.perform(command)
+    for (const command of commands) {
+      if (typeof command === 'string') await player.perform(command)
+      else await player.performRewriteOnSide(command.rewrite, command.side)
+    }
   })
   cy.window().should(win => {
     const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
@@ -67,9 +71,13 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
-    // After `use 0`, the visual transformation opens on the left-hand `x` in
-    // `x = x + 0`. Drag reverse add_zero directly onto that displayed `x`, as
-    // a player does; occurrence-based tactic syntax can select a different x.
-    performPlayerGestures(['use 0', 'rw [\u2190 add_zero]', 'rfl'])
+    // After `use 0`, select the left-hand side of `x = x + 0` with the visual
+    // arrow control, then drag reverse add_zero directly onto that displayed
+    // `x`, as a player does.
+    performPlayerGestures([
+      'use 0',
+      { rewrite: 'rw [\u2190 add_zero]', side: 'left' },
+      'rfl',
+    ])
   })
 })

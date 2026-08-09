@@ -362,8 +362,20 @@ export class CompletePlaythroughDriver {
   private readonly aliases = new Map<string, string>()
   private readonly pendingBranchAliases: Array<{ expected: string; before: Set<string> }> = []
   private classicCommandsAlreadyCovered = 0
+  private preferredRewriteSide: 'left' | 'right' | null = null
 
   constructor(private readonly win: DriverWindow) {}
+
+  /** Perform a rewrite after selecting the same side a player would with the
+   * transformation view's arrow button. */
+  async performRewriteOnSide(command: string, side: 'left' | 'right') {
+    this.preferredRewriteSide = side
+    try {
+      await this.perform(command)
+    } finally {
+      this.preferredRewriteSide = null
+    }
+  }
 
   private async navigateFromCompletedBranch() {
     const current = this.win.document.querySelector<HTMLElement>(
@@ -651,6 +663,22 @@ export class CompletePlaythroughDriver {
     for (const rawTarget of parsed.targets) {
       const target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
       await this.openTransform(target)
+      if (target === 'goal' && this.preferredRewriteSide) {
+        const overlay = await waitFor('transformation view', () =>
+          this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
+        const staticGroup = overlay.querySelector<HTMLElement>('.tr-static-group')
+        const currentSide = staticGroup?.classList.contains('static-right') ? 'left' : 'right'
+        if (currentSide !== this.preferredRewriteSide) {
+          const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
+          if (!swap) throw new Error('Could not find the transformation side selector')
+          click(swap)
+          await waitFor(`rewrite ${this.preferredRewriteSide} side`, () => {
+            const group = overlay.querySelector<HTMLElement>('.tr-static-group')
+            const selected = group?.classList.contains('static-right') ? 'left' : 'right'
+            return selected === this.preferredRewriteSide ? true : null
+          })
+        }
+      }
       if (parsed.repeat) {
         let changed = true
         let repetitions = 0
