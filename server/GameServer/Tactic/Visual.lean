@@ -598,10 +598,10 @@ private partial def focusedRewriteExpr
     -- that expression and use its proof directly.
     let thmType ← withReducible (whnf (← inferType thm))
     if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
-      let from := if symm then rightExpr else leftExpr
-      let to := if symm then leftExpr else rightExpr
-      if ← isDefEq e from then
-        let eNew ← instantiateMVars to
+      let sourceExpr := if symm then rightExpr else leftExpr
+      let replacementExpr := if symm then leftExpr else rightExpr
+      if ← isDefEq e sourceExpr then
+        let eNew ← instantiateMVars replacementExpr
         let thm ← instantiateMVars thm
         if !eNew.hasMVar && !thm.hasMVar then
           let eqProof ← if symm then mkAppM ``Eq.symm #[thm] else pure thm
@@ -941,7 +941,7 @@ private instance : OfNat VisualRewriteNat 0 where
 
 private axiom visualRewriteAdd : VisualRewriteNat → VisualRewriteNat → VisualRewriteNat
 
-private instance : Add VisualRewriteNat where
+private noncomputable instance : Add VisualRewriteNat where
   add := visualRewriteAdd
 
 private axiom visualRewriteAdd_zero (a : VisualRewriteNat) : a + 0 = a
