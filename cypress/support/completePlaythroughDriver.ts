@@ -118,24 +118,47 @@ async function waitForPlayAttempt(
   description: string,
   retry?: () => void,
 ) {
-  const entry = await waitFor(description, () => {
+  const interactionDeadline = Date.now() + INTERACTION_TIMEOUT
+  const responseDeadline = Date.now() + ACTION_TIMEOUT
+  let actionStarted = false
+  while (Date.now() < (actionStarted ? responseDeadline : interactionDeadline)) {
     const entries = playLog(win)
-    if (entries.length > previousCount) return entries.at(-1)
-    retry?.()
-    return null
-  }, INTERACTION_TIMEOUT)
-  if (!entry.succeeded) {
-    const leanError = (
-      win.sessionStorage.getItem('visual-last-lean-error')
-      ?? win.__lastLeanProofError
-      ?? ''
-    ).trim()
-    throw new Error(
-      `Player interaction was rejected: ${entry.playTactic}` +
-      (leanError ? `\nLean: ${leanError}` : ''),
-    )
+    const entry = entries.length > previousCount ? entries.at(-1) : undefined
+    if (entry) {
+      if (!entry.succeeded) {
+        const leanError = (
+          win.sessionStorage.getItem('visual-last-lean-error')
+          ?? win.__lastLeanProofError
+          ?? ''
+        ).trim()
+        throw new Error(
+          `Player interaction was rejected: ${entry.playTactic}` +
+          (leanError ? `\nLean: ${leanError}` : ''),
+        )
+      }
+      return entry
+    }
+
+    // The play log is appended only after Lean answers. Once the UI enters
+    // its processing state, the gesture has fired; allow the configured
+    // backend timeout instead of reporting a slow compile as a missed click.
+    let auditProcessing = false
+    try {
+      auditProcessing = harness(win).getProofAudit().processing
+    } catch {
+      // The bridge can briefly disappear while a completed branch is merged.
+    }
+    if (auditProcessing || win.document.querySelector('.tr-processing')) {
+      actionStarted = true
+    } else if (!actionStarted) {
+      retry?.()
+    }
+    await sleep(POLL_MS)
   }
-  return entry
+  throw new Error(
+    `Timed out waiting for ${description}` +
+    (actionStarted ? ' after the player action reached Lean' : ''),
+  )
 }
 
 async function waitForProofChange(win: DriverWindow, previous: string, description: string) {

@@ -3235,29 +3235,11 @@ export function VisualCanvas({
       }
     }
 
-    const action = actionCommandForStream(
+    const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
       leanGoalOrderRef.current,
     )
-    const rotation = action.rotation
-    let command = action.command
-    // A reverse theorem whose source is a lone pattern variable (notably
-    // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
-    // search. The player selected an exact expression, so make that theorem
-    // parameter explicit and retain the selected side/path with `conv`.
-    if (expectedGoal?.explicitReverseArg && transformTarget?.kind === 'goal') {
-      const scopedRewrite = explicitReverseRewriteCommand(
-        hypLabel,
-        expectedGoal.explicitReverseArg,
-        backendWorkingSideForRelation(
-          parsedGoalTarget(focusedStream!, comparisonTransformEnabled)?.relation ?? '=',
-          workingSide,
-        ),
-        path,
-      )
-      command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
-    }
     closeReductionTooltip()
     setIsProcessing(true)
 
@@ -3389,11 +3371,29 @@ export function VisualCanvas({
     const focusedStream = transformTarget
       ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
       : null
-    const { command, rotation } = actionCommandForStream(
+    const action = actionCommandForStream(
       playTactic,
       focusedStream,
       leanGoalOrderRef.current,
     )
+    const rotation = action.rotation
+    let command = action.command
+    // A reverse theorem whose source is a lone pattern variable (notably
+    // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
+    // search. The player selected an exact expression, so make that theorem
+    // parameter explicit and retain the selected side/path with `conv`.
+    if (expectedGoal?.explicitReverseArg && transformTarget?.kind === 'goal') {
+      const scopedRewrite = explicitReverseRewriteCommand(
+        hypLabel,
+        expectedGoal.explicitReverseArg,
+        backendWorkingSideForRelation(
+          parsedGoalTarget(focusedStream!, comparisonTransformEnabled)?.relation ?? '=',
+          workingSide,
+        ),
+        path,
+      )
+      command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
+    }
     closeReductionTooltip()
     setIsProcessing(true)
 
