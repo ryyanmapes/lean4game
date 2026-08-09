@@ -195,6 +195,16 @@ async function dragChangedProof(
     }
     await sleep(POLL_MS)
   }
+  // The local WASM runner can block the browser main thread for longer than
+  // the probe deadline. In that case the loop cannot observe either the
+  // processing render or the log entry before its condition expires, even
+  // though the accepted interaction appended its result before control came
+  // back to this task. Always sample the authoritative log once after the
+  // deadline before classifying the expression as a rejected drop.
+  if (!attempt) {
+    const entries = playLog(win)
+    if (entries.length > previousAttempts) attempt = entries.at(-1)
+  }
   if (!attempt && !actionStarted) return false
   attempt ??= await waitForPlayAttempt(
     win,
