@@ -67,6 +67,9 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
-    performPlayerGestures(['use 0', 'nth_rewrite 2 [\u2190 add_zero]', 'rfl'])
+    // After `use 0`, the visual transformation opens on the left-hand `x` in
+    // `x = x + 0`. Drag reverse add_zero directly onto that displayed `x`, as
+    // a player does; occurrence-based tactic syntax can select a different x.
+    performPlayerGestures(['use 0', 'rw [\u2190 add_zero]', 'rfl'])
   })
 })
