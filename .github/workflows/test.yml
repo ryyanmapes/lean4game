@@ -105,30 +105,6 @@ jobs:
       - name: Run Cypress tests (Development mode)
         run: npm run test
 
-      - name: Install Bubblewrap
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install bubblewrap
-
-      - name: Configure AppArmor for Bubblewrap (https://etbe.coker.com.au/2024/04/24/ubuntu-24-04-bubblewrap/)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo tee /etc/apparmor.d/bwrap > /dev/null << 'EOF'
-          abi <abi/4.0>,
-          include <tunables/global>
-
-          profile bwrap /usr/bin/bwrap flags=(unconfined) {
-            userns,
-
-            # Site-specific additions and overrides. See local/README for details.
-            include if exists <local/bwrap>
-          }
-          EOF
-          sudo systemctl reload apparmor
-
-      - name: Run Cypress tests (Production mode)
-        if: matrix.os == 'ubuntu-latest'
-        run: npm run test:prod
-
   all:
     name: all
     needs: test

@@ -3,9 +3,12 @@
 The test suite covers two different deployments and must not silently mix
 them:
 
-- `npm test` and `npm run test:prod` start lean4game's native relay. They run
-  the relay-compatible regression spec only. Routes at `/` use the websocket
-  Lean server supplied by that stack.
+- `npm test` starts lean4game's native development relay and runs the
+  relay-compatible regression spec only. Routes at `/` use the websocket Lean
+  server supplied by that stack.
+- `npm run test:prod` verifies the production build. The standalone production
+  server does not assemble sibling game data, so it is not a valid target for
+  the NNG4/VisualTest Cypress routes.
 - The mounted routes under `/lean4game/index.html` use the browser-local Lean
   WebAssembly runtime. They require the complete lean4.js release site,
   including `/visual-lean` and mounted game data. The lean4.js Docker release

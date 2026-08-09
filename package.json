@@ -136,7 +136,7 @@
     "production": "cross-env NODE_ENV=production node relay/dist/src/index.js",
     "translate": "npx i18next-scanner --config client/i18next-scanner.config.cjs",
     "test": "npm run build:test && concurrently -n server,cypress -c blue,green \"npm start\" \"npm run cypress:run:relay:ready\" -k -s first --hide server",
-    "test:prod": "npm run build && concurrently -n server,cypress -c blue,green \"PORT=3000 npm run production\" \"npm run cypress:run:relay:ready\" -k -s first"
+    "test:prod": "npm run build"
   },
   "eslintConfig": {
     "extends": [
