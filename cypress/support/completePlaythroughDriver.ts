@@ -614,11 +614,22 @@ export class CompletePlaythroughDriver {
   }
 
   private async clickGoal() {
-    const goal = await waitFor('current goal', () => currentGoal(this.win))
+    const goal = await waitFor('clickable current goal', () => {
+      const current = currentGoal(this.win)
+      return current?.classList.contains('clickable') && !current.classList.contains('solved')
+        ? current
+        : null
+    })
     const before = playerStateSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(goal)
-    await waitForPlayAttempt(this.win, previousAttempts, 'goal click player action')
+    let lastRetry = Date.now()
+    await waitForPlayAttempt(this.win, previousAttempts, 'goal click player action', () => {
+      if (Date.now() - lastRetry < 250) return
+      lastRetry = Date.now()
+      const current = currentGoal(this.win)
+      if (current?.classList.contains('clickable') && !current.classList.contains('solved')) click(current)
+    })
     await waitFor('goal click to update the visible player state', () => {
       const audit = harness(this.win).getProofAudit()
       return !audit.processing && playerStateSignature(this.win) !== before ? true : null
