@@ -91,7 +91,11 @@ async function waitForPlayAttempt(win: DriverWindow, previousCount: number, desc
     return entries.length > previousCount ? entries.at(-1) : null
   })
   if (!entry.succeeded) {
-    throw new Error(`Player interaction was rejected: ${entry.playTactic}`)
+    const leanError = win.sessionStorage.getItem('visual-last-lean-error')?.trim()
+    throw new Error(
+      `Player interaction was rejected: ${entry.playTactic}` +
+      (leanError ? `\nLean: ${leanError}` : ''),
+    )
   }
   return entry
 }

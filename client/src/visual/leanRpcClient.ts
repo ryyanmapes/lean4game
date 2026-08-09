@@ -132,8 +132,27 @@ class WebSocketLeanRpcClient {
         const hasError =
           proof.diagnostics?.some(isTacticError) ||
           proof.steps?.some((step: any) => step.diags?.some(isTacticError))
-        return hasError ? null : proof
-      } catch {
+        if (hasError) {
+          const errors = [
+            ...(proof.diagnostics ?? []),
+            ...proof.steps.flatMap((step: any) => step.diags ?? []),
+          ].filter(isTacticError)
+          try {
+            sessionStorage.setItem('visual-last-lean-error', errors.map((diag: any) =>
+              diag.message ?? diag.data ?? JSON.stringify(diag)
+            ).join('\n'))
+          } catch { /* diagnostics are best-effort */ }
+          return null
+        }
+        try { sessionStorage.removeItem('visual-last-lean-error') } catch { /* best-effort */ }
+        return proof
+      } catch (error) {
+        try {
+          sessionStorage.setItem(
+            'visual-last-lean-error',
+            error instanceof Error ? error.message : String(error),
+          )
+        } catch { /* diagnostics are best-effort */ }
         return null
       }
     })
