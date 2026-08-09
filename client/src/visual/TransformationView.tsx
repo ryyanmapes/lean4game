@@ -45,6 +45,7 @@ interface ExpectedRewriteGoal {
   lhsStr: string
   rhsStr: string
   relation: TransformRelation
+  explicitReverseArg?: string
 }
 
 export interface GuideArrow {
@@ -733,8 +734,22 @@ export function TransformationView({
       ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
       : applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
     const expectedGoal = workingSide === 'right'
-      ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr), relation }
-      : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr, relation }
+      ? {
+          lhsStr: goalLhsStr,
+          rhsStr: printExpression(rewrittenExpr),
+          relation,
+          explicitReverseArg: isThm && isReverse && from.type === 'variable'
+            ? printExpression(targetNode)
+            : undefined,
+        }
+      : {
+          lhsStr: printExpression(rewrittenExpr),
+          rhsStr: goalRhsStr,
+          relation,
+          explicitReverseArg: isThm && isReverse && from.type === 'variable'
+            ? printExpression(targetNode)
+            : undefined,
+        }
     const outcome = await onRewrite(rewriteReferenceForDrag(draggedId, hyp), isReverse, workingSide, path, expectedGoal)
     setIsProcessing(false)
 

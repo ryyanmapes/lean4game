@@ -491,6 +491,16 @@ jobs:
           example : 0 + 0 = 0 := by
             drag_rw_lhs [Nat.add_zero]
             click_goal
+
+          -- Reverse variable-source rewrites must work in the actual saved
+          -- WASM environment, not only while compiling the native module.
+          namespace MyNat
+          example (x : ℕ) : x = x + 0 := by
+            conv =>
+              lhs
+              rw [← add_zero (x)]
+            rfl
+          end MyNat
           LEAN
 
           # The persistent compile API reuses snapshots by their exact import

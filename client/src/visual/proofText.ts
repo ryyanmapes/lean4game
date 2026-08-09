@@ -131,6 +131,23 @@ export function coreTacticForVisualCommand(playTactic: string): string | null {
   return null
 }
 
+/** Build the exact core rewrite used after a player selects a reverse rule
+ * whose source pattern is only a theorem variable. */
+export function explicitReverseRewriteCommand(
+  theoremName: string,
+  argument: string,
+  workingSide: 'left' | 'right',
+  path: number[] | undefined,
+): string {
+  const steps = [workingSide === 'left' ? 'lhs' : 'rhs']
+  for (const position of path ?? []) steps.push(`arg ${position}`)
+  return [
+    'conv =>',
+    ...steps.map(step => `  ${step}`),
+    `  rw [← ${theoremName} (${argument})]`,
+  ].join('\n')
+}
+
 function leafForMode(step: ProofTextStep, mode: 'lean' | 'play'): string {
   if (mode === 'play') return step.playTactic
   return stripCasePrefixes(step.leanTactic)

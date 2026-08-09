@@ -172,6 +172,14 @@ function visible<T extends HTMLElement>(elements: Iterable<T>): T[] {
 
 function click(element: HTMLElement) {
   element.scrollIntoView({ block: 'center', inline: 'center' })
+  // Buttons already implement the browser's complete activation behavior.
+  // Preceding their native click with synthetic mouse-down events can start
+  // the canvas drag sensor in Chromium and cause React to ignore the button.
+  if (element instanceof HTMLButtonElement) {
+    element.focus()
+    element.click()
+    return
+  }
   element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
   element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }))
   // Native activation matters for buttons (including React-controlled tabs).
@@ -495,18 +503,19 @@ export class CompletePlaythroughDriver {
 
   private async pagedCard(tab: 'Tactics' | 'Theorems', selector: string) {
     const dock = await waitFor('player tray', () => this.win.document.querySelector<HTMLElement>('#theorem-tray'))
-    const tabButton = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
-      .find(button => button.textContent?.trim() === tab)
-    if (tabButton && !tabButton.classList.contains('active')) {
-      click(tabButton)
-      await waitFor(`${tab} tray tab to activate`, () => {
-        // React replaces the tab button while switching panes, so always
-        // query the current node instead of observing the detached old one.
-        const current = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
-          .find(button => button.textContent?.trim() === tab)
-        return current?.classList.contains('active') ? current : null
-      }, 5_000)
-    }
+    await waitFor(`${tab} tray tab to activate`, () => {
+      // React replaces the tab button while switching panes. Query and retry
+      // the current enabled control just as a player would after an ignored
+      // click, instead of retaining a detached node.
+      const current = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
+        .find(button => button.textContent?.trim() === tab)
+      if (current?.classList.contains('active')) return current
+      // When a level exposes only one tray kind, the tab strip is omitted and
+      // that sole pane is already active.
+      if (dock.querySelectorAll('.tr-tab-btn').length === 0) return dock
+      if (current && !current.disabled) click(current)
+      return null
+    }, 5_000)
     // The release build fetches theorem documentation lazily. Wait for the
     // selected tray to finish its first render instead of racing it.
     await waitFor(`${tab} tray contents`, () =>
@@ -787,17 +796,13 @@ export class CompletePlaythroughDriver {
       } else {
         for (const rule of parsed.rules) await this.applyRewriteRule(rule, parsed.occurrence)
       }
-      const back = await waitFor('enabled transformation Back button', () => {
-        const button = this.win.document.querySelector<HTMLButtonElement>(
-          '.tr-transformation-overlay .tr-back-btn',
-        )
-        return button && !button.disabled ? button : null
+      await waitFor('transformation view to close', () => {
+        const overlay = this.win.document.querySelector('.tr-transformation-overlay')
+        if (!overlay) return true
+        const button = overlay.querySelector<HTMLButtonElement>('.tr-back-btn')
+        if (button && !button.disabled) click(button)
+        return null
       })
-      if (back) {
-        click(back)
-        await waitFor('transformation view to close', () =>
-          this.win.document.querySelector('.tr-transformation-overlay') ? null : true)
-      }
     }
   }
 

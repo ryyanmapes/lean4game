@@ -45,6 +45,7 @@ import {
   commandForGoalAction,
   coreCommandForGoalClick,
   displayedProofLines,
+  explicitReverseRewriteCommand,
   isVisualOnlyPlayTactic,
   serializeProofCommands,
   shortenQualifiedNames,
@@ -440,6 +441,7 @@ interface ExpectedRewriteGoal {
   lhsStr: string
   rhsStr: string
   relation: TransformRelation
+  explicitReverseArg?: string
 }
 
 interface PendingTransformSync {
@@ -3233,11 +3235,29 @@ export function VisualCanvas({
       }
     }
 
-    const { command, rotation } = actionCommandForStream(
+    const action = actionCommandForStream(
       playTactic,
       focusedStream,
       leanGoalOrderRef.current,
     )
+    const rotation = action.rotation
+    let command = action.command
+    // A reverse theorem whose source is a lone pattern variable (notably
+    // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
+    // search. The player selected an exact expression, so make that theorem
+    // parameter explicit and retain the selected side/path with `conv`.
+    if (expectedGoal?.explicitReverseArg && transformTarget?.kind === 'goal') {
+      const scopedRewrite = explicitReverseRewriteCommand(
+        hypLabel,
+        expectedGoal.explicitReverseArg,
+        backendWorkingSideForRelation(
+          parsedGoalTarget(focusedStream!, comparisonTransformEnabled)?.relation ?? '=',
+          workingSide,
+        ),
+        path,
+      )
+      command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
+    }
     closeReductionTooltip()
     setIsProcessing(true)
 

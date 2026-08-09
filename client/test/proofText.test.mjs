@@ -7,6 +7,7 @@ const {
   commandForGoalAction,
   coreCommandForGoalClick,
   displayedProofLines,
+  explicitReverseRewriteCommand,
   rotationForGoal,
 } = await import('../../tmp-proof-text-tests/proofText.js')
 
@@ -15,6 +16,17 @@ test('a directly completable goal click replays as rfl without reparsing display
   assert.equal(coreCommandForGoalClick('click_goal', undefined, true), 'rfl')
   assert.equal(coreCommandForGoalClick('click_goal', 'Click to introduce variable'), 'click_goal')
   assert.equal(coreCommandForGoalClick('click_goal_left', 'Click to complete'), 'click_goal_left')
+})
+
+test('a selected reverse variable rewrite gets an explicit side and theorem argument', () => {
+  assert.equal(
+    explicitReverseRewriteCommand('MyNat.add_zero', 'x', 'left'),
+    'conv =>\n  lhs\n  rw [← MyNat.add_zero (x)]',
+  )
+  assert.equal(
+    explicitReverseRewriteCommand('h', 'x + y', 'right', [2, 1]),
+    'conv =>\n  rhs\n  arg 2\n  arg 1\n  rw [← h (x + y)]',
+  )
 })
 
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:
