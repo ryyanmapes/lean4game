@@ -488,6 +488,25 @@ private def evalTacticString (src : String) : TacticM Unit := do
   | .error err =>
     throwError "{err}"
 
+private def tryConvRootRewrite (h : Ident) (symm sideIsRhs : Bool) : TacticM Bool := do
+  let savedState ← saveState
+  try
+    -- Let Lean's standard rewriter handle a selected equality side. This
+    -- matters especially for reverse rewrites whose source is a bare variable (for example
+    -- `← MyNat.add_zero` applied to `x`): the theorem's typeclass-backed
+    -- notation can elaborate differently from the selected display term.
+    let target ← getMainTarget
+    unless (← matchEq? target).isSome do
+      restoreState savedState
+      return false
+    let side := if sideIsRhs then "rhs" else "lhs"
+    let direction := if symm then "← " else ""
+    evalTacticString s!"conv =>\n  {side}\n  rw [{direction}{h.getId}]"
+    pure true
+  catch _ =>
+    restoreState savedState
+    return false
+
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
   let mut ids : Std.HashSet FVarId := {}
   for localDecl in lctx do
@@ -670,6 +689,7 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
   | none =>
     match sideOpt with
     | some sideIsRhs =>
+      if ← tryConvRootRewrite h isRev sideIsRhs then return
       if ← tryFocusedRewrite h isRev sideIsRhs [] then return
     | none =>
       if ← tryRewrite h.raw isRev then return
