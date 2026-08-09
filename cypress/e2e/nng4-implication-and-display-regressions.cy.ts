@@ -73,12 +73,11 @@ describe('NNG4 implication and definition display regressions', () => {
 
     // After `use 0`, select the left-hand side of `x = x + 0` with the visual
     // arrow control, then drag reverse add_zero directly onto that displayed
-    // `x`, as a player does, then click the returned reflexive goal. This
-    // verifies that reconciliation preserves a real, actionable goal stream.
+    // `x`, as a player does. The exact scoped rewrite closes the proof, and
+    // stale focused-goal metadata must not resurrect an already-solved goal.
     performPlayerGestures([
       'use 0',
       { rewrite: 'rw [\u2190 add_zero]', side: 'left' },
-      'rfl',
     ])
   })
 })

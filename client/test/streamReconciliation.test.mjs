@@ -12,6 +12,18 @@ const {
   findLeafForStream,
 } = require('../../tmp-stream-tests/visual/proofTree.js')
 const { reconcileProofTreeAfterInteraction } = require('../../tmp-stream-tests/visual/streamReconciliation.js')
+const { proofStateToCanvas } = require('../../tmp-stream-tests/visual/leanToCanvas.js')
+
+test('authoritative proof completion discards a stale final focused goal', () => {
+  const canvas = proofStateToCanvas({
+    completed: true,
+    steps: [{
+      goals: [{ goal: { mvarId: 'stale-goal', type: { text: 'x = x' }, hyps: [] } }],
+    }],
+  })
+
+  assert.deepEqual(canvas, { streams: [], completed: true })
+})
 
 function hyp(id, name, type, { isTheorem = false } = {}) {
   const displayName = name

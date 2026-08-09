@@ -3442,7 +3442,7 @@ export function VisualCanvas({
     const leanCanvas = proofStateToCanvas(result)
     leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
-    const exactFocusedStreams = lastStep?.focusedGoals !== undefined
+    const exactFocusedStreams = !result.completed && lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
       : undefined
     let { nextTree, nextActiveId, focusedStreams, nextCanvas } = focusedStream
@@ -3528,31 +3528,6 @@ export function VisualCanvas({
       }
       nextStream = clickableStream
     }
-    // A scoped `conv` rewrite records the exact expression the player chose.
-    // If Lean reports that command complete, there is no live metavariable for
-    // a synthetic reflexive card to act on, so preserve Lean's completion.
-    const rewriteUsesExactSelectedTarget =
-      isReverse && transformTarget?.kind === 'goal' && command.includes('conv =>')
-    const shouldKeepReflexiveGoalUntilClick =
-      transformTarget?.kind === 'goal' &&
-      nextStream === null &&
-      leanCanvas.completed &&
-      !rewriteUsesExactSelectedTarget &&
-      focusedStream !== null &&
-      expectedGoal !== undefined &&
-      expectedGoal.relation === '=' &&
-      formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
-    if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
-      const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
-      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
-      nextActiveId = syntheticStream.id
-      focusedStreams = [syntheticStream]
-      nextCanvas = {
-        ...replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream),
-        completed: false,
-      }
-      nextStream = syntheticStream
-    }
     const shouldDeferGoalCompletionUntilClose =
       transformTarget?.kind === 'goal' && nextStream === null
 
@@ -3630,7 +3605,7 @@ export function VisualCanvas({
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
 
-    if (leanCanvas.completed && !shouldKeepReflexiveGoalUntilClick) {
+    if (leanCanvas.completed) {
       const completionCanvas =
         transformTarget?.kind === 'goal' && focusedStream && expectedGoal
           ? {

@@ -11,11 +11,18 @@ export function proofStateToCanvas(proof: ProofState | null | undefined): Canvas
   // Take the last step: current proof state after all tactics
   const lastStep = steps[steps.length - 1]
 
+  // `completed` is the proof runner's authoritative result. Some visual RPC
+  // responses retain the previously focused goal in their final step even
+  // after the submitted script has closed every metavariable.
+  if (proof?.completed) {
+    return { streams: [], completed: true }
+  }
+
   const streams = interactiveGoalsToStreams(lastStep?.goals ?? [])
 
   return {
     streams,
-    completed: Boolean(proof?.completed) && streams.length === 0,
+    completed: false,
   }
 }
 
