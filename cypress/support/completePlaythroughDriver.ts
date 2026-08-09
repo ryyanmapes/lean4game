@@ -614,12 +614,18 @@ export class CompletePlaythroughDriver {
   }
 
   private async clickGoal() {
-    const goal = await waitFor('clickable current goal', () => {
+    const target = await waitFor('clickable current goal or completed proof', () => {
+      const audit = harness(this.win).getProofAudit()
+      if (!audit.processing && audit.completed) {
+        return { goal: null, completed: true as const }
+      }
       const current = currentGoal(this.win)
       return current?.classList.contains('clickable') && !current.classList.contains('solved')
-        ? current
+        ? { goal: current, completed: false as const }
         : null
     })
+    if (target.completed) return
+    const goal = target.goal
     const before = playerStateSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(goal)
