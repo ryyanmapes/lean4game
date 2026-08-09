@@ -651,13 +651,16 @@ private def rewriteTargetRelationSide
   let eqProof ← mkCongrArg motive rwRes.eqProof
   pure { targetNew, eqProof, mvarIds := rwRes.mvarIds }
 
+private def applyFocusedRewrite (h : Ident) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : TacticM Unit := do
+  let mvarId ← getMainGoal
+  let target ← mvarId.getType
+  let rwRes ← rewriteTargetRelationSide mvarId target h symm sideIsRhs path
+  replaceGoalPreservingTarget mvarId rwRes.targetNew rwRes.eqProof rwRes.mvarIds
+
 private def tryFocusedRewrite (h : Ident) (symm : Bool) (sideIsRhs : Bool) (path : List Nat) : TacticM Bool := do
   let savedState ← saveState
   try
-    let mvarId ← getMainGoal
-    let target ← mvarId.getType
-    let rwRes ← rewriteTargetRelationSide mvarId target h symm sideIsRhs path
-    replaceGoalPreservingTarget mvarId rwRes.targetNew rwRes.eqProof rwRes.mvarIds
+    applyFocusedRewrite h symm sideIsRhs path
     pure true
   catch _ =>
     restoreState savedState
@@ -684,7 +687,8 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
   | none =>
     match sideOpt with
     | some sideIsRhs =>
-      if ← tryFocusedRewrite h isRev sideIsRhs [] then return
+      applyFocusedRewrite h isRev sideIsRhs []
+      return
     | none =>
       if ← tryRewrite h.raw isRev then return
       if ← tryRewrite h.raw (!isRev) then return
@@ -693,7 +697,8 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
   | some path =>
     match sideOpt with
     | some sideIsRhs =>
-      if ← tryFocusedRewrite h isRev sideIsRhs path then return
+      applyFocusedRewrite h isRev sideIsRhs path
+      return
     | none =>
       if ← tryFocusedRewrite h isRev true path then return
       if ← tryFocusedRewrite h isRev false path then return
