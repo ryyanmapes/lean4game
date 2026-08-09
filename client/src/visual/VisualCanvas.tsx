@@ -3474,12 +3474,17 @@ export function VisualCanvas({
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
       nextStream = syntheticStream
     }
+    // Generic visual rewrites deliberately leave a reflexive goal available
+    // for the player's final click. An explicit variable-source rewrite is a
+    // core `conv`/`rw` command which Lean has already closed, so synthesizing
+    // a non-live goal for it would display a clickable card that cannot act.
     const shouldKeepReflexiveGoalUntilClick =
       transformTarget?.kind === 'goal' &&
       nextStream === null &&
       leanCanvas.completed &&
       focusedStream !== null &&
       expectedGoal !== undefined &&
+      expectedGoal.explicitReverseArg === undefined &&
       expectedGoal.relation === '=' &&
       formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
     if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
