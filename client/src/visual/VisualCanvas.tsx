@@ -885,10 +885,13 @@ function expectedGoalForRewrite(
   const rewrittenExpr = isTheorem
     ? applyTheoremRewrite(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
     : applyEqualityRule(workingExpr, targetNode.id, hyp.lhs, hyp.rhs, isReverse)
+  const explicitReverseArg = isTheorem && isReverse && hyp.rhs.type === 'variable'
+    ? printExpression(targetNode)
+    : undefined
 
   return workingSide === 'right'
-    ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr), relation }
-    : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr, relation }
+    ? { lhsStr: goalLhsStr, rhsStr: printExpression(rewrittenExpr), relation, explicitReverseArg }
+    : { lhsStr: printExpression(rewrittenExpr), rhsStr: goalRhsStr, relation, explicitReverseArg }
 }
 
 function replaceFocusedStreamInCanvas(
@@ -3371,6 +3374,22 @@ export function VisualCanvas({
     const focusedStream = transformTarget
       ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
       : null
+    const resolvedRewrite = resolveRewriteHyp([], theoremEqualityHyps, hypLabel)
+    const parsedFocusedGoal = focusedStream
+      ? parsedGoalTarget(focusedStream, comparisonTransformEnabled)
+      : null
+    const selectedRoot = parsedFocusedGoal
+      ? (workingSide === 'left' ? parsedFocusedGoal.lhs : parsedFocusedGoal.rhs)
+      : null
+    const selectedNode = selectedRoot ? findExpressionNodeAtPath(selectedRoot, path) : null
+    const explicitReverseArg = expectedGoal?.explicitReverseArg ?? (
+      isReverse &&
+      resolvedRewrite?.isTheorem &&
+      resolvedRewrite.hyp.rhs.type === 'variable' &&
+      selectedNode
+        ? printExpression(selectedNode)
+        : undefined
+    )
     const action = actionCommandForStream(
       playTactic,
       focusedStream,
@@ -3382,10 +3401,10 @@ export function VisualCanvas({
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
     // search. The player selected an exact expression, so make that theorem
     // parameter explicit and retain the selected side/path with `conv`.
-    if (expectedGoal?.explicitReverseArg && transformTarget?.kind === 'goal') {
+    if (explicitReverseArg && transformTarget?.kind === 'goal') {
       const scopedRewrite = explicitReverseRewriteCommand(
         hypLabel,
-        expectedGoal.explicitReverseArg,
+        explicitReverseArg,
         backendWorkingSideForRelation(
           parsedGoalTarget(focusedStream!, comparisonTransformEnabled)?.relation ?? '=',
           workingSide,
@@ -3484,7 +3503,7 @@ export function VisualCanvas({
       leanCanvas.completed &&
       focusedStream !== null &&
       expectedGoal !== undefined &&
-      expectedGoal.explicitReverseArg === undefined &&
+      explicitReverseArg === undefined &&
       expectedGoal.relation === '=' &&
       formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
     if (shouldKeepReflexiveGoalUntilClick && focusedStream && expectedGoal) {
