@@ -1,4 +1,5 @@
 import type { ProofState } from '../components/infoview/rpc_api'
+import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { getWebsocketUrl } from '../utils/url'
 import { LocalWasmRpcClient } from './localWasmRpcClient'
 
@@ -138,9 +139,12 @@ class WebSocketLeanRpcClient {
             ...proof.steps.flatMap((step: any) => step.diags ?? []),
           ].filter(isTacticError)
           try {
-            sessionStorage.setItem('visual-last-lean-error', errors.map((diag: any) =>
-              diag.message ?? diag.data ?? JSON.stringify(diag)
-            ).join('\n'))
+            sessionStorage.setItem('visual-last-lean-error', errors.map((diag: any) => {
+              if (diag.message && typeof diag.message === 'object') {
+                return TaggedText_stripTags(diag.message)
+              }
+              return String(diag.message ?? diag.data ?? JSON.stringify(diag))
+            }).join('\n'))
           } catch { /* diagnostics are best-effort */ }
           return null
         }
