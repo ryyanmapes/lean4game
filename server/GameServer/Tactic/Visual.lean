@@ -488,20 +488,24 @@ private def evalTacticString (src : String) : TacticM Unit := do
   | .error err =>
     throwError "{err}"
 
-private def tryConvRootRewrite (h : Ident) (symm sideIsRhs : Bool) : TacticM Bool := do
+private def tryLeftRootRewrite (h : Ident) (symm sideIsRhs : Bool) : TacticM Bool := do
   let savedState ← saveState
   try
-    -- Let Lean's standard rewriter handle a selected equality side. This
-    -- matters especially for reverse rewrites whose source is a bare variable (for example
-    -- `← MyNat.add_zero` applied to `x`): the theorem's typeclass-backed
-    -- notation can elaborate differently from the selected display term.
+    -- Let Lean's standard `rewrite` tactic handle the left root of an equality.
+    -- The left root is the first occurrence in the original target, so this
+    -- preserves the visual selection without entering a `conv` subgoal. That
+    -- distinction matters in games which provide their own `rw` syntax, and
+    -- for reverse rules whose source is a bare variable (for example
+    -- `← MyNat.add_zero` applied to `x`).
+    if sideIsRhs then
+      restoreState savedState
+      return false
     let target ← getMainTarget
     unless (← matchEq? target).isSome do
       restoreState savedState
       return false
-    let side := if sideIsRhs then "rhs" else "lhs"
     let direction := if symm then "← " else ""
-    evalTacticString s!"conv =>\n  {side}\n  rw [{direction}{h.getId}]"
+    evalTacticString s!"rewrite [{direction}{h.getId}]"
     pure true
   catch _ =>
     restoreState savedState
@@ -689,7 +693,7 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
   | none =>
     match sideOpt with
     | some sideIsRhs =>
-      if ← tryConvRootRewrite h isRev sideIsRhs then return
+      if ← tryLeftRootRewrite h isRev sideIsRhs then return
       if ← tryFocusedRewrite h isRev sideIsRhs [] then return
     | none =>
       if ← tryRewrite h.raw isRev then return
@@ -996,6 +1000,7 @@ example (P Q : Prop) (h : Q) : P ∨ Q := by
 example : 0 + 0 = 0 := by
   fail_if_success click_goal
   drag_rw_lhs [Nat.add_zero]
+  click_goal
 
 example (x : Nat) : x = x + 0 := by
   drag_rw_lhs [← Nat.add_zero]
@@ -1003,6 +1008,7 @@ example (x : Nat) : x = x + 0 := by
 
 example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
   drag_rw_lhs [Nat.mul_add]
+  rfl
 
 example : 0 ≠ 1 := by
   click_goal
