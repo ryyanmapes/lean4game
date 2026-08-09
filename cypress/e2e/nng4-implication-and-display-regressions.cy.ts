@@ -73,11 +73,11 @@ describe('NNG4 implication and definition display regressions', () => {
 
     // After `use 0`, select the left-hand side of `x = x + 0` with the visual
     // arrow control, then drag reverse add_zero directly onto that displayed
-    // `x`, as a player does.
+    // `x`, as a player does. The resulting reflexive equality is closed by
+    // Lean's rewrite tactic itself, so no synthetic trailing `rfl` is needed.
     performPlayerGestures([
       'use 0',
       { rewrite: 'rw [\u2190 add_zero]', side: 'left' },
-      'rfl',
     ])
   })
 })
