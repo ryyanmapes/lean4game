@@ -532,6 +532,10 @@ private def instantiateRewriteTheoremAtExpr (e : Expr) (h : Ident) (symm : Bool)
       let fromPat := if symm then rhsPat else lhsPat
       unless ← isDefEq e fromPat do
         throwErrorAt h "drag_rw: '{h.getId}' does not match the selected subterm"
+      -- Commit the selected subterm's instantiation before constructing the
+      -- theorem application. In particular, reverse variable-pattern rules
+      -- such as `← add_zero` determine their parameter solely from `e`.
+      Term.synthesizeSyntheticMVarsNoPostponing
     let mut argsApplied := #[]
     for arg in args do
       argsApplied := argsApplied.push (← instantiateMVars arg)
@@ -602,15 +606,17 @@ private partial def focusedRewriteExpr
     -- that expression and use its proof directly.
     if symm then
       let thmType ← withReducible (whnf (← inferType thm))
-      if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
-        if ← isDefEq e rightExpr then
-          Term.synthesizeSyntheticMVarsNoPostponing
-          let eNew ← instantiateMVars leftExpr
-          let thm ← instantiateMVars thm
-          if eNew.hasMVar || thm.hasMVar then
-            throwErrorAt h "drag_rw: reverse rewrite has parameters that are not determined by the selected expression"
-          let eqProof ← mkAppM ``Eq.symm #[thm]
-          return { eNew, eqProof, mvarIds := [] }
+      let some (_, leftExpr, rightExpr) ← matchEq? thmType
+        | throwErrorAt h "drag_rw: reverse rewrite theorem did not elaborate to an equality"
+      unless ← isDefEq e rightExpr do
+        throwErrorAt h "drag_rw: reverse rewrite source no longer matches the selected expression"
+      Term.synthesizeSyntheticMVarsNoPostponing
+      let eNew ← instantiateMVars leftExpr
+      let thm ← instantiateMVars thm
+      if eNew.hasMVar || thm.hasMVar then
+        throwErrorAt h "drag_rw: reverse rewrite has parameters that are not determined by the selected expression"
+      let eqProof ← mkAppM ``Eq.symm #[thm]
+      return { eNew, eqProof, mvarIds := [] }
     let r ← rewriteAtExpr mvarId e thm h.raw symm
     pure { eNew := r.eNew, eqProof := r.eqProof, mvarIds := r.mvarIds }
   | k :: rest =>

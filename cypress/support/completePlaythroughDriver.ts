@@ -42,7 +42,7 @@ function sleep(ms: number) {
 async function waitFor<T>(
   description: string,
   read: () => T | null | undefined | false,
-  timeout = ACTION_TIMEOUT,
+  timeout = INTERACTION_TIMEOUT,
 ): Promise<T> {
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
@@ -183,6 +183,17 @@ function click(element: HTMLElement) {
 
 function doubleClick(element: HTMLElement) {
   element.scrollIntoView({ block: 'center', inline: 'center' })
+  for (let detail = 1; detail <= 2; detail += 1) {
+    element.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0, detail,
+    }))
+    element.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true, cancelable: true, button: 0, detail,
+    }))
+    element.dispatchEvent(new MouseEvent('click', {
+      bubbles: true, cancelable: true, button: 0, detail,
+    }))
+  }
   element.dispatchEvent(new MouseEvent('dblclick', {
     bubbles: true,
     cancelable: true,
@@ -488,8 +499,13 @@ export class CompletePlaythroughDriver {
       .find(button => button.textContent?.trim() === tab)
     if (tabButton && !tabButton.classList.contains('active')) {
       click(tabButton)
-      await waitFor(`${tab} tray tab to activate`, () =>
-        tabButton.classList.contains('active') ? tabButton : null, 5_000)
+      await waitFor(`${tab} tray tab to activate`, () => {
+        // React replaces the tab button while switching panes, so always
+        // query the current node instead of observing the detached old one.
+        const current = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
+          .find(button => button.textContent?.trim() === tab)
+        return current?.classList.contains('active') ? current : null
+      }, 5_000)
     }
     // The release build fetches theorem documentation lazily. Wait for the
     // selected tray to finish its first render instead of racing it.
@@ -771,7 +787,12 @@ export class CompletePlaythroughDriver {
       } else {
         for (const rule of parsed.rules) await this.applyRewriteRule(rule, parsed.occurrence)
       }
-      const back = this.win.document.querySelector<HTMLButtonElement>('.tr-transformation-overlay .tr-back-btn')
+      const back = await waitFor('enabled transformation Back button', () => {
+        const button = this.win.document.querySelector<HTMLButtonElement>(
+          '.tr-transformation-overlay .tr-back-btn',
+        )
+        return button && !button.disabled ? button : null
+      })
       if (back) {
         click(back)
         await waitFor('transformation view to close', () =>
