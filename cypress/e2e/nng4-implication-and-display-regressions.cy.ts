@@ -1,9 +1,11 @@
+import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
+
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = 600000
 
 interface VisualHarness {
-  runPlayerTactic(command: string): Promise<void>
   copyTheoremToCanvas(theoremName: string): void
+  getProofAudit(): { completed: boolean; processing: boolean }
 }
 
 type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
@@ -16,6 +18,18 @@ function visualHarness() {
   })
 }
 
+function performPlayerGestures(commands: string[]) {
+  cy.window({ timeout: LOAD_TIMEOUT }).then(async win => {
+    const player = new CompletePlaythroughDriver(win)
+    for (const command of commands) await player.perform(command)
+  })
+  cy.window().should(win => {
+    const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
+    expect(audit?.processing, 'visual proof is idle').to.equal(false)
+    expect(audit?.completed, 'visual proof is complete').to.equal(true)
+  })
+}
+
 describe('NNG4 implication and definition display regressions', () => {
   beforeEach(() => {
     cy.on('uncaught:exception', () => false)
@@ -23,13 +37,11 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.clearLocalStorage()
   })
 
-  it('applies a local zero-ne-one theorem to a 0 = 1 hypothesis', () => {
+  it('applies zero-ne-one through player theorem and tactic drags', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/10/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
-    visualHarness().then(harness => harness.runPlayerTactic(
-      'intro h; have thm_zero_ne_one : (0 : ℕ) ≠ 1 := MyNat.zero_ne_one; drag_to h thm_zero_ne_one',
-    ))
+    performPlayerGestures(['symm', 'exact zero_ne_one'])
   })
 
   it('shows the definitionally expanded form on a less-or-equal theorem card', () => {
@@ -51,12 +63,10 @@ describe('NNG4 implication and definition display regressions', () => {
     })
   })
 
-  it('rewrites x to x + 0 with reverse add_zero', () => {
+  it('rewrites the selected x to x + 0 with reverse add_zero', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
-    visualHarness().then(harness => harness.runPlayerTactic(
-      'use 0; drag_rw_lhs [← MyNat.add_zero]',
-    ))
+    performPlayerGestures(['use 0', 'nth_rewrite 2 [\u2190 add_zero]', 'rfl'])
   })
 })
