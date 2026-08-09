@@ -996,15 +996,12 @@ example (P Q : Prop) (h : Q) : P ∨ Q := by
 example : 0 + 0 = 0 := by
   fail_if_success click_goal
   drag_rw_lhs [Nat.add_zero]
-  click_goal
 
 example (x : Nat) : x = x + 0 := by
   drag_rw_lhs [← Nat.add_zero]
-  rfl
 
 example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
   drag_rw_lhs [Nat.mul_add]
-  rfl
 
 example : 0 ≠ 1 := by
   click_goal
