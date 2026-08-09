@@ -596,16 +596,15 @@ private partial def focusedRewriteExpr
     -- such a pattern because it would match every subterm. Here the player has
     -- already selected the exact expression, so instantiate the equality at
     -- that expression and use its proof directly.
-    let thmType ← withReducible (whnf (← inferType thm))
-    if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
-      let sourceExpr := if symm then rightExpr else leftExpr
-      let replacementExpr := if symm then leftExpr else rightExpr
-      if ← isDefEq e sourceExpr then
-        let eNew ← instantiateMVars replacementExpr
-        let thm ← instantiateMVars thm
-        if !eNew.hasMVar && !thm.hasMVar then
-          let eqProof ← if symm then mkAppM ``Eq.symm #[thm] else pure thm
-          return { eNew, eqProof, mvarIds := [] }
+    if symm then
+      let thmType ← withReducible (whnf (← inferType thm))
+      if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
+        if ← isDefEq e rightExpr then
+          let eNew ← instantiateMVars leftExpr
+          let thm ← instantiateMVars thm
+          if !eNew.hasMVar && !thm.hasMVar then
+            let eqProof ← mkAppM ``Eq.symm #[thm]
+            return { eNew, eqProof, mvarIds := [] }
     let r ← rewriteAtExpr mvarId e thm h.raw symm
     pure { eNew := r.eNew, eqProof := r.eqProof, mvarIds := r.mvarIds }
   | k :: rest =>
