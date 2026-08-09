@@ -117,6 +117,8 @@
     "build:test": "node scripts/run-in-dir.cjs cypress/TestGame lake build",
     "cypress:run": "node scripts/run-cypress.cjs run",
     "cypress:run:ready": "node scripts/run-cypress-ready.cjs run",
+    "cypress:run:relay": "node scripts/run-cypress.cjs run --spec cypress/e2e/nng4-implication-and-display-regressions.cy.ts --browser electron",
+    "cypress:run:relay:ready": "node scripts/run-cypress-ready.cjs run --spec cypress/e2e/nng4-implication-and-display-regressions.cy.ts --browser electron",
     "cypress:open": "node scripts/run-cypress.cjs open",
     "cypress:debug": "cross-env DEBUG=cypress:* node scripts/run-cypress.cjs open",
     "test:visual-level2-browser": "node scripts/run-cypress.cjs run --spec cypress/e2e/visualtest-level2.cy.ts --browser electron",
@@ -133,8 +135,8 @@
     "test:visual-complete-playthrough": "node scripts/generate-nng4-visual-solutions.mjs && node scripts/run-cypress.cjs run --spec cypress/e2e/nng4-visual-complete-playthrough.cy.ts --browser chrome --config baseUrl=http://127.0.0.1:5173 --env VISUAL_TIMEOUT=180000,LEAN4GAME_MOUNT=/lean4game/index.html",
     "production": "cross-env NODE_ENV=production node relay/dist/src/index.js",
     "translate": "npx i18next-scanner --config client/i18next-scanner.config.cjs",
-    "test": "npm run build:test && concurrently -n server,cypress -c blue,green \"npm start\" \"npm run cypress:run:ready\" -k -s first --hide server",
-    "test:prod": "npm run build && concurrently -n server,cypress -c blue,green \"PORT=3000 npm run production\" \"npm run cypress:run:ready\" -k -s first"
+    "test": "npm run build:test && concurrently -n server,cypress -c blue,green \"npm start\" \"npm run cypress:run:relay:ready\" -k -s first --hide server",
+    "test:prod": "npm run build && concurrently -n server,cypress -c blue,green \"PORT=3000 npm run production\" \"npm run cypress:run:relay:ready\" -k -s first"
   },
   "eslintConfig": {
     "extends": [

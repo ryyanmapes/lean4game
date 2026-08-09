@@ -124,6 +124,13 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
     cy.clearLocalStorage()
   })
 
+  afterEach(function () {
+    // Every level is independently expensive because it is checked by Lean.
+    // Once one player interaction fails, stop this spec so CI reports that
+    // actionable failure instead of waiting through the remaining levels.
+    if (this.currentTest?.state === 'failed') Cypress.stop()
+  })
+
   for (const solution of playableSolutions) {
     it(`${solution.world} ${solution.level}: ${solution.title}`, () => {
       cy.viewport(1920, 1080)
