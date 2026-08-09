@@ -200,6 +200,87 @@ test('completing the middle branch keeps it selected and updates sibling C witho
   assert.deepEqual(result.nextCanvas.streams.map(stream => stream.id), [streamA.id, refreshedSiblingC.id])
 })
 
+test('empty Runner goals synthesize the actual induction base and successor states', () => {
+  const original = stream('induction-original', '0 + n = n', null, [
+    hyp('induction-n', 'n', 'ℕ'),
+  ])
+  const beforeTree = {
+    id: 'induction-leaf',
+    streamId: original.id,
+    label: null,
+    completed: false,
+    children: [],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [original], completed: false },
+    { streams: [], completed: false },
+    original,
+    'induction n with d hd',
+    true,
+    original.id,
+    [],
+  )
+
+  assert.equal(result.focusedStreams.length, 2)
+  const [base, successor] = result.focusedStreams
+  assert.equal(base.goal.type.text, '0 + 0 = 0')
+  assert.equal(base.equalityTree, undefined)
+  assert.deepEqual(base.hyps.map(card => card.hyp.names[0]), [])
+  assert.equal(successor.goal.type.text, '0 + succ(d) = succ(d)')
+  assert.equal(successor.equalityTree, undefined)
+  assert.deepEqual(successor.hyps.map(card => card.hyp.names[0]), ['d', 'hd'])
+  assert.equal(successor.hyps[1].hyp.type.text, '0 + d = d')
+})
+
+test('empty Runner goals keep the obligation created by a constructed witness', () => {
+  const original = stream('exists-original', 'x ≤ x', null, [hyp('exists-x', 'x', 'ℕ')])
+  original.existsInfo = { varName: 'a', body: 'x + a = x' }
+  const beforeTree = {
+    id: 'exists-leaf', streamId: original.id, label: null, completed: false, children: [],
+  }
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [original], completed: false },
+    { streams: [], completed: false },
+    original,
+    'refine Exists.intro (0) ?_',
+    false,
+    original.id,
+    [],
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(result.focusedStreams[0].goal.type.text, 'x + 0 = x')
+  assert.equal(result.focusedStreams[0].existsInfo, undefined)
+  assert.equal(result.nextTree.completed, false)
+})
+
+test('empty Runner goals synthesize substituted Nat cases branches', () => {
+  const original = stream('cases-original', 'a + b = 0 → a = 0', null, [
+    hyp('cases-a', 'a', 'ℕ'),
+    hyp('cases-b', 'b', 'ℕ'),
+  ])
+  const beforeTree = {
+    id: 'cases-leaf', streamId: original.id, label: null, completed: false, children: [],
+  }
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [original], completed: false },
+    { streams: [], completed: false },
+    original,
+    'cases b',
+    true,
+    original.id,
+    [],
+  )
+
+  assert.equal(result.focusedStreams[0].goal.type.text, 'a + 0 = 0 → a = 0')
+  assert.equal(result.focusedStreams[1].goal.type.text, 'a + succ(b) = 0 → a = 0')
+  assert.deepEqual(result.focusedStreams[1].hyps.map(card => card.hyp.names[0]), ['a', 'b'])
+})
+
 test('completed branches can still opt into automatic navigation', () => {
   const { streamA, streamB, staleSiblingC, refreshedSiblingC } = baseStreams()
   const result = reconcileProofTreeAfterInteraction(

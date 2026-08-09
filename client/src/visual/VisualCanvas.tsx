@@ -16,8 +16,8 @@ import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
 import type { ConstructionMode } from './ConstructionView'
-import { contextualizeExistsDisplay, contextualizeReductionForms } from './existsDisplay'
-import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaText, parse, printExpression } from './expr-engine'
+import { contextualizeExistsDisplay, contextualizeReductionForms, replaceIdentifier } from './existsDisplay'
+import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaText, matchAndCapture, parse, printExpression, substituteVariables } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
@@ -393,6 +393,9 @@ interface InteractionOptions {
   targetStreamId?: string
   mobileInsertAfter?: string
   mobileInsertPlacement?: 'after' | 'replace'
+  commandOverride?: string
+  leanTacticOverride?: string
+  syntheticHyp?: { name: string; type: string }
 }
 
 interface GoalChoiceMenu {
@@ -1155,6 +1158,28 @@ function inferLeanTacticFromVisualInteraction(
     return `cases ${hypName}`
   }
 
+  const dragTo = /^drag_to\s+(?:←\s+)?(\S+)\s+(\S+)$/u.exec(playTactic)
+  if (dragTo && stream) {
+    const firstName = dragTo[1]!
+    const secondName = dragTo[2]!
+    const firstCard = findHypCardByName(stream, firstName)
+    const secondCard = findHypCardByName(stream, secondName)
+    if (firstCard && secondCard && !firstCard.isTheorem && !secondCard.isTheorem) {
+      const firstType = normalizeFormulaText(TaggedText_stripTags(firstCard.hyp.type))
+      const secondType = normalizeFormulaText(TaggedText_stripTags(secondCard.hyp.type))
+      const firstImplication = splitImplicationText(firstType)
+      const secondImplication = splitImplicationText(secondType)
+      const application = firstImplication && formulasMatch(firstImplication[0], secondType)
+        ? `${firstName} ${secondName}`
+        : secondImplication && formulasMatch(secondImplication[0], firstType)
+          ? `${secondName} ${firstName}`
+          : null
+      if (application) {
+        return `have ${nextFreshHypName(stream.hyps, 'h')} := ${application}`
+      }
+    }
+  }
+
   if (playTactic.startsWith('induction ')) return playTactic
 
   const existsWitness = parseExistsIntroPlayTactic(playTactic)
@@ -1260,6 +1285,87 @@ export interface VisualProofResumeState {
   activeStreamId: string | null
   theoremCopies: PropositionTheoremCopy[]
   savedAt: number
+}
+
+function synthesizeForallSpecializationContinuation(
+  focusedStream: GoalStream,
+  hypName: string,
+  prompt: ForallSpecificationInfo,
+  expression: string,
+): GoalStream {
+  const hyps = cloneHypCards(focusedStream.hyps)
+  hyps.push({
+    id: uuidv4(),
+    isTheorem: true,
+    hyp: {
+      names: [hypName],
+      playName: hypName,
+      type: { text: replaceIdentifier(prompt.body, prompt.varName, expression) },
+      reductionForms: [],
+    },
+    position: { x: 96, y: 96 },
+  })
+  return {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: { ...focusedStream.goal, mvarId: undefined },
+    hyps,
+    equalityTree: focusedStream.equalityTree,
+    existsInfo: focusedStream.existsInfo,
+    reductionForms: [],
+  }
+}
+
+function synthesizeAddedTheoremContinuation(
+  focusedStream: GoalStream,
+  hypName: string,
+  hypType: string,
+): GoalStream {
+  const hyps = cloneHypCards(focusedStream.hyps)
+  hyps.push({
+    id: uuidv4(),
+    isTheorem: true,
+    hyp: {
+      names: [hypName],
+      playName: hypName,
+      type: { text: hypType },
+      reductionForms: [],
+    },
+    position: { x: 96, y: 96 },
+  })
+  return {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: { ...focusedStream.goal, mvarId: undefined },
+    hyps,
+    reductionForms: [],
+  }
+}
+
+function synthesizeHypRewriteContinuation(
+  focusedStream: GoalStream,
+  hypId: string,
+  expectedHyp: ExpectedRewriteGoal,
+): GoalStream {
+  const nextHypType = `${expectedHyp.lhsStr} ${expectedHyp.relation} ${expectedHyp.rhsStr}`
+  return {
+    ...focusedStream,
+    id: uuidv4(),
+    goal: { ...focusedStream.goal, mvarId: undefined },
+    hyps: focusedStream.hyps.map(card => card.id === hypId
+      ? {
+          ...card,
+          hyp: {
+            ...card.hyp,
+            type: { text: nextHypType },
+            typeBody: undefined,
+            equalityTree: undefined,
+            reductionForms: [],
+          },
+        }
+      : { ...card, position: { ...card.position } }),
+    reductionForms: [],
+  }
 }
 
 interface VisualCanvasProps {
@@ -2105,11 +2211,13 @@ export function VisualCanvas({
           anchorIndex: mobileVisualOrder.theorems.indexOf(options.mobileInsertAfter),
         }
       : null
-    const { command, rotation } = actionCommandForStream(
+    const inferredAction = actionCommandForStream(
       playTactic,
       focusedStream,
       leanGoalOrderRef.current,
     )
+    const command = options?.commandOverride ?? inferredAction.command
+    const rotation = inferredAction.rotation
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setIsProcessing(true)
@@ -2125,11 +2233,11 @@ export function VisualCanvas({
     setIsProcessing(false)
 
     const lastStep = result?.steps.at(-1)
-    const leanTactic = handledBySyntheticReflexiveClick
+    const leanTactic = options?.leanTacticOverride ?? (handledBySyntheticReflexiveClick
       ? 'rfl'
       : result
       ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream, lastStep)
-      : null
+      : null)
 
     // Log the attempt regardless of outcome
     appendPlayLog(logKey, {
@@ -2183,7 +2291,7 @@ export function VisualCanvas({
       : undefined
 
     let nextCanvas = mergedCanvas
-    const { nextTree, nextActiveId, nextCanvas: reconciledCanvas } = focusedStream
+    let { nextTree, nextActiveId, nextCanvas: reconciledCanvas } = focusedStream
       ? reconcileProofTreeAfterInteraction(
           proofTree,
           canvasState,
@@ -2200,6 +2308,21 @@ export function VisualCanvas({
           nextCanvas: mergedCanvas,
         }
     nextCanvas = reconciledCanvas
+    if (options?.syntheticHyp && nextCanvas.streams.length === 0) {
+      const syntheticStream = synthesizeAddedTheoremContinuation(
+        focusedStream,
+        options.syntheticHyp.name,
+        options.syntheticHyp.type,
+      )
+      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      nextActiveId = syntheticStream.id
+      nextCanvas = replaceFocusedStreamInCanvas(
+        canvasState,
+        nextCanvas,
+        focusedStream.id,
+        syntheticStream,
+      )
+    }
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
@@ -2568,10 +2691,56 @@ export function VisualCanvas({
             nameB: targetName,
             reverse,
           })
+          const targetEquality = targetCard ? parsedHypEquality(targetCard) : null
+          const theoremDerivation = targetCard && theoremTemplate
+            ? (() => {
+                const theoremText = theoremTemplate.proposition
+                const targetRef = interactionHypName(targetCard) ?? targetName
+                const hypName = nextFreshHypName(targetStream!.hyps, 'h')
+                if (targetEquality) {
+                  const rewriteRightToLeft = theoremText.includes(targetEquality.rhsStr)
+                  const rewriteLeftToRight = theoremText.includes(targetEquality.lhsStr)
+                  if (rewriteRightToLeft || rewriteLeftToRight) {
+                    const from = rewriteRightToLeft ? targetEquality.rhsStr : targetEquality.lhsStr
+                    const to = rewriteRightToLeft ? targetEquality.lhsStr : targetEquality.rhsStr
+                    const arrow = rewriteRightToLeft ? '← ' : ''
+                    return {
+                      command: `have ${hypName} := ${theoremTemplate.theoremName}; rw [${arrow}${targetRef}] at ${hypName}`,
+                      hypName,
+                      hypType: replaceIdentifier(theoremText, from, to),
+                    }
+                  }
+                }
+                const implication = splitImplicationText(theoremText)
+                const targetType = (targetCard.hyp.typeBody ?? TaggedText_stripTags(targetCard.hyp.type)).trim()
+                if (!implication) return null
+                let resultType: string
+                try {
+                  const patternTarget = targetType.replace(/≠/gu, '=')
+                  const patternPremise = implication[0].replace(/≠/gu, '=')
+                  const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
+                  if (!bindings) return null
+                  resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+                } catch {
+                  if (!formulasMatch(implication[0], targetType)) return null
+                  resultType = implication[1]
+                }
+                return {
+                  command: `have ${hypName} := ${theoremTemplate.theoremName} ${targetRef}`,
+                  hypName,
+                  hypType: resultType,
+                }
+              })()
+            : null
           applyInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
+            ...(theoremDerivation ? {
+              commandOverride: theoremDerivation.command,
+              leanTacticOverride: theoremDerivation.command,
+              syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+            } : {}),
           })
           return
         }
@@ -3039,11 +3208,13 @@ export function VisualCanvas({
     let playTactic = `refine Exists.intro (${exprStr}) ?_`
     let placementHint: PlacementHint | undefined
     let consumedTheoremCopyIds: string[] | undefined
+    let specializationName: string | null = null
 
     if (target.kind === 'forall_spec') {
       const baseName = target.sourceKind === 'hyp'
         ? nextFreshHypName(focusedStream.hyps, target.sourceRef)
         : nextFreshHypName(focusedStream.hyps, 'h')
+      specializationName = baseName
       const argExpr = `(${exprStr})`
       playTactic = `specialize_forall_as ${baseName} ${target.sourceRef} ${target.prompt.varName} ${argExpr}`
 
@@ -3104,6 +3275,24 @@ export function VisualCanvas({
       activeStreamId,
       exactFocusedStreams,
     )
+    const missingForallContinuation =
+      target.kind === 'forall_spec' && nextCanvas.streams.length === 0
+    if (missingForallContinuation) {
+      const syntheticStream = synthesizeForallSpecializationContinuation(
+        focusedStream,
+        specializationName!,
+        target.prompt,
+        exprStr,
+      )
+      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      nextActiveId = syntheticStream.id
+      nextCanvas = replaceFocusedStreamInCanvas(
+        canvasState,
+        nextCanvas,
+        focusedStream.id,
+        syntheticStream,
+      )
+    }
 
     setProofSteps(prev => [...prev, {
       command,
@@ -3126,7 +3315,7 @@ export function VisualCanvas({
       nextCanvas = updatePlacedHypPosition(nextCanvas, placementHint, placementHint.droppedPosition)
     }
 
-    if (leanCanvas.completed) {
+    if (leanCanvas.completed && !missingForallContinuation) {
       const completionCanvas = placementHint
         ? updatePlacedHypPosition(canvasState, placementHint, placementHint.droppedPosition)
         : canvasState
@@ -3233,6 +3422,24 @@ export function VisualCanvas({
         nextCanvas: mergedCanvas,
       }
     let nextStream = focusedStreams[0] ?? null
+    if (
+      transformTarget?.kind === 'hyp' &&
+      nextStream === null &&
+      !leanCanvas.completed &&
+      focusedStream &&
+      expectedGoal
+    ) {
+      const syntheticStream = synthesizeHypRewriteContinuation(
+        focusedStream,
+        transformTarget.hypId,
+        expectedGoal,
+      )
+      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      nextActiveId = syntheticStream.id
+      focusedStreams = [syntheticStream]
+      nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
+      nextStream = syntheticStream
+    }
     if (
       transformTarget?.kind === 'goal' &&
       nextStream === null &&

@@ -562,7 +562,7 @@ function applyEqualityRuleAt(
  * Variables in `pattern` are wildcards that match any subexpression.
  * Returns null if the pattern does not structurally match `expr`.
  */
-function matchAndCapture(
+export function matchAndCapture(
   expr: ExpressionNode,
   pattern: ExpressionNode,
   bindings: Record<string, ExpressionNode> = {},
@@ -592,7 +592,7 @@ function matchAndCapture(
 }
 
 /** Replace all variable nodes in `node` with their bound values, assigning fresh IDs. */
-function substituteVariables(
+export function substituteVariables(
   node: ExpressionNode,
   bindings: Record<string, ExpressionNode>,
 ): ExpressionNode {

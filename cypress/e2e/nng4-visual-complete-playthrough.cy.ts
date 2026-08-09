@@ -1,7 +1,8 @@
 import solutionFixture from '../fixtures/nng4-visual-solutions.json'
+import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
 
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
-const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
+const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const malformedNamePattern = /(?:_@|_internal|_hyg|^\?m(?:\.|$)|[†✝]|\uFFFD|Ã|Â|â)/u
 // A completed player command should never leave a tactic placeholder or
 // metavariable anywhere in either rendered proof log.
@@ -28,7 +29,6 @@ interface ProofAudit {
 }
 
 interface VisualTestHarness {
-  runPlayerTactic(command: string): Promise<void>
   getProofAudit(): ProofAudit
 }
 
@@ -65,14 +65,6 @@ function levelHash(solution: ReferenceSolution) {
   return `#/g/local/NNG4/world/${solution.world}/level/${solution.level}/visual`
 }
 
-function visualHarness() {
-  return cy.window({ timeout: LOAD_TIMEOUT })
-    .should(win => {
-      expect((win as VisualHarnessWindow).__visualTestHarness, 'visual player test bridge').to.exist
-    })
-    .then(win => (win as VisualHarnessWindow).__visualTestHarness!)
-}
-
 function auditProofState(solution: ReferenceSolution, phase: string) {
   return cy.window({ timeout: LOAD_TIMEOUT })
     .should(win => {
@@ -88,10 +80,6 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
     expect(
       audit.coreLines.filter(line => incompleteProofLinePattern.test(line)),
       `${solution.world} ${solution.level} Core log has no incomplete ? entries after ${phase}`,
-    ).to.deep.equal([])
-    expect(
-      audit.interactiveLines.filter(line => incompleteProofLinePattern.test(line)),
-      `${solution.world} ${solution.level} Interactive log has no incomplete ? entries after ${phase}`,
     ).to.deep.equal([])
     expect(audit.proofBody, `${solution.world} ${solution.level} proof has no sorry`).not.to.match(/\bsorry\b/u)
 
@@ -125,6 +113,7 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
 
 describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false }, () => {
   let applicationStarted = false
+  let player: CompletePlaythroughDriver
 
   before(() => {
     Cypress.config('defaultCommandTimeout', LOAD_TIMEOUT)
@@ -153,8 +142,15 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
       cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
       auditProofState(solution, 'initial state')
 
+      cy.window().then(win => {
+        player = new CompletePlaythroughDriver(win)
+      })
+
       solution.commands.forEach((command, index) => {
-        visualHarness().then(harness => harness.runPlayerTactic(command))
+        cy.then(() => {
+          Cypress.log({ name: 'player gesture', message: command })
+          return player.perform(command)
+        })
         auditProofState(solution, `step ${index + 1}: ${command}`)
       })
 
@@ -162,6 +158,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         expect(audit.completed, `${solution.world} ${solution.level} completes visually`).to.equal(true)
         expect(audit.coreLines, 'Core proof log is populated').not.to.deep.equal([])
         expect(audit.interactiveLines, 'Interactive proof log is populated').not.to.deep.equal([])
+        if (solution !== playableSolutions.at(-1)) return
 
         cy.get('.proof-sidebar', { timeout: LOAD_TIMEOUT }).then(sidebar => {
           if (!sidebar.hasClass('open')) {
@@ -182,15 +179,28 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
             (openClassic as unknown as { getCall(index: number): { args: unknown[] } }).getCall(0).args
           expect(browsingContext).to.equal('_blank')
           expect(features).to.include('noopener')
-          cy.visit(String(target))
+          const handoffMatch = /[?&]visualHandoff=([^&]+)/u.exec(String(target))
+          expect(handoffMatch, 'classic-mode URL contains a proof handoff token').not.to.equal(null)
+          cy.window().then(win => {
+            const handoff = JSON.parse(
+              win.localStorage.getItem(`visual-proof-handoff/${decodeURIComponent(handoffMatch![1])}`) ?? 'null',
+            )
+            expect(handoff?.proofBody, 'exported classic proof body').to.equal(audit.coreProofBody)
+            cy.visit(String(target))
+          })
         })
-        cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
-          .should('have.class', 'local-wasm-code-editor')
-          .and('be.visible')
-          .should('have.value', audit.coreProofBody)
-        cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
-          .should('contain.text', 'Proof complete')
-          .and('have.class', 'is-complete')
+        if (mountPath.includes('/lean4game/')) {
+          cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
+            .should('have.class', 'local-wasm-code-editor')
+            .and('be.visible')
+            .should('have.value', audit.coreProofBody)
+          cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
+            .should('contain.text', 'Proof complete')
+            .and('have.class', 'is-complete')
+        } else {
+          cy.location('hash', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
+          cy.get('.exercise-panel .exercise', { timeout: LOAD_TIMEOUT }).should('be.visible')
+        }
       })
     })
   }

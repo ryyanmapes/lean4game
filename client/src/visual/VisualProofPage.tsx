@@ -23,7 +23,7 @@ import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity', 'tauto'])
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1

@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'
+import ts from 'typescript'
 
 const [baseUrl, outputName = 'mobile-module-playthrough'] = process.argv.slice(2)
 if (!baseUrl) {
@@ -20,6 +21,17 @@ const solutions = fixture.solutions.filter(solution => !solution.visualSkip)
 const malformedNamePattern = /(?:_@|_internal|_hyg|^\?m(?:\.|$)|[†✝]|\uFFFD|Ãƒ|Ã‚|Ã¢)/u
 const outputDir = 'cypress/results'
 const output = path.join(outputDir, `${outputName}.json`)
+const gestureDriverSource = ts.transpileModule(
+  (await fs.readFile('cypress/support/completePlaythroughDriver.ts', 'utf8'))
+    .replace('export class CompletePlaythroughDriver', 'class CompletePlaythroughDriver')
+    .concat('\nwindow.CompletePlaythroughDriver = CompletePlaythroughDriver\n'),
+  {
+    compilerOptions: {
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ES2022,
+    },
+  },
+).outputText
 const results = {
   baseUrl,
   startedAt: new Date().toISOString(),
@@ -168,6 +180,8 @@ try {
   const coldStarted = performance.now()
   await page.goto(target, { waitUntil: 'domcontentloaded', timeout: loadTimeout })
   await waitForLevel(page, first)
+  await page.evaluate(timeout => { window.__playerGestureTimeout = timeout }, loadTimeout)
+  await page.addScriptTag({ content: gestureDriverSource })
   results.coldReadyMs = performance.now() - coldStarted
   const browserIsolation = await page.evaluate(() => ({
     crossOriginIsolated: window.crossOriginIsolated,
@@ -194,7 +208,9 @@ try {
       const command = solution.commands[commandIndex]
       await ensureInteractiveStream(page)
       await page.evaluate(async playerCommand => {
-        await window.__visualTestHarness.runPlayerTactic(playerCommand)
+        const driver = window.__completePlaythroughDriver
+          ?? (window.__completePlaythroughDriver = new window.CompletePlaythroughDriver(window))
+        await driver.perform(playerCommand)
       }, command)
       await audit(page, solution, `step ${commandIndex + 1}: ${command}`)
     }

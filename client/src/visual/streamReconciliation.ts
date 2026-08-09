@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { CanvasState, GoalStream, HypCard as HypCardType } from './types'
 import { parse, printExpression, sanitizeLeanDisplayName } from './expr-engine'
+import { replaceIdentifier } from './existsDisplay'
 import {
   branchLeafStream,
   collectActiveStreamIds,
@@ -954,6 +955,27 @@ function synthesizeContinuationStream(
   playTactic?: string,
 ): GoalStream | null {
   if (!playTactic) return null
+  const existsIntro = /^refine\s+Exists\.intro\s+\((.+)\)\s+\?_$/u.exec(playTactic.trim())
+  if (existsIntro && focusedStream.existsInfo) {
+    const nextGoalType = replaceIdentifier(
+      focusedStream.existsInfo.body,
+      focusedStream.existsInfo.varName,
+      existsIntro[1]!.trim(),
+    )
+    return {
+      ...focusedStream,
+      id: uuidv4(),
+      equalityTree: undefined,
+      existsInfo: undefined,
+      goal: {
+        ...focusedStream.goal,
+        mvarId: undefined,
+        type: { text: nextGoalType },
+        reductionForms: [],
+      },
+      reductionForms: [],
+    }
+  }
   if (playTactic === 'click_goal_left' || playTactic === 'click_goal_right') {
     return synthesizeGoalBranchStream(focusedStream, playTactic)
   }
@@ -979,18 +1001,27 @@ function synthesizeContinuationStream(
 function synthesizeInductionStreams(
   focusedStream: GoalStream,
   hypName: string,
+  predecessorName = 'd',
+  inductionHypName = 'hd',
 ): GoalStream[] {
   const targetCard = focusedStream.hyps.find(card => card.hyp.names[0] === hypName)
   if (!targetCard) return []
 
   const hypsWithoutTarget = focusedStream.hyps.filter(card => card.hyp.names[0] !== hypName)
+  const escapedHypName = hypName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const substitute = (text: string, replacement: string) =>
+    text.replace(new RegExp(`\\b${escapedHypName}\\b`, 'g'), replacement)
+  const originalGoal = goalDisplayText(focusedStream)
 
   // Base case: variable is 0, remove the induction target from context
   const zeroStream: GoalStream = {
     ...focusedStream,
     id: uuidv4(),
+    equalityTree: undefined,
+    existsInfo: undefined,
     goal: {
       ...focusedStream.goal,
+      type: { text: substitute(originalGoal, '0') },
       mvarId: undefined,
       userName: 'zero',
       reductionForms: [],
@@ -999,27 +1030,42 @@ function synthesizeInductionStreams(
     reductionForms: [],
   }
 
-  // Inductive step: keep the variable, add the induction hypothesis
-  const ihName = nextFreshHypName(focusedStream.hyps, `${hypName}_ih`)
+  // Inductive step: replace the target with its predecessor and add the
+  // induction hypothesis. This fallback is used when Runner reports an empty
+  // focused-goal list for a successful split tactic.
+  const predecessorCard: HypCardType = {
+    ...targetCard,
+    id: uuidv4(),
+    hyp: {
+      ...targetCard.hyp,
+      names: [predecessorName],
+      playName: predecessorName,
+    },
+    position: synthesizedCardPosition(hypsWithoutTarget.length),
+  }
   const ihCard: HypCardType = {
     id: uuidv4(),
     hyp: {
-      names: [ihName],
-      type: { text: '…' },
+      names: [inductionHypName],
+      playName: inductionHypName,
+      type: { text: substitute(originalGoal, predecessorName) },
       reductionForms: [],
     },
-    position: synthesizedCardPosition(focusedStream.hyps.length),
+    position: synthesizedCardPosition(hypsWithoutTarget.length + 1),
   }
   const succStream: GoalStream = {
     ...focusedStream,
     id: uuidv4(),
+    equalityTree: undefined,
+    existsInfo: undefined,
     goal: {
       ...focusedStream.goal,
+      type: { text: substitute(originalGoal, `succ(${predecessorName})`) },
       mvarId: undefined,
       userName: 'succ',
       reductionForms: [],
     },
-    hyps: [...cloneHypCards(focusedStream.hyps), ihCard],
+    hyps: [...cloneHypCards(hypsWithoutTarget), predecessorCard, ihCard],
     reductionForms: [],
   }
 
@@ -1034,13 +1080,20 @@ function synthesizeCasesStreams(
   if (!targetCard) return []
 
   const hypsWithoutTarget = focusedStream.hyps.filter(card => card.hyp.names[0] !== hypName)
+  const escapedHypName = hypName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const substitute = (text: string, replacement: string) =>
+    text.replace(new RegExp(`\\b${escapedHypName}\\b`, 'g'), replacement)
+  const originalGoal = goalDisplayText(focusedStream)
 
   // Zero case: the variable is 0, remove it from context
   const zeroStream: GoalStream = {
     ...focusedStream,
     id: uuidv4(),
+    equalityTree: undefined,
+    existsInfo: undefined,
     goal: {
       ...focusedStream.goal,
+      type: { text: substitute(originalGoal, '0') },
       mvarId: undefined,
       userName: 'zero',
       reductionForms: [],
@@ -1063,8 +1116,11 @@ function synthesizeCasesStreams(
   const succStream: GoalStream = {
     ...focusedStream,
     id: uuidv4(),
+    equalityTree: undefined,
+    existsInfo: undefined,
     goal: {
       ...focusedStream.goal,
+      type: { text: substitute(originalGoal, `succ(${predName})`) },
       mvarId: undefined,
       userName: 'succ',
       reductionForms: [],
@@ -1086,8 +1142,14 @@ function synthesizeSplitStreamsForInteraction(
   }
 
   if (playTactic?.startsWith('induction ')) {
-    const hypName = playTactic.slice('induction '.length).trim().split(/\s+/u)[0] ?? ''
-    return synthesizeInductionStreams(focusedStream, hypName)
+    const match = /^induction\s+(\S+)(?:\s+with\s+(\S+)\s+(\S+))?/u.exec(playTactic.trim())
+    if (!match) return []
+    return synthesizeInductionStreams(
+      focusedStream,
+      match[1] ?? '',
+      match[2] ?? 'd',
+      match[3] ?? 'hd',
+    )
   }
 
   if (playTactic?.startsWith('cases ')) {

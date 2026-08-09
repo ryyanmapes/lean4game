@@ -130,7 +130,7 @@
     "test:visual-world-progress": "node ./node_modules/typescript/bin/tsc client/src/visual/visualWorldProgress.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-visual-world-progress-tests --skipLibCheck --esModuleInterop && node --test client/test/visualWorldProgress.test.mjs",
     "test:visual-browser-proof": "node scripts/run-browser-proof-tests.mjs",
     "test:visual-complete-fixture": "node scripts/generate-nng4-visual-solutions.mjs",
-    "test:visual-complete-playthrough": "node scripts/generate-nng4-visual-solutions.mjs && node scripts/run-cypress.cjs run --spec cypress/e2e/nng4-visual-complete-playthrough.cy.ts --browser chrome --config baseUrl=http://127.0.0.1:5173 --env VISUAL_TIMEOUT=180000",
+    "test:visual-complete-playthrough": "node scripts/generate-nng4-visual-solutions.mjs && node scripts/run-cypress.cjs run --spec cypress/e2e/nng4-visual-complete-playthrough.cy.ts --browser chrome --config baseUrl=http://127.0.0.1:5173 --env VISUAL_TIMEOUT=180000,LEAN4GAME_MOUNT=/lean4game/index.html",
     "production": "cross-env NODE_ENV=production node relay/dist/src/index.js",
     "translate": "npx i18next-scanner --config client/i18next-scanner.config.cjs",
     "test": "npm run build:test && concurrently -n server,cypress -c blue,green \"npm start\" \"npm run cypress:run:ready\" -k -s first --hide server",

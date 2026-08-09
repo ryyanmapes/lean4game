@@ -6,9 +6,11 @@ const {
   findDisambiguatingRewritePath,
   findMatchingNodeIds,
   formatFormulaText,
+  matchAndCapture,
   matchesPattern,
   parse,
   printExpression,
+  substituteVariables,
 } = await import('../../tmp-expr-tests/visual/expr-engine.js')
 
 const AND = '\u2227'
@@ -45,6 +47,17 @@ test('add_succ matches and rewrites the induction successor goal', () => {
 
   assert.equal(matchesPattern(goal, lhs), true)
   assert.equal(printExpression(applyTheoremRewrite(goal, goal.id, lhs, rhs, false)), 'succ(0 + d)')
+})
+
+test('instantiates an implication result from the theorem card target', () => {
+  // Negated equalities use the same expression shape after the caller
+  // normalizes their relation token for structural matching.
+  const bindings = matchAndCapture(parse('x * y = 0'), parse('a * b = 0'))
+  assert.ok(bindings)
+  assert.equal(
+    printExpression(substituteVariables(parse('a ≤ a * b'), bindings)),
+    'x ≤ x * y',
+  )
 })
 
 test('finds one automatic rewrite target only when the highlighted match is unambiguous', () => {
