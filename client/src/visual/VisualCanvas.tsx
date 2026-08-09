@@ -791,15 +791,7 @@ function synthesizeGoalRewriteContinuation(
   expectedGoal: ExpectedRewriteGoal,
 ): GoalStream {
   const nextGoalType = `${expectedGoal.lhsStr} ${expectedGoal.relation} ${expectedGoal.rhsStr}`
-  const isDirectlyClickable =
-    expectedGoal.relation === '=' && formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
-  const clickAction: ClickAction | undefined = isDirectlyClickable
-    ? {
-        playTactic: 'click_goal',
-        tooltip: 'Click to complete',
-        options: [],
-      }
-    : undefined
+  const clickAction = reflexiveGoalClickAction(expectedGoal)
 
   return {
     ...focusedStream,
@@ -1319,6 +1311,16 @@ function synthesizeForallSpecializationContinuation(
     existsInfo: focusedStream.existsInfo,
     reductionForms: [],
   }
+}
+
+function reflexiveGoalClickAction(expectedGoal: ExpectedRewriteGoal): ClickAction | undefined {
+  return expectedGoal.relation === '=' && formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
+    ? {
+        playTactic: 'click_goal',
+        tooltip: 'Click to complete',
+        options: [],
+      }
+    : undefined
 }
 
 function synthesizeAddedTheoremContinuation(
@@ -3492,6 +3494,39 @@ export function VisualCanvas({
       focusedStreams = [syntheticStream]
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
       nextStream = syntheticStream
+    }
+    // Lean can return a live reflexive continuation without annotating it as
+    // directly completable. Keep the real stream/mvar identity and add only
+    // the missing player action so the visible goal can genuinely be clicked.
+    const returnedReflexiveClick = expectedGoal
+      ? reflexiveGoalClickAction(expectedGoal)
+      : undefined
+    if (
+      transformTarget?.kind === 'goal' &&
+      nextStream !== null &&
+      returnedReflexiveClick !== undefined &&
+      !hasClickAction(nextStream.goal.clickAction)
+    ) {
+      const returnedStreamId = nextStream.id
+      const clickableStream: GoalStream = {
+        ...nextStream,
+        goal: {
+          ...nextStream.goal,
+          clickAction: returnedReflexiveClick,
+        },
+      }
+      nextTree = replaceLeafStream(nextTree, returnedStreamId, clickableStream)
+      focusedStreams = focusedStreams.map(stream =>
+        stream.id === returnedStreamId ? clickableStream : stream
+      )
+      nextCanvas = {
+        ...nextCanvas,
+        completed: false,
+        streams: nextCanvas.streams.map(stream =>
+          stream.id === returnedStreamId ? clickableStream : stream
+        ),
+      }
+      nextStream = clickableStream
     }
     // A scoped `conv` rewrite records the exact expression the player chose.
     // If Lean reports that command complete, there is no live metavariable for
