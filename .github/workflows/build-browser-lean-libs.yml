@@ -499,7 +499,6 @@ jobs:
             conv =>
               lhs
               rw [← add_zero (x)]
-            rfl
           end MyNat
           LEAN
 
