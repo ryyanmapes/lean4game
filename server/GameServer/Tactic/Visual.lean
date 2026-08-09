@@ -999,6 +999,7 @@ example : 0 + 0 = 0 := by
 
 example (x : Nat) : x = x + 0 := by
   drag_rw_lhs [← Nat.add_zero]
+  rfl
 
 example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
   drag_rw_lhs [Nat.mul_add]
