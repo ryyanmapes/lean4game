@@ -488,29 +488,6 @@ private def evalTacticString (src : String) : TacticM Unit := do
   | .error err =>
     throwError "{err}"
 
-private def tryLeftRootRewrite (h : Ident) (symm sideIsRhs : Bool) : TacticM Bool := do
-  let savedState ← saveState
-  try
-    -- Let Lean's standard `rewrite` tactic handle the left root of an equality.
-    -- The left root is the first occurrence in the original target, so this
-    -- preserves the visual selection without entering a `conv` subgoal. That
-    -- distinction matters in games which provide their own `rw` syntax, and
-    -- for reverse rules whose source is a bare variable (for example
-    -- `← MyNat.add_zero` applied to `x`).
-    if sideIsRhs then
-      restoreState savedState
-      return false
-    let target ← getMainTarget
-    unless (← matchEq? target).isSome do
-      restoreState savedState
-      return false
-    let direction := if symm then "← " else ""
-    evalTacticString s!"rewrite [{direction}{h.getId}]"
-    pure true
-  catch _ =>
-    restoreState savedState
-    return false
-
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
   let mut ids : Std.HashSet FVarId := {}
   for localDecl in lctx do
@@ -614,6 +591,21 @@ private partial def focusedRewriteExpr
   match path with
   | [] =>
     let thm ← instantiateRewriteTheoremAtExpr e h symm
+    -- A reverse rewrite such as `← add_zero` has a bare variable as its
+    -- source pattern. Generic rewriting intentionally refuses to search for
+    -- such a pattern because it would match every subterm. Here the player has
+    -- already selected the exact expression, so instantiate the equality at
+    -- that expression and use its proof directly.
+    let thmType ← withReducible (whnf (← inferType thm))
+    if let some (_, lhs, rhs) ← matchEq? thmType then
+      let from := if symm then rhs else lhs
+      let to := if symm then lhs else rhs
+      if ← isDefEq e from then
+        let eNew ← instantiateMVars to
+        let thm ← instantiateMVars thm
+        if !eNew.hasMVar && !thm.hasMVar then
+          let eqProof ← if symm then mkAppM ``Eq.symm #[thm] else pure thm
+          return { eNew, eqProof, mvarIds := [] }
     let r ← rewriteAtExpr mvarId e thm h.raw symm
     pure { eNew := r.eNew, eqProof := r.eqProof, mvarIds := r.mvarIds }
   | k :: rest =>
@@ -693,7 +685,6 @@ private def evalDragRwCore (h : Ident) (isRev : Bool) (sideOpt : Option Bool) (p
   | none =>
     match sideOpt with
     | some sideIsRhs =>
-      if ← tryLeftRootRewrite h isRev sideIsRhs then return
       if ← tryFocusedRewrite h isRev sideIsRhs [] then return
     | none =>
       if ← tryRewrite h.raw isRev then return
@@ -941,6 +932,26 @@ private def directAddLocal (a b : Nat) : Nat := a + b
 
 private theorem directAdd_zero_local (a : Nat) : directAddLocal a 0 = a := by
   simp [directAddLocal]
+
+private inductive VisualRewriteNat where
+  | zero
+
+private instance : OfNat VisualRewriteNat 0 where
+  ofNat := .zero
+
+private opaque visualRewriteAdd : VisualRewriteNat → VisualRewriteNat → VisualRewriteNat
+
+private instance : Add VisualRewriteNat where
+  add := visualRewriteAdd
+
+private axiom visualRewriteAdd_zero (a : VisualRewriteNat) : a + 0 = a
+
+-- Game-defined opaque arithmetic has the same elaborated shape as MyNat.add.
+-- Reverse rewriting the selected variable must not invoke generic pattern
+-- search, because a bare theorem variable would match every expression.
+example (x : VisualRewriteNat) : x = x + 0 := by
+  drag_rw_lhs [← visualRewriteAdd_zero]
+  rfl
 
 -- Direct game-defined binary operators must expose both operands to visual paths.
 -- This is the shape of `MyNat.add`, and regresses reverse `add_zero` on the RHS.
