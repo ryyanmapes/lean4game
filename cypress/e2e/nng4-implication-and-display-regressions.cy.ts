@@ -1,4 +1,7 @@
-import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
+import {
+  CompletePlaythroughDriver,
+  sortPlayLogEntries,
+} from '../support/completePlaythroughDriver'
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = 600000
@@ -57,6 +60,17 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.on('uncaught:exception', () => false)
     cy.clearCookies()
     cy.clearLocalStorage()
+  })
+
+  it('observes the newest player action across per-level play logs', () => {
+    const additionOneRewrite = { timestamp: 100, playTactic: 'drag_rw_lhs [hd]' }
+    const additionFourRewrite = { timestamp: 400, playTactic: 'drag_rw_lhs [hd]' }
+    const additionThreeRewrite = { timestamp: 300, playTactic: 'drag_rw_rhs [add_succ]' }
+
+    // localStorage returns keys in insertion order, so flattening their arrays
+    // can put the newest current-level action before an older prior-level one.
+    const flattenedByKeyOrder = [additionFourRewrite, additionOneRewrite, additionThreeRewrite]
+    expect(sortPlayLogEntries(flattenedByKeyOrder).at(-1)).to.equal(additionFourRewrite)
   })
 
   it('applies zero-ne-one through player theorem and tactic drags', () => {

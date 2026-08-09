@@ -17,6 +17,7 @@ interface ReadOnlyVisualHarness {
 }
 
 interface PlayLogEntry {
+  timestamp: number
   playTactic: string
   leanTactic: string | null
   succeeded: boolean
@@ -97,6 +98,10 @@ function playerStateSignature(win: DriverWindow) {
   })
 }
 
+export function sortPlayLogEntries<T extends { timestamp: number }>(entries: T[]): T[] {
+  return [...entries].sort((left, right) => left.timestamp - right.timestamp)
+}
+
 function playLog(win: DriverWindow): PlayLogEntry[] {
   const entries: PlayLogEntry[] = []
   for (let index = 0; index < win.localStorage.length; index += 1) {
@@ -109,7 +114,11 @@ function playLog(win: DriverWindow): PlayLogEntry[] {
       // A malformed unrelated persisted log should not hide a new player action.
     }
   }
-  return entries
+  // Each level has its own playlog/* key. localStorage key iteration order is
+  // insertion order, not chronological order across those per-level arrays,
+  // so the newest interaction is not necessarily entries.at(-1). That made a
+  // later level observe an old, successful rewrite from an earlier level.
+  return sortPlayLogEntries(entries)
 }
 
 async function waitForPlayAttempt(
