@@ -180,6 +180,9 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         cy.window().then(win => {
           cy.stub(win, 'open').as('openClassic')
         })
+        cy.get('[data-testid="proof-actions-toggle"]', { timeout: LOAD_TIMEOUT })
+          .should('be.visible')
+          .click()
         cy.contains('button', 'Export to classic mode', { timeout: LOAD_TIMEOUT })
           .scrollIntoView()
           .should('be.visible')

@@ -813,15 +813,20 @@ export class CompletePlaythroughDriver {
   private async transformRule(name: string) {
     const overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
+    const waitForMeasuredDock = () => waitFor('measured rewrite menu', () => {
+      const dock = overlay.querySelector<HTMLElement>('.tr-rule-dock[data-layout-ready="true"]')
+      return dock && getComputedStyle(dock).visibility !== 'hidden' ? dock : null
+    })
     for (const tabName of ['Everything', 'Hypotheses', '+', '*', '^', '\u2264', '012', 'Peano']) {
       const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
         .find(button => button.textContent?.trim() === tabName)
       if (tab && !tab.classList.contains('active')) {
         click(tab)
-        await sleep(35)
       }
+      await waitForMeasuredDock()
       await rewindPages(overlay, 'Previous rule')
       for (let page = 0; page < 100; page += 1) {
+        await waitForMeasuredDock()
         const rule = visible(overlay.querySelectorAll<HTMLElement>(
           `[data-rule-label="${cssEscape(this.resolveName(name))}"], [data-rule-label="${cssEscape(name)}"]`,
         ))[0]
@@ -829,7 +834,6 @@ export class CompletePlaythroughDriver {
         const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
         if (!next || next.disabled) break
         click(next)
-        await sleep(35)
       }
     }
     throw new Error(`Could not find rewrite rule ${name}`)
@@ -844,7 +848,32 @@ export class CompletePlaythroughDriver {
       click(reverse)
       await sleep(30)
     }
-    for (let sideAttempt = 0; sideAttempt < 2; sideAttempt += 1) {
+
+    // Lean's `rw` searches a relation from left to right. Visual mode edits one
+    // side at a time, so explicitly reproduce that search order instead of
+    // inheriting whichever side the preceding player gesture happened to
+    // leave selected. This matters when the same theorem matches both sides:
+    // choosing the right first can make a later rewrite in the same command
+    // impossible even though the original Lean tactic is valid.
+    const requestedSides: Array<'left' | 'right'> = this.preferredRewriteSide
+      ? [this.preferredRewriteSide]
+      : ['left', 'right']
+    let remainingOccurrence = occurrence
+
+    for (const requestedSide of requestedSides) {
+      const staticGroup = overlay.querySelector<HTMLElement>('.tr-static-group')
+      const currentSide = staticGroup?.classList.contains('static-right') ? 'left' : 'right'
+      if (currentSide !== requestedSide) {
+        const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
+        if (!swap) throw new Error('Could not find the transformation side selector')
+        click(swap)
+        await waitFor(`rewrite ${requestedSide} side`, () => {
+          const group = overlay.querySelector<HTMLElement>('.tr-static-group')
+          const selected = group?.classList.contains('static-right') ? 'left' : 'right'
+          return selected === requestedSide ? true : null
+        })
+      }
+
       const card = await this.transformRule(rule.name)
       const session = await beginPointerDrag(card)
       let targets: HTMLElement[] = []
@@ -854,7 +883,7 @@ export class CompletePlaythroughDriver {
         if (targets.length > 0) break
         await sleep(POLL_MS)
       }
-      const targetIndex = occurrence === null ? 0 : occurrence - 1
+      const targetIndex = remainingOccurrence === null ? 0 : remainingOccurrence - 1
       const target = targets[targetIndex]
       if (target) {
         const before = proofSignature(harness(this.win).getProofAudit())
@@ -865,6 +894,14 @@ export class CompletePlaythroughDriver {
         return
       }
       session.cancel()
+
+      // `nth_rewrite` numbers occurrences across both sides of the relation,
+      // not independently within each visual side.
+      if (remainingOccurrence !== null && targets.length > 0) {
+        remainingOccurrence -= targets.length
+        continue
+      }
+
       const expressionNodes = visible(
         overlay.querySelectorAll<HTMLElement>('.tr-expr-wrapper .tr-expression-node'),
       )
@@ -873,11 +910,6 @@ export class CompletePlaythroughDriver {
         const before = proofSignature(harness(this.win).getProofAudit())
         if (await dragChangedProof(this.win, fallbackCard, expressionNode, before)) return
       }
-
-      const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
-      if (!swap || sideAttempt > 0) break
-      click(swap)
-      await sleep(50)
     }
     throw new Error(
       `Rewrite ${rule.name} could not be dragged to a matching expression ` +

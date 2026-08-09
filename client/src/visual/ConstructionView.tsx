@@ -455,7 +455,7 @@ export function ConstructionView({
         {headerSlot}
 
         {/* Back button */}
-        <button className="tr-back-btn" onClick={onClose} disabled={busy}>
+        <button className="tr-back-btn" onClick={() => { if (!busy) onClose() }} aria-disabled={busy}>
           ← Back
         </button>
 
@@ -505,7 +505,8 @@ export function ConstructionView({
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={!canUndo || busy}
+              disabled={!canUndo}
+              aria-disabled={busy || !canUndo}
               className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
               title="Undo last fill"
             >↩</button>
@@ -515,7 +516,8 @@ export function ConstructionView({
           <div className="tr-side-controls">
             <button
               onClick={() => void handleDone()}
-              disabled={!isComplete || busy}
+              disabled={!isComplete}
+              aria-disabled={busy || !isComplete}
               className={`cn-done-btn${isComplete ? ' ready' : ''}${doneError ? ' error' : ''}`}
               title={isComplete ? (isSpecifyMode ? 'Submit specification to Lean' : 'Submit witness to Lean') : 'Fill all slots to continue'}
             >Done ›</button>
@@ -527,8 +529,9 @@ export function ConstructionView({
           <div className="tr-dock-cards cn-dock-cards">
             <button
               className="tr-nav-btn"
-              onClick={() => setCurrentPage(Math.max(0, clampedPage - 1))}
-              disabled={clampedPage === 0 || !hasBricks || busy}
+              onClick={() => { if (!busy) setCurrentPage(Math.max(0, clampedPage - 1)) }}
+              disabled={clampedPage === 0 || !hasBricks}
+              aria-disabled={busy || clampedPage === 0 || !hasBricks}
               aria-label="Previous construction item"
             >‹</button>
 
@@ -544,7 +547,7 @@ export function ConstructionView({
                       const brickSlots = countSlots(brick.make())
                       // net new slots = brickSlots - 1 (we're replacing one slot with the brick)
                       const newTotal = slotCount - 1 + brickSlots
-                      const disabled = slotCount === 0 || newTotal > MAX_SLOTS || busy
+                      const disabled = slotCount === 0 || newTotal > MAX_SLOTS
                       return (
                         <BrickCard
                           key={brick.id}
@@ -568,8 +571,9 @@ export function ConstructionView({
 
             <button
               className="tr-nav-btn"
-              onClick={() => setCurrentPage(Math.min(totalPages - 1, clampedPage + 1))}
-              disabled={clampedPage >= totalPages - 1 || !hasBricks || busy}
+              onClick={() => { if (!busy) setCurrentPage(Math.min(totalPages - 1, clampedPage + 1)) }}
+              disabled={clampedPage >= totalPages - 1 || !hasBricks}
+              aria-disabled={busy || clampedPage >= totalPages - 1 || !hasBricks}
               aria-label="Next construction item"
             >›</button>
           </div>

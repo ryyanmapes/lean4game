@@ -481,6 +481,7 @@
 .visual-page .statement-card.variable-only-tactic {
   --bevel-border-color: var(--glass-border);
   position: relative;
+  border-color: transparent;
   clip-path: polygon(
     0.65rem 0,
     calc(100% - 0.65rem) 0,
@@ -509,10 +510,10 @@
     linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
     linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
     linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) top left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) top right / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) bottom left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) 50%, transparent calc(50% + 0.5px)) bottom right / 0.65rem 0.65rem no-repeat;
+    linear-gradient(135deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1px), transparent calc(50% + 1px)) top left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 1px), var(--bevel-border-color) calc(50% - 1px), var(--bevel-border-color) 50%, transparent 50%) top right / 0.65rem 0.65rem no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1px), transparent calc(50% + 1px)) bottom left / 0.65rem 0.65rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 1px), var(--bevel-border-color) calc(50% - 1px), var(--bevel-border-color) 50%, transparent 50%) bottom right / 0.65rem 0.65rem no-repeat;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,
@@ -916,6 +917,13 @@
 .visual-page .stream-nav-btn:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+/* The octagon overlay draws every edge. Keeping the rectangular native
+   border underneath it double-composites the straight edges, making them
+   brighter and apparently thicker than the single diagonal corner strokes. */
+.visual-page .statement-card.tactic-tray-card.variable-only-tactic {
+  border-color: transparent;
 }
 
 .visual-page .stream-nav-btn.toward-incomplete:not(:disabled) {
@@ -2204,7 +2212,7 @@
   flex-direction: column;
 }
 
-/* Mode toggle + copy button row */
+/* Mode toggle + proof actions menu row */
 .proof-sidebar-header {
   display: flex;
   align-items: center;
@@ -2241,8 +2249,13 @@
   color: var(--visual-sidebar-active-text);
 }
 
-.proof-sidebar-copy-btn {
+.proof-sidebar-actions {
   margin-left: auto;
+  position: relative;
+}
+
+.proof-sidebar-actions-toggle {
+  list-style: none;
   appearance: none;
   border: 1px solid var(--visual-border-subtle);
   border-radius: 6px;
@@ -2256,9 +2269,46 @@
   transition: background 0.15s, color 0.15s;
 }
 
-.proof-sidebar-copy-btn:hover {
+.proof-sidebar-actions-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.proof-sidebar-actions-toggle:hover,
+.proof-sidebar-actions[open] .proof-sidebar-actions-toggle {
   background: var(--visual-glass-bg-hover);
   color: var(--visual-text-secondary);
+}
+
+.proof-sidebar-actions-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 80;
+  width: max-content;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--visual-glass-border);
+  border-radius: 8px;
+  background: var(--visual-surface-solid);
+  box-shadow: 0 10px 28px var(--visual-shadow-panel);
+}
+
+.proof-sidebar-actions-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--visual-text-secondary);
+  text-align: left;
+  font: 600 0.75rem/1.25 var(--font-family), system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.proof-sidebar-actions-menu button:hover {
+  background: var(--visual-glass-bg-hover);
+  color: var(--visual-text-bright);
 }
 
 /* Scrollable steps list */
@@ -2277,29 +2327,6 @@
 .proof-sidebar-steps::-webkit-scrollbar-thumb {
   background: var(--visual-glass-border);
   border-radius: 2px;
-}
-
-.proof-sidebar-footer {
-  flex-shrink: 0;
-  padding: 0.7rem 0.9rem;
-  border-top: 1px solid var(--visual-border-faint);
-}
-
-.proof-sidebar-classic-btn {
-  width: 100%;
-  appearance: none;
-  border: 1px solid var(--visual-glass-border);
-  border-radius: 7px;
-  padding: 0.55rem 0.7rem;
-  background: var(--visual-glass-bg);
-  color: var(--visual-text-secondary);
-  font: 700 0.75rem/1.25 var(--font-family), system-ui, sans-serif;
-  cursor: pointer;
-}
-
-.proof-sidebar-classic-btn:hover {
-  background: var(--visual-glass-bg-hover);
-  color: var(--visual-text-bright);
 }
 
 .proof-sidebar-empty {

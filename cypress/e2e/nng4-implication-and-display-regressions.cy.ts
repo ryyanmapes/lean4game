@@ -5,13 +5,19 @@ import {
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = 600000
+const requestedRegression = String(Cypress.env('VISUAL_REGRESSION') ?? '')
 
 interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
   getProofAudit(): { completed: boolean; processing: boolean }
 }
 
-type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
+type HarnessWindow = Cypress.AUTWindow & {
+  __visualTestHarness?: VisualHarness
+  __visualTransientDisabledButtons?: string[]
+  __visualUnmeasuredDockWasVisible?: boolean
+  __visualStabilityObserver?: MutationObserver
+}
 type PlayerGesture = string | { rewrite: string; side: 'left' | 'right' }
 
 function visualHarness() {
@@ -37,6 +43,41 @@ function performPlayerGestures(commands: PlayerGesture[]) {
   })
 }
 
+function observeTransformStability(win: Cypress.AUTWindow) {
+  const observedWindow = win as HarnessWindow
+  observedWindow.__visualTransientDisabledButtons = []
+  observedWindow.__visualUnmeasuredDockWasVisible = false
+  observedWindow.__visualStabilityObserver?.disconnect()
+
+  const inspectDock = () => {
+    for (const dock of win.document.querySelectorAll<HTMLElement>('.tr-transformation-overlay .tr-rule-dock')) {
+      if (getComputedStyle(dock).visibility !== 'hidden' && dock.dataset.layoutReady !== 'true') {
+        observedWindow.__visualUnmeasuredDockWasVisible = true
+      }
+    }
+  }
+  const observer = new win.MutationObserver(mutations => {
+    inspectDock()
+    for (const mutation of mutations) {
+      if (mutation.type !== 'attributes' || mutation.attributeName !== 'disabled') continue
+      const button = mutation.target
+      if (!(button instanceof win.HTMLButtonElement) || !button.disabled) continue
+      if (!button.closest('.tr-overlay') || button.getAttribute('aria-disabled') !== 'true') continue
+      observedWindow.__visualTransientDisabledButtons?.push(
+        button.getAttribute('aria-label') ?? button.title ?? button.className,
+      )
+    }
+  })
+  observer.observe(win.document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['disabled', 'style', 'data-layout-ready'],
+  })
+  observedWindow.__visualStabilityObserver = observer
+  inspectDock()
+}
+
 function playImplicationChain(sourceType: string, targetType: string) {
   cy.visit(`${mountPath}#/g/local/VisualTest/world/Prototype/level/1/visual`)
   cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
@@ -56,7 +97,8 @@ function playImplicationChain(sourceType: string, targetType: string) {
 }
 
 describe('NNG4 implication and definition display regressions', () => {
-  beforeEach(() => {
+  beforeEach(function () {
+    if (requestedRegression && !this.currentTest.title.includes(requestedRegression)) this.skip()
     cy.on('uncaught:exception', () => false)
     cy.clearCookies()
     cy.clearLocalStorage()
@@ -98,13 +140,23 @@ describe('NNG4 implication and definition display regressions', () => {
       .should('be.visible')
       .and('contain.text', '∃')
 
-    cy.get('[data-testid="hyp-card"].variable-card').first().should($card => {
+  })
+
+  it('renders the induction octagon edges with one color and one-pixel thickness', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`)
+    cy.get('[data-tactic-name="induction"]', { timeout: LOAD_TIMEOUT }).should($card => {
       const card = $card[0]!
-      const edgeWidth = getComputedStyle(card).borderTopWidth
-      const bevel = getComputedStyle(card, '::after').backgroundImage
-      expect(edgeWidth, 'normal edge width').to.equal('1px')
-      expect(bevel, 'diagonal bevel uses the same one-pixel band').to.contain('0.5px')
-      expect(bevel, 'old thicker diagonal band is absent').not.to.contain('0.85px')
+      const cardStyle = getComputedStyle(card)
+      const bevelStyle = getComputedStyle(card, '::after')
+      const bevel = bevelStyle.backgroundImage
+      const dangerBorder = cardStyle.getPropertyValue('--visual-danger-border').trim()
+
+      expect(cardStyle.borderTopWidth, 'native border retains one-pixel layout').to.equal('1px')
+      expect(cardStyle.borderTopColor, 'native border does not double the straight edges')
+        .to.equal('rgba(0, 0, 0, 0)')
+      expect(bevel, 'all octagon edges use the tactic border color').to.contain(dangerBorder)
+      expect(bevel, 'diagonal corner bands are a solid one pixel inside the clip').to.contain('calc(50% + 1px)')
+      expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
     })
   })
 
@@ -112,15 +164,47 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
-    // After `use 0`, select the left-hand side of `x = x + 0` with the visual
-    // arrow control, then drag reverse add_zero directly onto that displayed
-    // `x`, as a player does, then click the returned reflexive goal. If the
-    // relay retained stale goal metadata, Lean's "no goals" response confirms
-    // that the preceding rewrite already completed the proof.
-    performPlayerGestures([
-      'use 0',
-      { rewrite: 'rw [\u2190 add_zero]', side: 'left' },
-      'rfl',
-    ])
+    // Select the left-hand side of `x = x + 0` with the visual arrow control,
+    // then drag reverse add_zero directly onto the displayed `x`, as a player
+    // does. Lean's `rw` tactic may close the resulting reflexive goal itself,
+    // but visual mode must still show that intermediate goal and wait for the
+    // player's explicit goal click.
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.perform('use 0')
+      observeTransformStability(win)
+      await player.performRewriteOnSide('rw [\u2190 add_zero]', 'left')
+    })
+
+    cy.window().should(win => {
+      const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
+      expect(audit?.processing, 'rewrite has finished').to.equal(false)
+      expect(audit?.completed, 'rewrite alone does not complete the visual level').to.equal(false)
+      expect(
+        (win as HarnessWindow).__visualUnmeasuredDockWasVisible,
+        'rewrite dock is hidden until its final pagination and height are measured',
+      ).to.equal(false)
+      expect(
+        (win as HarnessWindow).__visualTransientDisabledButtons,
+        'processing does not visually disable otherwise-available buttons',
+      ).to.deep.equal([])
+    })
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('not.have.class', 'solved')
+
+    performPlayerGestures(['rfl'])
+
+    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar-copy-btn').should('not.exist')
+    cy.get('.proof-sidebar-classic-btn').should('not.exist')
+    cy.get('[data-testid="proof-actions-toggle"]').click()
+    cy.get('[data-testid="proof-actions-menu"]').should('be.visible')
+    cy.get('[data-testid="proof-action-copy"]').should('be.visible').click()
+    cy.get('[data-testid="proof-actions-menu"]').should('not.be.visible')
+    cy.get('[data-testid="proof-actions-toggle"]').click()
+    cy.get('[data-testid="proof-action-export-classic"]')
+      .should('be.visible')
+      .and('contain.text', 'Export to classic mode')
   })
 })

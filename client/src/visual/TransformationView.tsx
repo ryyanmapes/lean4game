@@ -244,6 +244,8 @@ export function TransformationView({
   )
   const [cardWidthsByTab, setCardWidthsByTab] = useState<Record<string, Record<string, number>>>({})
   const [ruleDockHeight, setRuleDockHeight] = useState(0)
+  const [measuredLayoutKey, setMeasuredLayoutKey] = useState('')
+  const [measuredDockLayoutKey, setMeasuredDockLayoutKey] = useState('')
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const exprWrapperRef = useRef<HTMLDivElement>(null)
@@ -329,13 +331,29 @@ export function TransformationView({
     return allRules.filter(r => r.dragId.startsWith('thm_') && r.category === selectedTab)
   }, [allRules, selectedTab])
 
+  const ruleDockLayoutKey = useMemo(() => JSON.stringify({
+    selectedTab,
+    isReverse,
+    pageWidth: Math.round(pageWidth),
+    rules: tabRules.map(rule => [
+      rule.dragId,
+      rule.label,
+      rule.lhsStr,
+      rule.rhsStr,
+      (rule as EqualityHyp & { forallFooter?: string }).forallFooter ?? '',
+    ]),
+  }), [isReverse, pageWidth, selectedTab, tabRules])
+
   // Track cards independently so each page can hold as many of its own cards
   // as fit, rather than inheriting the width of the tab's widest theorem.
   useLayoutEffect(() => {
     const el = pageRef.current
     if (!el) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
-    if (!cards.length) return
+    if (!cards.length) {
+      setMeasuredLayoutKey(ruleDockLayoutKey)
+      return
+    }
     setCardWidthsByTab(prev => {
       const previous = prev[selectedTab] ?? {}
       const next = { ...previous }
@@ -352,15 +370,34 @@ export function TransformationView({
       if (!changed) return prev
       return { ...prev, [selectedTab]: next }
     })
-  }, [tabRules, selectedTab, isReverse, pageWidth, pageIndexByTab])
+    setMeasuredLayoutKey(ruleDockLayoutKey)
+  }, [ruleDockLayoutKey, selectedTab])
+
+  const GAP_PX = 12
+  const hasRules = tabRules.length > 0
+  const measuredWidths = cardWidthsByTab[selectedTab] ?? {}
+  const hasMeasurements = measuredLayoutKey === ruleDockLayoutKey &&
+    tabRules.every(rule => measuredWidths[rule.dragId] > 0)
+  const pages = hasMeasurements
+    ? packAdaptivePages(tabRules.map(rule => measuredWidths[rule.dragId] ?? pageWidth), pageWidth, GAP_PX)
+    : [{ start: 0, end: tabRules.length }]
+  const desiredPage = pageIndexByTab[selectedTab] ?? 0
+  const totalPages = pages.length
+  const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
+  const pageRange = pages[clampedPage] ?? { start: 0, end: 0 }
+  const pageItems = tabRules.slice(pageRange.start, pageRange.end)
+  const dockLayoutKey = `${ruleDockLayoutKey}:${clampedPage}:${pageRange.start}:${pageRange.end}`
+  const layoutReady = hasMeasurements && measuredDockLayoutKey === dockLayoutKey && ruleDockHeight > 0
 
   useLayoutEffect(() => {
+    if (!hasMeasurements) return
     const dock = ruleDockRef.current
     if (!dock) return
 
     const updateHeight = () => {
       const nextHeight = dock.offsetHeight
       setRuleDockHeight(prev => (Math.abs(prev - nextHeight) <= 0.5 ? prev : nextHeight))
+      setMeasuredDockLayoutKey(dockLayoutKey)
     }
 
     updateHeight()
@@ -370,20 +407,8 @@ export function TransformationView({
     const observer = new ResizeObserver(() => updateHeight())
     observer.observe(dock)
     return () => observer.disconnect()
-  }, [selectedTab, tabRules.length, isProcessing])
+  }, [dockLayoutKey, hasMeasurements])
 
-  const GAP_PX = 12
-  const hasRules = tabRules.length > 0
-  const measuredWidths = cardWidthsByTab[selectedTab] ?? {}
-  const hasMeasurements = tabRules.some(rule => measuredWidths[rule.dragId] > 0)
-  const pages = hasMeasurements
-    ? packAdaptivePages(tabRules.map(rule => measuredWidths[rule.dragId] ?? pageWidth), pageWidth, GAP_PX)
-    : [{ start: 0, end: tabRules.length }]
-  const desiredPage = pageIndexByTab[selectedTab] ?? 0
-  const totalPages = pages.length
-  const clampedPage = Math.min(Math.max(0, desiredPage), totalPages - 1)
-  const pageRange = pages[clampedPage] ?? { start: 0, end: 0 }
-  const pageItems = tabRules.slice(pageRange.start, pageRange.end)
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
     totalPages,
@@ -799,6 +824,7 @@ export function TransformationView({
   }
 
   const handleUndo = async () => {
+    if (isProcessing) return
     setIsProcessing(true)
     const success = await onUndo()
     setIsProcessing(false)
@@ -812,6 +838,7 @@ export function TransformationView({
   }
 
   const handleSwap = () => {
+    if (isProcessing) return
     onWorkingSideChange(workingSide === 'right' ? 'left' : 'right')
     setHistory([])
   }
@@ -834,7 +861,7 @@ export function TransformationView({
         onDragCancel={releaseSuppressedRuleClick}
       >
         {/* Back button */}
-        <button ref={backButtonRef} className="tr-back-btn" onClick={onClose} disabled={isProcessing}>
+        <button ref={backButtonRef} className="tr-back-btn" onClick={() => { if (!isProcessing) onClose() }} aria-disabled={isProcessing}>
           ← Back
         </button>
 
@@ -854,7 +881,7 @@ export function TransformationView({
             <button
               className="tr-swap-btn"
               onClick={handleSwap}
-              disabled={isProcessing}
+              aria-disabled={isProcessing}
               title="Edit this side instead"
             >{workingSide === 'left' ? '→' : '←'}</button>
           </div>
@@ -895,7 +922,8 @@ export function TransformationView({
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={!(canUndo ?? rewriteStepCount > 0) || isProcessing}
+              disabled={!(canUndo ?? rewriteStepCount > 0)}
+              aria-disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
               title="Undo"
             >↩</button>
@@ -905,8 +933,8 @@ export function TransformationView({
           <div className="tr-side-controls">
             <button
               ref={reverseButtonRef}
-              onClick={() => onIsReverseChange(!isReverse)}
-              disabled={isProcessing}
+              onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
+              aria-disabled={isProcessing}
               className={`tr-ctrl-btn${isReverse ? ' active-reverse' : ''}`}
               title={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
             >↕</button>
@@ -918,14 +946,18 @@ export function TransformationView({
         <div
           className="tr-rule-dock"
           ref={ruleDockRef}
-          onContextMenu={e => { e.preventDefault(); onIsReverseChange(!isReverse) }}
+          data-layout-ready={layoutReady ? 'true' : 'false'}
+          aria-busy={!layoutReady}
+          style={{ visibility: layoutReady ? 'visible' : 'hidden' }}
+          onContextMenu={e => { e.preventDefault(); if (!isProcessing) onIsReverseChange(!isReverse) }}
         >
           {/* Cards row */}
           <div className="tr-dock-cards">
             <button
               className={`tr-nav-btn${emphOnPrevPage ? ' visual-emphasize-btn' : ''}`}
-              onClick={() => { onPageIndexChange(selectedTab, Math.max(0, clampedPage - 1)); setHoveredId(null) }}
-              disabled={clampedPage === 0 || !hasRules || isProcessing}
+              onClick={() => { if (isProcessing) return; onPageIndexChange(selectedTab, Math.max(0, clampedPage - 1)); setHoveredId(null) }}
+              disabled={clampedPage === 0 || !hasRules}
+              aria-disabled={isProcessing || clampedPage === 0 || !hasRules}
               aria-label="Previous rule"
             >‹</button>
 
@@ -968,8 +1000,9 @@ export function TransformationView({
 
             <button
               className={`tr-nav-btn${emphOnNextPage ? ' visual-emphasize-btn' : ''}`}
-              onClick={() => { onPageIndexChange(selectedTab, Math.min(totalPages - 1, clampedPage + 1)); setHoveredId(null) }}
-              disabled={clampedPage >= totalPages - 1 || !hasRules || isProcessing}
+              onClick={() => { if (isProcessing) return; onPageIndexChange(selectedTab, Math.min(totalPages - 1, clampedPage + 1)); setHoveredId(null) }}
+              disabled={clampedPage >= totalPages - 1 || !hasRules}
+              aria-disabled={isProcessing || clampedPage >= totalPages - 1 || !hasRules}
               aria-label="Next rule"
             >›</button>
           </div>
@@ -981,7 +1014,8 @@ export function TransformationView({
                 <button
                   key={tab.id}
                   className={`tr-tab-btn${selectedTab === tab.id ? ' active' : ''}`}
-                  onClick={() => { onSelectedTabChange(tab.id); setHoveredId(null) }}
+                  onClick={() => { if (isProcessing) return; onSelectedTabChange(tab.id); setHoveredId(null) }}
+                  aria-disabled={isProcessing}
                 >
                   {tab.label}
                 </button>

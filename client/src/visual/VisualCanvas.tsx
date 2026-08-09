@@ -1731,6 +1731,7 @@ export function VisualCanvas({
   const [sideViewMode, setSideViewMode] = useState<'lean' | 'play'>(() => {
     try { return (localStorage.getItem('visual-proof-view-mode') as 'lean' | 'play') || 'lean' } catch { return 'lean' }
   })
+  const proofActionsMenuRef = useRef<HTMLDetailsElement>(null)
   const [goalChoiceMenu, setGoalChoiceMenu] = useState<GoalChoiceMenu | null>(null)
   const [goalChoiceMenuViewportPos, setGoalChoiceMenuViewportPos] = useState<{ x: number; y: number } | null>(null)
   const [reductionTooltip, setReductionTooltip] = useState<ReductionTooltip | null>(null)
@@ -3476,10 +3477,11 @@ export function VisualCanvas({
       : {
           nextTree: proofTree,
           nextActiveId: activeStreamId,
-        focusedStreams: [] as GoalStream[],
-        nextCanvas: mergedCanvas,
-      }
+          focusedStreams: [] as GoalStream[],
+          nextCanvas: mergedCanvas,
+        }
     let nextStream = focusedStreams[0] ?? null
+    let preservedAutoCompletedReflexiveGoal = false
     if (
       transformTarget?.kind === 'hyp' &&
       nextStream === null &&
@@ -3501,11 +3503,15 @@ export function VisualCanvas({
     if (
       transformTarget?.kind === 'goal' &&
       nextStream === null &&
-      !leanCanvas.completed &&
       focusedStream &&
-      expectedGoal
+      expectedGoal &&
+      (
+        !leanCanvas.completed ||
+        reflexiveGoalClickAction(expectedGoal) !== undefined
+      )
     ) {
       const syntheticStream = synthesizeGoalRewriteContinuation(focusedStream, expectedGoal)
+      preservedAutoCompletedReflexiveGoal = leanCanvas.completed
       nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
       nextActiveId = syntheticStream.id
       focusedStreams = [syntheticStream]
@@ -3622,7 +3628,7 @@ export function VisualCanvas({
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
 
-    if (leanCanvas.completed) {
+    if (leanCanvas.completed && !preservedAutoCompletedReflexiveGoal) {
       const completionCanvas =
         transformTarget?.kind === 'goal' && focusedStream && expectedGoal
           ? {
@@ -4733,11 +4739,36 @@ export function VisualCanvas({
           className={`proof-sidebar-mode-btn${sideViewMode === 'play' ? ' active' : ''}`}
           onClick={() => setProofViewMode('play')}
         >Interactive</button>
-        <button
-          className="proof-sidebar-copy-btn"
-          onClick={copyDisplayedProof}
-          title="Copy to clipboard"
-        >Copy</button>
+        <details className="proof-sidebar-actions" ref={proofActionsMenuRef}>
+          <summary
+            className="proof-sidebar-actions-toggle"
+            data-testid="proof-actions-toggle"
+            aria-label="Proof actions"
+            title="Proof actions"
+          >{'\u2630'}</summary>
+          <div className="proof-sidebar-actions-menu" data-testid="proof-actions-menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="proof-action-copy"
+              onClick={() => {
+                copyDisplayedProof()
+                if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
+              }}
+            >Copy</button>
+            {onOpenClassic && (
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="proof-action-export-classic"
+                onClick={() => {
+                  if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
+                  onOpenClassic(buildStructuredLeanProof(proofSteps))
+                }}
+              >Export to classic mode</button>
+            )}
+          </div>
+        </details>
       </div>
     )
   }
@@ -4755,21 +4786,6 @@ export function VisualCanvas({
             </div>
           )
         })}
-      </div>
-    )
-  }
-
-  function renderProofFooter() {
-    if (!onOpenClassic) return null
-    return (
-      <div className="proof-sidebar-footer">
-        <button
-          type="button"
-          className="proof-sidebar-classic-btn"
-          onClick={() => onOpenClassic(buildStructuredLeanProof(proofSteps))}
-        >
-          Export to classic mode
-        </button>
       </div>
     )
   }
@@ -5340,7 +5356,7 @@ export function VisualCanvas({
             >
               <button
                 onClick={() => void undoLastStep()}
-                disabled={isProcessing}
+                aria-disabled={isProcessing}
                 className="tr-ctrl-btn active-undo"
                 title="Undo"
               >↩</button>
@@ -5380,7 +5396,6 @@ export function VisualCanvas({
               <div className="mobile-side-page-body proof-page-body">
                 {renderProofToolbar()}
                 {renderProofStepList()}
-                {renderProofFooter()}
               </div>
             </section>
           )}
@@ -5448,7 +5463,6 @@ export function VisualCanvas({
         <div className="proof-sidebar-inner">
           {renderProofToolbar()}
           {renderProofStepList()}
-          {renderProofFooter()}
         </div>
       </div>
       )}
