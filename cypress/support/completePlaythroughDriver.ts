@@ -176,17 +176,31 @@ async function dragChangedProof(
 ) {
   const previousAttempts = playLog(win).length
   await drag(source, target)
-  const deadline = Date.now() + 600
+  const deadline = Date.now() + 1_000
   let attempt: PlayLogEntry | undefined
+  let actionStarted = false
   while (Date.now() < deadline) {
     const entries = playLog(win)
     if (entries.length > previousAttempts) {
       attempt = entries.at(-1)
       break
     }
+    // A matching expression starts Lean immediately, but the release WASM
+    // worker can take several seconds to append its play-log result. Treat
+    // the processing state as proof that this candidate accepted the drop;
+    // non-matching expression nodes never enter that state.
+    if (harness(win).getProofAudit().processing || win.document.querySelector('.tr-processing')) {
+      actionStarted = true
+      break
+    }
     await sleep(POLL_MS)
   }
-  if (!attempt) return false
+  if (!attempt && !actionStarted) return false
+  attempt ??= await waitForPlayAttempt(
+    win,
+    previousAttempts,
+    'fallback rewrite drag after Lean accepted the expression target',
+  )
   if (!attempt.succeeded) throw new Error(`Player rewrite was rejected: ${attempt.playTactic}`)
   await waitForProofChange(win, previous, 'dragged interaction to update the proof')
   return true
