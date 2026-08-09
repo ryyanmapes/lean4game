@@ -561,7 +561,7 @@ private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array E
   -- Goals produced from reducible definitions (notably MyNat.LE after `use`)
   -- can display as an equality while retaining a wrapper at the expression
   -- head. Normalize that wrapper before classifying the relation.
-  let target ← withReducible (whnf target)
+  let target ← withTransparency .all (whnf target)
   let target := target.consumeMData
   let fn := target.getAppFn
   let args := target.getAppArgs
