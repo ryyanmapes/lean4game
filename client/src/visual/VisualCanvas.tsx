@@ -3493,10 +3493,16 @@ export function VisualCanvas({
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
       nextStream = syntheticStream
     }
+    // A scoped `conv` rewrite records the exact expression the player chose.
+    // If Lean reports that command complete, there is no live metavariable for
+    // a synthetic reflexive card to act on, so preserve Lean's completion.
+    const rewriteUsesExactSelectedTarget =
+      isReverse && transformTarget?.kind === 'goal' && command.includes('conv =>')
     const shouldKeepReflexiveGoalUntilClick =
       transformTarget?.kind === 'goal' &&
       nextStream === null &&
       leanCanvas.completed &&
+      !rewriteUsesExactSelectedTarget &&
       focusedStream !== null &&
       expectedGoal !== undefined &&
       expectedGoal.relation === '=' &&
