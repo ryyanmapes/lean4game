@@ -20,7 +20,7 @@ function visualHarness() {
 }
 
 function performPlayerGestures(commands: PlayerGesture[]) {
-  cy.window({ timeout: LOAD_TIMEOUT }).then(async win => {
+  cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
     const player = new CompletePlaythroughDriver(win)
     for (const command of commands) {
       if (typeof command === 'string') await player.perform(command)

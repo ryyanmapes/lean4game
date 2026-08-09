@@ -8,6 +8,7 @@ interface ProofAudit {
 interface StreamSnapshot {
   streamId: string
   hypTypes: Record<string, string>
+  currentStreamIsCompleted: boolean
 }
 
 interface ReadOnlyVisualHarness {
@@ -23,6 +24,7 @@ interface PlayLogEntry {
 
 type DriverWindow = Cypress.AUTWindow & {
   __visualTestHarness?: ReadOnlyVisualHarness
+  __lastLeanProofError?: string
 }
 
 const POLL_MS = 25
@@ -31,13 +33,18 @@ const ACTION_TIMEOUT = Number(
     ? Cypress.env('VISUAL_TIMEOUT') ?? 600_000
     : (globalThis as typeof globalThis & { __playerGestureTimeout?: number }).__playerGestureTimeout ?? 600_000,
 )
+const INTERACTION_TIMEOUT = Math.min(ACTION_TIMEOUT, 60_000)
 
 function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-async function waitFor<T>(description: string, read: () => T | null | undefined | false): Promise<T> {
-  const deadline = Date.now() + ACTION_TIMEOUT
+async function waitFor<T>(
+  description: string,
+  read: () => T | null | undefined | false,
+  timeout = ACTION_TIMEOUT,
+): Promise<T> {
+  const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
     const value = read()
     if (value) return value
@@ -70,6 +77,26 @@ function proofSignature(audit: ProofAudit) {
   })
 }
 
+function playerStateSignature(win: DriverWindow) {
+  let snapshot: StreamSnapshot | null = null
+  try {
+    snapshot = harness(win).getCurrentStreamSnapshot()
+  } catch {
+    // Completing one branch can intentionally leave no interactive stream
+    // selected until the player chooses another leaf in the proof graph.
+  }
+  const goal = currentGoal(win)
+  return JSON.stringify({
+    proof: proofSignature(harness(win).getProofAudit()),
+    streamId: snapshot?.streamId ?? null,
+    currentStreamIsCompleted: snapshot?.currentStreamIsCompleted ?? null,
+    hypTypes: snapshot?.hypTypes ?? null,
+    goalId: goal?.dataset.streamId ?? goal?.id ?? null,
+    goalText: goal?.dataset.goalText ?? goal?.textContent ?? null,
+    goalSolved: goal?.classList.contains('solved') ?? false,
+  })
+}
+
 function playLog(win: DriverWindow): PlayLogEntry[] {
   const entries: PlayLogEntry[] = []
   for (let index = 0; index < win.localStorage.length; index += 1) {
@@ -89,9 +116,13 @@ async function waitForPlayAttempt(win: DriverWindow, previousCount: number, desc
   const entry = await waitFor(description, () => {
     const entries = playLog(win)
     return entries.length > previousCount ? entries.at(-1) : null
-  })
+  }, INTERACTION_TIMEOUT)
   if (!entry.succeeded) {
-    const leanError = win.sessionStorage.getItem('visual-last-lean-error')?.trim()
+    const leanError = (
+      win.sessionStorage.getItem('visual-last-lean-error')
+      ?? win.__lastLeanProofError
+      ?? ''
+    ).trim()
     throw new Error(
       `Player interaction was rejected: ${entry.playTactic}` +
       (leanError ? `\nLean: ${leanError}` : ''),
@@ -104,7 +135,7 @@ async function waitForProofChange(win: DriverWindow, previous: string, descripti
   await waitFor(description, () => {
     const audit = harness(win).getProofAudit()
     return !audit.processing && proofSignature(audit) !== previous ? audit : null
-  })
+  }, INTERACTION_TIMEOUT)
 }
 
 async function dragChangedProof(
@@ -143,7 +174,11 @@ function click(element: HTMLElement) {
   element.scrollIntoView({ block: 'center', inline: 'center' })
   element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
   element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }))
-  element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  // Native activation matters for buttons (including React-controlled tabs).
+  // SVG proof-tree nodes do not expose HTMLElement.click(), so retain the
+  // explicit mouse event as a fallback for those player controls.
+  if (typeof element.click === 'function') element.click()
+  else element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
 }
 
 function doubleClick(element: HTMLElement) {
@@ -382,23 +417,48 @@ export class CompletePlaythroughDriver {
   }
 
   private async navigateFromCompletedBranch() {
-    const current = this.win.document.querySelector<HTMLElement>(
-      '[data-testid="proof-stream-leaf"][data-current="true"]',
-    )
-    if (current?.dataset.completed !== 'true') return
-    const next = visible(this.win.document.querySelectorAll<HTMLElement>(
+    let before: StreamSnapshot | null = null
+    try {
+      before = harness(this.win).getCurrentStreamSnapshot()
+    } catch {
+      // A solved branch may deliberately leave the canvas without a current
+      // stream until the player selects an incomplete graph leaf.
+    }
+    if (before && !before.currentStreamIsCompleted && currentGoal(this.win)) return
+
+    const previousStreamId = before?.streamId ?? null
+    const towardIncomplete = visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+      '[data-testid^="stream-nav-"].toward-incomplete:not(:disabled)',
+    ))[0]
+    const nextLeaf = visible(this.win.document.querySelectorAll<HTMLElement>(
       '[data-testid="proof-stream-leaf"][data-completed="false"]',
     ))[0]
-    if (!next) return
-    const streamId = next.dataset.streamId
+    const next = towardIncomplete ?? nextLeaf
+    if (!next) {
+      if (currentGoal(this.win)) return
+      throw new Error(`Completed branch has no visible route to an incomplete stream (${JSON.stringify({
+        previousStreamId,
+        leaves: Array.from(this.win.document.querySelectorAll<HTMLElement>('[data-testid="proof-stream-leaf"]'))
+          .map(leaf => ({
+            streamId: leaf.dataset.streamId,
+            current: leaf.dataset.current,
+            completed: leaf.dataset.completed,
+          })),
+      })})`)
+    }
+    const streamId = nextLeaf?.dataset.streamId
     click(next)
     await waitFor('the selected incomplete proof branch to render', () => {
-      if (next.dataset.current !== 'true') return null
-      if (!streamId) return currentGoal(this.win)
-      return visible(this.win.document.querySelectorAll<HTMLElement>(
-        `[data-testid="goal-card"][data-stream-id="${cssEscape(streamId)}"]`,
-      ))[0] ?? null
-    })
+      let snapshot: StreamSnapshot
+      try {
+        snapshot = harness(this.win).getCurrentStreamSnapshot()
+      } catch {
+        return null
+      }
+      if (previousStreamId && snapshot.streamId === previousStreamId) return null
+      if (streamId && snapshot.streamId !== streamId) return null
+      return currentGoal(this.win)
+    }, 15_000)
     if (this.pendingBranchAliases.length > 0) {
       const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {
@@ -428,8 +488,14 @@ export class CompletePlaythroughDriver {
       .find(button => button.textContent?.trim() === tab)
     if (tabButton && !tabButton.classList.contains('active')) {
       click(tabButton)
-      await sleep(40)
+      await waitFor(`${tab} tray tab to activate`, () =>
+        tabButton.classList.contains('active') ? tabButton : null, 5_000)
     }
+    // The release build fetches theorem documentation lazily. Wait for the
+    // selected tray to finish its first render instead of racing it.
+    await waitFor(`${tab} tray contents`, () =>
+      visible(dock.querySelectorAll<HTMLElement>('.tr-tactic-card, .tr-theorem-card, [data-tactic-name], [data-theorem-name]'))[0]
+      ?? (dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')?.disabled ? null : dock), 10_000)
     await rewindPages(dock, 'Previous')
     for (let page = 0; page < 100; page += 1) {
       const card = visible(dock.querySelectorAll<HTMLElement>(selector))[0]
@@ -494,11 +560,14 @@ export class CompletePlaythroughDriver {
 
   private async clickGoal() {
     const goal = await waitFor('current goal', () => currentGoal(this.win))
-    const before = proofSignature(harness(this.win).getProofAudit())
+    const before = playerStateSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(goal)
     await waitForPlayAttempt(this.win, previousAttempts, 'goal click player action')
-    await waitForProofChange(this.win, before, 'goal click to update the proof')
+    await waitFor('goal click to update the visible player state', () => {
+      const audit = harness(this.win).getProofAudit()
+      return !audit.processing && playerStateSignature(this.win) !== before ? true : null
+    }, INTERACTION_TIMEOUT)
   }
 
   private async cases(command: string) {
@@ -818,7 +887,11 @@ export class CompletePlaythroughDriver {
   }
 
   async perform(command: string) {
-    await waitFor('visual proof to become idle', () => !harness(this.win).getProofAudit().processing)
+    await waitFor(
+      `visual proof to become idle before ${command}`,
+      () => !harness(this.win).getProofAudit().processing,
+      INTERACTION_TIMEOUT,
+    )
     if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
     const normalized = command.trim()

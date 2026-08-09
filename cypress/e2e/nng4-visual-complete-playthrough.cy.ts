@@ -165,7 +165,11 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         expect(audit.completed, `${solution.world} ${solution.level} completes visually`).to.equal(true)
         expect(audit.coreLines, 'Core proof log is populated').not.to.deep.equal([])
         expect(audit.interactiveLines, 'Interactive proof log is populated').not.to.deep.equal([])
-        if (solution !== playableSolutions.at(-1)) return
+        // Focused diagnostic runs must not turn their selected level into the
+        // synthetic "last level" and exercise an unrelated classic export.
+        // The unfiltered 66-level playthrough still validates the handoff on
+        // the actual final playable level.
+        if (solution !== allPlayableSolutions.at(-1)) return
 
         cy.get('.proof-sidebar', { timeout: LOAD_TIMEOUT }).then(sidebar => {
           if (!sidebar.hasClass('open')) {

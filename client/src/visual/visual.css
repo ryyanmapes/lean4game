@@ -956,6 +956,14 @@
   align-items: center;
   gap: 0.4rem;
   flex: 0 0 auto;
+  /* The compact graph can overlap a goal at shorter desktop heights. Its
+     empty glass/background area must not make that goal unclickable. */
+  pointer-events: none;
+}
+
+.visual-page .proof-tree-diagram svg g[data-stream-id],
+.visual-page .stream-nav-btn {
+  pointer-events: auto;
 }
 
 .visual-page .proof-graph-info-stack {

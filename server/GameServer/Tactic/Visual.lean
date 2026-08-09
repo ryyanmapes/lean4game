@@ -604,11 +604,13 @@ private partial def focusedRewriteExpr
       let thmType ← withReducible (whnf (← inferType thm))
       if let some (_, leftExpr, rightExpr) ← matchEq? thmType then
         if ← isDefEq e rightExpr then
+          Term.synthesizeSyntheticMVarsNoPostponing
           let eNew ← instantiateMVars leftExpr
           let thm ← instantiateMVars thm
-          if !eNew.hasMVar && !thm.hasMVar then
-            let eqProof ← mkAppM ``Eq.symm #[thm]
-            return { eNew, eqProof, mvarIds := [] }
+          if eNew.hasMVar || thm.hasMVar then
+            throwErrorAt h "drag_rw: reverse rewrite has parameters that are not determined by the selected expression"
+          let eqProof ← mkAppM ``Eq.symm #[thm]
+          return { eNew, eqProof, mvarIds := [] }
     let r ← rewriteAtExpr mvarId e thm h.raw symm
     pure { eNew := r.eNew, eqProof := r.eqProof, mvarIds := r.mvarIds }
   | k :: rest =>

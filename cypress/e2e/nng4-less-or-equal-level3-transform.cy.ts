@@ -122,8 +122,7 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
       expectReflexiveEquality(goalText)
     })
 
-    visualHarness().then(harness => harness.clickGoal())
-    cy.wait(900)
+    goalCard().click()
     cy.window({ timeout: 60000 }).should(win => {
       const raw = win.localStorage.getItem('playlog/LessOrEqual/3')
       const entries = raw ? JSON.parse(raw) : []
