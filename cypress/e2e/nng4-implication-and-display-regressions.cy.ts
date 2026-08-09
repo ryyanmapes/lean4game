@@ -34,6 +34,24 @@ function performPlayerGestures(commands: PlayerGesture[]) {
   })
 }
 
+function playImplicationChain(sourceType: string, targetType: string) {
+  cy.visit(`${mountPath}#/g/local/VisualTest/world/Prototype/level/1/visual`)
+  cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+  cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+    const player = new CompletePlaythroughDriver(win)
+    await player.perform('intro premise')
+    await player.perform('intro implication')
+    await player.combineVisiblePropositions(sourceType, targetType, 'Q')
+    await player.solveGoalWithVisibleProposition('Q')
+  })
+  cy.window().should(win => {
+    const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
+    expect(audit?.processing, 'visual proof is idle').to.equal(false)
+    expect(audit?.completed, 'visual proof is complete').to.equal(true)
+  })
+}
+
 describe('NNG4 implication and definition display regressions', () => {
   beforeEach(() => {
     cy.on('uncaught:exception', () => false)
@@ -47,6 +65,15 @@ describe('NNG4 implication and definition display regressions', () => {
 
     performPlayerGestures(['symm', 'exact zero_ne_one'])
   })
+
+  for (const [description, sourceType, targetType] of [
+    ['premise onto implication', 'P', 'P → Q'],
+    ['implication onto premise', 'P → Q', 'P'],
+  ] as const) {
+    it(`applies generic A and A-to-B cards by dragging ${description}`, () => {
+      playImplicationChain(sourceType, targetType)
+    })
+  }
 
   it('shows the definitionally expanded form on a less-or-equal theorem card', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/2/visual`)

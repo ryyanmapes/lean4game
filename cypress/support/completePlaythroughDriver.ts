@@ -454,6 +454,56 @@ export class CompletePlaythroughDriver {
 
   constructor(private readonly win: DriverWindow) {}
 
+  private normalizedProposition(value: string) {
+    return value
+      .replace(/->/gu, '→')
+      .replace(/\s+/gu, '')
+  }
+
+  private visibleHypothesisOfType(type: string) {
+    const expected = this.normalizedProposition(type)
+    return visible(this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'))
+      .find(card => this.normalizedProposition(card.dataset.hypType ?? '') === expected)
+      ?? null
+  }
+
+  /** Combine two visible proposition cards using the same pointer drag as a
+   * player. This deliberately addresses cards by their displayed types, not
+   * by Lean names, so focused tests can exercise generic A / (A → B)
+   * application without smuggling in a theorem-specific command. */
+  async combineVisiblePropositions(sourceType: string, targetType: string, resultType: string) {
+    const source = await waitFor(
+      `visible proposition card ${sourceType}`,
+      () => this.visibleHypothesisOfType(sourceType),
+    )
+    const target = await waitFor(
+      `visible proposition card ${targetType}`,
+      () => this.visibleHypothesisOfType(targetType),
+    )
+    await this.dragAndWait(source, target, `${sourceType} drag onto ${targetType}`)
+    await waitFor(
+      `the derived proposition card ${resultType}`,
+      () => this.visibleHypothesisOfType(resultType),
+    )
+    if (harness(this.win).getProofAudit().completed) {
+      throw new Error(`Combining ${sourceType} with ${targetType} completed before ${resultType} was applied to the goal`)
+    }
+  }
+
+  /** Solve the current goal by dragging a visible proposition card onto it. */
+  async solveGoalWithVisibleProposition(type: string) {
+    const source = await waitFor(
+      `visible proposition card ${type}`,
+      () => this.visibleHypothesisOfType(type),
+    )
+    const target = await waitFor('current goal', () => currentGoal(this.win))
+    await this.dragAndWait(source, target, `${type} drag onto the goal`)
+    await waitFor(`${type} application to complete the proof`, () => {
+      const audit = harness(this.win).getProofAudit()
+      return !audit.processing && audit.completed ? audit : null
+    })
+  }
+
   /** Perform a rewrite after selecting the same side a player would with the
    * transformation view's arrow button. */
   async performRewriteOnSide(command: string, side: 'left' | 'right') {
