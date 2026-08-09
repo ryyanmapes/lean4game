@@ -112,10 +112,17 @@ function playLog(win: DriverWindow): PlayLogEntry[] {
   return entries
 }
 
-async function waitForPlayAttempt(win: DriverWindow, previousCount: number, description: string) {
+async function waitForPlayAttempt(
+  win: DriverWindow,
+  previousCount: number,
+  description: string,
+  retry?: () => void,
+) {
   const entry = await waitFor(description, () => {
     const entries = playLog(win)
-    return entries.length > previousCount ? entries.at(-1) : null
+    if (entries.length > previousCount) return entries.at(-1)
+    retry?.()
+    return null
   }, INTERACTION_TIMEOUT)
   if (!entry.succeeded) {
     const leanError = (
@@ -855,7 +862,20 @@ export class CompletePlaythroughDriver {
     const before = proofSignature(harness(this.win).getProofAudit())
     const previousAttempts = playLog(this.win).length
     click(done)
-    await waitForPlayAttempt(this.win, previousAttempts, `${description} player construction action`)
+    let lastRetry = Date.now()
+    await waitForPlayAttempt(
+      this.win,
+      previousAttempts,
+      `${description} player construction action`,
+      () => {
+        if (Date.now() - lastRetry < 250) return
+        lastRetry = Date.now()
+        const current = this.win.document.querySelector<HTMLButtonElement>(
+          '.tr-construction-overlay .cn-done-btn',
+        )
+        if (current && !current.disabled) click(current)
+      },
+    )
     await waitForProofChange(this.win, before, `${description} construction`)
   }
 
