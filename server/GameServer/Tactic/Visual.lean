@@ -558,6 +558,10 @@ private structure EqualitySideRewriteResult where
   mvarIds : List MVarId
 
 private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array Expr × Nat × Nat)) := do
+  -- Goals produced from reducible definitions (notably MyNat.LE after `use`)
+  -- can display as an equality while retaining a wrapper at the expression
+  -- head. Normalize that wrapper before classifying the relation.
+  let target ← withReducible (whnf target)
   let target := target.consumeMData
   let fn := target.getAppFn
   let args := target.getAppArgs
@@ -954,6 +958,13 @@ private axiom visualRewriteAdd_zero (a : VisualRewriteNat) : a + 0 = a
 -- Reverse rewriting the selected variable must not invoke generic pattern
 -- search, because a bare theorem variable would match every expression.
 example (x : VisualRewriteNat) : x = x + 0 := by
+  drag_rw_lhs [← visualRewriteAdd_zero]
+  rfl
+
+private def WrappedVisualEq (a b : VisualRewriteNat) : Prop := a = b
+
+-- Reducible goal wrappers must be normalized before relation-side selection.
+example (x : VisualRewriteNat) : WrappedVisualEq x (x + 0) := by
   drag_rw_lhs [← visualRewriteAdd_zero]
   rfl
 
