@@ -2694,12 +2694,17 @@ export function VisualCanvas({
     // browser's hit-test take precedence over dnd-kit's rectangle result.
     const origin = mobileDragPointerOriginRef.current
     const translated = active.rect.current.translated
+    const initial = active.rect.current.initial
     const pointerX = origin?.x != null
       ? origin.x + delta.x
-      : translated ? translated.left + translated.width / 2 : null
+      : translated
+        ? translated.left + translated.width / 2
+        : initial ? initial.left + initial.width / 2 + delta.x : null
     const pointerY = origin?.y != null
       ? origin.y + delta.y
-      : translated ? translated.top + translated.height / 2 : null
+      : translated
+        ? translated.top + translated.height / 2
+        : initial ? initial.top + initial.height / 2 + delta.y : null
     if (pointerX != null && pointerY != null) {
       const card = document.elementsFromPoint(pointerX, pointerY)
         .map(element => element.closest<HTMLElement>(
