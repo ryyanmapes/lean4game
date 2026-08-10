@@ -1064,11 +1064,17 @@ export class CompletePlaythroughDriver {
       ),
     )[0])
     const hypothesis = await waitFor(`hypothesis ${hypName}`, () => this.hyp(this.resolveName(hypName)))
-    await this.dragAndWait(
-      direction === 'theorem-to-hypothesis' ? copy : hypothesis,
-      direction === 'theorem-to-hypothesis' ? hypothesis : copy,
-      `${theoremName} ${direction}`,
-    )
+    const source = direction === 'theorem-to-hypothesis' ? copy : hypothesis
+    const target = direction === 'theorem-to-hypothesis' ? hypothesis : copy
+    const description = `${theoremName} ${direction}`
+    const before = proofSignature(harness(this.win).getProofAudit())
+    const previousAttempts = playLog(this.win).length
+    const session = await beginPointerDrag(source, 94)
+    await waitFor(`${description} drag activation`, () =>
+      source.classList.contains('dragging') ? true : null, 2_000)
+    await session.finish(target)
+    await waitForPlayAttempt(this.win, previousAttempts, description)
+    await waitForProofChange(this.win, before, description)
   }
 
   async undoLastPlayerStep() {
