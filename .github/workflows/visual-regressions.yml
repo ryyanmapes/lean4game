@@ -59,6 +59,7 @@ jobs:
       - name: Run focused player regressions
         env:
           CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
+          VISUAL_TIMEOUT: '120000'
         run: |
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "npm run cypress:run:relay:ready" \
