@@ -27,6 +27,10 @@ test('a selected reverse variable rewrite gets an explicit side and theorem argu
     explicitReverseRewriteCommand('h', 'x + y', 'right', [2, 1]),
     'conv =>\n  rhs\n  arg 2\n  arg 1\n  rw [← h (x + y)]',
   )
+  assert.equal(
+    explicitReverseRewriteCommand('MyNat.zero_add', 'n', 'right', undefined, 'h'),
+    'conv at h =>\n  rhs\n  rw [← MyNat.zero_add (n)]',
+  )
 })
 
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:

@@ -138,11 +138,12 @@ export function explicitReverseRewriteCommand(
   argument: string,
   workingSide: 'left' | 'right',
   path: number[] | undefined,
+  targetHypName?: string,
 ): string {
   const steps = [workingSide === 'left' ? 'lhs' : 'rhs']
   for (const position of path ?? []) steps.push(`arg ${position}`)
   return [
-    'conv =>',
+    targetHypName ? `conv at ${targetHypName} =>` : 'conv =>',
     ...steps.map(step => `  ${step}`),
     `  rw [← ${theoremName} (${argument})]`,
   ].join('\n')

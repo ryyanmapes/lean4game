@@ -3409,11 +3409,16 @@ export function VisualCanvas({
       ? canvasState.streams.find(stream => stream.id === transformTarget.streamId) ?? null
       : null
     const resolvedRewrite = resolveRewriteHyp([], theoremEqualityHyps, hypLabel)
-    const parsedFocusedGoal = focusedStream
-      ? parsedGoalTarget(focusedStream, comparisonTransformEnabled)
+    const parsedFocusedTarget = focusedStream
+      ? transformTarget?.kind === 'hyp'
+        ? (() => {
+            const card = focusedStream.hyps.find(candidate => candidate.id === transformTarget.hypId)
+            return card ? parsedHypTarget(card, comparisonTransformEnabled) : null
+          })()
+        : parsedGoalTarget(focusedStream, comparisonTransformEnabled)
       : null
-    const selectedRoot = parsedFocusedGoal
-      ? (workingSide === 'left' ? parsedFocusedGoal.lhs : parsedFocusedGoal.rhs)
+    const selectedRoot = parsedFocusedTarget
+      ? (workingSide === 'left' ? parsedFocusedTarget.lhs : parsedFocusedTarget.rhs)
       : null
     const selectedNode = selectedRoot ? findExpressionNodeAtPath(selectedRoot, path) : null
     const explicitReverseArg = expectedGoal?.explicitReverseArg ?? (
@@ -3435,15 +3440,16 @@ export function VisualCanvas({
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
     // search. The player selected an exact expression, so make that theorem
     // parameter explicit and retain the selected side/path with `conv`.
-    if (explicitReverseArg && transformTarget?.kind === 'goal') {
+    if (explicitReverseArg && transformTarget) {
       const scopedRewrite = explicitReverseRewriteCommand(
         hypLabel,
         explicitReverseArg,
         backendWorkingSideForRelation(
-          parsedGoalTarget(focusedStream!, comparisonTransformEnabled)?.relation ?? '=',
+          parsedFocusedTarget?.relation ?? '=',
           workingSide,
         ),
         path,
+        transformTarget.kind === 'hyp' ? transformTarget.hypRef : undefined,
       )
       command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
     }
