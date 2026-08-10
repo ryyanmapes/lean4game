@@ -1782,6 +1782,10 @@ export function VisualCanvas({
   const [animatedHyps, setAnimatedHyps] = useState<AnimatedHypMarker[]>([])
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
   const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>(() => resumeState?.theoremCopies ?? [])
+  const theoremCopiesRef = useRef(theoremCopies)
+  useEffect(() => {
+    theoremCopiesRef.current = theoremCopies
+  }, [theoremCopies])
   const [mobileVisualOrder, setMobileVisualOrder] = useState<MobileVisualOrder>(() =>
     initialMobileVisualOrder(gameId, worldId, levelId, initialState)
   )
@@ -2213,7 +2217,7 @@ export function VisualCanvas({
   }
 
   function getTheoremCopyById(copyId: string): PropositionTheoremCopy | undefined {
-    return theoremCopies.find(copy => copy.id === copyId)
+    return theoremCopiesRef.current.find(copy => copy.id === copyId)
   }
 
   function updatePlacedHypPosition(
@@ -2264,14 +2268,18 @@ export function VisualCanvas({
   }
 
   function createTheoremCopy(theorem: PropositionTheorem, position: { x: number; y: number }) {
-    setTheoremCopies(prev => [
-      ...prev,
-      {
+    setTheoremCopies(prev => {
+      const next = [
+        ...prev,
+        {
         id: uuidv4(),
         theorem,
         position,
-      },
-    ])
+        },
+      ]
+      theoremCopiesRef.current = next
+      return next
+    })
   }
 
   function clearReductionTooltipCloseTimer() {
