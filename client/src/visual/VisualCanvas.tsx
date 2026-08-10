@@ -520,6 +520,7 @@ interface VisualCanvasTestHarness {
     targetStreamId: string | null
   }
   getLastTransformRewriteDebug: () => TransformRewriteDebug | null
+  getLastDragDebug: () => Record<string, unknown> | null
   getProofAudit: () => {
     completed: boolean
     processing: boolean
@@ -1796,6 +1797,7 @@ export function VisualCanvas({
   const mobileAutoScrollFrameRef = useRef<number | null>(null)
   const mobileDragPointerOriginRef = useRef<{ x: number; y: number } | null>(null)
   const latestDragPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const lastDragDebugRef = useRef<Record<string, unknown> | null>(null)
   const pendingMobileInsertionRef = useRef<{
     anchorKey: string
     placement: 'after' | 'replace'
@@ -2615,6 +2617,11 @@ export function VisualCanvas({
       mobileDragPointerOriginRef.current = null
     }
     latestDragPointerRef.current = mobileDragPointerOriginRef.current
+    lastDragDebugRef.current = {
+      phase: 'start',
+      activeId: String(event.active.id),
+      pointerOrigin: mobileDragPointerOriginRef.current,
+    }
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setActiveDragId(String(event.active.id))
@@ -2769,6 +2776,16 @@ export function VisualCanvas({
     const draggedRect = active.rect.current.initial
     const draggedWidth = draggedRect?.width ?? DEFAULT_WIDTH
     const draggedHeight = draggedRect?.height ?? DEFAULT_HEIGHT
+    lastDragDebugRef.current = {
+      phase: 'end',
+      activeId,
+      dndOverId: over?.id == null ? null : String(over.id),
+      resolvedOverId: overId ?? null,
+      pointer: pointerX == null || pointerY == null ? null : { x: pointerX, y: pointerY },
+      sourceTheoremCopy: sourceTheoremCopy?.theorem.theoremName ?? null,
+      sourceCard: interactionHypName(sourceCard) ?? null,
+      theoremCopyIds: theoremCopiesRef.current.map(copy => copy.id),
+    }
 
     if (isPhonePortrait && overId?.startsWith(MOBILE_DIVIDER_PREFIX)) {
       const [, columnValue, indexValue] = overId.split(':')
@@ -4842,6 +4859,7 @@ export function VisualCanvas({
       closeTransform: closeTestTransform,
       getTransformStatus,
       getLastTransformRewriteDebug,
+      getLastDragDebug: () => lastDragDebugRef.current,
       getProofAudit,
       getCurrentStreamSnapshot,
     }

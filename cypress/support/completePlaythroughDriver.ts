@@ -18,6 +18,7 @@ interface StreamSnapshot {
 interface ReadOnlyVisualHarness {
   getProofAudit(): ProofAudit
   getCurrentStreamSnapshot(): StreamSnapshot
+  getLastDragDebug(): Record<string, unknown> | null
 }
 
 interface PlayLogEntry {
@@ -911,7 +912,15 @@ export class CompletePlaythroughDriver {
     const before = proofSignature(harness(this.win).getProofAudit())
     const previousAttempts = playLog(this.win).length
     await drag(source, target)
-    await waitForPlayAttempt(this.win, previousAttempts, description)
+    try {
+      await waitForPlayAttempt(this.win, previousAttempts, description)
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; ` +
+        `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
+        { cause: error },
+      )
+    }
     await waitForProofChange(this.win, before, description)
   }
 
@@ -1081,7 +1090,15 @@ export class CompletePlaythroughDriver {
     await waitFor(`${description} drag activation`, () =>
       source.classList.contains('dragging') ? true : null, 2_000)
     await session.finish(target)
-    await waitForPlayAttempt(this.win, previousAttempts, description)
+    try {
+      await waitForPlayAttempt(this.win, previousAttempts, description)
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; ` +
+        `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
+        { cause: error },
+      )
+    }
     await waitForProofChange(this.win, before, description)
   }
 
