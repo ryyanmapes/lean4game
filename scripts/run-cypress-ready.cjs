@@ -10,12 +10,18 @@ function httpGetResource(pathname) {
   return `http-get://${target.host}${target.pathname}${target.search}`
 }
 
-const resources = [
-  httpGetResource('/'),
-  httpGetResource('/data/g/test/TestGame/game.json'),
-  httpGetResource('/data/g/local/VisualTest/game.json'),
-  httpGetResource('/data/g/local/NNG4/game.json'),
+const defaultPaths = [
+  '/',
+  '/data/g/test/TestGame/game.json',
+  '/data/g/local/VisualTest/game.json',
+  '/data/g/local/NNG4/game.json',
 ]
+const configuredPaths = process.env.CYPRESS_READY_PATHS
+  ?.split(',')
+  .map(value => value.trim())
+  .filter(Boolean)
+const resources = (configuredPaths?.length ? configuredPaths : defaultPaths)
+  .map(httpGetResource)
 
 async function main() {
   try {

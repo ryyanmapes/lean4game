@@ -57,6 +57,8 @@ jobs:
           test -s .lake/gamedata/game.json
 
       - name: Run focused player regressions
+        env:
+          CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
         run: |
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "npm run cypress:run:relay:ready" \
