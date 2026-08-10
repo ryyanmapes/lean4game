@@ -233,23 +233,28 @@ function visible<T extends Element>(elements: Iterable<T>): T[] {
   })
 }
 
-function click(element: HTMLElement) {
+function click(element: Element) {
   element.scrollIntoView({ block: 'center', inline: 'center' })
+  const view = element.ownerDocument.defaultView
+  if (!view) throw new Error('Cannot activate an element without a browser window')
   // Buttons already implement the browser's complete activation behavior.
   // Preceding their native click with synthetic mouse-down events can start
   // the canvas drag sensor in Chromium and cause React to ignore the button.
-  if (element instanceof HTMLButtonElement) {
+  if (element instanceof view.HTMLButtonElement) {
     element.focus()
     element.click()
     return
   }
-  element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
-  element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }))
+  // Cypress runs specs in a separate iframe. Events constructed from that
+  // window are not reliably accepted by React listeners on SVG proof-tree
+  // nodes in the application iframe, so always use the target's own realm.
+  element.dispatchEvent(new view.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+  element.dispatchEvent(new view.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }))
   // Native activation matters for buttons (including React-controlled tabs).
   // SVG proof-tree nodes do not expose HTMLElement.click(), so retain the
   // explicit mouse event as a fallback for those player controls.
-  if (typeof element.click === 'function') element.click()
-  else element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  if (element instanceof view.HTMLElement && typeof element.click === 'function') element.click()
+  else element.dispatchEvent(new view.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
 }
 
 function doubleClick(element: HTMLElement) {
@@ -599,28 +604,66 @@ export class CompletePlaythroughDriver {
       ))[0] ?? null
     }
     let lastClickAt = 0
-    await waitFor('the selected incomplete proof branch to render', () => {
-      let snapshot: StreamSnapshot
+    const activateRoute = () => {
+      const next = findRoute()
+      if (!next || Date.now() - lastClickAt < 250) return
+      click(next)
+      lastClickAt = Date.now()
+    }
+    activateRoute()
+    try {
+      await waitFor('the selected incomplete proof branch to render', () => {
+        let snapshot: StreamSnapshot
+        try {
+          snapshot = harness(this.win).getCurrentStreamSnapshot()
+        } catch {
+          // A completed branch deliberately has no interactive current stream.
+          // The route click is what creates one, so keep activating the live
+          // control while React replaces the solved branch's graph render.
+          activateRoute()
+          return null
+        }
+        const leftCompletedStream = !previousStreamId || snapshot.streamId !== previousStreamId
+        const reachedIncompleteStream = !snapshot.currentStreamIsCompleted
+        if (!leftCompletedStream || !reachedIncompleteStream) {
+          // React can replace both graph leaves and responsive navigation bars
+          // while the completed branch settles. Re-query the live control for
+          // every retry, and stop clicking as soon as selection changes. Stream
+          // reconciliation can replace the clicked leaf's transient id with a
+          // new canonical id, so the observable player contract is a different,
+          // incomplete stream with a rendered goal—not identifier equality.
+          activateRoute()
+          return null
+        }
+        return currentGoal(this.win)
+      }, 15_000)
+    } catch (error) {
+      let snapshot: StreamSnapshot | string
       try {
         snapshot = harness(this.win).getCurrentStreamSnapshot()
-      } catch {
-        return null
+      } catch (snapshotError) {
+        snapshot = snapshotError instanceof Error ? snapshotError.message : String(snapshotError)
       }
-      const leftCompletedStream = !previousStreamId || snapshot.streamId !== previousStreamId
-      const reachedSelectedLeaf = route.kind !== 'leaf' || snapshot.streamId === route.streamId
-      if (!leftCompletedStream || !reachedSelectedLeaf) {
-        // React can replace both graph leaves and responsive navigation bars
-        // while the completed branch settles. Re-query the live control for
-        // every retry, and stop clicking as soon as selection changes.
-        const next = findRoute()
-        if (next && Date.now() - lastClickAt >= 250) {
-          click(next as unknown as HTMLElement)
-          lastClickAt = Date.now()
-        }
-        return null
-      }
-      return currentGoal(this.win)
-    }, 15_000)
+      const goals = visible(this.win.document.querySelectorAll<HTMLElement>('[data-testid="goal-card"]'))
+        .map(goal => ({
+          streamId: goal.dataset.streamId,
+          className: goal.className,
+          text: goal.textContent?.trim(),
+        }))
+      const leaves = visible(this.win.document.querySelectorAll<SVGElement>('[data-testid="proof-stream-leaf"]'))
+        .map(leaf => ({
+          streamId: leaf.dataset.streamId,
+          current: leaf.dataset.current,
+          completed: leaf.dataset.completed,
+        }))
+      throw new Error(`Could not render the selected incomplete proof branch: ${JSON.stringify({
+        previousStreamId,
+        route,
+        snapshot,
+        goals,
+        leaves,
+      })}`, { cause: error })
+    }
     if (this.pendingBranchAliases.length > 0) {
       const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {

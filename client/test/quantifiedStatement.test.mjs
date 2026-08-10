@@ -5,6 +5,8 @@ const {
   buildEqualityTheoremDisplay,
   buildForallSpecificationFromDisplay,
   buildPropositionTheoremDisplay,
+  buildQuantifiedTheoremApplication,
+  forallBinderNamesFromFooter,
 } = await import('../../tmp-quantified-tests/quantifiedStatement.js')
 
 const FORALL = '\u2200'
@@ -94,6 +96,25 @@ test('proposition theorems can end in equalities while keeping value binders in 
     body: `${FORALL} (y : ${REAL}), x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
     isImplicit: false,
   })
+})
+
+test('forall footer binder names preserve explicit application order', () => {
+  assert.deepEqual(
+    forallBinderNamesFromFooter(`${FORALL} (a b : ${NAT}) {c : ${NAT}}`),
+    ['a', 'b', 'c'],
+  )
+})
+
+test('dragged theorem applications instantiate matched quantified binders before the proof', () => {
+  assert.equal(
+    buildQuantifiedTheoremApplication(
+      'MyNat.succ_inj',
+      `${FORALL} (a : ${NAT}) (b : ${NAT})`,
+      { a: 'a + d', b: 'b + d' },
+      'h',
+    ),
+    'MyNat.succ_inj (a := a + d) (b := b + d) h',
+  )
 })
 
 test('workspace cards can reconstruct the next specification step from displayed text', () => {

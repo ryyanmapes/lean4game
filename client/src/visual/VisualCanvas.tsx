@@ -21,7 +21,7 @@ import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaTe
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
-import { buildForallSpecificationFromDisplay } from './quantifiedStatement'
+import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
@@ -2740,18 +2740,28 @@ export function VisualCanvas({
                 const targetType = (targetCard.hyp.typeBody ?? TaggedText_stripTags(targetCard.hyp.type)).trim()
                 if (!implication) return null
                 let resultType: string
+                let inferredValues: Record<string, string> = {}
                 try {
                   const patternTarget = targetType.replace(/≠/gu, '=')
                   const patternPremise = implication[0].replace(/≠/gu, '=')
                   const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
                   if (!bindings) return null
                   resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+                  inferredValues = Object.fromEntries(
+                    Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
+                  )
                 } catch {
                   if (!formulasMatch(implication[0], targetType)) return null
                   resultType = implication[1]
                 }
+                const application = buildQuantifiedTheoremApplication(
+                  theoremTemplate.theoremName,
+                  theoremTemplate.forallFooter,
+                  inferredValues,
+                  targetRef,
+                )
                 return {
-                  command: `have ${hypName} := ${theoremTemplate.theoremName} ${targetRef}`,
+                  command: `have ${hypName} := ${application}`,
                   hypName,
                   hypType: resultType,
                 }

@@ -221,6 +221,29 @@ function parseForallFooterBinders(footer?: string): ParsedBinder[] {
   return binders
 }
 
+/** Binder names retained in a theorem card's compact forall footer, in Lean
+ * application order. These names let drag application instantiate explicit
+ * quantified arguments inferred by proposition matching. */
+export function forallBinderNamesFromFooter(footer?: string): string[] {
+  return parseForallFooterBinders(footer)
+    .map(binder => binder.name)
+    .filter((name): name is string => name !== undefined)
+}
+
+/** Build a theorem application using named values inferred by matching its
+ * displayed premise. Named arguments work for both explicit and implicit
+ * binders and avoid shifting the dragged proof into the first value slot. */
+export function buildQuantifiedTheoremApplication(
+  theoremName: string,
+  forallFooter: string | undefined,
+  inferredValues: Readonly<Record<string, string>>,
+  proofReference: string,
+): string {
+  const inferredArguments = forallBinderNamesFromFooter(forallFooter)
+    .flatMap(name => inferredValues[name] ? [`(${name} := ${inferredValues[name]})`] : [])
+  return [theoremName, ...inferredArguments, proofReference].join(' ')
+}
+
 function buildForallFooter(binders: string[]): string | undefined {
   if (binders.length === 0) return undefined
   return `\u2200 ${binders.join(' ')}`
