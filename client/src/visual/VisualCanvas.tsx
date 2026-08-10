@@ -21,13 +21,15 @@ import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaTe
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
-import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication } from './quantifiedStatement'
+import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication, buildRuntimeQuantifiedStatementDisplay } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
+import { compareBucketTheorems, THEOREM_BUCKETS, theoremBucket } from './theoremOrdering'
+import type { TheoremBucket } from './theoremOrdering'
 import {
   cloneProofTree,
   collectActiveStreamIds,
@@ -1380,13 +1382,17 @@ function synthesizeForallSpecializationContinuation(
   expression: string,
 ): GoalStream {
   const hyps = cloneHypCards(focusedStream.hyps)
+  const specializedType = replaceIdentifier(prompt.body, prompt.varName, expression)
+  const display = buildRuntimeQuantifiedStatementDisplay(specializedType)
   hyps.push({
     id: uuidv4(),
     isTheorem: true,
     hyp: {
       names: [hypName],
       playName: hypName,
-      type: { text: replaceIdentifier(prompt.body, prompt.varName, expression) },
+      type: { text: display.mainText },
+      typeBody: display.mainText,
+      forallFooter: display.forallFooter,
       reductionForms: [],
     },
     position: { x: 96, y: 96 },
@@ -1536,8 +1542,32 @@ function TheoremTray({
       : activeTab === 'theorems' && theorems.length > 0
         ? 'theorems'
         : availableTabs[0]
+  const [theoremCategory, setTheoremCategory] = useState<'all' | TheoremBucket>('all')
+  const populatedTheoremBuckets = React.useMemo(() => THEOREM_BUCKETS
+    .filter(bucket => theorems.some(theorem => theoremBucket(theorem) === bucket.id)), [theorems])
+  const showTheoremCategories = populatedTheoremBuckets.length > 1
+  useEffect(() => {
+    if (
+      theoremCategory !== 'all' &&
+      !populatedTheoremBuckets.some(bucket => bucket.id === theoremCategory)
+    ) setTheoremCategory('all')
+  }, [populatedTheoremBuckets, theoremCategory])
+  const visibleTheorems = React.useMemo(() => {
+    const filtered = theoremCategory === 'all'
+      ? theorems
+      : theorems.filter(theorem => theoremBucket(theorem) === theoremCategory)
+    return [...filtered].sort((left, right) => {
+      const leftBucket = theoremBucket(left)
+      const rightBucket = theoremBucket(right)
+      if (theoremCategory === 'all' && leftBucket !== rightBucket) {
+        const bucketOrder = ['add', 'ne', 'le', 'mul', 'other']
+        return bucketOrder.indexOf(leftBucket) - bucketOrder.indexOf(rightBucket)
+      }
+      return compareBucketTheorems(left, right, theoremCategory === 'all' ? leftBucket : theoremCategory)
+    })
+  }, [theoremCategory, theorems])
   const items: (PropositionTheorem | VisualTactic)[] =
-    visibleTab === 'tactics' ? tactics : visibleTab === 'theorems' ? theorems : []
+    visibleTab === 'tactics' ? tactics : visibleTab === 'theorems' ? visibleTheorems : []
 
   const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
   const [pageWidth, setPageWidth] = useState(0)
@@ -1693,6 +1723,27 @@ function TheoremTray({
         </div>
       )}
 
+      {visibleTab === 'theorems' && showTheoremCategories && (
+        <div className="tr-dock-tabs tr-theorem-category-tabs" data-testid="theorem-category-tabs">
+          {[
+            { id: 'all' as const, label: 'All' },
+            ...populatedTheoremBuckets,
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`tr-tab-btn${theoremCategory === tab.id ? ' active' : ''}`}
+              data-theorem-category={tab.id}
+              onClick={() => {
+                setTheoremCategory(tab.id)
+                onPageIndexChange('theorems', 0)
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
       {availableTabs.length > 1 && (
         <div className="tr-dock-tabs">
           {availableTabs.map(tab => (
@@ -1805,6 +1856,7 @@ export function VisualCanvas({
   } | null>(null)
   const [mobileScrollMetrics, setMobileScrollMetrics] = useState({ top: 0, client: 0, scroll: 0 })
   const [mobileContentOverflows, setMobileContentOverflows] = useState(false)
+  const [mobileScrollReserve, setMobileScrollReserve] = useState(0)
   const [activeDraggedTheorem, setActiveDraggedTheorem] = useState<PropositionTheorem | null>(null)
   const [activeDraggedHyp, setActiveDraggedHyp] = useState<HypCardType | null>(null)
   const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
@@ -1812,9 +1864,13 @@ export function VisualCanvas({
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const isProcessingRef = useRef(isProcessing)
-  useEffect(() => {
-    isProcessingRef.current = isProcessing
-  }, [isProcessing])
+  const updateProcessingState = React.useCallback((next: boolean) => {
+    // Drop handlers run between React commits. Keep the imperative guard in
+    // lockstep with state so a drag immediately following a completed action
+    // cannot observe the previous `true` value and be silently discarded.
+    isProcessingRef.current = next
+    setIsProcessing(next)
+  }, [])
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>(() =>
     visualTactics.some(tactic =>
       emphasizeItems?.includes(tactic.id) ||
@@ -2274,18 +2330,20 @@ export function VisualCanvas({
   }
 
   function createTheoremCopy(theorem: PropositionTheorem, position: { x: number; y: number }) {
+    const copyId = uuidv4()
     setTheoremCopies(prev => {
       const next = [
         ...prev,
         {
-        id: uuidv4(),
-        theorem,
-        position,
+          id: copyId,
+          theorem,
+          position,
         },
       ]
       theoremCopiesRef.current = next
       return next
     })
+    return copyId
   }
 
   function clearReductionTooltipCloseTimer() {
@@ -2340,7 +2398,7 @@ export function VisualCanvas({
     const rotation = inferredAction.rotation
     setGoalChoiceMenu(null)
     closeReductionTooltip()
-    setIsProcessing(true)
+    updateProcessingState(true)
 
     const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
     const result = await onInteraction(newScript)
@@ -2359,7 +2417,7 @@ export function VisualCanvas({
         confirmedNoGoalsCompletion
       )
 
-    setIsProcessing(false)
+    updateProcessingState(false)
 
     const lastStep = result?.steps.at(-1)
     const leanTactic = options?.leanTacticOverride ?? (handledByConfirmedGoalCompletion
@@ -2521,14 +2579,14 @@ export function VisualCanvas({
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
-    setIsProcessing(true)
+    updateProcessingState(true)
 
     const removedStep = proofSteps[proofSteps.length - 1]
     const newSteps = proofSteps.slice(0, -1)
     const newScript = serializeProofCommands(newSteps.map(step => step.command))
     const result = await onInteraction(newScript)
 
-    setIsProcessing(false)
+    updateProcessingState(false)
     if (result === null) {
       pendingMobileInsertionRef.current = null
       return false
@@ -2805,6 +2863,25 @@ export function VisualCanvas({
         : sourceTheoremCopy
           ? 'theorems'
           : null
+      if (theoremTemplate && column === 'theorems' && Number.isFinite(destinationIndex)) {
+        const copyId = createTheoremCopy(theoremTemplate, { x: 0, y: 0 })
+        const copyKey = `copy:${copyId}`
+        setMobileVisualOrder(prev => {
+          const current = prev.theorems.filter(key => key !== copyKey)
+          const visibleKeys = orderedMobileTheorems.map(item => item.key)
+          const clampedDestination = Math.max(0, Math.min(visibleKeys.length, destinationIndex))
+          const nextVisibleKey = visibleKeys[clampedDestination]
+          const previousVisibleKey = visibleKeys[clampedDestination - 1]
+          const insertionIndex = nextVisibleKey
+            ? Math.max(0, current.indexOf(nextVisibleKey))
+            : previousVisibleKey
+              ? current.indexOf(previousVisibleKey) + 1
+              : current.length
+          current.splice(Math.max(0, insertionIndex), 0, copyKey)
+          return { ...prev, theorems: current }
+        })
+        return
+      }
       if (sourceKey && sourceColumn === column && Number.isFinite(destinationIndex)) {
         setMobileVisualOrder(prev => {
           const current = [...prev[column]]
@@ -3438,11 +3515,11 @@ export function VisualCanvas({
       leanGoalOrderRef.current,
     )
     closeReductionTooltip()
-    setIsProcessing(true)
+    updateProcessingState(true)
 
     const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
     const result = await onInteraction(newScript)
-    setIsProcessing(false)
+    updateProcessingState(false)
 
     const lastStep = result?.steps.at(-1)
     const leanTactic = result
@@ -3615,11 +3692,11 @@ export function VisualCanvas({
       command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
     }
     closeReductionTooltip()
-    setIsProcessing(true)
+    updateProcessingState(true)
 
     const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
     const result = await onInteraction(newScript)
-    setIsProcessing(false)
+    updateProcessingState(false)
 
     const lastStep = result?.steps.at(-1)
     const annotationLeanTactic = lastStep?.annotation?.leanTactic ?? null
@@ -4081,7 +4158,7 @@ export function VisualCanvas({
       }
       const missingVariables = variableKeys.filter(key => !next.variables.includes(key))
       const missingTheorems = theoremKeys.filter(key => !next.theorems.includes(key))
-      if (missingVariables.length > 0) next.variables = [...missingVariables, ...next.variables]
+      if (missingVariables.length > 0) next.variables = [...next.variables, ...missingVariables]
       if (missingTheorems.length > 0) {
         const insertion = pendingMobileInsertionRef.current
         const anchorIndex = insertion
@@ -4100,7 +4177,7 @@ export function VisualCanvas({
           )
           next.theorems.splice(fallbackIndex, 0, ...missingTheorems)
         } else {
-          next.theorems = [...missingTheorems, ...next.theorems]
+          next.theorems = [...next.theorems, ...missingTheorems]
         }
       }
       pendingMobileInsertionRef.current = null
@@ -4132,6 +4209,8 @@ export function VisualCanvas({
     ? isMobileTheoremCard(activeDraggedHyp) ? 'theorems' : 'variables'
     : activeDraggedTheoremSourceId && theoremCopies.some(copy => copy.id === activeDraggedTheoremSourceId)
       ? 'theorems'
+      : activeDraggedTheorem
+        ? 'theorems'
       : null
 
   useLayoutEffect(() => {
@@ -4146,6 +4225,11 @@ export function VisualCanvas({
       update()
       const natural = mobileNaturalContentRef.current
       setMobileContentOverflows(Boolean(natural && natural.scrollHeight > scroller.clientHeight + 1))
+      const cardHeights = Array.from(
+        natural?.querySelectorAll<HTMLElement>('.mobile-list-card') ?? [],
+        card => card.getBoundingClientRect().height,
+      )
+      setMobileScrollReserve(cardHeights.length > 0 ? Math.max(...cardHeights) + 20 : 0)
     }
     updateAll()
     scroller.addEventListener('scroll', update, { passive: true })
@@ -5429,7 +5513,13 @@ export function VisualCanvas({
                       </section>
                     </div>
                     </div>
-                    {mobileContentOverflows && <div className="mobile-scroll-deadspace" aria-hidden="true" />}
+                    {(mobileContentOverflows || mobileScrollReserve > 0) && (
+                      <div
+                        className="mobile-scroll-deadspace"
+                        style={{ height: mobileScrollReserve || undefined }}
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
                 </div>
                 <div

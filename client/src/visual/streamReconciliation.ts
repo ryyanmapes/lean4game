@@ -498,7 +498,7 @@ function synthesizeHypSplitStream(
   const splitNames = ['left', 'right']
   const existingRawNames = new Set(nextHyps.map(rawHypName))
   const splitCards: HypCardType[] = splitTarget.map((typeText, index) => {
-    const baseName = splitNames[index] ?? `${hypName}_${index + 1}`
+    const baseName = splitNames[index] ?? `${hypName}${index + 1}`
     const rawName = targetCard.isTheorem
       ? nextFreshName(existingRawNames, `${DERIVED_THEOREM_PREFIX}${baseName}`, 1)
       : nextFreshName(existingRawNames, baseName, 1)
@@ -577,7 +577,7 @@ function synthesizeHypCaseSplitStreams(
   const branchLabels = ['inl', 'inr']
   const baseRawNames = new Set(baseHyps.map(rawHypName))
   return splitTarget.map((typeText, index) => {
-    const baseName = splitNames[index] ?? `${hypName}_${index + 1}`
+    const baseName = splitNames[index] ?? `${hypName}${index + 1}`
     const branchRawName = targetCard.isTheorem
       ? nextFreshName(baseRawNames, `${DERIVED_THEOREM_PREFIX}${baseName}`, 1)
       : nextFreshName(baseRawNames, baseName, 1)

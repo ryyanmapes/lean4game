@@ -5,6 +5,7 @@ const {
   buildEqualityTheoremDisplay,
   buildForallSpecificationFromDisplay,
   buildPropositionTheoremDisplay,
+  buildRuntimeQuantifiedStatementDisplay,
   buildQuantifiedTheoremApplication,
   forallBinderNamesFromFooter,
 } = await import('../../tmp-quantified-tests/quantifiedStatement.js')
@@ -146,6 +147,21 @@ test('runtime forall hypotheses can be specified without a separate footer', () 
       varName: 'y',
       body: `d ${LE} y ∨ y ${LE} d`,
       isImplicit: false,
+    },
+  )
+})
+
+test('partially specialized theorem cards retain remaining binders in the lower row', () => {
+  assert.deepEqual(
+    buildRuntimeQuantifiedStatementDisplay(`${FORALL} (t : ${NAT}), b ${LE} b1 ${IMPLIES} b * t ${LE} b1 * t`),
+    {
+      mainText: `b ${LE} b1 ${IMPLIES} b * t ${LE} b1 * t`,
+      forallFooter: `${FORALL} (t : ${NAT})`,
+      forallSpecification: {
+        varName: 't',
+        body: `b ${LE} b1 ${IMPLIES} b * t ${LE} b1 * t`,
+        isImplicit: false,
+      },
     },
   )
 })

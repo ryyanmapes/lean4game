@@ -40,6 +40,7 @@ export interface PropositionTheorem {
   reductionForms?: string[]
   forallFooter?: string
   forallSpecification?: ForallSpecificationInfo
+  category?: string
 }
 
 /** A supported visual tactic rendered as a draggable tray card. */

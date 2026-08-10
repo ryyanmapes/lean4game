@@ -342,3 +342,19 @@ export function buildForallSpecificationFromDisplay(
   const body = parsed.rest.replace(/^,\s*/u, '').trim()
   return buildForallSpecification(body, binders)
 }
+
+/** Split a runtime `∀ ...` proposition into the same compact card layout used
+ * by inventory theorems, retaining the remaining binders in the lower row. */
+export function buildRuntimeQuantifiedStatementDisplay(statement: string): QuantifiedStatementDisplay {
+  let normalized = normalizeTheoremStatement(statement)
+  if (!normalized.startsWith('∀')) return { mainText: normalized }
+  normalized = normalized.slice(1).trim()
+  const parsed = parseLeadingBinders(normalized)
+  const binders = parsed.binders.flatMap(expandBinderToken)
+  const mainText = parsed.rest.replace(/^,\s*/u, '').trim()
+  return {
+    mainText,
+    forallFooter: buildForallFooter(binders.map(binder => binder.text)),
+    forallSpecification: buildForallSpecification(mainText, binders),
+  }
+}

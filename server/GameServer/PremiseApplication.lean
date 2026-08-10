@@ -224,6 +224,23 @@ private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
 def binderDomainByName? (fnType : Expr) (binderName : Name) : MetaM (Option Expr) := do
   return (← findBinderIndexAndDomain? fnType binderName).map Prod.snd
 
+/-- Lean's pretty-printer disambiguates a binder that collides with a local name by
+    displaying (for example) `b` as `b_1`. The binder stored in the expression is still
+    named `b`, so accept that display-only suffix after first trying the exact name. -/
+private def unsuffixedPrettyBinderName? (binderName : Name) : Option Name := do
+  let parts := binderName.toString.splitOn "_"
+  let suffix :: baseRev := parts.reverse | none
+  if baseRev.isEmpty || suffix.isEmpty || suffix.toNat?.isNone then none
+  else some (Name.mkSimple (String.intercalate "_" baseRev.reverse))
+
+/-- Resolve an exact binder name or its pretty-printer collision alias, returning the
+    actual expression binder name together with its domain. -/
+def resolveBinderName? (fnType : Expr) (binderName : Name) : MetaM (Option (Name × Expr)) := do
+  if let some domain ← binderDomainByName? fnType binderName then
+    return some (binderName, domain)
+  let some fallbackName := unsuffixedPrettyBinderName? binderName | return none
+  return (← binderDomainByName? fnType fallbackName).map fun domain => (fallbackName, domain)
+
 /-- Apply a theorem/hypothesis to a named binder argument while preserving any remaining
     unresolved binders as explicit/implicit lambdas in the resulting term. -/
 def mkNamedBinderApplication?

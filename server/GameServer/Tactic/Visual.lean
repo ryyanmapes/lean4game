@@ -389,7 +389,7 @@ syntax (name := specialize_forall_as) "specialize_forall_as" ident ident ident t
   let valueStx := stx[4]
   withMainContext do
     let (srcExpr, srcType) ← resolveNamedExprAndTypePreservingForalls src
-    let some binderDomain ← binderDomainByName? srcType binder.getId
+    let some (resolvedBinder, binderDomain) ← resolveBinderName? srcType binder.getId
       | throwError "specialize_forall_as: '{src.getId}' has no binder named '{binder.getId}'\n\
           {src.getId} : {srcType}"
     let valueExpr ← Term.withSynthesize do
@@ -398,7 +398,7 @@ syntax (name := specialize_forall_as) "specialize_forall_as" ident ident ident t
         throwAbortTactic
       pure valueExpr
     let valueType ← inferType valueExpr
-    if let some proof ← mkNamedBinderApplication? srcExpr srcType binder.getId valueExpr valueType then
+    if let some proof ← mkNamedBinderApplication? srcExpr srcType resolvedBinder valueExpr valueType then
       replaceNamedExprWithProof newName proof
       return
     throwError "specialize_forall_as: cannot specialize '{src.getId}' at '{binder.getId}' with {valueExpr}\n\
@@ -1113,6 +1113,14 @@ example (src : ∀ {a b : Nat}, a = a → b = b → True) (x y : Nat)
     (hx : x = x) (hy : y = y) : True := by
   specialize_forall_as h src a x
   exact h hx hy
+
+example (b : Nat) : b = b := by
+  let src : ∀ (a b t : Nat), a = a := fun _ _ _ => rfl
+  specialize_forall_as h src a 0
+  -- The remaining `b` binder is displayed as `b_1` because `b` is already local.
+  specialize_forall_as h2 h b_1 0
+  specialize_forall_as h3 h2 t 0
+  rfl
 
 private theorem instChainLocal [Inhabited Nat] {a : Nat} : a = a → 0 = 0 := by
   intro _

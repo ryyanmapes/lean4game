@@ -12,6 +12,7 @@ import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
+import { compareTheoremNames } from './theoremOrdering'
 
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
@@ -293,7 +294,9 @@ export function TransformationView({
   // Flat ordered list: hypotheses first (backend order), then theorems (backend order)
   const allRules = useMemo(() => [
     ...equalityHyps.map(h => ({ ...h, dragId: `hyp_${h.id}` })),
-    ...theoremEqualityHyps.map(t => ({ ...t, dragId: `thm_${t.id}` })),
+    ...[...theoremEqualityHyps]
+      .sort((left, right) => compareTheoremNames(left.label || left.id, right.label || right.id))
+      .map(t => ({ ...t, dragId: `thm_${t.id}` })),
   ], [equalityHyps, theoremEqualityHyps])
 
   // Build tab list: "Hypotheses" always first, then one tab per unique category in

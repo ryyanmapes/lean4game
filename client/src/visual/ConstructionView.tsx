@@ -471,7 +471,7 @@ export function ConstructionView({
               <>
                 <span className="cn-propose-keyword">Specify</span>
                 {' '}
-                <span className="cn-propose-var">{varName}</span>
+                <span className="cn-propose-var">{formatFormulaText(varName)}</span>
                 {' '}
                 <span className="cn-propose-keyword">for which you'll have</span>
                 <span className="cn-propose-body-line">
@@ -482,7 +482,7 @@ export function ConstructionView({
               <>
                 <span className="cn-propose-keyword">Propose</span>
                 {' '}
-                <span className="cn-propose-var">{varName}</span>
+                <span className="cn-propose-var">{formatFormulaText(varName)}</span>
                 {' '}
                 <span className="cn-propose-keyword">such that</span>
                 <span className="cn-propose-body-line">

@@ -9,13 +9,15 @@ const TRAILING_DAGGERS = /[†✝]+$/gu
 export function sanitizeLeanDisplayName(name: string): string {
   const withoutDaggers = name.replace(TRAILING_DAGGERS, '')
   const withoutGeneratedSuffix = withoutDaggers.replace(GENERATED_NAME_SUFFIX, '')
-  const sanitized = withoutGeneratedSuffix.replace(/[.]+$/u, '')
+  const withoutCollisionUnderscore = withoutGeneratedSuffix.replace(/_([0-9]+)$/u, '$1')
+  const sanitized = withoutCollisionUnderscore.replace(/[.]+$/u, '')
   return sanitized || name
 }
 
 function sanitizeLeanDisplayText(text: string): string {
   return text
     .replace(GENERATED_NAME_SUFFIX, '')
+    .replace(/\b([A-Za-z][A-Za-z0-9']*)_([0-9]+)\b/gu, '$1$2')
     .replace(/[†✝]+/gu, '')
 }
 

@@ -10,6 +10,7 @@ const {
   matchesPattern,
   parse,
   printExpression,
+  sanitizeLeanDisplayName,
   substituteVariables,
 } = await import('../../tmp-expr-tests/visual/expr-engine.js')
 
@@ -38,6 +39,11 @@ test('removes Lean hygienic suffixes and dagger disambiguators from displayed fo
     formatFormulaText('zero ≤ succ a† ∨ succ a._@._internal.0.2021293395._hygCtx._hyg.31 ≤ zero'),
     `0 ≤ succ(a) ${OR} succ(a) ≤ 0`,
   )
+})
+
+test('renders collision suffixes without invisible underscores while preserving the number', () => {
+  assert.equal(sanitizeLeanDisplayName('b_1'), 'b1')
+  assert.equal(formatFormulaText('b ≤ b_1 → b * t ≤ b_1 * t'), 'b ≤ b1 → b * t ≤ b1 * t')
 })
 
 test('add_succ matches and rewrites the induction successor goal', () => {

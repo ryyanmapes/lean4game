@@ -602,6 +602,7 @@ export function VisualProofPage() {
               reductionForms: inferAtomicReductionForms(theoremDisplay.mainText),
               forallFooter: theoremDisplay.forallFooter,
               forallSpecification: theoremDisplay.forallSpecification,
+              category: thm.category,
             })
             continue
           }
