@@ -225,7 +225,7 @@ async function dragChangedProof(
   return true
 }
 
-function visible<T extends HTMLElement>(elements: Iterable<T>): T[] {
+function visible<T extends Element>(elements: Iterable<T>): T[] {
   return Array.from(elements).filter(element => {
     const rect = element.getBoundingClientRect()
     const style = getComputedStyle(element)
@@ -559,35 +559,46 @@ export class CompletePlaythroughDriver {
     if (before && !before.currentStreamIsCompleted && currentGoal(this.win)) return
 
     const previousStreamId = before?.streamId ?? null
-    const towardIncomplete = visible(this.win.document.querySelectorAll<HTMLButtonElement>(
-      '[data-testid^="stream-nav-"].toward-incomplete:not(:disabled)',
-    ))[0]
-    const nextLeaf = visible(this.win.document.querySelectorAll<HTMLElement>(
-      '[data-testid="proof-stream-leaf"][data-completed="false"]',
-    ))[0]
-    // Prefer the explicit proof-tree leaf. A highlighted left/right arrow can
-    // be duplicated across responsive layouts, while the leaf identifies the
-    // exact incomplete branch a player intends to resume.
-    const next = nextLeaf ?? towardIncomplete
-    if (!next) {
-      if (currentGoal(this.win)) return
-      throw new Error(`Completed branch has no visible route to an incomplete stream (${JSON.stringify({
-        previousStreamId,
-        leaves: Array.from(this.win.document.querySelectorAll<HTMLElement>('[data-testid="proof-stream-leaf"]'))
-          .map(leaf => ({
-            streamId: leaf.dataset.streamId,
-            current: leaf.dataset.current,
-            completed: leaf.dataset.completed,
-          })),
-      })})`)
+    // The proof tree and the completed-stream snapshot are updated by separate
+    // React state changes. For one render, the just-completed current leaf can
+    // therefore still say data-completed="false". It is not a route anywhere:
+    // navigateToStream intentionally ignores a click on the current stream.
+    // Wait for a clickable *different* leaf (or a live highlighted arrow), and
+    // retain only its stable stream id rather than a soon-to-be-replaced node.
+    const route = await waitFor('a visible route to an incomplete proof branch', () => {
+      const leaf = visible(this.win.document.querySelectorAll<SVGElement>(
+        '[data-testid="proof-stream-leaf"][data-completed="false"][data-stream-id]',
+      )).find(candidate => candidate.dataset.streamId !== previousStreamId)
+      if (leaf?.dataset.streamId) return { kind: 'leaf' as const, streamId: leaf.dataset.streamId }
+      const arrow = visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+        '[data-testid^="stream-nav-"].toward-incomplete:not(:disabled)',
+      ))[0]
+      if (arrow) return { kind: 'arrow' as const, testId: arrow.getAttribute('data-testid') ?? '' }
+      try {
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        if (
+          snapshot.streamId !== previousStreamId
+          && !snapshot.currentStreamIsCompleted
+          && currentGoal(this.win)
+        ) return { kind: 'already-selected' as const }
+      } catch {
+        // The graph can briefly have no selected stream between branches.
+      }
+      return null
+    }, 15_000)
+    if (route.kind === 'already-selected') return
+
+    const findRoute = () => {
+      if (route.kind === 'leaf') {
+        return visible(this.win.document.querySelectorAll<SVGElement>(
+          `[data-testid="proof-stream-leaf"][data-stream-id="${cssEscape(route.streamId)}"]`,
+        ))[0] ?? null
+      }
+      return visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+        `[data-testid="${cssEscape(route.testId)}"].toward-incomplete:not(:disabled)`,
+      ))[0] ?? null
     }
-    // A highlighted arrow and the first visible incomplete tree leaf need not
-    // point at the same branch. Only assert an exact stream id when the player
-    // actually clicked that leaf; navigation arrows are validated by leaving
-    // the completed stream and rendering any live goal.
-    const streamId = next === nextLeaf ? nextLeaf?.dataset.streamId : null
-    let lastClickAt = Date.now()
-    click(next)
+    let lastClickAt = 0
     await waitFor('the selected incomplete proof branch to render', () => {
       let snapshot: StreamSnapshot
       try {
@@ -596,13 +607,14 @@ export class CompletePlaythroughDriver {
         return null
       }
       const leftCompletedStream = !previousStreamId || snapshot.streamId !== previousStreamId
-      const reachedSelectedLeaf = !streamId || snapshot.streamId === streamId
+      const reachedSelectedLeaf = route.kind !== 'leaf' || snapshot.streamId === route.streamId
       if (!leftCompletedStream || !reachedSelectedLeaf) {
-        // React may replace the graph while the completed branch is settling.
-        // Retry only until selection changes; never click again while merely
-        // waiting for the newly selected goal to paint.
-        if (next.isConnected && Date.now() - lastClickAt >= 250) {
-          click(next)
+        // React can replace both graph leaves and responsive navigation bars
+        // while the completed branch settles. Re-query the live control for
+        // every retry, and stop clicking as soon as selection changes.
+        const next = findRoute()
+        if (next && Date.now() - lastClickAt >= 250) {
+          click(next as unknown as HTMLElement)
           lastClickAt = Date.now()
         }
         return null
