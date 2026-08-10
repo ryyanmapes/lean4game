@@ -2687,27 +2687,26 @@ export function VisualCanvas({
     const { delta, active, over } = event
     const activeId = active.id as string
     let overId = over?.id as string | undefined
-    // Cards that can be both dragged and dropped occasionally make dnd-kit
-    // report no collision (or the active card itself) even though the release
-    // pointer is visibly over another card. Use the browser's own hit-test as
-    // a fallback so the interaction follows what the player can see.
-    if (!overId || overId === activeId) {
-      const origin = mobileDragPointerOriginRef.current
-      const translated = active.rect.current.translated
-      const pointerX = origin?.x != null
-        ? origin.x + delta.x
-        : translated ? translated.left + translated.width / 2 : null
-      const pointerY = origin?.y != null
-        ? origin.y + delta.y
-        : translated ? translated.top + translated.height / 2 : null
-      if (pointerX != null && pointerY != null) {
-        const card = document.elementsFromPoint(pointerX, pointerY)
-          .map(element => element.closest<HTMLElement>(
-            '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]',
-          ))
-          .find(element => element?.id && element.id !== activeId)
-        if (card?.id) overId = card.id
-      }
+    // Cards that can be both dragged and dropped can make rectangle collision
+    // prefer the large theorem tray (or the active card itself) even though
+    // the release pointer is visibly over a statement card. A card directly
+    // under the pointer is the player's unambiguous target, so let the
+    // browser's hit-test take precedence over dnd-kit's rectangle result.
+    const origin = mobileDragPointerOriginRef.current
+    const translated = active.rect.current.translated
+    const pointerX = origin?.x != null
+      ? origin.x + delta.x
+      : translated ? translated.left + translated.width / 2 : null
+    const pointerY = origin?.y != null
+      ? origin.y + delta.y
+      : translated ? translated.top + translated.height / 2 : null
+    if (pointerX != null && pointerY != null) {
+      const card = document.elementsFromPoint(pointerX, pointerY)
+        .map(element => element.closest<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]',
+        ))
+        .find(element => element?.id && element.id !== activeId)
+      if (card?.id) overId = card.id
     }
     setActiveDraggedTheorem(null)
     setActiveDraggedHyp(null)
