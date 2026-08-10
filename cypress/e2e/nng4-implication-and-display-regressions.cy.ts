@@ -4,12 +4,20 @@ import {
 } from '../support/completePlaythroughDriver'
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
-const LOAD_TIMEOUT = 600000
-const requestedRegression = String(Cypress.env('VISUAL_REGRESSION') ?? '')
+const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
+const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean)
 
 interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
-  getProofAudit(): { completed: boolean; processing: boolean }
+  getProofAudit(): {
+    completed: boolean
+    processing: boolean
+    coreLines: string[]
+    interactiveLines: string[]
+  }
 }
 
 type HarnessWindow = Cypress.AUTWindow & {
@@ -100,7 +108,10 @@ function playImplicationChain(sourceType: string, targetType: string) {
 
 describe('NNG4 implication and definition display regressions', () => {
   beforeEach(function () {
-    if (requestedRegression && !this.currentTest.title.includes(requestedRegression)) this.skip()
+    if (
+      requestedRegressions.length > 0
+      && !requestedRegressions.some(regression => this.currentTest.title.includes(regression))
+    ) this.skip()
     cy.on('uncaught:exception', error => {
       if (Cypress.env('VISUAL_DEBUG_UNCAUGHT')) throw error
       return false

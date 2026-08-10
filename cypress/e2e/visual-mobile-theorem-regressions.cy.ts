@@ -1,4 +1,8 @@
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
+const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean)
 // Development/CI exercises the websocket-backed game server. Release runs can
 // point this at the mounted browser build with LEAN4GAME_MOUNT.
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
@@ -121,7 +125,13 @@ function dragTheoremTemplateToDivider(theoremSuffix: string, dividerIndex: numbe
 }
 
 describe('Visual Lean mobile theorem player regressions', { testIsolation: false }, () => {
-  beforeEach(() => cy.viewport(390, 844))
+  beforeEach(function () {
+    if (
+      requestedRegressions.length > 0
+      && !requestedRegressions.some(regression => this.currentTest.title.includes(regression))
+    ) this.skip()
+    cy.viewport(390, 844)
+  })
 
   it('places a theorem tray card into a chosen theorem slot and keeps theorem styling', () => {
     openLevel('Implication', 9)
