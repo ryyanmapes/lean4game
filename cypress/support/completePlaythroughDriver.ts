@@ -565,7 +565,10 @@ export class CompletePlaythroughDriver {
     const nextLeaf = visible(this.win.document.querySelectorAll<HTMLElement>(
       '[data-testid="proof-stream-leaf"][data-completed="false"]',
     ))[0]
-    const next = towardIncomplete ?? nextLeaf
+    // Prefer the explicit proof-tree leaf. A highlighted left/right arrow can
+    // be duplicated across responsive layouts, while the leaf identifies the
+    // exact incomplete branch a player intends to resume.
+    const next = nextLeaf ?? towardIncomplete
     if (!next) {
       if (currentGoal(this.win)) return
       throw new Error(`Completed branch has no visible route to an incomplete stream (${JSON.stringify({
@@ -583,6 +586,7 @@ export class CompletePlaythroughDriver {
     // actually clicked that leaf; navigation arrows are validated by leaving
     // the completed stream and rendering any live goal.
     const streamId = next === nextLeaf ? nextLeaf?.dataset.streamId : null
+    let lastClickAt = Date.now()
     click(next)
     await waitFor('the selected incomplete proof branch to render', () => {
       let snapshot: StreamSnapshot
@@ -591,8 +595,18 @@ export class CompletePlaythroughDriver {
       } catch {
         return null
       }
-      if (previousStreamId && snapshot.streamId === previousStreamId) return null
-      if (streamId && snapshot.streamId !== streamId) return null
+      const leftCompletedStream = !previousStreamId || snapshot.streamId !== previousStreamId
+      const reachedSelectedLeaf = !streamId || snapshot.streamId === streamId
+      if (!leftCompletedStream || !reachedSelectedLeaf) {
+        // React may replace the graph while the completed branch is settling.
+        // Retry only until selection changes; never click again while merely
+        // waiting for the newly selected goal to paint.
+        if (next.isConnected && Date.now() - lastClickAt >= 250) {
+          click(next)
+          lastClickAt = Date.now()
+        }
+        return null
+      }
       return currentGoal(this.win)
     }, 15_000)
     if (this.pendingBranchAliases.length > 0) {
