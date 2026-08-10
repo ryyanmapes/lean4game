@@ -182,6 +182,21 @@ async function waitForProofChange(win: DriverWindow, previous: string, descripti
   }, INTERACTION_TIMEOUT)
 }
 
+async function waitForPlayerIdle(win: DriverWindow, description: string) {
+  await waitFor(description, () => {
+    const audit = harness(win).getProofAudit()
+    return !audit.processing && !win.document.querySelector('.tr-processing') ? true : null
+  })
+  // Require the idle state to survive another browser task. This models the
+  // beat between deliberate player gestures and avoids grabbing a card during
+  // the same React commit that finishes the preceding Lean interaction.
+  await sleep(50)
+  await waitFor(description, () => {
+    const audit = harness(win).getProofAudit()
+    return !audit.processing && !win.document.querySelector('.tr-processing') ? true : null
+  })
+}
+
 async function dragChangedProof(
   win: DriverWindow,
   source: HTMLElement,
@@ -909,6 +924,7 @@ export class CompletePlaythroughDriver {
   }
 
   private async dragAndWait(source: HTMLElement, target: HTMLElement, description: string) {
+    await waitForPlayerIdle(this.win, `${description} to become available`)
     const before = proofSignature(harness(this.win).getProofAudit())
     const previousAttempts = playLog(this.win).length
     await drag(source, target)
@@ -1075,6 +1091,7 @@ export class CompletePlaythroughDriver {
     hypName: string,
     direction: 'theorem-to-hypothesis' | 'hypothesis-to-theorem',
   ) {
+    await waitForPlayerIdle(this.win, `${theoremName} application to become available`)
     const copy = await waitFor(`workspace copy of ${theoremName}`, () => visible(
       this.win.document.querySelectorAll<HTMLElement>(
         `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(theoremName))}"]`,

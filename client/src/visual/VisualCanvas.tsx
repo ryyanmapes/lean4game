@@ -4860,7 +4860,11 @@ export function VisualCanvas({
     const interactiveLines = displayedProofLines(proofSteps, 'play')
     return {
       completed: visualTestStateRef.current.canvasCompleted,
-      processing: isProcessing,
+      // The ref is updated synchronously in the event handler, while React may
+      // not commit the corresponding render until after a fast test/player
+      // input has arrived.  Expose the same authoritative value used by the
+      // interaction guard so callers cannot mistake that gap for an idle UI.
+      processing: isProcessingRef.current,
       proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
       coreProofBody: [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'),
       coreLines,
