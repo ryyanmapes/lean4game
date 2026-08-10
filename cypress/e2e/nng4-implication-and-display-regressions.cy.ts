@@ -144,17 +144,21 @@ describe('NNG4 implication and definition display regressions', () => {
 
   it('renders the induction octagon edges with one color and one-pixel thickness', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`)
-    cy.get('[data-tactic-name="induction"]', { timeout: LOAD_TIMEOUT }).should($card => {
+    cy.get('[data-tactic-name="induction"]', { timeout: LOAD_TIMEOUT }).then($card => {
       const card = $card[0]!
       const cardStyle = getComputedStyle(card)
       const bevelStyle = getComputedStyle(card, '::after')
       const bevel = bevelStyle.backgroundImage
       const dangerBorder = cardStyle.getPropertyValue('--visual-danger-border').trim()
+      const normalizeColor = (value: string) => value
+        .replace(/\s+/gu, '')
+        .replace(/([,(])\./gu, (_match, prefix: string) => `${prefix}0.`)
 
       expect(cardStyle.borderTopWidth, 'native border retains one-pixel layout').to.equal('1px')
       expect(cardStyle.borderTopColor, 'native border does not double the straight edges')
         .to.equal('rgba(0, 0, 0, 0)')
-      expect(bevel, 'all octagon edges use the tactic border color').to.contain(dangerBorder)
+      expect(normalizeColor(bevel), 'all octagon edges use the tactic border color')
+        .to.contain(normalizeColor(dangerBorder))
       expect(bevel, 'diagonal corner bands are a solid one pixel inside the clip').to.contain('calc(50% + 1px)')
       expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
     })

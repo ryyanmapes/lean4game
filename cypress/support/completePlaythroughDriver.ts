@@ -842,6 +842,12 @@ export class CompletePlaythroughDriver {
   private async applyRewriteRule(rule: RewriteRule, occurrence: number | null) {
     const overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
+    await waitFor('rewrite controls to become interactive', () => {
+      const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
+      return !overlay.querySelector('.tr-processing') && swap?.getAttribute('aria-disabled') !== 'true'
+        ? true
+        : null
+    })
     const reverse = overlay.querySelector<HTMLButtonElement>('button[title^="Mode:"]')
     const isReverse = reverse?.classList.contains('active-reverse') ?? false
     if (reverse && isReverse !== rule.reverse) {
@@ -864,8 +870,10 @@ export class CompletePlaythroughDriver {
       const staticGroup = overlay.querySelector<HTMLElement>('.tr-static-group')
       const currentSide = staticGroup?.classList.contains('static-right') ? 'left' : 'right'
       if (currentSide !== requestedSide) {
-        const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
-        if (!swap) throw new Error('Could not find the transformation side selector')
+        const swap = await waitFor('available transformation side selector', () => {
+          const button = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
+          return button && button.getAttribute('aria-disabled') !== 'true' ? button : null
+        })
         click(swap)
         await waitFor(`rewrite ${requestedSide} side`, () => {
           const group = overlay.querySelector<HTMLElement>('.tr-static-group')
