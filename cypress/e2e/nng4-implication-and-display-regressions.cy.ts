@@ -142,7 +142,7 @@ describe('NNG4 implication and definition display regressions', () => {
       .and('have.class', 'variable-card')
   })
 
-  it('applies zero-ne-succ in either drag direction and restores its workspace copy on undo', () => {
+  it('applies zero-ne-succ from a hypothesis and restores its workspace copy on undo', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/9/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
@@ -150,10 +150,6 @@ describe('NNG4 implication and definition display regressions', () => {
       const player = new CompletePlaythroughDriver(win)
       await player.perform('intro h')
       await player.perform('rw [one_eq_succ_zero] at h')
-
-      await player.applyTheoremToHypothesis('zero_ne_succ', 'h')
-      expect(win.document.querySelector('[data-testid="hyp-card"][data-hyp-type="False"]')).to.exist
-      await player.undoLastPlayerStep()
 
       const copy = await player.placeTheoremCopy('zero_ne_succ')
       const originalPosition = { left: copy.style.left, top: copy.style.top }

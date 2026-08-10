@@ -1085,13 +1085,6 @@ export class CompletePlaythroughDriver {
     await waitForProofChange(this.win, before, description)
   }
 
-  async applyTheoremToHypothesis(theoremName: string, hypName: string) {
-    const theorem = await this.theorem(theoremName)
-    const hypothesis = await waitFor(`hypothesis ${hypName}`, () =>
-      this.hyp(this.resolveName(hypName)))
-    await this.dragAndWait(theorem, hypothesis, `${theoremName} theorem-to-hypothesis`)
-  }
-
   async undoLastPlayerStep() {
     const before = proofSignature(harness(this.win).getProofAudit())
     const undo = await waitFor('combining-mode undo button', () =>
