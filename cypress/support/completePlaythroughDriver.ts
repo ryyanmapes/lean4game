@@ -322,6 +322,47 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   await finishPointerDrag(source, target, startX, startY, 91)
 }
 
+async function dragToPoint(source: HTMLElement, clientX: number, clientY: number) {
+  source.scrollIntoView({ block: 'center', inline: 'center' })
+  await sleep(POLL_MS)
+  const start = source.getBoundingClientRect()
+  const startX = start.left + start.width / 2
+  const startY = start.top + start.height / 2
+  const ownerDocument = source.ownerDocument
+  const moveTarget = ownerDocument.body
+  const PointerEventCtor = ownerDocument.defaultView?.PointerEvent ?? PointerEvent
+  const pointer = {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 93,
+    pointerType: 'mouse',
+    isPrimary: true,
+    button: 0,
+  }
+  source.dispatchEvent(new PointerEventCtor('pointerdown', {
+    ...pointer,
+    buttons: 1,
+    clientX: startX,
+    clientY: startY,
+  }))
+  for (let step = 1; step <= 8; step += 1) {
+    const ratio = step / 8
+    moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+      ...pointer,
+      buttons: 1,
+      clientX: startX + (clientX - startX) * ratio,
+      clientY: startY + (clientY - startY) * ratio,
+    }))
+    await sleep(15)
+  }
+  moveTarget.dispatchEvent(new PointerEventCtor('pointerup', {
+    ...pointer,
+    buttons: 0,
+    clientX,
+    clientY,
+  }))
+}
+
 async function finishPointerDrag(
   source: HTMLElement,
   target: HTMLElement,
@@ -978,7 +1019,16 @@ export class CompletePlaythroughDriver {
     const copiesBefore = visible(this.win.document.querySelectorAll<HTMLElement>(
       `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
     )).length
-    await drag(source, canvas)
+    const bounds = canvas.getBoundingClientRect()
+    // Place the copy in empty lower-left canvas space. Dropping at the canvas
+    // centre can put a large theorem card directly over a hypothesis; because
+    // copies are also droppable, a later pointer release then targets the
+    // source copy instead of the hypothesis underneath it.
+    await dragToPoint(
+      source,
+      bounds.left + Math.min(180, bounds.width * 0.2),
+      bounds.bottom - Math.min(150, bounds.height * 0.2),
+    )
     return waitFor(`workspace copy of ${name}`, () => {
       const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
         `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,

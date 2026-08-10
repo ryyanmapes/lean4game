@@ -45,6 +45,17 @@ test('the proof sidebar keeps all Lean lines from one player gesture under one s
   assert.deepEqual(displayedProofSteps(steps, 'lean'), ['exfalso\nexact h'])
 })
 
+test('the interactive proof pane renders existential construction without a metavariable hole', () => {
+  const steps = [{
+    command: 'refine Exists.intro (0) ?_',
+    playTactic: 'refine Exists.intro (0) ?_',
+    leanTactic: 'use 0',
+    rotation: null,
+  }]
+  assert.deepEqual(displayedProofSteps(steps, 'play'), ['use 0'])
+  assert.equal(displayedProofSteps(steps, 'play')[0].includes('?'), false)
+})
+
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:
 //   induction c with d hd
 //   · rw [add_zero, add_zero]; rfl

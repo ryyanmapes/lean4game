@@ -150,7 +150,14 @@ export function explicitReverseRewriteCommand(
 }
 
 function leafForMode(step: ProofTextStep, mode: 'lean' | 'play'): string {
-  if (mode === 'play') return step.playTactic
+  if (mode === 'play') {
+    const existsIntro = /^refine\s+Exists\.intro\s+\((.+)\)\s+\?_$/u.exec(step.playTactic.trim())
+    // The interaction is recorded internally as a core `refine` so it also
+    // works in games that do not import the `use` tactic. The player-facing
+    // proof pane should show the equivalent complete tactic, never its
+    // implementation metavariable.
+    return existsIntro ? `use ${existsIntro[1]}` : step.playTactic
+  }
   return stripCasePrefixes(step.leanTactic)
     ?? coreTacticForVisualCommand(step.playTactic)
     ?? (isVisualOnlyPlayTactic(step.playTactic) ? `? (${step.playTactic})` : step.playTactic)
