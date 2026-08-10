@@ -1054,7 +1054,6 @@ export class CompletePlaythroughDriver {
   }
 
   async placeTheoremCopy(name: string) {
-    const source = await this.theorem(name)
     const canvas = await waitFor('combining canvas', () =>
       this.win.document.querySelector<HTMLElement>('[data-testid="combining-canvas"]'))
     const copiesBefore = visible(this.win.document.querySelectorAll<HTMLElement>(
@@ -1063,21 +1062,49 @@ export class CompletePlaythroughDriver {
     const bounds = canvas.getBoundingClientRect()
     const trayTop = this.win.document.getElementById('theorem-tray')
       ?.getBoundingClientRect().top ?? bounds.bottom
-    // Place the copy in empty lower-left canvas space. Dropping at the canvas
-    // centre can put a large theorem card directly over a hypothesis. Keep its
-    // centre well above the tray too: dnd-kit uses the whole dragged rectangle
-    // for collision detection, just like a player drag, not only the pointer.
-    await dragToPoint(
-      source,
-      bounds.left + Math.min(300, bounds.width * 0.25),
-      Math.min(bounds.top + bounds.height * 0.7, trayTop - 140),
-    )
-    const copy = await waitFor(`workspace copy of ${name}`, () => {
-      const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
-        `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
-      ))
-      return copies.length > copiesBefore ? copies.at(-1) ?? null : null
+    const sourceRect = (await this.theorem(name)).getBoundingClientRect()
+    const obstacles = visible(this.win.document.querySelectorAll<HTMLElement>(
+      '[data-testid="goal-card"], [data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+    )).map(element => element.getBoundingClientRect())
+    const candidates = [
+      [0.2, 0.65], [0.4, 0.65], [0.6, 0.65], [0.2, 0.4], [0.4, 0.4], [0.6, 0.4],
+    ].map(([xRatio, yRatio]) => ({
+      x: bounds.left + bounds.width * xRatio!,
+      y: Math.min(bounds.top + bounds.height * yRatio!, trayTop - sourceRect.height / 2 - 24),
+    }))
+    const openCandidates = candidates.filter(point => {
+      const candidate = {
+        left: point.x - sourceRect.width / 2,
+        right: point.x + sourceRect.width / 2,
+        top: point.y - sourceRect.height / 2,
+        bottom: point.y + sourceRect.height / 2,
+      }
+      return obstacles.every(obstacle =>
+        candidate.right < obstacle.left - 12
+        || candidate.left > obstacle.right + 12
+        || candidate.bottom < obstacle.top - 12
+        || candidate.top > obstacle.bottom + 12)
     })
+    const placements = openCandidates.length > 0 ? openCandidates : candidates
+    let copy: HTMLElement | null = null
+    let placementError: unknown
+    for (let attempt = 0; attempt < Math.min(3, placements.length); attempt += 1) {
+      const source = await this.theorem(name)
+      const point = placements[attempt]!
+      await dragToPoint(source, point.x, point.y)
+      try {
+        copy = await waitFor(`workspace copy of ${name}`, () => {
+          const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
+            `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
+          ))
+          return copies.length > copiesBefore ? copies.at(-1) ?? null : null
+        }, 5_000)
+        break
+      } catch (error) {
+        placementError = error
+      }
+    }
+    if (!copy) throw placementError ?? new Error(`Could not place workspace copy of ${name}`)
     // React can paint the new copy just before dnd-kit's layout effect has
     // registered it with the pointer sensor. A player necessarily takes a
     // beat between releasing the tray card and grabbing the new card; model
