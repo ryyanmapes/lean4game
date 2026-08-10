@@ -41,9 +41,6 @@ export function interactionToPlayTactic(i: VisualInteraction): string {
     case 'drag_apply':
       return `drag_apply ${i.theoremName} ${i.hypName}`
     case 'drag_tactic':
-      if (i.tacticName === 'revert' && i.targetHypName) {
-        return `revert ${i.targetHypName}`
-      }
       return i.targetHypName ? `${i.tacticName} at ${i.targetHypName}` : i.tacticName
     case 'drag_induction':
       return `induction ${i.hypName} with ${i.predecessorName ?? 'd'} ${i.inductionHypName ?? 'hd'}`

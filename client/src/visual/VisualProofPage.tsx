@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { useEffect, useState, useCallback, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
@@ -23,7 +24,7 @@ import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'revert', 'positivity', 'tauto'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'tauto'])
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1
@@ -84,6 +85,74 @@ function delay(ms: number) {
 
 function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
   return levelId - skippedLevels.filter(skipped => skipped > 0 && skipped < levelId).length
+}
+
+function levelSucceedsIntro(worldId: string, levelId: number, edges: string[][]): boolean {
+  if (worldId === 'Implication') return levelId > 6
+  const successors = new Map<string, string[]>()
+  for (const [source, target] of edges) {
+    if (!source || !target) continue
+    successors.set(source, [...(successors.get(source) ?? []), target])
+  }
+  const reachable = new Set<string>(['Implication'])
+  const queue = ['Implication']
+  while (queue.length > 0) {
+    const source = queue.shift()!
+    for (const target of successors.get(source) ?? []) {
+      if (reachable.has(target)) continue
+      reachable.add(target)
+      queue.push(target)
+    }
+  }
+  return reachable.has(worldId)
+}
+
+function moveInitialVariablesIntoGoal(canvas: CanvasState): {
+  canvas: CanvasState
+  prelude: string
+} {
+  const variableNames: string[] = []
+  const streams = canvas.streams.map(stream => {
+    const variables = stream.hyps.filter(card => !card.hyp.isAssumption && !card.isTheorem)
+    if (variables.length === 0) return stream
+
+    const variableIds = new Set(variables.map(card => card.id))
+    const binders = variables.flatMap(card => {
+      const type = TaggedText_stripTags(card.hyp.type).trim()
+      return card.hyp.names.filter(Boolean).map(name => {
+        variableNames.push(card.hyp.playName ?? name)
+        return `(${name} : ${type})`
+      })
+    })
+    const originalGoal = TaggedText_stripTags(stream.goal.type).trim()
+    const quantifiedGoal = binders.reduceRight(
+      (body, binder) => `∀ ${binder}, ${body}`,
+      originalGoal,
+    )
+
+    return {
+      ...stream,
+      goal: {
+        ...stream.goal,
+        type: { text: quantifiedGoal },
+        reductionForms: [],
+        clickAction: {
+          playTactic: 'click_goal',
+          tooltip: 'Introduce variable',
+          options: [],
+        },
+      },
+      hyps: stream.hyps.filter(card => !variableIds.has(card.id)),
+      equalityTree: undefined,
+      existsInfo: undefined,
+      reductionForms: [],
+    }
+  })
+
+  return {
+    canvas: { ...canvas, streams },
+    prelude: variableNames.length > 0 ? `revert ${variableNames.join(' ')}` : '',
+  }
 }
 
 function isPhonePortraitViewport(): boolean {
@@ -160,6 +229,7 @@ export function VisualProofPage() {
   const telemetryStartedAt = React.useMemo(() => Date.now(), [solvingId])
   const telemetrySequence = useRef(0)
   const navigate = useNavigate()
+  const proofPreludeRef = useRef('')
   useEffect(() => {
     // The map uses this to return the player to the world they just left,
     // especially on phone layouts where only part of the graph is visible.
@@ -302,6 +372,7 @@ export function VisualProofPage() {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
     setCanvasState(null)
     setResumeState(null)
+    proofPreludeRef.current = ''
     setError(null)
     if (!worldId || !levelId) return
 
@@ -322,12 +393,24 @@ export function VisualProofPage() {
           if (!active) {
             return
           }
-          const initialCanvas = proofStateToCanvas(proof)
+          let initialCanvas = proofStateToCanvas(proof)
+          if (gameId === 'NNG4') {
+            const gameData = await fetchJsonWithRetry<{
+              worlds?: { edges?: string[][] }
+            }>(`${getDataBaseUrl().replace(/\/$/, '')}/${gameId}/game.json`)
+            if (levelSucceedsIntro(worldId, levelId, gameData?.worlds?.edges ?? [])) {
+              const prepared = moveInitialVariablesIntoGoal(initialCanvas)
+              proofPreludeRef.current = prepared.prelude
+              initialCanvas = prepared.canvas
+            }
+          }
           const saved = loadVisualProofAutosave(gameId, worldId, levelId)
           let validatedResume: VisualProofResumeState | null = null
           if (saved && saved.proofBody.trim().length > 0) {
             try {
-              const restoredProof = await client.sendProofUpdate(saved.proofBody)
+              const restoredProof = await client.sendProofUpdate(
+                [proofPreludeRef.current, saved.proofBody].filter(Boolean).join('\n'),
+              )
               if (restoredProof !== null) {
                 validatedResume = saved
               } else {
@@ -366,7 +449,9 @@ export function VisualProofPage() {
   // returns the new ProofState, or null on Lean error.
   const handleInteraction = useCallback(async (proofBody: string): Promise<ProofState | null> => {
     if (!worldId || !levelId) return null
-    return getClient(worldId, levelId).sendProofUpdate(proofBody)
+    return getClient(worldId, levelId).sendProofUpdate(
+      [proofPreludeRef.current, proofBody].filter(Boolean).join('\n'),
+    )
   }, [getClient, levelId, worldId])
 
   // Fetch the level JSON directly to get the lemma list (InventoryPanel is not mounted
@@ -611,6 +696,7 @@ export function VisualProofPage() {
       onOpenClassic={handleOpenClassic}
       resumeState={resumeState}
       onAutosave={handleAutosave}
+      proofPrelude={proofPreludeRef.current}
     />
   )
 }

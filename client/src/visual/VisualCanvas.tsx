@@ -45,6 +45,7 @@ import {
   commandForGoalAction,
   coreCommandForGoalClick,
   displayedProofLines,
+  displayedProofSteps,
   explicitReverseRewriteCommand,
   isVisualOnlyPlayTactic,
   serializeProofCommands,
@@ -331,6 +332,14 @@ function cloneCanvasState(canvas: CanvasState): CanvasState {
   }
 }
 
+function cloneTheoremCopies(copies: PropositionTheoremCopy[]): PropositionTheoremCopy[] {
+  return copies.map(copy => ({
+    ...copy,
+    theorem: { ...copy.theorem },
+    position: { ...copy.position },
+  }))
+}
+
 function streamHypNames(stream?: GoalStream | null): string[] {
   if (!stream) return []
   return stream.hyps.flatMap(card => card.hyp.names).filter((name): name is string => Boolean(name))
@@ -371,6 +380,8 @@ interface ProofStepRecord {
   activeStreamIdAfter: string | null
   /** The transform target active when this step was applied (non-null = was a rewrite). Used by undo to navigate back to the right mode. */
   transformTargetSnapshot: TransformTarget | null
+  /** Workspace theorem copies immediately before this interaction. */
+  theoremCopiesBefore?: PropositionTheoremCopy[]
 }
 
 interface PlacementHint {
@@ -1205,7 +1216,8 @@ function inferLeanTacticFromVisualInteraction(
     }
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
     if (hypType === 'False') {
-      return `exfalso\nexact ${hypName}`
+      const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
+      return goalType === 'False' ? `exact ${hypName}` : `exfalso\nexact ${hypName}`
     }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
     const iffSides = splitIffText(hypType)
@@ -1238,11 +1250,15 @@ function resolveLeanTactic(
 ): string | null {
   const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream, resultStep)
   const annotationLeaf = stripCasePrefixes(annotationLeanTactic)
+  // A placeholder annotation describes the visual command but is not valid
+  // Lean. Prefer the generic structural inference (for example A applied to
+  // A → B) instead of ever rendering `? (drag_to h1 h2)` as Core Lean.
+  const hasUsableAnnotation = Boolean(annotationLeaf && !annotationLeaf.includes('?'))
   const shouldPreferNamedIntro =
     playTactic === 'click_goal' &&
     annotationLeaf === 'intro' &&
     (inferredLeanTactic?.startsWith('intro ') ?? false)
-  if (annotationLeanTactic && !shouldPreferNamedIntro) return annotationLeanTactic
+  if (hasUsableAnnotation && annotationLeanTactic && !shouldPreferNamedIntro) return annotationLeanTactic
   if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
   if (!isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
   return null
@@ -1282,6 +1298,78 @@ export interface VisualProofResumeState {
   activeStreamId: string | null
   theoremCopies: PropositionTheoremCopy[]
   savedAt: number
+}
+
+interface TheoremApplicationDerivation {
+  command: string
+  hypName: string
+  hypType: string
+}
+
+/** Build the visible `have` produced by applying any theorem-shaped card to a
+ * matching premise card. This is shared by tray templates and placed theorem
+ * copies, and is independent of which card the player drags first. */
+function deriveTheoremApplication(
+  theorem: PropositionTheorem,
+  premiseCard: HypCardType,
+  stream: GoalStream,
+): TheoremApplicationDerivation | null {
+  const theoremText = theorem.proposition
+  const premiseRef = interactionHypName(premiseCard) ?? premiseCard.hyp.names[0]
+  if (!premiseRef) return null
+  const hypName = nextFreshHypName(stream.hyps, 'h')
+  const implicationText = [theoremText, ...(theorem.reductionForms ?? [])]
+    .find(candidate => splitImplicationText(candidate) !== null)
+  const implication = implicationText ? splitImplicationText(implicationText) : null
+  const premiseType = (premiseCard.hyp.typeBody ?? TaggedText_stripTags(premiseCard.hyp.type)).trim()
+
+  if (implication) {
+    let resultType: string | null = null
+    let inferredValues: Record<string, string> = {}
+    try {
+      const patternTarget = premiseType.replace(/≠/gu, '=')
+      const patternPremise = implication[0].replace(/≠/gu, '=')
+      const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
+      if (bindings) {
+        resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+        inferredValues = Object.fromEntries(
+          Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
+        )
+      }
+    } catch {
+      if (formulasMatch(implication[0], premiseType)) resultType = implication[1]
+    }
+    if (resultType !== null) {
+      const application = buildQuantifiedTheoremApplication(
+        theorem.theoremName,
+        theorem.forallFooter,
+        inferredValues,
+        premiseRef,
+      )
+      return {
+        command: `have ${hypName} := ${application}`,
+        hypName,
+        hypType: resultType,
+      }
+    }
+  }
+
+  const premiseEquality = parsedHypEquality(premiseCard)
+  if (premiseEquality) {
+    const rewriteRightToLeft = theoremText.includes(premiseEquality.rhsStr)
+    const rewriteLeftToRight = theoremText.includes(premiseEquality.lhsStr)
+    if (rewriteRightToLeft || rewriteLeftToRight) {
+      const from = rewriteRightToLeft ? premiseEquality.rhsStr : premiseEquality.lhsStr
+      const to = rewriteRightToLeft ? premiseEquality.lhsStr : premiseEquality.rhsStr
+      const arrow = rewriteRightToLeft ? '← ' : ''
+      return {
+        command: `have ${hypName} := ${theorem.theoremName}; rw [${arrow}${premiseRef}] at ${hypName}`,
+        hypName,
+        hypType: replaceIdentifier(theoremText, from, to),
+      }
+    }
+  }
+  return null
 }
 
 function synthesizeForallSpecializationContinuation(
@@ -1407,6 +1495,8 @@ interface VisualCanvasProps {
   onOpenClassic?: (proofBody: string) => void
   resumeState?: VisualProofResumeState | null
   onAutosave?: (state: VisualProofResumeState) => void
+  /** Hidden setup needed to present original theorem binders as clickable goals. */
+  proofPrelude?: string
 }
 
 function TheoremTray({
@@ -1626,7 +1716,7 @@ export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave
+  onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
@@ -1836,10 +1926,10 @@ export function VisualCanvas({
   useEffect(() => {
     if (canvasState.completed) {
       const playScript = buildStructuredProof(proofSteps, 'play')
-      const leanScript = buildStructuredLeanProof(proofSteps)
+      const leanScript = [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n')
       onLevelCompleted?.({ playScript, leanScript })
     }
-  }, [canvasState.completed])
+  }, [canvasState.completed, proofPrelude])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2308,7 +2398,19 @@ export function VisualCanvas({
     }
 
     const annotation = lastStep?.annotation
-    const leanCanvas = proofStateToCanvas(result)
+    const returnedGoals = lastStep?.focusedGoals?.length
+      ? lastStep.focusedGoals
+      : lastStep?.goals ?? []
+    const returnedIntroStreams = playTactic === 'click_goal' && leanTactic?.startsWith('intro')
+      ? interactiveGoalsToStreams(returnedGoals)
+      : []
+    // The proof RPC can report `completed` for a definitionally reduced
+    // function goal even though the same response contains the post-`intro`
+    // goal. A concrete returned stream is stronger evidence here: keep it so
+    // the player still has to perform the remaining proof interactions.
+    const leanCanvas = returnedIntroStreams.length > 0
+      ? { streams: returnedIntroStreams, completed: false }
+      : proofStateToCanvas(result)
     leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
@@ -2360,6 +2462,7 @@ export function VisualCanvas({
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
+      theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
     onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
@@ -2419,6 +2522,9 @@ export function VisualCanvas({
         ? cloneCanvasState(initialState)
         : mergeCanvasState(proofStateToCanvas(result), canvasState))
     const restoredCanvas = cloneCanvasState(nextCanvas)
+    if (removedStep.theoremCopiesBefore) {
+      setTheoremCopies(cloneTheoremCopies(removedStep.theoremCopiesBefore))
+    }
 
     setProofSteps(newSteps)
     setProofTree(cloneProofTree(nextTree))
@@ -2635,10 +2741,6 @@ export function VisualCanvas({
     }
 
     if (tacticTemplate) {
-      if (tacticTemplate.name === 'revert' && goalIds.has(overId as string)) {
-        return
-      }
-
       if (goalIds.has(overId as string)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
         applyInteraction(playTactic, activeId, {
@@ -2716,60 +2818,8 @@ export function VisualCanvas({
             nameB: targetName,
             reverse,
           })
-          const targetEquality = targetCard ? parsedHypEquality(targetCard) : null
-          const theoremDerivation = targetCard && theoremTemplate
-            ? (() => {
-                const theoremText = theoremTemplate.proposition
-                const targetRef = interactionHypName(targetCard) ?? targetName
-                const hypName = nextFreshHypName(targetStream!.hyps, 'h')
-                const implication = splitImplicationText(theoremText)
-                const targetType = (targetCard.hyp.typeBody ?? TaggedText_stripTags(targetCard.hyp.type)).trim()
-                if (implication) {
-                  let resultType: string | null = null
-                  let inferredValues: Record<string, string> = {}
-                  try {
-                    const patternTarget = targetType.replace(/≠/gu, '=')
-                    const patternPremise = implication[0].replace(/≠/gu, '=')
-                    const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
-                    if (bindings) {
-                      resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
-                      inferredValues = Object.fromEntries(
-                        Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
-                      )
-                    }
-                  } catch {
-                    if (formulasMatch(implication[0], targetType)) resultType = implication[1]
-                  }
-                  if (resultType !== null) {
-                    const application = buildQuantifiedTheoremApplication(
-                      theoremTemplate.theoremName,
-                      theoremTemplate.forallFooter,
-                      inferredValues,
-                      targetRef,
-                    )
-                    return {
-                      command: `have ${hypName} := ${application}`,
-                      hypName,
-                      hypType: resultType,
-                    }
-                  }
-                }
-                if (targetEquality) {
-                  const rewriteRightToLeft = theoremText.includes(targetEquality.rhsStr)
-                  const rewriteLeftToRight = theoremText.includes(targetEquality.lhsStr)
-                  if (rewriteRightToLeft || rewriteLeftToRight) {
-                    const from = rewriteRightToLeft ? targetEquality.rhsStr : targetEquality.lhsStr
-                    const to = rewriteRightToLeft ? targetEquality.lhsStr : targetEquality.rhsStr
-                    const arrow = rewriteRightToLeft ? '← ' : ''
-                    return {
-                      command: `have ${hypName} := ${theoremTemplate.theoremName}; rw [${arrow}${targetRef}] at ${hypName}`,
-                      hypName,
-                      hypType: replaceIdentifier(theoremText, from, to),
-                    }
-                  }
-                }
-                return null
-              })()
+          const theoremDerivation = targetCard && targetStream
+            ? deriveTheoremApplication(theoremTemplate, targetCard, targetStream)
             : null
           applyInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
@@ -2845,9 +2895,17 @@ export function VisualCanvas({
             theoremName: targetTheoremCopy.theorem.theoremName,
             hypName: sourceName,
           })
+          const theoremDerivation = sourceStream
+            ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
+            : null
           applyInteraction(playTactic, activeId, {
             consumedTheoremCopyIds: [targetTheoremCopy.id],
             mobileInsertAfter: targetTheoremCopy ? theoremCopyMobileKey(targetTheoremCopy) : undefined,
+            ...(theoremDerivation ? {
+              commandOverride: theoremDerivation.command,
+              leanTacticOverride: theoremDerivation.command,
+              syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+            } : {}),
           })
           return
         }
@@ -2890,6 +2948,11 @@ export function VisualCanvas({
         const playTactic = interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
         const consumedTheoremCopyIds = [sourceTheoremCopy?.id, targetTheoremCopy?.id]
           .filter((id): id is string => Boolean(id))
+        const theoremDerivation = sourceTheoremCopy && targetCard && targetStream
+          ? deriveTheoremApplication(sourceTheoremCopy.theorem, targetCard, targetStream)
+          : targetTheoremCopy && sourceCard && sourceStream
+            ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
+            : null
         applyInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
@@ -2898,6 +2961,11 @@ export function VisualCanvas({
             : targetTheoremCopy
               ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) }
               : {}),
+          ...(theoremDerivation ? {
+            commandOverride: theoremDerivation.command,
+            leanTacticOverride: theoremDerivation.command,
+            syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+          } : {}),
         })
       }
       return
@@ -3342,6 +3410,7 @@ export function VisualCanvas({
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: null,
+      theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
     onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
 
@@ -3608,6 +3677,7 @@ export function VisualCanvas({
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       transformTargetSnapshot: transformTarget,
+      theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
     onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
 
@@ -4057,7 +4127,7 @@ export function VisualCanvas({
   useLayoutEffect(() => {
     const updateGuides = () => {
       if (activeTacticHypInfos.length === 0) {
-        setTacticHypGuides([])
+        setTacticHypGuides(current => current.length === 0 ? current : [])
         return
       }
 
@@ -4139,7 +4209,9 @@ export function VisualCanvas({
           },
         })
       }
-      setTacticHypGuides(nextGuides)
+      setTacticHypGuides(current =>
+        JSON.stringify(current) === JSON.stringify(nextGuides) ? current : nextGuides
+      )
     }
 
     updateGuides()
@@ -4163,13 +4235,13 @@ export function VisualCanvas({
   useLayoutEffect(() => {
     const updateGuides = () => {
       if (activeHypGoalInfos.length === 0) {
-        setHypGoalGuides([])
+        setHypGoalGuides(current => current.length === 0 ? current : [])
         return
       }
 
       const goalEl = goalsContainerRef.current?.querySelector<HTMLElement>('[data-testid="goal-card"]')
       if (!goalEl) {
-        setHypGoalGuides([])
+        setHypGoalGuides(current => current.length === 0 ? current : [])
         return
       }
 
@@ -4236,7 +4308,9 @@ export function VisualCanvas({
           },
         })
       }
-      setHypGoalGuides(nextGuides)
+      setHypGoalGuides(current =>
+        JSON.stringify(current) === JSON.stringify(nextGuides) ? current : nextGuides
+      )
     }
 
     updateGuides()
@@ -4262,7 +4336,7 @@ export function VisualCanvas({
   useLayoutEffect(() => {
     const updateGuides = () => {
       if (activeHypInfos.length === 0) {
-        setHypInfoGuides([])
+        setHypInfoGuides(current => current.length === 0 ? current : [])
         return
       }
 
@@ -4311,7 +4385,9 @@ export function VisualCanvas({
           },
         })
       }
-      setHypInfoGuides(nextGuides)
+      setHypInfoGuides(current =>
+        JSON.stringify(current) === JSON.stringify(nextGuides) ? current : nextGuides
+      )
     }
 
     updateGuides()
@@ -4610,7 +4686,7 @@ export function VisualCanvas({
       completed: visualTestStateRef.current.canvasCompleted,
       processing: isProcessing,
       proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
-      coreProofBody: buildStructuredLeanProof(proofSteps),
+      coreProofBody: [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'),
       coreLines,
       interactiveLines,
       visibleNames: streams.flatMap(stream =>
@@ -4783,7 +4859,7 @@ export function VisualCanvas({
                 data-testid="proof-action-export-classic"
                 onClick={() => {
                   if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
-                  onOpenClassic(buildStructuredLeanProof(proofSteps))
+                  onOpenClassic([proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'))
                 }}
               >Export to classic mode</button>
             )}
@@ -4794,7 +4870,7 @@ export function VisualCanvas({
   }
 
   function renderProofStepList() {
-    const lines = displayedProofLines(proofSteps, sideViewMode)
+    const lines = displayedProofSteps(proofSteps, sideViewMode)
     return (
       <div className="proof-sidebar-steps">
         {lines.map((line, i) => {

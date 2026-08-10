@@ -5,6 +5,7 @@ import Lean.Meta.Tactic.Rewrite
 import Lean.Meta.Tactic.Replace
 import Lean.Meta.Tactic.Refl
 import Lean.Meta.Tactic.Assert
+import Lean.Meta.Tactic.Intro
 import Lean.Meta.Tactic.Rename
 import Lean.Parser.Extension
 import Lean.Util.OccursCheck
@@ -169,6 +170,11 @@ private def freshUserName (base : String) : TacticM Name := withMainContext do
     idx := idx + 1
     candidate := Name.mkSimple s!"{base}{idx}"
   pure candidate
+
+private def introPropositionWithoutCleanup (name : Name) : TacticM Unit :=
+  liftMetaTactic fun mvarId => do
+    let (_, nextGoal) ← mvarId.intro name
+    pure [nextGoal]
 
 private def freshDerivedTheoremName (base : String) : TacticM Name := do
   let base := if base.isEmpty then "theorem" else base
@@ -840,7 +846,7 @@ syntax (name := click_goal) "click_goal" : tactic
             evalTacticString "intro"
   | some .introProp =>
       let hName ← freshUserName "h"
-      evalTacticString s!"intro {hName}"
+      introPropositionWithoutCleanup hName
   | some .splitAnd =>
       evalTactic (← `(tactic| constructor))
   | _ =>

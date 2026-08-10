@@ -10,6 +10,7 @@ interface ProofAudit {
 
 interface StreamSnapshot {
   streamId: string
+  goalType: string
   hypTypes: Record<string, string>
   currentStreamIsCompleted: boolean
 }
@@ -491,7 +492,9 @@ function matchesExplicitArgument(actual: ExpressionNode, expected: ExpressionNod
 }
 
 function forallBinderNames(card: HTMLElement): string[] {
-  const footer = card.querySelector<HTMLElement>('.tr-forall-footer')?.textContent ?? ''
+  const footer = card.querySelector<HTMLElement>(
+    '.tr-forall-footer, .statement-forall-footer',
+  )?.textContent ?? ''
   return Array.from(footer.matchAll(/[({]\s*([^\s:(){}]+)/gu), match => match[1])
 }
 
@@ -518,6 +521,31 @@ function matchesPartiallyAppliedRule(
     // If an older card format cannot be parsed, retain the normal visual
     // target behavior instead of inventing a false negative.
     return true
+  }
+}
+
+function matchesTheoremPremise(
+  theorem: HTMLElement,
+  hypothesis: HTMLElement,
+  explicitArgs: string[],
+): boolean {
+  const proposition = theorem.querySelector<HTMLElement>('.proposition')?.textContent ?? ''
+  const arrow = proposition.indexOf('→')
+  const targetType = hypothesis.dataset.hypType
+  if (arrow < 0 || !targetType) return false
+  try {
+    const bindings = matchAndCapture(
+      parse(targetType.replace(/≠/gu, '=')),
+      parse(proposition.slice(0, arrow).trim().replace(/≠/gu, '=')),
+    )
+    if (!bindings) return false
+    const binders = forallBinderNames(theorem)
+    return explicitArgs.every((argument, index) => {
+      const actual = bindings[binders[index]]
+      return actual ? matchesExplicitArgument(actual, parse(argument)) : false
+    })
+  } catch {
+    return false
   }
 }
 
@@ -568,6 +596,7 @@ export class CompletePlaythroughDriver {
   private readonly aliases = new Map<string, string>()
   private readonly pendingBranchAliases: Array<{ expected: string; before: Set<string> }> = []
   private classicCommandsAlreadyCovered = 0
+  private implicitIntroAlreadyPerformed = false
   private preferredRewriteSide: 'left' | 'right' | null = null
 
   constructor(private readonly win: DriverWindow) {}
@@ -931,14 +960,86 @@ export class CompletePlaythroughDriver {
     return this.hyp(name) ?? await this.theorem(name)
   }
 
+  async placeTheoremCopy(name: string) {
+    const source = await this.theorem(name)
+    const canvas = await waitFor('combining canvas', () =>
+      this.win.document.querySelector<HTMLElement>('[data-testid="combining-canvas"]'))
+    const copiesBefore = visible(this.win.document.querySelectorAll<HTMLElement>(
+      `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
+    )).length
+    await drag(source, canvas)
+    return waitFor(`workspace copy of ${name}`, () => {
+      const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
+        `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
+      ))
+      return copies.length > copiesBefore ? copies.at(-1) ?? null : null
+    })
+  }
+
+  async applyTheoremCopyToHypothesis(
+    theoremName: string,
+    hypName: string,
+    direction: 'theorem-to-hypothesis' | 'hypothesis-to-theorem',
+  ) {
+    const copy = await waitFor(`workspace copy of ${theoremName}`, () => visible(
+      this.win.document.querySelectorAll<HTMLElement>(
+        `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(theoremName))}"]`,
+      ),
+    )[0])
+    const hypothesis = await waitFor(`hypothesis ${hypName}`, () => this.hyp(this.resolveName(hypName)))
+    await this.dragAndWait(
+      direction === 'theorem-to-hypothesis' ? copy : hypothesis,
+      direction === 'theorem-to-hypothesis' ? hypothesis : copy,
+      `${theoremName} ${direction}`,
+    )
+  }
+
+  async undoLastPlayerStep() {
+    const before = proofSignature(harness(this.win).getProofAudit())
+    const undo = await waitFor('combining-mode undo button', () =>
+      visible(this.win.document.querySelectorAll<HTMLButtonElement>('.tr-controls .active-undo[title="Undo"]'))[0])
+    click(undo)
+    await waitFor('undo to restore the previous player state', () => {
+      const audit = harness(this.win).getProofAudit()
+      return !audit.processing && proofSignature(audit) !== before ? audit : null
+    }, INTERACTION_TIMEOUT)
+  }
+
   private async applyOrExact(command: string) {
     const match = /^(?:apply|exact)\s+(.+?)(?:\s+at\s+(\S+))?$/u.exec(command)
     if (!match) throw new Error(`Unsupported theorem application: ${command}`)
-    const name = sourceName(match[1])
+    const application = splitTopLevelWhitespace(match[1])
+    const name = sourceName(application[0] ?? match[1])
+    const explicitArgs = application.slice(1)
     const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-    const source = await this.sourceCard(name)
+    let source = await this.sourceCard(name)
+    let usedPremiseApplication = false
+    if (!match[2] && explicitArgs.length > 0) {
+      const matchingHypothesis = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      ).find(hypothesis => matchesTheoremPremise(source, hypothesis, explicitArgs))
+      if (matchingHypothesis) {
+        const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        await this.dragAndWait(source, matchingHypothesis, `${command} premise application`)
+        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(candidate => !namesBeforeApplication.has(candidate))
+        if (!createdName) throw new Error(`${command} did not derive its theorem conclusion`)
+        source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
+        usedPremiseApplication = true
+      }
+    }
+    for (const argument of usedPremiseApplication ? [] : explicitArgs) {
+      const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+      doubleClick(source)
+      await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+      await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
+      const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        .find(candidate => !namesBeforeArgument.has(candidate))
+      if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
+      source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
+    }
     const target = match[2]
-      ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(match[2]))
+      ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(this.resolveName(match[2])))
       : await waitFor('current goal', () => currentGoal(this.win))
     await this.dragAndWait(source, target, `${command} player drag`)
     if (match[2]) {
@@ -1137,7 +1238,7 @@ export class CompletePlaythroughDriver {
             throw new Error(`Rewriting under an implication did not introduce a transformable premise (${command})`)
           }
           this.aliases.set('h', introducedName)
-          this.classicCommandsAlreadyCovered += 1
+          this.implicitIntroAlreadyPerformed = true
           target = introducedName
         }
       }
@@ -1296,6 +1397,15 @@ export class CompletePlaythroughDriver {
     await this.submitConstruction(parseConstructionExpr(match[1]), command)
   }
 
+  private async introduceLeadingForalls() {
+    for (let count = 0; count < 32; count += 1) {
+      const snapshot = harness(this.win).getCurrentStreamSnapshot()
+      if (!/^\s*∀/u.test(snapshot.goalType)) return
+      await this.clickGoal()
+    }
+    throw new Error('More than 32 leading forall binders remained after player introductions')
+  }
+
   async perform(command: string) {
     await waitFor(
       `visual proof to become idle before ${command}`,
@@ -1304,13 +1414,43 @@ export class CompletePlaythroughDriver {
     )
     if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
+    await this.introduceLeadingForalls()
     const normalized = command.trim()
+    if (this.implicitIntroAlreadyPerformed) {
+      this.implicitIntroAlreadyPerformed = false
+      if (/^intro(?:\s+|$)/u.test(normalized)) return
+    }
     if (this.classicCommandsAlreadyCovered > 0) {
       this.classicCommandsAlreadyCovered -= 1
       return
     }
-    if (normalized === 'rfl' || normalized === 'intro h' || /^intro\s+/u.test(normalized)) {
+    if (normalized === 'rfl') {
       await this.clickGoal()
+      return
+    }
+    if (/^intro(?:\s+|$)/u.test(normalized)) {
+      const requestedNames = normalized.replace(/^intro\s*/u, '').trim().split(/\s+/u).filter(Boolean)
+      const introductions = requestedNames.length > 0 ? requestedNames : ['h']
+      for (const requestedName of introductions) {
+        const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        await this.clickGoal()
+        let afterNames: string[]
+        try {
+          afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        } catch {
+          const audit = harness(this.win).getProofAudit()
+          throw new Error(
+            `Intro ${requestedName} left no interactive stream: ${JSON.stringify({
+              completed: audit.completed,
+              coreLines: audit.coreLines,
+              interactiveLines: audit.interactiveLines,
+              proofBody: audit.proofBody,
+            })}`,
+          )
+        }
+        const actualName = afterNames.find(name => !beforeNames.has(name))
+        if (actualName) this.aliases.set(requestedName, actualName)
+      }
       return
     }
     if (normalized === 'left' || normalized === 'right') {

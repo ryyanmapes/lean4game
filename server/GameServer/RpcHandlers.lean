@@ -1534,7 +1534,8 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
         let startResultsAfter := goalsAtStartResult.filter (fun result => result.useAfter)
         let sourceTrimmed := source.trimAscii.toString
         let prefersStartAfterFallback :=
-          sourceTrimmed.startsWith "drag_rw" || sourceTrimmed.startsWith "drag_rw_hyp"
+          sourceTrimmed.startsWith "drag_rw" || sourceTrimmed.startsWith "drag_rw_hyp" ||
+          sourceTrimmed == "click_goal"
         let goalsAtPreferredResult :=
           if prefersStartAfterFallback then
             match endResultsAfter with
@@ -1584,6 +1585,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
             fun { ctxInfo := ci, tacticInfo := tacticInfo, useAfter := useAfter, .. } => do
               -- TODO: What does this function body do?
               -- let ciAfter := { ci with mctx := ti.mctxAfter }
+              let useAfter := useAfter || sourceTrimmed == "click_goal"
               let ci := if useAfter then
                   { ci with mctx := tacticInfo.mctxAfter }
                 else
@@ -1598,6 +1600,7 @@ def getProofState (p : ProofStateParams) : RequestM (RequestTask (Option ProofSt
           let focusedGoals ←
             match goalsAtResult.getLast? with
             | some { ctxInfo := ci, tacticInfo := tacticInfo, useAfter := useAfter, .. } =>
+                let useAfter := useAfter || sourceTrimmed == "click_goal"
                 let ci := if useAfter then
                     { ci with mctx := tacticInfo.mctxAfter }
                   else

@@ -393,5 +393,16 @@ describe('VisualTest Level 2', () => {
       ])
       expect(entries.every(entry => entry.succeeded === true)).to.equal(true)
     })
+
+    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
+    cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+    cy.get('.proof-sidebar-step.unknown').should('not.exist')
+    cy.get('.proof-sidebar-step-text').then(steps => {
+      const text = Array.from(steps, step => step.textContent ?? '').join('\n')
+      expect(text, 'function application drags render as ordinary have statements')
+        .to.match(/have\s+h\d*\s*:=/u)
+      expect(text).not.to.contain('? (drag_to')
+    })
   })
 })

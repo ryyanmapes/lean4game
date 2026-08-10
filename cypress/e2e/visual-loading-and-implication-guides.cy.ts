@@ -127,15 +127,13 @@ describe('Visual loading progress and Implication guidance', () => {
     ).should('not.exist')
   })
 
-  it('opens playable Implication 5 on the highlighted revert tactic and spaces its note', () => {
+  it('opens playable Implication 5 without the removed revert tactic and spaces its note', () => {
     // Authored level 6 is displayed as level 5 because authored level 5 is skipped.
     cy.visit(levelUrl(6))
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
     cy.contains('.tr-tab-btn.active', 'Tactics').should('be.visible')
-    cy.get('[data-tactic-name="revert"]')
-      .should('be.visible')
-      .and('have.class', 'visual-emphasize')
+    cy.get('[data-tactic-name="revert"]').should('not.exist')
 
     cy.contains('.goal-info', 'Note that this process can be undone').within(() => {
       cy.get('br').should('have.length.at.least', 2)

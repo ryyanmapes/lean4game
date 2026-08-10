@@ -483,14 +483,14 @@
   position: relative;
   border-color: transparent;
   clip-path: polygon(
-    0.65rem 0,
-    calc(100% - 0.65rem) 0,
-    100% 0.65rem,
-    100% calc(100% - 0.65rem),
-    calc(100% - 0.65rem) 100%,
-    0.65rem 100%,
-    0 calc(100% - 0.65rem),
-    0 0.65rem
+    1rem 0,
+    calc(100% - 1rem) 0,
+    100% 1rem,
+    100% calc(100% - 1rem),
+    calc(100% - 1rem) 100%,
+    1rem 100%,
+    0 calc(100% - 1rem),
+    0 1rem
   );
 }
 
@@ -506,14 +506,14 @@
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 1.3rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 1.3rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 1.3rem) no-repeat,
-    linear-gradient(135deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1px), transparent calc(50% + 1px)) top left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 1px), var(--bevel-border-color) calc(50% - 1px), var(--bevel-border-color) 50%, transparent 50%) top right / 0.65rem 0.65rem no-repeat,
-    linear-gradient(45deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1px), transparent calc(50% + 1px)) bottom left / 0.65rem 0.65rem no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 1px), var(--bevel-border-color) calc(50% - 1px), var(--bevel-border-color) 50%, transparent 50%) bottom right / 0.65rem 0.65rem no-repeat;
+    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 2rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 2rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 2rem) no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 2rem) no-repeat,
+    linear-gradient(135deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1.414px), transparent calc(50% + 1.414px)) top left / 1rem 1rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 1.414px), var(--bevel-border-color) calc(50% - 1.414px), var(--bevel-border-color) 50%, transparent 50%) top right / 1rem 1rem no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1.414px), transparent calc(50% + 1.414px)) bottom left / 1rem 1rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 1.414px), var(--bevel-border-color) calc(50% - 1.414px), var(--bevel-border-color) 50%, transparent 50%) bottom right / 1rem 1rem no-repeat;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,

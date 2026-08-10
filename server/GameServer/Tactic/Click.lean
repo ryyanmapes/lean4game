@@ -1,4 +1,5 @@
 import Lean.Elab.Tactic.Basic
+import Lean.Meta.Tactic.Intro
 import Lean.Meta.Tactic.Refl
 import GameServer.GoalClick
 
@@ -14,6 +15,11 @@ private def freshUserName (base : String) : TacticM Name := withMainContext do
     idx := idx + 1
     candidate := Name.mkSimple s!"{base}{idx}"
   pure candidate
+
+private def introPropositionWithoutCleanup (name : Name) : TacticM Unit :=
+  liftMetaTactic fun mvarId => do
+    let (_, nextGoal) ← mvarId.intro name
+    pure [nextGoal]
 
 private def evalTacticString (src : String) : TacticM Unit := do
   let env ← getEnv
@@ -61,7 +67,7 @@ syntax (name := click_goal) "click_goal" : tactic
             evalTacticString "intro"
   | some .introProp =>
       let hName ← freshUserName "h"
-      evalTacticString s!"intro {hName}"
+      introPropositionWithoutCleanup hName
   | some .splitAnd =>
       evalTactic (← `(tactic| constructor))
   | _ =>

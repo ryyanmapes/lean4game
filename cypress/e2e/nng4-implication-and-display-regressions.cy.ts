@@ -40,6 +40,8 @@ function performPlayerGestures(commands: PlayerGesture[]) {
     const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
     expect(audit?.processing, 'visual proof is idle').to.equal(false)
     expect(audit?.completed, 'visual proof is complete').to.equal(true)
+    expect(audit?.coreLines.some(line => line.includes('?')), 'Core tactics are valid').to.equal(false)
+    expect(audit?.interactiveLines.some(line => line.includes('?')), 'interaction tactics are valid').to.equal(false)
   })
 }
 
@@ -99,7 +101,10 @@ function playImplicationChain(sourceType: string, targetType: string) {
 describe('NNG4 implication and definition display regressions', () => {
   beforeEach(function () {
     if (requestedRegression && !this.currentTest.title.includes(requestedRegression)) this.skip()
-    cy.on('uncaught:exception', () => false)
+    cy.on('uncaught:exception', error => {
+      if (Cypress.env('VISUAL_DEBUG_UNCAUGHT')) throw error
+      return false
+    })
     cy.clearCookies()
     cy.clearLocalStorage()
   })
@@ -120,6 +125,59 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
     performPlayerGestures(['symm', 'exact zero_ne_one'])
+  })
+
+  it('keeps post-intro-world forall binders in the clickable goal and removes revert', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/7/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('have.attr', 'data-goal-text')
+      .and('match', /^∀/u)
+    cy.get('[data-testid="hyp-card"][data-hyp-name="x"]').should('not.exist')
+    cy.get('[data-tactic-name="revert"]').should('not.exist')
+
+    cy.get('[data-testid="goal-card"]').click()
+    cy.get('[data-testid="hyp-card"][data-hyp-name="x"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('have.class', 'variable-card')
+  })
+
+  it('applies zero-ne-succ in either drag direction and restores its workspace copy on undo', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/9/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.perform('intro h')
+      await player.perform('rw [one_eq_succ_zero] at h')
+      const copy = await player.placeTheoremCopy('zero_ne_succ')
+      const originalPosition = { left: copy.style.left, top: copy.style.top }
+
+      await player.applyTheoremCopyToHypothesis('zero_ne_succ', 'h', 'theorem-to-hypothesis')
+      expect(win.document.querySelector('[data-testid="hyp-card"][data-hyp-type="False"]')).to.exist
+      await player.undoLastPlayerStep()
+
+      const restored = win.document.querySelector<HTMLElement>(
+        '[data-testid="theorem-copy-card"][data-theorem-name$="zero_ne_succ"]',
+      )
+      expect(restored, 'undo restores the consumed theorem copy').to.exist
+      expect({ left: restored!.style.left, top: restored!.style.top }).to.deep.equal(originalPosition)
+
+      await player.applyTheoremCopyToHypothesis('zero_ne_succ', 'h', 'hypothesis-to-theorem')
+      const falseCard = win.document.querySelector<HTMLElement>(
+        '[data-testid="hyp-card"][data-hyp-type="False"]',
+      )
+      expect(falseCard, 'the reverse drag direction also derives False').to.exist
+      await player.perform(`exact ${falseCard!.dataset.hypName}`)
+    })
+
+    cy.get('.proof-sidebar-tab').click()
+    cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+    cy.get('.proof-sidebar-step.unknown').should('not.exist')
+    cy.get('.proof-sidebar-step-text').last().invoke('text').should(text => {
+      expect(text).to.match(/^exact\s/u)
+      expect(text).not.to.contain('exfalso')
+    })
   })
 
   for (const [description, sourceType, targetType] of [
@@ -159,7 +217,11 @@ describe('NNG4 implication and definition display regressions', () => {
         .to.equal('rgba(0, 0, 0, 0)')
       expect(normalizeColor(bevel), 'all octagon edges use the tactic border color')
         .to.contain(normalizeColor(dangerBorder))
-      expect(bevel, 'diagonal corner bands are a solid one pixel inside the clip').to.contain('calc(50% + 1px)')
+      expect(cardStyle.clipPath, 'octagon uses the larger one-rem corner taper').to.contain('1rem')
+      expect(
+        bevel,
+        '45-degree bands use sqrt(2) CSS pixels so their perpendicular stroke is one pixel',
+      ).to.contain('1.414px')
       expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
     })
   })

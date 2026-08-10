@@ -81,6 +81,10 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
       audit.coreLines.filter(line => incompleteProofLinePattern.test(line)),
       `${solution.world} ${solution.level} Core log has no incomplete ? entries after ${phase}`,
     ).to.deep.equal([])
+    expect(
+      audit.interactiveLines.filter(line => incompleteProofLinePattern.test(line)),
+      `${solution.world} ${solution.level} Interactive log has no incomplete ? entries after ${phase}`,
+    ).to.deep.equal([])
     expect(audit.proofBody, `${solution.world} ${solution.level} proof has no sorry`).not.to.match(/\bsorry\b/u)
 
     const issues: NameIssue[] = []

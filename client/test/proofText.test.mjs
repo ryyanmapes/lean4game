@@ -7,6 +7,7 @@ const {
   commandForGoalAction,
   coreCommandForGoalClick,
   displayedProofLines,
+  displayedProofSteps,
   explicitReverseRewriteCommand,
   rotationForGoal,
 } = await import('../../tmp-proof-text-tests/proofText.js')
@@ -31,6 +32,17 @@ test('a selected reverse variable rewrite gets an explicit side and theorem argu
     explicitReverseRewriteCommand('MyNat.zero_add', 'n', 'right', undefined, 'h'),
     'conv at h =>\n  rhs\n  rw [← MyNat.zero_add (n)]',
   )
+})
+
+test('the proof sidebar keeps all Lean lines from one player gesture under one step number', () => {
+  const steps = [{
+    command: 'exfalso\nexact h',
+    playTactic: 'drag_goal h',
+    leanTactic: 'exfalso\nexact h',
+    rotation: null,
+  }]
+  assert.deepEqual(displayedProofLines(steps, 'lean'), ['exfalso', 'exact h'])
+  assert.deepEqual(displayedProofSteps(steps, 'lean'), ['exfalso\nexact h'])
 })
 
 // Complete visual solution corresponding to NNG4/Game/Levels/Addition/L04add_assoc.lean:
