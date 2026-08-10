@@ -2685,6 +2685,30 @@ export function VisualCanvas({
 
   function handleDragEnd(event: DragEndEvent) {
     const { delta, active, over } = event
+    const activeId = active.id as string
+    let overId = over?.id as string | undefined
+    // Cards that can be both dragged and dropped occasionally make dnd-kit
+    // report no collision (or the active card itself) even though the release
+    // pointer is visibly over another card. Use the browser's own hit-test as
+    // a fallback so the interaction follows what the player can see.
+    if (!overId || overId === activeId) {
+      const origin = mobileDragPointerOriginRef.current
+      const translated = active.rect.current.translated
+      const pointerX = origin?.x != null
+        ? origin.x + delta.x
+        : translated ? translated.left + translated.width / 2 : null
+      const pointerY = origin?.y != null
+        ? origin.y + delta.y
+        : translated ? translated.top + translated.height / 2 : null
+      if (pointerX != null && pointerY != null) {
+        const card = document.elementsFromPoint(pointerX, pointerY)
+          .map(element => element.closest<HTMLElement>(
+            '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]',
+          ))
+          .find(element => element?.id && element.id !== activeId)
+        if (card?.id) overId = card.id
+      }
+    }
     setActiveDraggedTheorem(null)
     setActiveDraggedHyp(null)
     setActiveDraggedTheoremSourceId(null)
@@ -2692,8 +2716,6 @@ export function VisualCanvas({
     setActiveDragId(null)
     mobileDragPointerOriginRef.current = null
     stopMobileAutoScroll()
-    const activeId = active.id as string
-    const overId = over?.id as string | undefined
     const theoremTemplate = active.data.current?.theoremTemplate
       ? active.data.current.theorem as PropositionTheorem
       : null
@@ -2795,7 +2817,7 @@ export function VisualCanvas({
 
     if (theoremTemplate) {
       const reverse = getIffDirection(activeId) === 'reverse'
-      if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
+      if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyInteraction(playTactic, activeId, {
@@ -2872,7 +2894,7 @@ export function VisualCanvas({
     }
 
     // If dropped on a different card or a goal, it's an interaction
-    if (over && over.id !== active.id && overId !== THEOREM_TRAY_ID) {
+    if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard) ?? sourceTheoremCopy?.theorem.theoremName
       if (!sourceName) return
       const reverse = getIffDirection(activeId) === 'reverse'
