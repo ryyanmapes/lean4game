@@ -150,10 +150,15 @@ describe('NNG4 implication and definition display regressions', () => {
       const player = new CompletePlaythroughDriver(win)
       await player.perform('intro h')
       await player.perform('rw [one_eq_succ_zero] at h')
+
+      await player.applyTheoremToHypothesis('zero_ne_succ', 'h')
+      expect(win.document.querySelector('[data-testid="hyp-card"][data-hyp-type="False"]')).to.exist
+      await player.undoLastPlayerStep()
+
       const copy = await player.placeTheoremCopy('zero_ne_succ')
       const originalPosition = { left: copy.style.left, top: copy.style.top }
 
-      await player.applyTheoremCopyToHypothesis('zero_ne_succ', 'h', 'theorem-to-hypothesis')
+      await player.applyTheoremCopyToHypothesis('zero_ne_succ', 'h', 'hypothesis-to-theorem')
       expect(win.document.querySelector('[data-testid="hyp-card"][data-hyp-type="False"]')).to.exist
       await player.undoLastPlayerStep()
 
