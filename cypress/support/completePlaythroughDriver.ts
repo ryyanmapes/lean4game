@@ -1,3 +1,6 @@
+import { matchAndCapture, parse } from '../../client/src/visual/expr-engine'
+import type { ExpressionNode } from '../../client/src/visual/expr-types'
+
 interface ProofAudit {
   completed: boolean
   processing: boolean
@@ -259,18 +262,20 @@ function click(element: Element) {
 
 function doubleClick(element: HTMLElement) {
   element.scrollIntoView({ block: 'center', inline: 'center' })
+  const view = element.ownerDocument.defaultView
+  if (!view) throw new Error('Cannot double-click an element without a browser window')
   for (let detail = 1; detail <= 2; detail += 1) {
-    element.dispatchEvent(new MouseEvent('mousedown', {
+    element.dispatchEvent(new view.MouseEvent('mousedown', {
       bubbles: true, cancelable: true, button: 0, detail,
     }))
-    element.dispatchEvent(new MouseEvent('mouseup', {
+    element.dispatchEvent(new view.MouseEvent('mouseup', {
       bubbles: true, cancelable: true, button: 0, detail,
     }))
-    element.dispatchEvent(new MouseEvent('click', {
+    element.dispatchEvent(new view.MouseEvent('click', {
       bubbles: true, cancelable: true, button: 0, detail,
     }))
   }
-  element.dispatchEvent(new MouseEvent('dblclick', {
+  element.dispatchEvent(new view.MouseEvent('dblclick', {
     bubbles: true,
     cancelable: true,
     button: 0,
@@ -439,6 +444,81 @@ function sourceName(source: string) {
 interface RewriteRule {
   name: string
   reverse: boolean
+  args: string[]
+}
+
+function splitTopLevelWhitespace(source: string): string[] {
+  const terms: string[] = []
+  let depth = 0
+  let start = -1
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    if (/\s/u.test(char) && depth === 0) {
+      if (start >= 0) terms.push(source.slice(start, index))
+      start = -1
+      continue
+    }
+    if (start < 0) start = index
+    if (char === '(') depth += 1
+    else if (char === ')') depth -= 1
+  }
+  if (start >= 0) terms.push(source.slice(start))
+  return terms
+}
+
+function rewriteSource(source: string) {
+  const terms = splitTopLevelWhitespace(source.trim())
+  return {
+    name: sourceName(terms[0] ?? source),
+    args: terms.slice(1),
+  }
+}
+
+function matchesExplicitArgument(actual: ExpressionNode, expected: ExpressionNode): boolean {
+  if (expected.type === 'variable' && expected.name === '_') return true
+  if (actual.type !== expected.type) return false
+  if (actual.type === 'variable' && expected.type === 'variable') return actual.name === expected.name
+  if (actual.type === 'constant' && expected.type === 'constant') return actual.value === expected.value
+  if (actual.type === 'app' && expected.type === 'app') {
+    return actual.func === expected.func && matchesExplicitArgument(actual.arg, expected.arg)
+  }
+  if (actual.type === 'binary' && expected.type === 'binary') {
+    return actual.op === expected.op
+      && matchesExplicitArgument(actual.left, expected.left)
+      && matchesExplicitArgument(actual.right, expected.right)
+  }
+  return false
+}
+
+function forallBinderNames(card: HTMLElement): string[] {
+  const footer = card.querySelector<HTMLElement>('.tr-forall-footer')?.textContent ?? ''
+  return Array.from(footer.matchAll(/[({]\s*([^\s:(){}]+)/gu), match => match[1])
+}
+
+function matchesPartiallyAppliedRule(
+  target: HTMLElement,
+  card: HTMLElement,
+  explicitArgs: string[],
+): boolean {
+  if (explicitArgs.length === 0) return true
+  const expressionText = target.dataset.exprText
+  const symbol = card.querySelector<HTMLElement>('.tr-symbol')?.textContent ?? ''
+  const sourcePattern = symbol.split('\u2192', 1)[0]?.trim()
+  if (!expressionText || !sourcePattern) return true
+  try {
+    const bindings = matchAndCapture(parse(expressionText), parse(sourcePattern))
+    if (!bindings) return false
+    const binderNames = forallBinderNames(card)
+    return explicitArgs.every((argument, index) => {
+      const binderName = binderNames[index]
+      const actual = binderName ? bindings[binderName] : undefined
+      return actual ? matchesExplicitArgument(actual, parse(argument)) : false
+    })
+  } catch {
+    // If an older card format cannot be parsed, retain the normal visual
+    // target behavior instead of inventing a false negative.
+    return true
+  }
 }
 
 function parseRewrite(command: string) {
@@ -453,7 +533,7 @@ function parseRewrite(command: string) {
     rules: splitTopLevel(match[3]).map(raw => {
       const reverse = /^\u2190\s*/u.test(raw)
       const body = raw.replace(/^\u2190\s*/u, '')
-      return { name: sourceName(body), reverse } satisfies RewriteRule
+      return { ...rewriteSource(body), reverse } satisfies RewriteRule
     }),
     targets,
   }
@@ -990,6 +1070,7 @@ export class CompletePlaythroughDriver {
       const targetDeadline = Date.now() + 1_000
       while (Date.now() < targetDeadline) {
         targets = visible(overlay.querySelectorAll<HTMLElement>('.tr-expression-node.potential-target'))
+          .filter(target => matchesPartiallyAppliedRule(target, card, rule.args))
         if (targets.length > 0) break
         await sleep(POLL_MS)
       }
@@ -1012,6 +1093,11 @@ export class CompletePlaythroughDriver {
         continue
       }
 
+      // A partially applied theorem must never fall back to arbitrary nodes:
+      // doing so discards the explicit argument and can make symmetric rules
+      // such as commutativity oscillate forever.
+      if (rule.args.length > 0) continue
+
       const expressionNodes = visible(
         overlay.querySelectorAll<HTMLElement>('.tr-expr-wrapper .tr-expression-node'),
       )
@@ -1032,7 +1118,29 @@ export class CompletePlaythroughDriver {
   private async rewrite(command: string) {
     const parsed = parseRewrite(command)
     for (const rawTarget of parsed.targets) {
-      const target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
+      let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
+      if (target === 'goal') {
+        const goal = await waitFor('current goal', () => currentGoal(this.win))
+        if (!goal.classList.contains('transformable') && goal.classList.contains('clickable')) {
+          // Lean can rewrite inside an implication before `intro`, but the
+          // visual player transforms statement cards rather than syntax under
+          // an implication. Perform the equivalent player sequence: introduce
+          // the premise, then rewrite its newly created relation card. The
+          // following classic `intro` line has already been covered by this
+          // visible click and must not produce a second gesture.
+          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+          await this.clickGoal()
+          const snapshot = harness(this.win).getCurrentStreamSnapshot()
+          const introducedName = Object.keys(snapshot.hypTypes)
+            .find(name => !beforeNames.has(name) && this.hyp(name)?.classList.contains('transformable'))
+          if (!introducedName) {
+            throw new Error(`Rewriting under an implication did not introduce a transformable premise (${command})`)
+          }
+          this.aliases.set('h', introducedName)
+          this.classicCommandsAlreadyCovered += 1
+          target = introducedName
+        }
+      }
       await this.openTransform(target)
       const preferredSide = this.preferredRewriteSide
       if (target === 'goal' && preferredSide) {

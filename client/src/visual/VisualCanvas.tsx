@@ -2722,6 +2722,38 @@ export function VisualCanvas({
                 const theoremText = theoremTemplate.proposition
                 const targetRef = interactionHypName(targetCard) ?? targetName
                 const hypName = nextFreshHypName(targetStream!.hyps, 'h')
+                const implication = splitImplicationText(theoremText)
+                const targetType = (targetCard.hyp.typeBody ?? TaggedText_stripTags(targetCard.hyp.type)).trim()
+                if (implication) {
+                  let resultType: string | null = null
+                  let inferredValues: Record<string, string> = {}
+                  try {
+                    const patternTarget = targetType.replace(/≠/gu, '=')
+                    const patternPremise = implication[0].replace(/≠/gu, '=')
+                    const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
+                    if (bindings) {
+                      resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+                      inferredValues = Object.fromEntries(
+                        Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
+                      )
+                    }
+                  } catch {
+                    if (formulasMatch(implication[0], targetType)) resultType = implication[1]
+                  }
+                  if (resultType !== null) {
+                    const application = buildQuantifiedTheoremApplication(
+                      theoremTemplate.theoremName,
+                      theoremTemplate.forallFooter,
+                      inferredValues,
+                      targetRef,
+                    )
+                    return {
+                      command: `have ${hypName} := ${application}`,
+                      hypName,
+                      hypType: resultType,
+                    }
+                  }
+                }
                 if (targetEquality) {
                   const rewriteRightToLeft = theoremText.includes(targetEquality.rhsStr)
                   const rewriteLeftToRight = theoremText.includes(targetEquality.lhsStr)
@@ -2736,35 +2768,7 @@ export function VisualCanvas({
                     }
                   }
                 }
-                const implication = splitImplicationText(theoremText)
-                const targetType = (targetCard.hyp.typeBody ?? TaggedText_stripTags(targetCard.hyp.type)).trim()
-                if (!implication) return null
-                let resultType: string
-                let inferredValues: Record<string, string> = {}
-                try {
-                  const patternTarget = targetType.replace(/≠/gu, '=')
-                  const patternPremise = implication[0].replace(/≠/gu, '=')
-                  const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
-                  if (!bindings) return null
-                  resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
-                  inferredValues = Object.fromEntries(
-                    Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
-                  )
-                } catch {
-                  if (!formulasMatch(implication[0], targetType)) return null
-                  resultType = implication[1]
-                }
-                const application = buildQuantifiedTheoremApplication(
-                  theoremTemplate.theoremName,
-                  theoremTemplate.forallFooter,
-                  inferredValues,
-                  targetRef,
-                )
-                return {
-                  command: `have ${hypName} := ${application}`,
-                  hypName,
-                  hypType: resultType,
-                }
+                return null
               })()
             : null
           applyInteraction(playTactic, activeId, {
