@@ -1791,6 +1791,7 @@ export function VisualCanvas({
   const mobileScrollbarDragRef = useRef<{ pointerId: number; grabOffset: number } | null>(null)
   const mobileAutoScrollFrameRef = useRef<number | null>(null)
   const mobileDragPointerOriginRef = useRef<{ x: number; y: number } | null>(null)
+  const latestDragPointerRef = useRef<{ x: number; y: number } | null>(null)
   const pendingMobileInsertionRef = useRef<{
     anchorKey: string
     placement: 'after' | 'replace'
@@ -2605,6 +2606,7 @@ export function VisualCanvas({
     } else {
       mobileDragPointerOriginRef.current = null
     }
+    latestDragPointerRef.current = mobileDragPointerOriginRef.current
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setActiveDragId(String(event.active.id))
@@ -2636,9 +2638,15 @@ export function VisualCanvas({
   }
 
   function handleDragMove(event: DragMoveEvent) {
+    const origin = mobileDragPointerOriginRef.current
+    if (origin) {
+      latestDragPointerRef.current = {
+        x: origin.x + event.delta.x,
+        y: origin.y + event.delta.y,
+      }
+    }
     if (!isPhonePortrait || !activeDragId) return
     const track = mobileScrollbarRef.current?.getBoundingClientRect()
-    const origin = mobileDragPointerOriginRef.current
     if (!track || !origin) {
       stopMobileAutoScroll()
       return
@@ -2695,13 +2703,18 @@ export function VisualCanvas({
     const origin = mobileDragPointerOriginRef.current
     const translated = active.rect.current.translated
     const initial = active.rect.current.initial
-    const pointerX = origin?.x != null
-      ? origin.x + delta.x
+    const latestPointer = latestDragPointerRef.current
+    const pointerX = latestPointer?.x != null
+      ? latestPointer.x
+      : origin?.x != null
+        ? origin.x + delta.x
       : translated
         ? translated.left + translated.width / 2
         : initial ? initial.left + initial.width / 2 + delta.x : null
-    const pointerY = origin?.y != null
-      ? origin.y + delta.y
+    const pointerY = latestPointer?.y != null
+      ? latestPointer.y
+      : origin?.y != null
+        ? origin.y + delta.y
       : translated
         ? translated.top + translated.height / 2
         : initial ? initial.top + initial.height / 2 + delta.y : null
@@ -2733,6 +2746,7 @@ export function VisualCanvas({
     setActiveDraggedTactic(null)
     setActiveDragId(null)
     mobileDragPointerOriginRef.current = null
+    latestDragPointerRef.current = null
     stopMobileAutoScroll()
     const theoremTemplate = active.data.current?.theoremTemplate
       ? active.data.current.theorem as PropositionTheorem
@@ -5169,6 +5183,7 @@ export function VisualCanvas({
           setActiveDraggedTactic(null)
           setActiveDragId(null)
           mobileDragPointerOriginRef.current = null
+          latestDragPointerRef.current = null
           stopMobileAutoScroll()
           closeReductionTooltip()
         }}
