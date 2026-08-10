@@ -345,6 +345,13 @@ async function dragToPoint(source: HTMLElement, clientX: number, clientY: number
     clientX: startX,
     clientY: startY,
   }))
+  moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+    ...pointer,
+    buttons: 1,
+    clientX: startX + 12,
+    clientY: startY + 12,
+  }))
+  await sleep(20)
   for (let step = 1; step <= 8; step += 1) {
     const ratio = step / 8
     moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
@@ -1020,14 +1027,16 @@ export class CompletePlaythroughDriver {
       `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
     )).length
     const bounds = canvas.getBoundingClientRect()
+    const trayTop = this.win.document.getElementById('theorem-tray')
+      ?.getBoundingClientRect().top ?? bounds.bottom
     // Place the copy in empty lower-left canvas space. Dropping at the canvas
-    // centre can put a large theorem card directly over a hypothesis; because
-    // copies are also droppable, a later pointer release then targets the
-    // source copy instead of the hypothesis underneath it.
+    // centre can put a large theorem card directly over a hypothesis. Keep its
+    // centre well above the tray too: dnd-kit uses the whole dragged rectangle
+    // for collision detection, just like a player drag, not only the pointer.
     await dragToPoint(
       source,
-      bounds.left + Math.min(180, bounds.width * 0.2),
-      bounds.bottom - Math.min(150, bounds.height * 0.2),
+      bounds.left + Math.min(300, bounds.width * 0.25),
+      Math.min(bounds.top + bounds.height * 0.7, trayTop - 140),
     )
     return waitFor(`workspace copy of ${name}`, () => {
       const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
