@@ -1810,6 +1810,11 @@ export function VisualCanvas({
   const [activeDraggedTheoremSourceId, setActiveDraggedTheoremSourceId] = useState<string | null>(null)
   const [activeDraggedTactic, setActiveDraggedTactic] = useState<VisualTactic | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const isProcessingRef = useRef(isProcessing)
+  useEffect(() => {
+    isProcessingRef.current = isProcessing
+  }, [isProcessing])
   const [activeTrayTab, setActiveTrayTab] = useState<TrayTab>(() =>
     visualTactics.some(tactic =>
       emphasizeItems?.includes(tactic.id) ||
@@ -1820,7 +1825,6 @@ export function VisualCanvas({
       : 'theorems'
   )
   const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
-  const [isProcessing, setIsProcessing] = useState(false)
   const [trayHeight, setTrayHeight] = useState(0)
   const [showProofSidebar, setShowProofSidebar] = useState<boolean>(() => {
     try { return localStorage.getItem('visual-proof-sidebar-open') === 'true' } catch { return false }
@@ -2311,7 +2315,7 @@ export function VisualCanvas({
   }
 
   async function applyInteraction(playTactic: string, sourceCardId: string, options?: InteractionOptions): Promise<boolean> {
-    if (isProcessing) return false
+    if (isProcessingRef.current) return false
     const focusedStreamId = options?.targetStreamId
       ?? (canvasState.streams.some(stream => stream.id === sourceCardId) ? sourceCardId : null)
       ?? (canvasState.streams.find(stream => stream.hyps.some(card => card.id === sourceCardId))?.id ?? null)
