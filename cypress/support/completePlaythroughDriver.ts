@@ -4,6 +4,7 @@ import type { ExpressionNode } from '../../client/src/visual/expr-types'
 interface ProofAudit {
   completed: boolean
   processing: boolean
+  proofBody: string
   coreLines: string[]
   interactiveLines: string[]
 }

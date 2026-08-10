@@ -33,9 +33,31 @@ function waitForPlayerIdle(label: string) {
   })
 }
 
+function visiblePlayerState(win: Cypress.AUTWindow) {
+  const goal = win.document.querySelector<HTMLElement>('[data-testid="goal-card"]')
+  const hypotheses = Array.from(
+    win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+    card => `${card.dataset.hypName ?? ''}:${card.dataset.hypType ?? card.textContent ?? ''}`,
+  )
+  return JSON.stringify({
+    goalId: goal?.dataset.streamId ?? goal?.id ?? null,
+    goalText: goal?.dataset.goalText ?? goal?.textContent ?? null,
+    hypotheses,
+  })
+}
+
 function clickGoal() {
-  cy.get('[data-testid="goal-card"].clickable', { timeout: 60_000 }).click()
-  waitForPlayerIdle('clicking the goal')
+  cy.window().then(win => {
+    const before = visiblePlayerState(win)
+    cy.get('[data-testid="goal-card"].clickable', { timeout: 60_000 }).click()
+    cy.window({ timeout: 60_000 }).should(currentWindow => {
+      const bridge = (currentWindow as HarnessWindow).__visualTestHarness
+      expect(bridge, 'visual player test bridge remains mounted').to.exist
+      expect(bridge!.getProofAudit().processing, 'goal click has finished').to.equal(false)
+      expect(visiblePlayerState(currentWindow), 'goal click changes the visible proof state')
+        .not.to.equal(before)
+    })
+  })
 }
 
 function chooseConstructionBrick(label: string) {

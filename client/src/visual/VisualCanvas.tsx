@@ -410,6 +410,7 @@ interface InteractionOptions {
   commandOverride?: string
   leanTacticOverride?: string
   syntheticHyp?: { name: string; type: string }
+  queueIfBusy?: boolean
 }
 
 interface GoalChoiceMenu {
@@ -2373,7 +2374,22 @@ export function VisualCanvas({
   }
 
   async function applyInteraction(playTactic: string, sourceCardId: string, options?: InteractionOptions): Promise<boolean> {
-    if (isProcessingRef.current) return false
+    if (isProcessingRef.current) {
+      if (!options?.queueIfBusy) return false
+      const deadline = Date.now() + 120_000
+      while (isProcessingRef.current && Date.now() < deadline) {
+        await new Promise<void>(resolve => window.setTimeout(resolve, 25))
+      }
+      if (isProcessingRef.current) return false
+      // Re-enter through the latest render so stream/card lookup uses the
+      // state produced by the interaction that was ahead of this drop.
+      const latestApplyInteraction = applyInteractionRef.current
+      if (!latestApplyInteraction) return false
+      return latestApplyInteraction(playTactic, sourceCardId, {
+        ...options,
+        queueIfBusy: false,
+      })
+    }
     const focusedStreamId = options?.targetStreamId
       ?? (canvasState.streams.some(stream => stream.id === sourceCardId) ? sourceCardId : null)
       ?? (canvasState.streams.find(stream => stream.hyps.some(card => card.id === sourceCardId))?.id ?? null)
@@ -2771,6 +2787,11 @@ export function VisualCanvas({
   function handleDragEnd(event: DragEndEvent) {
     const { delta, active, over } = event
     const activeId = active.id as string
+    const applyDroppedInteraction = (
+      playTactic: string,
+      sourceCardId: string,
+      options?: InteractionOptions,
+    ) => applyInteraction(playTactic, sourceCardId, { ...options, queueIfBusy: true })
     let overId = over?.id as string | undefined
     // Cards that can be both dragged and dropped can make rectangle collision
     // prefer the large theorem tray (or the active card itself) even though
@@ -2910,7 +2931,7 @@ export function VisualCanvas({
     if (tacticTemplate) {
       if (goalIds.has(overId as string)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
-        applyInteraction(playTactic, activeId, {
+        applyDroppedInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
           targetStreamId: overId as string,
         })
@@ -2928,12 +2949,12 @@ export function VisualCanvas({
             predecessorName: nextFreshHypName(targetStream.hyps, 'd'),
             inductionHypName: nextFreshHypName(targetStream.hyps, 'hd'),
           })
-          applyInteraction(playTactic, activeId, { streamSplit: true })
+          applyDroppedInteraction(playTactic, activeId, { streamSplit: true })
           return
         }
         if (tacticTemplate.name === 'cases') {
           const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
-          applyInteraction(playTactic, activeId, { streamSplit: true })
+          applyDroppedInteraction(playTactic, activeId, { streamSplit: true })
           return
         }
         const placementHint: PlacementHint = {
@@ -2948,7 +2969,7 @@ export function VisualCanvas({
           tacticName: tacticTemplate.name,
           targetHypName: targetName,
         })
-        applyInteraction(playTactic, activeId, { placementHint })
+        applyDroppedInteraction(playTactic, activeId, { placementHint })
       }
       return
     }
@@ -2958,7 +2979,7 @@ export function VisualCanvas({
       if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
-          applyInteraction(playTactic, activeId, {
+          applyDroppedInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
             targetStreamId: overId as string,
           })
@@ -2988,7 +3009,7 @@ export function VisualCanvas({
           const theoremDerivation = targetCard && targetStream
             ? deriveTheoremApplication(theoremTemplate, targetCard, targetStream)
             : null
-          applyInteraction(playTactic, activeId, {
+          applyDroppedInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
             ...(targetStream ? { targetStreamId: targetStream.id } : {}),
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
@@ -3027,7 +3048,7 @@ export function VisualCanvas({
     if (sourceCard?.isTheorem && overId === THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard)
       if (!sourceName) return
-      applyInteraction(`delete_theorem ${sourceName}`, activeId)
+      applyDroppedInteraction(`delete_theorem ${sourceName}`, activeId)
       return
     }
 
@@ -3040,7 +3061,7 @@ export function VisualCanvas({
       if (goalIds.has(overId as string)) {
         // Dropped on a goal card → drag_goal
         const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
-        applyInteraction(playTactic, activeId, {
+        applyDroppedInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
           targetStreamId: overId as string,
           consumedTheoremCopyIds: sourceTheoremCopy ? [sourceTheoremCopy.id] : undefined,
@@ -3066,7 +3087,7 @@ export function VisualCanvas({
           const theoremDerivation = sourceStream
             ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
-          applyInteraction(playTactic, activeId, {
+          applyDroppedInteraction(playTactic, activeId, {
             consumedTheoremCopyIds: [targetTheoremCopy.id],
             mobileInsertAfter: targetTheoremCopy ? theoremCopyMobileKey(targetTheoremCopy) : undefined,
             ...(theoremDerivation ? {
@@ -3121,7 +3142,7 @@ export function VisualCanvas({
           : targetTheoremCopy && sourceCard && sourceStream
             ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
-        applyInteraction(playTactic, activeId, {
+        applyDroppedInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(targetStream ? { targetStreamId: targetStream.id } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
