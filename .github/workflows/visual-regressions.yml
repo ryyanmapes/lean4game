@@ -25,6 +25,10 @@ jobs:
       - name: Checkout NNG4
         run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
 
+      - name: Record NNG4 revision
+        id: nng4-revision
+        run: echo "sha=$(git -C ../NNG4 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -43,6 +47,12 @@ jobs:
           lake-package-directory: server
 
       - run: elan default stable
+
+      - name: Cache compiled NNG4 game
+        uses: actions/cache@v4
+        with:
+          path: ../NNG4/.lake/build
+          key: focused-nng4-${{ runner.os }}-${{ steps.nng4-revision.outputs.sha }}
 
       - name: Install JavaScript dependencies and build relay
         run: |

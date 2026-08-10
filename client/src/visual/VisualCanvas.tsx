@@ -570,6 +570,10 @@ function hypMobileKey(card: HypCardType): string {
   return `hyp:${card.hyp.playName ?? card.hyp.names[0] ?? card.id}`
 }
 
+function interactionHypName(card?: HypCardType | null): string | undefined {
+  return card?.hyp.playName ?? card?.hyp.names[0]
+}
+
 /** Mobile columns separate data variables from propositions. `isTheorem` only
  * marks generated theorem cards, while Lean's `isAssumption` covers ordinary
  * proposition hypotheses such as `hd : P`. */
@@ -1374,6 +1378,21 @@ function deriveTheoremApplication(
     }
   }
   return null
+}
+
+/** Visual inference is an enhancement to a Lean-valid drag, never a gate for
+ * sending that drag. Unusual pretty-printed propositions must therefore fall
+ * back to the backend instead of aborting the pointer event. */
+function safelyDeriveTheoremApplication(
+  theorem: PropositionTheorem,
+  premiseCard: HypCardType,
+  stream: GoalStream,
+): TheoremApplicationDerivation | null {
+  try {
+    return deriveTheoremApplication(theorem, premiseCard, stream)
+  } catch {
+    return null
+  }
 }
 
 function synthesizeForallSpecializationContinuation(
@@ -2895,7 +2914,7 @@ export function VisualCanvas({
     const droppedOnTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
     const droppedPremiseName = interactionHypName(sourceCard)
     if (sourceCard && sourceStream && droppedOnTheoremCopy && droppedPremiseName) {
-      const theoremDerivation = deriveTheoremApplication(
+      const theoremDerivation = safelyDeriveTheoremApplication(
         droppedOnTheoremCopy.theorem,
         sourceCard,
         sourceStream,
@@ -3054,7 +3073,7 @@ export function VisualCanvas({
             reverse,
           })
           const theoremDerivation = targetCard && targetStream
-            ? deriveTheoremApplication(theoremTemplate, targetCard, targetStream)
+            ? safelyDeriveTheoremApplication(theoremTemplate, targetCard, targetStream)
             : null
           applyDroppedInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
@@ -3132,7 +3151,7 @@ export function VisualCanvas({
             hypName: sourceName,
           })
           const theoremDerivation = sourceStream
-            ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
+            ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
           applyDroppedInteraction(playTactic, activeId, {
             consumedTheoremCopyIds: [targetTheoremCopy.id],
@@ -3185,9 +3204,9 @@ export function VisualCanvas({
         const consumedTheoremCopyIds = [sourceTheoremCopy?.id, targetTheoremCopy?.id]
           .filter((id): id is string => Boolean(id))
         const theoremDerivation = sourceTheoremCopy && targetCard && targetStream
-          ? deriveTheoremApplication(sourceTheoremCopy.theorem, targetCard, targetStream)
+          ? safelyDeriveTheoremApplication(sourceTheoremCopy.theorem, targetCard, targetStream)
           : targetTheoremCopy && sourceCard && sourceStream
-            ? deriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
+            ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
         applyDroppedInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
@@ -3555,12 +3574,16 @@ export function VisualCanvas({
     let specializationName: string | null = null
 
     if (target.kind === 'forall_spec') {
-      const baseName = target.sourceKind === 'hyp'
+      const displayName = target.sourceKind === 'hyp'
         ? nextFreshHypName(focusedStream.hyps, target.sourceRef)
         : nextFreshHypName(focusedStream.hyps, 'h')
-      specializationName = baseName
+      // Lean's internal prefix lets proofStateToCanvas distinguish player-
+      // generated theorem cards from ordinary assumptions. It is stripped for
+      // display, so collision suffixes remain h1/h2 rather than h_1/h_2.
+      const leanName = `${DERIVED_THEOREM_PREFIX}${displayName}`
+      specializationName = displayName
       const argExpr = `(${exprStr})`
-      playTactic = `specialize_forall_as ${baseName} ${target.sourceRef} ${target.prompt.varName} ${argExpr}`
+      playTactic = `specialize_forall_as ${leanName} ${target.sourceRef} ${target.prompt.varName} ${argExpr}`
 
       if (target.sourceKind === 'theorem_copy' && target.sourceId) {
         const copy = getTheoremCopyById(target.sourceId)
@@ -3569,7 +3592,7 @@ export function VisualCanvas({
           placementHint = {
             hypId: `${copy.id}::specified`,
             streamId: focusedStream.id,
-            hypName: baseName,
+            hypName: displayName,
             originalPosition: copy.position,
             droppedPosition: copy.position,
           }
@@ -4683,10 +4706,6 @@ export function VisualCanvas({
       throw new Error(`Could not find hypothesis "${hypName}" on stream ${stream.id}`)
     }
     return card
-  }
-
-  function interactionHypName(card?: HypCardType | null): string | undefined {
-    return card?.hyp.playName ?? card?.hyp.names[0]
   }
 
   async function applyTestPlayerTactic(command: string) {
