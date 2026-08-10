@@ -204,11 +204,26 @@ describe('NNG4 implication and definition display regressions', () => {
   it('shows the definitionally expanded form on a less-or-equal theorem card', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/2/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('[data-testid="goal-card"]').click()
+    cy.get('[data-testid="goal-card"] .statement-atomic-form', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('contain.text', '∃')
 
     visualHarness().then(harness => harness.copyTheoremToCanvas('MyNat.le_refl'))
     cy.get('[data-testid="theorem-copy-card"][data-theorem-name="MyNat.le_refl"] .statement-atomic-form')
       .should('be.visible')
       .and('contain.text', '∃')
+
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/5/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    visualHarness().then(harness => harness.copyTheoremToCanvas('MyNat.le_trans'))
+    cy.get('[data-testid="theorem-copy-card"][data-theorem-name="MyNat.le_trans"]')
+      .should('not.have.descendants', '.statement-atomic-form')
+      .and('have.class', 'theorem-card-break-after-label')
+      .find('.statement-card-main > .proposition')
+      .should($proposition => {
+        expect(getComputedStyle($proposition[0]!).flexBasis, 'proposition starts after the label').to.equal('100%')
+      })
 
   })
 
@@ -236,6 +251,45 @@ describe('NNG4 implication and definition display regressions', () => {
       ).to.contain('1.414px')
       expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
     })
+
+    cy.get('[data-tactic-name="induction"]').then($card => {
+      const rect = $card[0]!.getBoundingClientRect()
+      const pointer = { pointerId: 27, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }
+      cy.wrap($card).trigger('pointerdown', {
+        ...pointer,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        force: true,
+      })
+      cy.get('body').trigger('pointermove', {
+        ...pointer,
+        clientX: rect.left + rect.width / 2 + 12,
+        clientY: rect.top + rect.height / 2 + 12,
+        force: true,
+      })
+    })
+    cy.get('[data-testid="hyp-card"][data-hyp-name="n"]')
+      .should('have.class', 'potential-drop-target')
+    cy.get('[data-testid="goal-card"]')
+      .should('not.have.class', 'potential-drop-target')
+    cy.get('body').trigger('pointerup', {
+      pointerId: 27,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      clientX: 1,
+      clientY: 1,
+      force: true,
+    })
+  })
+
+  it('renders cases as an octagonal variable tactic', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvAddition/level/6/visual`)
+    cy.contains('.tr-tab-btn', 'Tactics', { timeout: LOAD_TIMEOUT }).click()
+    cy.get('[data-tactic-name="cases"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('have.class', 'variable-only-tactic')
   })
 
   it('rewrites the selected x to x + 0 with reverse add_zero', () => {
@@ -277,6 +331,9 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('.proof-sidebar-copy-btn').should('not.exist')
     cy.get('.proof-sidebar-classic-btn').should('not.exist')
     cy.get('[data-testid="proof-actions-toggle"]').click()
+    cy.get('[data-testid="proof-actions-toggle"]').should($toggle => {
+      expect(getComputedStyle($toggle[0]!).userSelect, 'hamburger is not text-selectable').to.equal('none')
+    })
     cy.get('[data-testid="proof-actions-menu"]').should('be.visible')
     cy.get('[data-testid="proof-action-copy"]').should('be.visible').click()
     cy.get('[data-testid="proof-actions-menu"]').should('not.be.visible')

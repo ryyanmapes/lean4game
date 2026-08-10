@@ -45,5 +45,13 @@ test('accepts the expanded Exists form emitted for less-or-equal statements', ()
 test('infers atomic forms for static proposition theorem cards', () => {
   assert.deepEqual(inferAtomicReductionForms('0 ≠ 1'), ['0 = 1 → False'])
   assert.deepEqual(inferAtomicReductionForms('a ≤ b'), ['∃ c, b = a + c'])
+  assert.deepEqual(
+    inferAtomicReductionForms('x ≤ y → (y ≤ z → x ≤ z)'),
+    [],
+  )
+  assert.deepEqual(
+    inferAtomicReductionForms('x ≤ 0 → x = 0'),
+    [],
+  )
   assert.deepEqual(inferAtomicReductionForms('a = b'), [])
 })

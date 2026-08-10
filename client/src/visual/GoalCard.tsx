@@ -7,6 +7,7 @@ import { colorizeFormula } from './colorizeFormula'
 import { VisualInfoText } from './VisualInfoText'
 import type { VisualGoalInfo } from './types'
 import { AtomicForm } from './AtomicForm'
+import { inferAtomicReductionForms } from './existsDisplay'
 
 interface GoalCardProps {
   id: string
@@ -23,6 +24,7 @@ interface GoalCardProps {
   isSolved?: boolean
   visualInfos?: VisualGoalInfo[]
   showDropTarget?: boolean
+  isPotentialTarget?: boolean
   infoPositions?: Array<'above' | 'below'>
   atomicContextNames?: string[]
   reductionForms?: string[]
@@ -43,6 +45,7 @@ export function GoalCard({
   isSolved,
   visualInfos = [],
   showDropTarget = false,
+  isPotentialTarget = false,
   infoPositions = ['above', 'below'],
   atomicContextNames = [],
   reductionForms,
@@ -54,6 +57,13 @@ export function GoalCard({
   const propositionRef = React.useRef<HTMLSpanElement | null>(null)
   const [arrows, setArrows] = React.useState<Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>>([])
   const goalText = formatFormulaText(TaggedText_stripTags(goal.type))
+  const effectiveReductionForms = React.useMemo(() => {
+    const merged = [...(reductionForms ?? [])]
+    for (const form of inferAtomicReductionForms(goalText)) {
+      if (!merged.includes(form)) merged.push(form)
+    }
+    return merged
+  }, [goalText, reductionForms])
   const hypTypeTexts = React.useMemo(
     () => goal.hyps.map(h => formatFormulaText(TaggedText_stripTags(h.type))),
     [goal.hyps],
@@ -80,6 +90,7 @@ export function GoalCard({
     isTransformable ? 'transformable' : '',
     isConstructable ? 'constructable' : '',
     isClickable ? 'clickable' : '',
+    isPotentialTarget ? 'potential-drop-target' : '',
     isOver && showDropTarget ? 'drop-target-active' : '',
     isSolved ? 'solved' : '',
   ].filter(Boolean).join(' ')
@@ -231,7 +242,7 @@ export function GoalCard({
       >
         <div className="goal-prefix">Goal</div>
         <span ref={propositionRef} className="proposition">{colorizeFormula(goalText)}</span>
-        <AtomicForm displayText={goalText} reductionForms={reductionForms} contextNames={atomicContextNames} />
+        <AtomicForm displayText={goalText} reductionForms={effectiveReductionForms} contextNames={atomicContextNames} />
       </div>
       {infoPositions.includes('below') && renderInfo('below')}
       {arrows.map(renderGoalInfoArrow)}

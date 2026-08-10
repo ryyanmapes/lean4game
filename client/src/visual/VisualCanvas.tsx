@@ -709,6 +709,33 @@ function hypIsTransformable(card: HypCardType, allowComparisons: boolean): boole
   return card.hyp.equalityTree != null || parsedHypTarget(card, allowComparisons) !== null
 }
 
+function isNaturalVariableCard(card: HypCardType): boolean {
+  if (card.isTheorem || card.hyp.isAssumption) return false
+  const typeText = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim()
+  return typeText === 'ℕ' || typeText === 'Nat' || typeText === 'MyNat'
+}
+
+function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
+  if (tactic.name === 'induction') return isNaturalVariableCard(card)
+  if (tactic.name === 'cases') return true
+  if (tactic.name === 'symm') {
+    const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
+    return parsedHypEquality(card) !== null || typeText.includes('↔')
+  }
+  // `tauto` operates on the goal; it does not have a meaningful `at h` form.
+  if (tactic.name === 'tauto') return false
+  return true
+}
+
+function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean {
+  if (tactic.name === 'induction' || tactic.name === 'cases') return false
+  if (tactic.name === 'symm') {
+    const goalText = TaggedText_stripTags(stream.goal.type)
+    return parsedGoalEquality(stream) !== null || goalText.includes('↔')
+  }
+  return true
+}
+
 function natContextVarNames(stream: GoalStream): string[] {
   return stream.hyps
     .filter(card => {
@@ -2995,7 +3022,8 @@ export function VisualCanvas({
     }
 
     if (tacticTemplate) {
-      if (goalIds.has(overId as string)) {
+      const targetGoalStream = canvasState.streams.find(stream => stream.id === overId)
+      if (targetGoalStream && tacticCanTargetGoal(tacticTemplate, targetGoalStream)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
         applyDroppedInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
@@ -3007,7 +3035,7 @@ export function VisualCanvas({
       const targetStream = canvasState.streams.find(s => s.hyps.some(h => h.id === overId))
       const targetCard = targetStream?.hyps.find(h => h.id === overId)
       const targetName = interactionHypName(targetCard)
-      if (targetCard && targetStream && targetName) {
+      if (targetCard && targetStream && targetName && tacticCanTargetHyp(tacticTemplate, targetCard)) {
         if (tacticTemplate.name === 'induction') {
           const playTactic = interactionToPlayTactic({
             type: 'drag_induction',
@@ -5212,6 +5240,9 @@ export function VisualCanvas({
     const opensConstructionOnTap = isPhonePortrait && isConstructable
     const isClickable = hasClickAction(clickAction) || opensConstructionOnTap
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
+    const isTacticTarget = activeDraggedTactic
+      ? tacticCanTargetHyp(activeDraggedTactic, card)
+      : false
     return (
       <HypCard
         key={card.id}
@@ -5228,7 +5259,10 @@ export function VisualCanvas({
         isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
         isConstructable={streamInteractionsEnabled && isConstructable}
         constructOnSingleClick={streamInteractionsEnabled && opensConstructionOnTap}
-        showDropTarget={activeDragId !== null && activeDragId !== card.id}
+        showDropTarget={activeDraggedTactic
+          ? isTacticTarget
+          : activeDragId !== null && activeDragId !== card.id}
+        isPotentialTarget={isTacticTarget}
         mobileList={mobileList}
         onClickAction={streamInteractionsEnabled && isClickable && displayStream
           ? opensConstructionOnTap
@@ -5338,6 +5372,9 @@ export function VisualCanvas({
     const isClickable = hasClickAction(clickAction)
     const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
     const isConstructable = goalIsConstructable(liveGoalStream)
+    const isTacticTarget = activeDraggedTactic
+      ? tacticCanTargetGoal(activeDraggedTactic, liveGoalStream)
+      : false
     return (
       <GoalCard
         key={stream.id}
@@ -5351,7 +5388,8 @@ export function VisualCanvas({
         isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
         visualInfos={visualGoalInfos}
         infoPositions={infoPositions}
-        showDropTarget={activeDragId !== null}
+        showDropTarget={activeDraggedTactic ? isTacticTarget : activeDragId !== null}
+        isPotentialTarget={isTacticTarget}
         atomicContextNames={streamHypNames(liveGoalStream)}
         reductionForms={stream.reductionForms}
         onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}

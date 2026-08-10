@@ -7,7 +7,7 @@ function isClickOnlyTactic(tactic: VisualTactic) {
 }
 
 function isVariableOnlyTactic(tactic: VisualTactic) {
-  return tactic.name === 'induction'
+  return tactic.name === 'induction' || tactic.name === 'cases'
 }
 
 function VisualTacticContent({ tactic }: { tactic: VisualTactic }) {

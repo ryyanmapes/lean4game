@@ -71,7 +71,7 @@ jobs:
         env:
           CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
           CYPRESS_VISUAL_TIMEOUT: '120000'
-          CYPRESS_VISUAL_REGRESSION: 'zero-ne-succ,specializes collision-renamed binders'
+          CYPRESS_VISUAL_REGRESSION: 'zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,renders the induction octagon,renders cases as an octagonal'
         run: |
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "npm run cypress:run:relay:ready" \

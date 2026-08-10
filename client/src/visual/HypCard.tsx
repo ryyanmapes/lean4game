@@ -21,6 +21,7 @@ interface HypCardProps {
   isConstructable?: boolean
   constructOnSingleClick?: boolean
   showDropTarget?: boolean
+  isPotentialTarget?: boolean
   mobileList?: boolean
   animateMove?: boolean
   iffDirection?: IffDirection
@@ -43,6 +44,7 @@ export function HypCard({
   isConstructable = false,
   constructOnSingleClick = false,
   showDropTarget = false,
+  isPotentialTarget = false,
   mobileList = false,
   animateMove = false,
   iffDirection = 'forward',
@@ -85,6 +87,7 @@ export function HypCard({
     card.isTheorem ? 'derived-theorem-card' : '',
     card.hyp.forallFooter ? 'has-forall-footer' : '',
     isDragging ? 'dragging' : '',
+    isPotentialTarget && !isDragging ? 'potential-drop-target' : '',
     isOver && showDropTarget && !isDragging ? 'drop-target-active' : '',
     isFailing ? 'drag-fail' : '',
     isClickable ? 'clickable' : '',

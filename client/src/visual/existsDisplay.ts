@@ -1,5 +1,42 @@
 const IDENTIFIER_CHAR_CLASS = "[\\p{L}\\p{N}_']"
 
+function nextExistsName(usedNames: Set<string>): string {
+  let suffix = 1
+  let candidate = 'c'
+  while (usedNames.has(candidate)) {
+    suffix += 1
+    candidate = `c${suffix}`
+  }
+  usedNames.add(candidate)
+  return candidate
+}
+
+function expandTopLevelLessOrEqual(displayText: string): string | null {
+  if (!displayText.includes('≤')) return null
+  let depth = 0
+  let lessOrEqualIndex = -1
+  for (let index = 0; index < displayText.length; index += 1) {
+    const char = displayText[index]
+    if (char === '(') depth += 1
+    else if (char === ')') {
+      depth -= 1
+      if (depth < 0) return null
+    } else if (depth === 0 && (char === '→' || char === '∧' || char === '∨')) {
+      return null
+    } else if (depth === 0 && char === '≤') {
+      if (lessOrEqualIndex >= 0) return null
+      lessOrEqualIndex = index
+    }
+  }
+  if (depth !== 0 || lessOrEqualIndex < 0) return null
+  const lhs = displayText.slice(0, lessOrEqualIndex).trim()
+  const rhs = displayText.slice(lessOrEqualIndex + 1).trim()
+  if (!lhs || !rhs) return null
+  const identifiers = displayText.match(/[\p{L}][\p{L}\p{N}_']*/gu) ?? []
+  const witness = nextExistsName(new Set(identifiers))
+  return `∃ ${witness}, ${rhs} = ${lhs} + ${witness}`
+}
+
 export interface ExistsDisplayInfo {
   varName: string
   body: string
@@ -172,11 +209,8 @@ export function inferAtomicReductionForms(displayText: string): string[] {
     return [`${lhs.trim()} = ${rhs.trim()} → False`]
   }
 
-  const lessOrEqual = /^(.*?)\s*≤\s*(.*?)$/u.exec(displayed)
-  if (lessOrEqual) {
-    const [, lhs = '', rhs = ''] = lessOrEqual
-    return [`∃ c, ${rhs.trim()} = ${lhs.trim()} + c`]
-  }
+  const expandedLessOrEqual = expandTopLevelLessOrEqual(displayed)
+  if (expandedLessOrEqual) return [expandedLessOrEqual]
 
   return []
 }

@@ -521,6 +521,10 @@
   --bevel-border-color: var(--visual-drop-target-border);
 }
 
+.visual-page .statement-card.variable-card.potential-drop-target {
+  --bevel-border-color: var(--visual-info-ring);
+}
+
 .visual-page .statement-card.variable-card.drag-fail,
 .visual-page .statement-card.variable-only-tactic.drag-fail {
   --bevel-border-color: var(--visual-danger);
@@ -1067,6 +1071,13 @@
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
+}
+
+.visual-page .statement-card.theorem-card-break-after-label .statement-card-main > .proposition {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 0.12rem;
+  text-align: center;
 }
 
 .visual-page .statement-card-label {
@@ -2122,6 +2133,11 @@
 }
 
 /* ── Drop target highlight ── */
+.visual-page .potential-drop-target {
+  box-shadow: 0 0 0 2px var(--visual-info-ring), 0 0 14px color-mix(in srgb, var(--visual-info-ring) 45%, transparent);
+  border-color: var(--visual-info-ring);
+}
+
 .visual-page .drop-target-active {
   box-shadow: 0 0 0 2px var(--visual-drop-target-border), 0 0 20px var(--visual-drop-target-glow) !important;
   border-color: var(--visual-drop-target-border) !important;
@@ -2257,6 +2273,9 @@
 .proof-sidebar-actions-toggle {
   list-style: none;
   appearance: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   border: 1px solid var(--visual-border-subtle);
   border-radius: 6px;
   padding: 0.28rem 0.55rem;
