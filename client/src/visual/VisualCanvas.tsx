@@ -2120,14 +2120,21 @@ export function VisualCanvas({
   )
 
   const collisionDetection = useCallback<CollisionDetection>((args) => {
-    const pointerCollisions = pointerWithin(args)
+    // Theorem copies and local cards are both draggable and droppable. When
+    // cards overlap, dnd-kit can otherwise report the active card itself as
+    // the first pointer collision and hide the card the player is targeting.
+    // A self-drop has no interaction semantics, so keep it out of both
+    // collision strategies and let the intended card underneath win.
+    const withoutActive = (collisions: ReturnType<typeof pointerWithin>) =>
+      collisions.filter(collision => collision.id !== args.active.id)
+    const pointerCollisions = withoutActive(pointerWithin(args))
     if (isPhonePortrait) {
       const dividerCollisions = pointerCollisions.filter(collision =>
         String(collision.id).startsWith(MOBILE_DIVIDER_PREFIX)
       )
       return dividerCollisions.length > 0 ? dividerCollisions : pointerCollisions
     }
-    return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
+    return pointerCollisions.length > 0 ? pointerCollisions : withoutActive(rectIntersection(args))
   }, [isPhonePortrait])
 
   useEffect(() => {
