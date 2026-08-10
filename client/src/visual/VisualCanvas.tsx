@@ -2830,6 +2830,7 @@ export function VisualCanvas({
             : null
           applyInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
+            ...(targetStream ? { targetStreamId: targetStream.id } : {}),
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
             ...(theoremDerivation ? {
@@ -2962,6 +2963,7 @@ export function VisualCanvas({
             : null
         applyInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
+          ...(targetStream ? { targetStreamId: targetStream.id } : {}),
           ...(consumedTheoremCopyIds.length > 0 ? { consumedTheoremCopyIds } : {}),
           ...(targetCard && isMobileTheoremCard(targetCard)
             ? { mobileInsertAfter: hypMobileKey(targetCard) }
