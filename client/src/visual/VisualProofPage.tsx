@@ -394,15 +394,13 @@ export function VisualProofPage() {
             return
           }
           let initialCanvas = proofStateToCanvas(proof)
-          if (gameId === 'NNG4') {
-            const gameData = await fetchJsonWithRetry<{
-              worlds?: { edges?: string[][] }
-            }>(`${getDataBaseUrl().replace(/\/$/, '')}/${gameId}/game.json`)
-            if (levelSucceedsIntro(worldId, levelId, gameData?.worlds?.edges ?? [])) {
-              const prepared = moveInitialVariablesIntoGoal(initialCanvas)
-              proofPreludeRef.current = prepared.prelude
-              initialCanvas = prepared.canvas
-            }
+          const gameData = await fetchJsonWithRetry<{
+            worlds?: { edges?: string[][] }
+          }>(`${getDataBaseUrl().replace(/\/$/, '')}/${gameId}/game.json`)
+          if (levelSucceedsIntro(worldId, levelId, gameData?.worlds?.edges ?? [])) {
+            const prepared = moveInitialVariablesIntoGoal(initialCanvas)
+            proofPreludeRef.current = prepared.prelude
+            initialCanvas = prepared.canvas
           }
           const saved = loadVisualProofAutosave(gameId, worldId, levelId)
           let validatedResume: VisualProofResumeState | null = null

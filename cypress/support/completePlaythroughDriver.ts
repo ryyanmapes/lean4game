@@ -308,6 +308,17 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     clientX: startX,
     clientY: startY,
   }))
+  // Cross dnd-kit's distance threshold before approaching the target. Cards
+  // can legitimately overlap after a player places a theorem copy; without
+  // this explicit first motion, a center-to-center synthetic drag may remain
+  // a click and never enter the same drag path a player would trigger.
+  moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+    ...pointer,
+    buttons: 1,
+    clientX: startX + 12,
+    clientY: startY + 12,
+  }))
+  await sleep(20)
   await finishPointerDrag(source, target, startX, startY, 91)
 }
 

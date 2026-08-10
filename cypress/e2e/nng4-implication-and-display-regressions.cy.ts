@@ -40,8 +40,8 @@ function performPlayerGestures(commands: PlayerGesture[]) {
     const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
     expect(audit?.processing, 'visual proof is idle').to.equal(false)
     expect(audit?.completed, 'visual proof is complete').to.equal(true)
-    expect(audit?.coreLines.some(line => line.includes('?')), 'Core tactics are valid').to.equal(false)
-    expect(audit?.interactiveLines.some(line => line.includes('?')), 'interaction tactics are valid').to.equal(false)
+    expect(audit?.coreLines.filter(line => line.includes('?')), 'Core tactics are valid').to.deep.equal([])
+    expect(audit?.interactiveLines.filter(line => line.includes('?')), 'interaction tactics are valid').to.deep.equal([])
   })
 }
 
@@ -217,7 +217,7 @@ describe('NNG4 implication and definition display regressions', () => {
         .to.equal('rgba(0, 0, 0, 0)')
       expect(normalizeColor(bevel), 'all octagon edges use the tactic border color')
         .to.contain(normalizeColor(dangerBorder))
-      expect(cardStyle.clipPath, 'octagon uses the larger one-rem corner taper').to.contain('1rem')
+      expect(cardStyle.clipPath, 'octagon uses the larger 16-pixel corner taper').to.contain('16px')
       expect(
         bevel,
         '45-degree bands use sqrt(2) CSS pixels so their perpendicular stroke is one pixel',
