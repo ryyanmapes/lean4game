@@ -850,9 +850,17 @@ export class CompletePlaythroughDriver {
 
   private hyp(name: string) {
     const resolved = this.resolveName(name)
-    return visible(this.win.document.querySelectorAll<HTMLElement>(
-      `[data-testid="hyp-card"][data-hyp-name="${cssEscape(resolved)}"]`,
-    ))[0] ?? null
+    const baseSelector = `[data-testid="hyp-card"][data-hyp-name="${cssEscape(resolved)}"]`
+    try {
+      const streamId = harness(this.win).getCurrentStreamSnapshot().streamId
+      const current = visible(this.win.document.querySelectorAll<HTMLElement>(
+        `${baseSelector}[data-stream-id="${cssEscape(streamId)}"]`,
+      ))[0]
+      if (current) return current
+    } catch {
+      // The harness can briefly disappear while React changes proof branches.
+    }
+    return visible(this.win.document.querySelectorAll<HTMLElement>(baseSelector))[0] ?? null
   }
 
   private async pagedCard(tab: 'Tactics' | 'Theorems', selector: string) {
