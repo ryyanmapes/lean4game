@@ -1038,12 +1038,19 @@ export class CompletePlaythroughDriver {
       bounds.left + Math.min(300, bounds.width * 0.25),
       Math.min(bounds.top + bounds.height * 0.7, trayTop - 140),
     )
-    return waitFor(`workspace copy of ${name}`, () => {
+    const copy = await waitFor(`workspace copy of ${name}`, () => {
       const copies = visible(this.win.document.querySelectorAll<HTMLElement>(
         `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(name))}"]`,
       ))
       return copies.length > copiesBefore ? copies.at(-1) ?? null : null
     })
+    // React can paint the new copy just before dnd-kit's layout effect has
+    // registered it with the pointer sensor. A player necessarily takes a
+    // beat between releasing the tray card and grabbing the new card; model
+    // that beat, then return the currently mounted node rather than the first
+    // node observed during the placement render.
+    await sleep(250)
+    return (this.win.document.getElementById(copy.id) as HTMLElement | null) ?? copy
   }
 
   async applyTheoremCopyToHypothesis(
