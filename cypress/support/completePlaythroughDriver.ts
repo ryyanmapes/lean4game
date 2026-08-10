@@ -578,7 +578,11 @@ export class CompletePlaythroughDriver {
           })),
       })})`)
     }
-    const streamId = nextLeaf?.dataset.streamId
+    // A highlighted arrow and the first visible incomplete tree leaf need not
+    // point at the same branch. Only assert an exact stream id when the player
+    // actually clicked that leaf; navigation arrows are validated by leaving
+    // the completed stream and rendering any live goal.
+    const streamId = next === nextLeaf ? nextLeaf?.dataset.streamId : null
     click(next)
     await waitFor('the selected incomplete proof branch to render', () => {
       let snapshot: StreamSnapshot
@@ -839,7 +843,11 @@ export class CompletePlaythroughDriver {
     throw new Error(`Could not find rewrite rule ${name}`)
   }
 
-  private async applyRewriteRule(rule: RewriteRule, occurrence: number | null) {
+  private async applyRewriteRule(
+    rule: RewriteRule,
+    occurrence: number | null,
+    allowNoMatch = false,
+  ): Promise<boolean> {
     const overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
     await waitFor('rewrite controls to become interactive', () => {
@@ -899,7 +907,7 @@ export class CompletePlaythroughDriver {
         await session.finish(target)
         await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
         await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
-        return
+        return true
       }
       session.cancel()
 
@@ -916,9 +924,10 @@ export class CompletePlaythroughDriver {
       for (const expressionNode of expressionNodes) {
         const fallbackCard = await this.transformRule(rule.name)
         const before = proofSignature(harness(this.win).getProofAudit())
-        if (await dragChangedProof(this.win, fallbackCard, expressionNode, before)) return
+        if (await dragChangedProof(this.win, fallbackCard, expressionNode, before)) return true
       }
     }
+    if (allowNoMatch) return false
     throw new Error(
       `Rewrite ${rule.name} could not be dragged to a matching expression ` +
       `(audit=${JSON.stringify(harness(this.win).getProofAudit())}; ` +
@@ -955,8 +964,8 @@ export class CompletePlaythroughDriver {
           for (const rule of parsed.rules) {
             const before = proofSignature(harness(this.win).getProofAudit())
             try {
-              await this.applyRewriteRule(rule, null)
-              changed = proofSignature(harness(this.win).getProofAudit()) !== before
+              const applied = await this.applyRewriteRule(rule, null, true)
+              changed = applied && proofSignature(harness(this.win).getProofAudit()) !== before
             } catch (error) {
               if (!(error instanceof Error) || !error.message.startsWith('Timed out waiting for rewrite')) throw error
             }

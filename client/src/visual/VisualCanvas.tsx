@@ -1161,7 +1161,7 @@ function inferLeanTacticFromVisualInteraction(
     const secondName = dragTo[2]!
     const firstCard = findHypCardByName(stream, firstName)
     const secondCard = findHypCardByName(stream, secondName)
-    if (firstCard && secondCard && !firstCard.isTheorem && !secondCard.isTheorem) {
+    if (firstCard && secondCard) {
       const firstType = normalizeFormulaText(TaggedText_stripTags(firstCard.hyp.type))
       const secondType = normalizeFormulaText(TaggedText_stripTags(secondCard.hyp.type))
       const firstImplication = splitImplicationText(firstType)
