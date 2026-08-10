@@ -2791,7 +2791,25 @@ export function VisualCanvas({
       playTactic: string,
       sourceCardId: string,
       options?: InteractionOptions,
-    ) => applyInteraction(playTactic, sourceCardId, { ...options, queueIfBusy: true })
+    ) => {
+      lastDragDebugRef.current = {
+        ...lastDragDebugRef.current,
+        dispatch: { playTactic, sourceCardId, processing: isProcessingRef.current },
+      }
+      void applyInteraction(playTactic, sourceCardId, { ...options, queueIfBusy: true })
+        .then(succeeded => {
+          lastDragDebugRef.current = {
+            ...lastDragDebugRef.current,
+            dispatchResult: succeeded,
+          }
+        })
+        .catch(error => {
+          lastDragDebugRef.current = {
+            ...lastDragDebugRef.current,
+            dispatchError: error instanceof Error ? error.message : String(error),
+          }
+        })
+    }
     let overId = over?.id as string | undefined
     // Cards that can be both dragged and dropped can make rectangle collision
     // prefer the large theorem tray (or the active card itself) even though

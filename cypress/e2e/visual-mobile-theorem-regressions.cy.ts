@@ -147,6 +147,7 @@ describe('Visual Lean mobile theorem player regressions', { testIsolation: false
     openLevel('AdvMultiplication', 2)
     clickGoal()
     clickGoal()
+    clickGoal()
     cy.get('.mobile-variable-column [data-testid="hyp-card"]').then($cards => {
       expect(Array.from($cards, card => card.getAttribute('data-hyp-name')),
         'goal-created variables append in introduction order').to.deep.equal(['a', 'b'])
