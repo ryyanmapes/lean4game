@@ -2706,11 +2706,25 @@ export function VisualCanvas({
         ? translated.top + translated.height / 2
         : initial ? initial.top + initial.height / 2 + delta.y : null
     if (pointerX != null && pointerY != null) {
-      const card = document.elementsFromPoint(pointerX, pointerY)
+      const hitSelector = '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]'
+      const stackedCard = document.elementsFromPoint(pointerX, pointerY)
         .map(element => element.closest<HTMLElement>(
-          '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]',
+          hitSelector,
         ))
         .find(element => element?.id && element.id !== activeId)
+      const currentStreamCard = Array.from(document.querySelectorAll<HTMLElement>(hitSelector))
+        .filter(element => element.id && element.id !== activeId)
+        .sort((left, right) => {
+          const leftCurrent = left.dataset.streamId === activeStreamId ? 1 : 0
+          const rightCurrent = right.dataset.streamId === activeStreamId ? 1 : 0
+          return rightCurrent - leftCurrent
+        })
+        .find(element => {
+          const rect = element.getBoundingClientRect()
+          return pointerX >= rect.left && pointerX <= rect.right &&
+            pointerY >= rect.top && pointerY <= rect.bottom
+        })
+      const card = currentStreamCard ?? stackedCard
       if (card?.id) overId = card.id
     }
     setActiveDraggedTheorem(null)
