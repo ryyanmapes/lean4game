@@ -1,0 +1,63 @@
+name: Focused visual regressions
+run-name: Focused Visual Lean player regressions
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: focused-visual-regressions-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: 25
+
+jobs:
+  player-regressions:
+    name: Linux - focused Electron player tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout NNG4
+        run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Lean
+        uses: leanprover/lean-action@v1
+        with:
+          build: false
+          test: false
+          lint: false
+          use-github-cache: false
+          use-mathlib-cache: false
+          check-reservoir-eligibility: false
+          lake-package-directory: server
+
+      - run: elan default stable
+
+      - name: Install JavaScript dependencies and build relay
+        run: |
+          npm ci
+          npm run build:relay
+
+      - name: Build NNG4 game
+        working-directory: ../NNG4
+        run: |
+          lake exe cache get
+          lake build
+          test -s .lake/gamedata/game.json
+
+      - name: Run focused player regressions
+        run: |
+          npx concurrently -n server,cypress -c blue,green \
+            "npm start" "npm run cypress:run:relay:ready" \
+            -k -s first --hide server

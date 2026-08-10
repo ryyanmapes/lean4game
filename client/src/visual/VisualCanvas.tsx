@@ -2888,6 +2888,35 @@ export function VisualCanvas({
       theoremCopyIds: theoremCopiesRef.current.map(copy => copy.id),
     }
 
+    // A premise dropped onto a workspace theorem is unambiguously function
+    // application. Resolve it before the generic card branches: the theorem
+    // copy is local UI state rather than a Lean hypothesis, so treating it as
+    // an ordinary target can lose the drop before any tactic is dispatched.
+    const droppedOnTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
+    const droppedPremiseName = interactionHypName(sourceCard)
+    if (sourceCard && sourceStream && droppedOnTheoremCopy && droppedPremiseName) {
+      const theoremDerivation = deriveTheoremApplication(
+        droppedOnTheoremCopy.theorem,
+        sourceCard,
+        sourceStream,
+      )
+      const playTactic = interactionToPlayTactic({
+        type: 'drag_apply',
+        theoremName: droppedOnTheoremCopy.theorem.theoremName,
+        hypName: droppedPremiseName,
+      })
+      applyDroppedInteraction(playTactic, activeId, {
+        consumedTheoremCopyIds: [droppedOnTheoremCopy.id],
+        mobileInsertAfter: theoremCopyMobileKey(droppedOnTheoremCopy),
+        ...(theoremDerivation ? {
+          commandOverride: theoremDerivation.command,
+          leanTacticOverride: theoremDerivation.command,
+          syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+        } : {}),
+      })
+      return
+    }
+
     if (isPhonePortrait && overId?.startsWith(MOBILE_DIVIDER_PREFIX)) {
       const [, columnValue, indexValue] = overId.split(':')
       const column = columnValue as MobileColumn

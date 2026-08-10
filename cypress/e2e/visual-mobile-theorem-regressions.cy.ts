@@ -25,14 +25,6 @@ function openLevel(world: string, level: number) {
     .and('have.attr', 'data-level-id', String(level))
 }
 
-function waitForPlayerIdle(label: string) {
-  cy.window({ timeout: 60_000 }).should(win => {
-    const bridge = (win as HarnessWindow).__visualTestHarness
-    expect(bridge, 'visual player test bridge remains mounted').to.exist
-    expect(bridge!.getProofAudit().processing, `player is idle after ${label}`).to.equal(false)
-  })
-}
-
 function visiblePlayerState(win: Cypress.AUTWindow) {
   const goal = win.document.querySelector<HTMLElement>('[data-testid="goal-card"]')
   const hypotheses = Array.from(
@@ -61,9 +53,18 @@ function clickGoal() {
 }
 
 function chooseConstructionBrick(label: string) {
-  cy.contains('button.cn-brick', new RegExp(`^${label}$`), { timeout: 60_000 }).click()
-  cy.get('.cn-done-btn.ready').click()
-  waitForPlayerIdle(`specifying ${label}`)
+  cy.window().then(win => {
+    const before = visiblePlayerState(win)
+    cy.contains('button.cn-brick', new RegExp(`^${label}$`), { timeout: 60_000 }).click()
+    cy.get('.cn-done-btn.ready').click()
+    cy.window({ timeout: 60_000 }).should(currentWindow => {
+      const bridge = (currentWindow as HarnessWindow).__visualTestHarness
+      expect(bridge, 'visual player test bridge remains mounted').to.exist
+      expect(bridge!.getProofAudit().processing, `specializing ${label} has finished`).to.equal(false)
+      expect(visiblePlayerState(currentWindow), `specializing ${label} changes the visible proof state`)
+        .not.to.equal(before)
+    })
+  })
 }
 
 function findTheoremCard(theoremSuffix: string, remainingPages = 32): Cypress.Chainable<JQuery<HTMLElement>> {
