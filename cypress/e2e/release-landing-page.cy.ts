@@ -16,7 +16,10 @@ describe('Visual Lean release landing page', () => {
       expect(arrow.text().trim()).to.equal('→')
     })
     cy.get('h1').should($title => {
-      expect(getComputedStyle($title[0]).fontFamily).to.equal(getComputedStyle(document.body).fontFamily)
+      const page = $title[0].ownerDocument.defaultView
+      const body = $title[0].ownerDocument.body
+      expect(page?.getComputedStyle($title[0]).fontFamily)
+        .to.equal(page?.getComputedStyle(body).fontFamily)
     })
     cy.get('#credits').scrollIntoView().should('be.visible')
       .and('contain.text', 'Visual Lean was coded with the help of Codex and Claude Code.')
