@@ -278,13 +278,13 @@ describe('NNG4 implication and definition display regressions', () => {
       '.goal-info.below',
       'Double-click there-exists goals to enter Construction Mode.',
       { timeout: LOAD_TIMEOUT },
-    ).should('exist').then($info => {
-      cy.get('#theorem-tray').then($tray => {
-        expect(
-          $info[0]!.getBoundingClientRect().bottom,
-          'the complete construction lesson stays above the fixed tray',
-        ).to.be.lte($tray[0]!.getBoundingClientRect().top)
-      })
+    ).should($info => {
+      const tray = Cypress.$('#theorem-tray')[0]
+      expect(tray, 'the fixed theorem tray exists').to.exist
+      expect(
+        $info[0]!.getBoundingClientRect().bottom,
+        'the complete construction lesson stays above the fixed tray',
+      ).to.be.lte(tray!.getBoundingClientRect().top)
     })
   })
 

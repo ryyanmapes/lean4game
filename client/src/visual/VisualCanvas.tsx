@@ -2163,9 +2163,13 @@ export function VisualCanvas({
       const dockTop = dock?.getBoundingClientRect().top ?? canvasRect.bottom
       const goalsH = goals.offsetHeight
       const BUFFER = 12
-      const naturalGoalTop = canvasRect.top + (canvasRect.height - goalsH) / 2
-      const minTop = Math.max(canvasRect.top + BUFFER, panelBottom + BUFFER)
-      const playableBottom = Math.min(canvasRect.bottom, dockTop)
+      // `top` is applied to an absolutely positioned child of the canvas, so
+      // every bound must use canvas-local coordinates. Mixing viewport values
+      // in here offsets the stack by `canvasRect.top` and lets short viewports
+      // place lesson callouts underneath the fixed theorem tray.
+      const naturalGoalTop = (canvasRect.height - goalsH) / 2
+      const minTop = Math.max(BUFFER, panelBottom - canvasRect.top + BUFFER)
+      const playableBottom = Math.min(canvasRect.height, dockTop - canvasRect.top)
       const maxTop = Math.max(minTop, playableBottom - goalsH - BUFFER)
       // The goal stack can grow when a lesson callout is attached. Position
       // the complete stack inside the playable canvas so the theorem/tactic
