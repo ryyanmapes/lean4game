@@ -85,7 +85,7 @@ jobs:
       - name: Run focused player regressions
         timeout-minutes: 15
         env:
-          CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
+          CYPRESS_READY_PATHS: /lean4game/index.html,/lean4game/data/g/local/NNG4/game.json
           CYPRESS_VISUAL_TIMEOUT: '120000'
           CYPRESS_VISUAL_WORLD: AdvAddition
           CYPRESS_VISUAL_LEVEL: '5'

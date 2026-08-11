@@ -11,10 +11,10 @@ function httpGetResource(pathname) {
 }
 
 const defaultPaths = [
-  '/',
-  '/data/g/test/TestGame/game.json',
-  '/data/g/local/VisualTest/game.json',
-  '/data/g/local/NNG4/game.json',
+  '/lean4game/index.html',
+  '/lean4game/data/g/test/TestGame/game.json',
+  '/lean4game/data/g/local/VisualTest/game.json',
+  '/lean4game/data/g/local/NNG4/game.json',
 ]
 const configuredPaths = process.env.CYPRESS_READY_PATHS
   ?.split(',')
