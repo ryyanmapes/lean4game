@@ -1009,6 +1009,19 @@ export class CompletePlaythroughDriver {
     const type = target.dataset.hypType ?? ''
     if (/^(?:\u2115|Nat|MyNat)$/u.test(type.trim())) {
       await this.dragTactic('cases', target)
+    } else if (type.trim() === 'False') {
+      // In the visual player, eliminating a False hypothesis is represented
+      // by applying that proposition card to the goal. A preceding theorem
+      // application may have replaced the fixture's original name (for
+      // example `h`) with a fresh card (`h2`); `this.hyp` has already resolved
+      // that alias, so drive the visible card exactly as a player would.
+      const goal = await waitFor('current goal', () => currentGoal(this.win))
+      await this.dragAndWait(target, goal, `applying ${match[1]} to the goal`)
+      await waitFor('False elimination to complete the current branch', () => {
+        const audit = harness(this.win).getProofAudit()
+        return !audit.processing && audit.completed ? audit : null
+      })
+      return
     } else {
       const before = proofSignature(harness(this.win).getProofAudit())
       const previousAttempts = playLog(this.win).length

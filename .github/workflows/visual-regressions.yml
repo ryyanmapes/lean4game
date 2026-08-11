@@ -17,8 +17,24 @@ env:
 
 jobs:
   player-regressions:
-    name: Linux - focused Electron player tests
+    name: Linux - ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: implication and theorem display
+            id: implication-display
+            specs: cypress/e2e/nng4-implication-and-display-regressions.cy.ts,cypress/e2e/visual-mobile-theorem-regressions.cy.ts
+          - name: lesson loading and guidance
+            id: lesson-guidance
+            specs: cypress/e2e/visual-loading-and-implication-guides.cy.ts
+          - name: mobile transformation pagination
+            id: mobile-pagination
+            specs: cypress/e2e/visual-mobile-pagination-stability.cy.ts
+          - name: Advanced Addition 5 playthrough
+            id: advanced-addition-5
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
     steps:
       - uses: actions/checkout@v4
 
@@ -76,14 +92,14 @@ jobs:
           CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,renders a revisited completed goal'
         run: |
           npx concurrently -n server,cypress -c blue,green \
-            "npm start" "node scripts/run-cypress-ready.cjs run --spec cypress/e2e/nng4-implication-and-display-regressions.cy.ts,cypress/e2e/visual-mobile-theorem-regressions.cy.ts,cypress/e2e/visual-loading-and-implication-guides.cy.ts,cypress/e2e/visual-mobile-pagination-stability.cy.ts,cypress/e2e/nng4-visual-complete-playthrough.cy.ts --browser electron" \
+            "npm start" "node scripts/run-cypress-ready.cjs run --spec ${{ matrix.specs }} --browser electron" \
             -k -s first --hide server
 
       - name: Upload focused regression evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: focused-visual-regression-${{ github.run_id }}
+          name: focused-visual-regression-${{ github.run_id }}-${{ matrix.id }}
           path: |
             cypress/results/*.json
             cypress/screenshots/**
