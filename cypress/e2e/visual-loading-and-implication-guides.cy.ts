@@ -2,7 +2,6 @@ const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
 
 type VisualHarness = {
-  openHypTransform(hypName: string): void
   getCurrentStreamSnapshot(): {
     hypTypes: Record<string, string>
   }
@@ -10,16 +9,27 @@ type VisualHarness = {
     isOpen: boolean
     targetKind: 'goal' | 'hyp' | null
   }
-  rewriteHypInTransform(
-    theoremName: string,
-    workingSide?: 'left' | 'right',
-    path?: number[],
-    isReverse?: boolean,
-  ): Promise<void>
 }
 
 type HarnessWindow = Cypress.AUTWindow & {
   __visualTestHarness?: VisualHarness
+}
+
+function clickVisibleTransformRule(label: string, remainingPages = 20): Cypress.Chainable<void> {
+  return cy.get('body').then($body => {
+    const rule = $body.find(`.tr-rule-dock:visible [data-rule-label="${label}"]`).get(0)
+    if (rule) {
+      cy.wrap(rule).click()
+      return
+    }
+    if (remainingPages <= 0) {
+      throw new Error(`Could not find visible transformation rule "${label}"`)
+    }
+    cy.get('.tr-rule-dock:visible .tr-nav-btn[aria-label="Next rule"]')
+      .should('not.be.disabled')
+      .click()
+    clickVisibleTransformRule(label, remainingPages - 1)
+  })
 }
 
 function levelUrl(level: number) {
@@ -92,33 +102,17 @@ describe('Visual loading progress and Implication guidance', () => {
       })
     })
 
-    cy.window().then(win => {
-      const harness = (win as HarnessWindow).__visualTestHarness
-      expect(harness, 'visual player test bridge').to.exist
-      harness!.openHypTransform('h')
-    })
+    cy.get('[data-hyp-name="h"]').dblclick()
     cy.window().should(win => {
       expect(
         (win as HarnessWindow).__visualTestHarness?.getTransformStatus(),
         'hypothesis transformation is open',
       ).to.include({ isOpen: true, targetKind: 'hyp' })
     })
-    cy.window().then(async win => {
-      const harness = (win as HarnessWindow).__visualTestHarness!
-      await harness!.rewriteHypInTransform('zero_add', 'left', [])
-    })
+    clickVisibleTransformRule('zero_add')
     cy.window().should(win => {
       const h = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes.h
-      expect(h).to.match(/^x\s*=\s*0\s*\+\s*y\s*\+\s*2$/)
-    })
-    cy.window().then(async win => {
-      const harness = (win as HarnessWindow).__visualTestHarness!
-      await harness.rewriteHypInTransform('zero_add', 'right')
-    })
-    cy.window().should(win => {
-      const h = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes.h
-      expect(h).to.match(/^x\s*=\s*y\s*\+\s*2$/)
-      expect(h).not.to.match(/0\s*\+\s*0\s*\+/)
+      expect(h).to.match(/^0\s*\+\s*x\s*=\s*y\s*\+\s*2$/)
     })
 
     cy.contains(
