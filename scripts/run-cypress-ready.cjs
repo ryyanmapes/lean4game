@@ -23,6 +23,32 @@ const configuredPaths = process.env.CYPRESS_READY_PATHS
 const resources = (configuredPaths?.length ? configuredPaths : defaultPaths)
   .map(httpGetResource)
 
+async function waitForValidJsonResources(paths, timeout = 240000) {
+  const jsonPaths = paths.filter(pathname => new URL(pathname, baseUrl).pathname.endsWith('.json'))
+  const deadline = Date.now() + timeout
+  let lastError
+
+  while (Date.now() < deadline) {
+    try {
+      for (const pathname of jsonPaths) {
+        const target = new URL(pathname, baseUrl)
+        const response = await fetch(target, { signal: AbortSignal.timeout(5000) })
+        if (!response.ok) throw new Error(`${target} returned HTTP ${response.status}`)
+        const body = await response.text()
+        JSON.parse(body)
+      }
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  throw new Error(`Timed out waiting for valid JSON prerequisites: ${jsonPaths.join(', ')}`, {
+    cause: lastError,
+  })
+}
+
 async function main() {
   try {
     await waitOn({
@@ -34,6 +60,11 @@ async function main() {
       window: 1000,
       validateStatus: status => status >= 200 && status < 300,
     })
+    // Vite's history fallback can return index.html with status 200 while the
+    // relay behind `/data` is still starting. Do not launch Cypress until the
+    // game-data prerequisites are parseable JSON, or the first visit will
+    // fail with "Unexpected token '<'" and retry against the wrong response.
+    await waitForValidJsonResources(configuredPaths?.length ? configuredPaths : defaultPaths)
   } catch (error) {
     console.error('Timed out waiting for Cypress prerequisites:', resources)
     console.error(error)
