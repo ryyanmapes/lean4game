@@ -61,6 +61,9 @@ export interface VisualGoalInfo {
   /** If set, the info only renders while the active goal does *not* contain a hypothesis
    *  whose type matches this string after formula-text normalization. */
   excludeHypType?: string | null
+  /** Hide this lesson callout after the named player tactic has been applied.
+   * Undo naturally restores it because the proof-step list is rolled back. */
+  hideAfterTactic?: string | null
   text: string
 }
 

@@ -697,6 +697,23 @@
   user-select: text;
   cursor: default;
   text-align: left;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--visual-scrollbar-thumb) var(--visual-scrollbar-track);
+}
+
+.visual-page .visual-info-callout::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+.visual-page .visual-info-callout::-webkit-scrollbar-track {
+  background: var(--visual-scrollbar-track);
+}
+
+.visual-page .visual-info-callout::-webkit-scrollbar-thumb {
+  border: 1px solid var(--visual-scrollbar-track);
+  border-radius: 999px;
+  background: var(--visual-scrollbar-thumb);
 }
 
 .visual-page .goal-info {
@@ -1480,6 +1497,16 @@
   color: var(--visual-text-primary);
   border-color: var(--visual-glass-border);
   background: var(--visual-glass-bg-hover);
+}
+
+/* A solved/revisited goal must never inherit the ordinary yellow hover glow,
+   including sticky :hover on touch browsers and completed proof branches. */
+.visual-page .statement-card.goal.solved:hover,
+.visual-page .statement-card.goal.solved.clickable:hover,
+.visual-page .statement-card.goal.solved.constructable:hover,
+.visual-page .statement-card.goal.solved.transformable:hover {
+  border-color: var(--visual-success);
+  box-shadow: 0 0 30px var(--visual-success-glow), 0 0 60px var(--visual-success-glow);
 }
 
 .visual-header-prev-btn,
@@ -2869,7 +2896,7 @@
 
   .visual-page.phone-portrait .goal-info {
     max-height: min(7rem, 16dvh);
-    overflow-y: auto;
+    overflow-y: scroll;
   }
 
   .visual-page.phone-portrait .goal-info.below {

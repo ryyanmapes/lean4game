@@ -17,6 +17,7 @@ import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
 import { inferAtomicReductionForms } from './existsDisplay'
+import { goalInfosForLevel } from './levelPresentation'
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
@@ -495,7 +496,12 @@ export function VisualProofPage() {
         }
         if (levelData.title) setLevelTitle(levelData.title)
         if (levelData.visualEmphasize?.length) setEmphasizeItems(levelData.visualEmphasize)
-        if (levelData.visualGoalInfos?.length) setVisualGoalInfos(levelData.visualGoalInfos)
+        setVisualGoalInfos(goalInfosForLevel(
+          gameId,
+          worldId,
+          levelId,
+          levelData.visualGoalInfos ?? [],
+        ))
         if (levelData.visualTransformInfos?.length) setVisualTransformInfos(levelData.visualTransformInfos)
         if (levelData.visualTacticHypInfos?.length) setVisualTacticHypInfos(levelData.visualTacticHypInfos)
         if (levelData.visualHypGoalInfos?.length) setVisualHypGoalInfos(levelData.visualHypGoalInfos)

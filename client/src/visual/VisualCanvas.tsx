@@ -42,6 +42,7 @@ import {
 } from './proofTree'
 import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
+import { goalInfoVisibleAfterTactics } from './levelPresentation'
 import {
   buildStructuredProof,
   commandForGoalAction,
@@ -4366,6 +4367,12 @@ export function VisualCanvas({
   const displayGoalText = displayStream
     ? formatFormulaText(TaggedText_stripTags(displayStream.goal.type))
     : null
+  const visibleVisualGoalInfos = React.useMemo(
+    () => visualGoalInfos.filter(info =>
+      goalInfoVisibleAfterTactics(info, proofSteps.map(step => step.playTactic)),
+    ),
+    [proofSteps, visualGoalInfos],
+  )
   const activeTacticHypInfos = React.useMemo(
     () => (visualTacticHypInfos ?? []).filter(info =>
       !proofGraphOccupiesMainView && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
@@ -5385,8 +5392,8 @@ export function VisualCanvas({
         isConstructable={streamInteractionsEnabled && isConstructable}
         isClickable={streamInteractionsEnabled && isClickable}
         clickTooltip={clickAction?.tooltip}
-        isSolved={solvedGoalId === stream.id || currentStreamIsCompleted}
-        visualInfos={visualGoalInfos}
+        isSolved={Boolean(previouslyCompleted) || canvasState.completed || solvedGoalId === stream.id || currentStreamIsCompleted}
+        visualInfos={visibleVisualGoalInfos}
         infoPositions={infoPositions}
         showDropTarget={activeDraggedTactic ? isTacticTarget : activeDragId !== null}
         isPotentialTarget={isTacticTarget}
@@ -5399,7 +5406,7 @@ export function VisualCanvas({
   }
 
   const mobileBelowGoalInfos = displayStream
-    ? visualGoalInfos.filter(info => {
+    ? visibleVisualGoalInfos.filter(info => {
         if (info.position !== 'below') return false
         if (info.goal && formatFormulaText(info.goal) !== displayGoalText) return false
         const hypTypes = displayStream.goal.hyps.map(hyp => formatFormulaText(TaggedText_stripTags(hyp.type)))

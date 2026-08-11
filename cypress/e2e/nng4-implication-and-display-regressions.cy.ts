@@ -12,6 +12,7 @@ const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
 
 interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
+  runPlayerTactic(command: string): Promise<void>
   getProofAudit(): {
     completed: boolean
     processing: boolean
@@ -227,6 +228,50 @@ describe('NNG4 implication and definition display regressions', () => {
 
   })
 
+  it('shows the requested level lesson labels and retires the induction reminder', () => {
+    const openAndExpect = (world: string, level: number, text: string) => {
+      cy.visit(`${mountPath}#/g/local/NNG4/world/${world}/level/${level}/visual`)
+      cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+      cy.contains('.goal-info.below', text, { timeout: LOAD_TIMEOUT }).should('be.visible')
+    }
+
+    openAndExpect(
+      'Implication',
+      3,
+      'Try solving this level both by dragging h1 onto h2, and dragging h2 onto the goal.',
+    )
+    openAndExpect(
+      'LessOrEqual',
+      1,
+      'Double-click there-exists goals to enter Construction Mode.',
+    )
+    openAndExpect(
+      'LessOrEqual',
+      4,
+      'Click there-exists hypotheses to name a variable fulfilling the condition.',
+    )
+    openAndExpect(
+      'LessOrEqual',
+      7,
+      "Click an 'or' hypothesis to split into two branches",
+    )
+    cy.get('.goal-info.below').should($info => {
+      const style = getComputedStyle($info[0]!)
+      expect(style.overflowY, 'overflowing lesson text reserves a persistent scrollbar').to.equal('scroll')
+      expect(style.scrollbarWidth, 'lesson scrollbar is visibly styled').to.equal('thin')
+    })
+
+    openAndExpect(
+      'LessOrEqual',
+      8,
+      "Induct after only 'a' is introduced to get a more general inductive hypothesis.",
+    )
+    visualHarness().then(harness => harness.runPlayerTactic('intro x'))
+    cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('be.visible')
+    visualHarness().then(harness => harness.runPlayerTactic('induction x with d hd'))
+    cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('not.exist')
+  })
+
   it('renders the induction octagon edges with one color and one-pixel thickness', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`)
     cy.get('[data-tactic-name="induction"]', { timeout: LOAD_TIMEOUT }).then($card => {
@@ -290,6 +335,52 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-tactic-name="cases"]', { timeout: LOAD_TIMEOUT })
       .should('be.visible')
       .and('have.class', 'variable-only-tactic')
+      .then($card => {
+        expect(getComputedStyle($card[0]!).clipPath, 'cases uses the variable octagon').to.contain('16px')
+      })
+  })
+
+  it('uses the wider phone world-map layout without horizontal scrolling', () => {
+    cy.viewport(390, 844)
+    cy.visit(`${mountPath}#/g/local/NNG4/visual`)
+    cy.get('[data-testid="visual-world-map"]', { timeout: LOAD_TIMEOUT }).should($map => {
+      const map = $map[0]!
+      const mapRect = map.getBoundingClientRect()
+      const circles = Array.from(map.querySelectorAll<SVGGraphicsElement>('.world-circle, .level-circle, .ending-world-hollow'))
+      const left = Math.min(...circles.map(circle => circle.getBoundingClientRect().left))
+      const right = Math.max(...circles.map(circle => circle.getBoundingClientRect().right))
+      expect((right - left) / mapRect.width, 'world tree occupies most of the phone width').to.be.greaterThan(0.55)
+      expect(map.scrollWidth, 'zoom does not reintroduce horizontal panning').to.be.at.most(map.clientWidth + 2)
+    })
+  })
+
+  it('renders a revisited completed goal with only the green solved glow', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`, {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('game_progress', JSON.stringify({
+          games: {
+            'g/local/nng4': {
+              inventory: [],
+              difficulty: 2,
+              readIntro: true,
+              data: {
+                LessOrEqual: {
+                  readIntro: true,
+                  1: { code: '', selections: [], completed: true, help: [] },
+                },
+              },
+            },
+          },
+        }))
+      },
+    })
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('have.class', 'solved')
+      .then($goal => {
+        const style = getComputedStyle($goal[0]!)
+        expect(style.borderColor, 'completed goal border is green').not.to.equal('rgb(234, 179, 8)')
+        expect(style.boxShadow, 'completed goal has no yellow warning glow').not.to.contain('234, 179, 8')
+      })
   })
 
   it('rewrites the selected x to x + 0 with reverse add_zero', () => {

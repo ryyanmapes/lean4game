@@ -323,7 +323,7 @@ export function applyNng4VisualLayout(
 
   const rawWidth = Math.max(120, rawBounds.x2 - rawBounds.x1)
   const rawCenter = rawBounds.x1 + rawWidth / 2
-  const width = compact ? rawWidth * 0.62 : rawWidth
+  const width = compact ? rawWidth * 0.8 : rawWidth
   const left = rawCenter - width / 2
   const center = left + width / 2
   const at = (fraction: number) => left + width * fraction
@@ -590,7 +590,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     ? applyNng4VisualLayout(rawLayout.nodes, rawLayout.bounds, isPhonePortraitViewport)
     : { nodes: { ...rawLayout.nodes }, bounds: rawLayout.bounds ? { ...rawLayout.bounds } : undefined, endingPosition: null }
   const nodes = arrangedLayout.nodes
-  const bounds = arrangedLayout.bounds
   const endingPosition = arrangedLayout.endingPosition
 
   const isSkipped = (worldId: string, level: number) =>
@@ -600,6 +599,24 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     const total = worldSize?.[worldId] ?? 0
     return total - (skippedLevels?.[worldId]?.length ?? 0)
   }
+
+  // Hidden/skipped worlds must not reserve empty horizontal space on phones.
+  // Fit the portrait viewBox to the worlds that are actually painted, while
+  // retaining the original vertical bounds and orbit padding.
+  const bounds = (() => {
+    const layoutBounds = arrangedLayout.bounds
+    if (!layoutBounds || !isPhonePortraitViewport) return layoutBounds
+    const visibleX = Object.entries(nodes)
+      .filter(([worldId]) => visibleCount(worldId) > 0)
+      .map(([, node]) => node.position.x)
+    if (endingPosition) visibleX.push(endingPosition.x)
+    if (visibleX.length === 0) return layoutBounds
+    return {
+      ...layoutBounds,
+      x1: Math.min(...visibleX),
+      x2: Math.max(...visibleX),
+    }
+  })()
 
   const completed: Record<string, boolean[]> = {}
   const started: Record<string, boolean[]> = {}
