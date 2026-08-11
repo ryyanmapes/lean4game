@@ -110,8 +110,11 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
         }
       }
     }
-    if (issues.length > 0) cy.task('recordVisualNameIssues', issues)
-    return audit
+    if (issues.length === 0) return audit
+    // Returning a synchronous audit after queuing cy.task makes Cypress abort
+    // the level before the final name audit can report the actual malformed
+    // value. Keep the task in the command chain and preserve the audit result.
+    return cy.task('recordVisualNameIssues', issues).then(() => audit)
   })
 }
 

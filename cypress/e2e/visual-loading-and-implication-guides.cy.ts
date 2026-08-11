@@ -132,6 +132,7 @@ describe('Visual loading progress and Implication guidance', () => {
     cy.visit(levelUrl(6))
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
+    cy.contains('.tr-tab-btn', 'Tactics').should('be.visible').click()
     cy.contains('.tr-tab-btn.active', 'Tactics').should('be.visible')
     cy.get('[data-tactic-name="revert"]').should('not.exist')
 

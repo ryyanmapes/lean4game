@@ -3074,8 +3074,13 @@
   }
 
   .visual-page.phone-portrait.tr-overlay .tr-rule-card {
+    min-width: 5.5rem;
     max-width: min(18rem, calc(100vw - 6.5rem));
     padding: 0.5rem 0.7rem;
+  }
+
+  .visual-page.phone-portrait.tr-overlay .tr-rule-page-cards {
+    gap: 0.5rem;
   }
 
   .visual-page.phone-portrait.tr-overlay .cn-brick {

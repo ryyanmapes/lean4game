@@ -184,7 +184,10 @@ describe('NNG4 implication and definition display regressions', () => {
     })
 
     cy.get('.proof-sidebar-tab').click()
-    cy.contains('.proof-sidebar-mode-btn', 'Core').click()
+    // Completing the proof leaves Core selected. A player has no reason to
+    // click the already-active, partially obscured mode button just to inspect
+    // the log; assert the visible state we actually depend on instead.
+    cy.contains('.proof-sidebar-mode-btn', 'Core').should('have.class', 'active')
     cy.get('.proof-sidebar-step.unknown').should('not.exist')
     cy.get('.proof-sidebar-step-text').last().invoke('text').should(text => {
       expect(text).to.match(/^exact\s/u)

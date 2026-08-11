@@ -376,7 +376,10 @@ export function TransformationView({
     setMeasuredLayoutKey(ruleDockLayoutKey)
   }, [ruleDockLayoutKey, selectedTab])
 
-  const GAP_PX = 12
+  // Keep this in sync with the responsive `.tr-rule-page-cards` gap. Phone
+  // pages intentionally use the tighter spacing so adjacent compact rules
+  // share a page instead of wasting most of it on a single card.
+  const GAP_PX = isPhonePortrait ? 8 : 12
   const hasRules = tabRules.length > 0
   const measuredWidths = cardWidthsByTab[selectedTab] ?? {}
   const hasMeasurements = measuredLayoutKey === ruleDockLayoutKey &&
