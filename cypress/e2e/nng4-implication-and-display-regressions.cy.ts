@@ -12,7 +12,6 @@ const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
 
 interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
-  runPlayerTactic(command: string): Promise<void>
   getProofAudit(): {
     completed: boolean
     processing: boolean
@@ -261,9 +260,14 @@ describe('NNG4 implication and definition display regressions', () => {
       8,
       "Induct after only 'a' is introduced to get a more general inductive hypothesis.",
     )
-    visualHarness().then(harness => harness.runPlayerTactic('intro x'))
+    let introducedName = ''
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      introducedName = await new CompletePlaythroughDriver(win).introduceOneForall()
+    })
     cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('be.visible')
-    visualHarness().then(harness => harness.runPlayerTactic('induction x with d hd'))
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      await new CompletePlaythroughDriver(win).inductVisibleVariable(introducedName)
+    })
     cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('not.exist')
   })
 

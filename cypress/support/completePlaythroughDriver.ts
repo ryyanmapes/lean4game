@@ -1550,6 +1550,22 @@ export class CompletePlaythroughDriver {
     await this.submitConstruction(parseConstructionExpr(match[1]), command)
   }
 
+  /** Introduce exactly one leading forall by clicking the goal, returning the
+   * collision-safe name that the player UI actually created. */
+  async introduceOneForall() {
+    const before = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+    await this.clickGoal()
+    const introducedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      .find(name => !before.has(name))
+    if (!introducedName) throw new Error('Goal click did not introduce a visible forall variable')
+    return introducedName
+  }
+
+  /** Drag the induction tactic card onto a currently visible variable card. */
+  async inductVisibleVariable(name: string) {
+    await this.induction(`induction ${name} with d hd`)
+  }
+
   private async introduceLeadingForalls() {
     for (let count = 0; count < 32; count += 1) {
       const snapshot = harness(this.win).getCurrentStreamSnapshot()
