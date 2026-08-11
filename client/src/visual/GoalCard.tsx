@@ -41,7 +41,6 @@ export function GoalCard({
   isTransformable,
   isConstructable,
   isClickable,
-  clickTooltip,
   isSolved,
   visualInfos = [],
   showDropTarget = false,
@@ -94,19 +93,6 @@ export function GoalCard({
     isOver && showDropTarget ? 'drop-target-active' : '',
     isSolved ? 'solved' : '',
   ].filter(Boolean).join(' ')
-
-  const doubleClickHint = isConstructable
-    ? 'Double-click to propose a witness'
-    : isTransformable
-      ? 'Double-click to open transformation view'
-      : undefined
-  const title = isClickable && doubleClickHint
-    ? clickTooltip
-      ? `${clickTooltip}. ${doubleClickHint}`
-      : doubleClickHint
-    : isClickable
-      ? clickTooltip
-      : doubleClickHint
 
   React.useEffect(() => {
     return () => {
@@ -238,7 +224,6 @@ export function GoalCard({
         onDoubleClick={isInteractive ? handleDoubleClick : undefined}
         onContextMenu={onContextMenu}
         onMouseLeave={onMouseLeave}
-        title={title}
       >
         <div className="goal-prefix">Goal</div>
         <span ref={propositionRef} className="proposition">{colorizeFormula(goalText)}</span>

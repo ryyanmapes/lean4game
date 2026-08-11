@@ -81,13 +81,13 @@ test('finds one automatic rewrite target only when the highlighted match is unam
   )
 })
 
-test('omits backend paths for a unique nested rewrite but keeps them for ambiguous matches', () => {
+test('keeps backend paths for nested rewrites, including unique matches', () => {
   const lhs = parse('a + succ(d)')
   const uniqueGoal = parse('(a + succ(d)) + b')
   const uniqueTarget = uniqueGoal.left
-  assert.equal(
+  assert.deepEqual(
     findDisambiguatingRewritePath(uniqueGoal, uniqueTarget.id, node => matchesPattern(node, lhs)),
-    undefined,
+    [1],
   )
 
   const ambiguousGoal = parse('(a + succ(d)) + (b + succ(d))')

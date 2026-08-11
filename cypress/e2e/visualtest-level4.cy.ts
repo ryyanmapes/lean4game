@@ -5,6 +5,13 @@ const VISUALTEST_LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 120000)
 interface VisualTestHarness {
   clickGoal(playTactic?: string): Promise<void>
   openGoalTransform(): void
+  rewriteGoalInTransform(
+    theoremName: string,
+    workingSide?: 'left' | 'right',
+    path?: number[],
+    isReverse?: boolean,
+  ): Promise<void>
+  getProofAudit(): { completed: boolean; coreLines: string[]; interactiveLines: string[] }
 }
 
 type VisualHarnessWindow = Cypress.AUTWindow & {
@@ -52,5 +59,26 @@ describe('VisualTest Level 4', () => {
       expect(labels).to.include('mul_comm')
     })
     cy.get('.tr-no-rules').should('not.exist')
+  })
+
+  it('applies mul_one in both directions without prematurely completing the level', () => {
+    visualHarness().then(async harness => {
+      await harness.clickGoal()
+      harness.openGoalTransform()
+      await harness.rewriteGoalInTransform('h', 'right')
+      await harness.rewriteGoalInTransform('mul_one', 'left', [0], true)
+      await harness.rewriteGoalInTransform('mul_one', 'left', [0], false)
+    })
+
+    cy.get('.tr-expression-node', { timeout: 60000 }).should('contain.text', '5')
+    cy.get('.visual-header.completed').should('not.exist')
+    cy.get('.tr-back-btn').click()
+    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should('be.visible')
+    cy.get('.visual-header.completed').should('not.exist')
+    visualHarness().then(harness => harness.getProofAudit()).then(audit => {
+      expect(audit.completed).to.equal(false)
+      expect(audit.coreLines.some(line => line.includes('?'))).to.equal(false)
+      expect(audit.interactiveLines.some(line => line.includes('?'))).to.equal(false)
+    })
   })
 })

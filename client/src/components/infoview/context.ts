@@ -83,6 +83,7 @@ export interface IPreferencesContext extends PreferencesState{
   setLanguage: React.Dispatch<React.SetStateAction<PreferencesState["language"]>>;
   setIsSuggestionsMobileMode: any;
   setIsVisualLightMode: React.Dispatch<React.SetStateAction<PreferencesState["isVisualLightMode"]>>;
+  setIsVisualAutoBranchSwitching: React.Dispatch<React.SetStateAction<PreferencesState["isVisualAutoBranchSwitching"]>>;
 }
 
 export const PreferencesContext = React.createContext<IPreferencesContext>({
@@ -92,11 +93,13 @@ export const PreferencesContext = React.createContext<IPreferencesContext>({
   language: "en",
   isSuggestionsMobileMode: false,
   isVisualLightMode: false,
+  isVisualAutoBranchSwitching: false,
   setLayout: () => {},
   setIsSavePreferences: () => {},
   setLanguage: () => {},
   setIsSuggestionsMobileMode: () => {},
   setIsVisualLightMode: () => {},
+  setIsVisualAutoBranchSwitching: () => {},
 })
 
 export const WorldLevelIdContext = React.createContext<{

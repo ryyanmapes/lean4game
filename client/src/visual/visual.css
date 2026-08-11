@@ -3375,7 +3375,8 @@
   gap: 0.5rem;
 }
 
-.visual-map-theme-toggle {
+.visual-map-theme-toggle,
+.visual-map-auto-branch-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -3392,27 +3393,22 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.visual-map-theme-toggle:hover {
+.visual-map-theme-toggle:hover,
+.visual-map-auto-branch-toggle:hover {
   background: var(--visual-glass-bg-hover);
   border-color: var(--visual-glass-border);
 }
 
-.visual-map-theme-toggle.active {
+.visual-map-theme-toggle.active,
+.visual-map-auto-branch-toggle.active {
   background: var(--visual-map-toggle-active-bg);
   color: var(--visual-map-toggle-active-text);
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12);
 }
 
-.visual-map-theme-label {
-  white-space: nowrap;
-}
-
 @media (max-width: 720px) {
-  .visual-map-theme-label {
-    display: none;
-  }
-
-  .visual-map-theme-toggle {
+  .visual-map-theme-toggle,
+  .visual-map-auto-branch-toggle {
     padding: 0;
     width: 2.25rem;
     justify-content: center;
@@ -3501,7 +3497,7 @@
     /* The SVG already includes room for each world's level orbit and label.
        Keep a small touch-friendly margin without allowing the first/last
        worlds to scroll through half a viewport of empty space. */
-    padding: 3rem 0.75rem 4rem;
+    padding: 3rem 0.25rem 4rem;
     overflow-x: hidden;
     overflow-y: auto;
     touch-action: pan-y;
@@ -3517,14 +3513,19 @@
     margin-top: 0;
   }
 
-  .visual-map-page .visual-map-theme-toggle {
+  .visual-map-page .visual-map-theme-toggle,
+  .visual-map-page .visual-map-auto-branch-toggle {
     position: fixed;
     /* Sit just below the appbar so it doesn't get hidden by the phone's
      * bottom browser chrome and is easy to reach. */
     left: calc(env(safe-area-inset-left, 0px) + 0.75rem);
-    top: calc(env(safe-area-inset-top, 0px) + 3.55rem);
+    top: calc(env(safe-area-inset-top, 0px) + 3.9rem);
     z-index: 180;
     box-shadow: 0 8px 24px var(--visual-shadow-strong);
+  }
+
+  .visual-map-page .visual-map-auto-branch-toggle {
+    left: calc(env(safe-area-inset-left, 0px) + 3.5rem);
   }
 }
 

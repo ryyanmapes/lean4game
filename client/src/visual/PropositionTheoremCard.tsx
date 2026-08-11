@@ -158,9 +158,6 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirecti
       className={classes}
       onDoubleClick={!isDragging ? onDoubleClick : undefined}
       onContextMenu={onContextMenu}
-      title={copy.theorem.forallSpecification
-        ? 'Drag onto cards to use this theorem, or double-click to specify an expression'
-        : 'Drag onto cards to use this theorem, or back to the theorem bar to delete it'}
       {...listeners}
       {...attributes}
     >

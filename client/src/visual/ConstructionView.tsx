@@ -146,7 +146,6 @@ function SlotNode({ id: slotId, selectedSlotId, onSelectSlot }: {
       ref={setNodeRef}
       className={`cn-slot${slotId === selectedSlotId ? ' selected' : ''}${isOver ? ' drop-hover' : ''}`}
       onClick={() => onSelectSlot(slotId)}
-      title="Click to select or drop a brick here"
     >?</button>
   )
 }
@@ -508,7 +507,7 @@ export function ConstructionView({
               disabled={!canUndo}
               aria-disabled={busy || !canUndo}
               className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
-              title="Undo last fill"
+              aria-label="Undo last fill"
             >↩</button>
           </div>
 
@@ -519,7 +518,7 @@ export function ConstructionView({
               disabled={!isComplete}
               aria-disabled={busy || !isComplete}
               className={`cn-done-btn${isComplete ? ' ready' : ''}${doneError ? ' error' : ''}`}
-              title={isComplete ? (isSpecifyMode ? 'Submit specification to Lean' : 'Submit witness to Lean') : 'Fill all slots to continue'}
+              aria-label={isComplete ? (isSpecifyMode ? 'Submit specification to Lean' : 'Submit witness to Lean') : 'Fill all slots to continue'}
             >Done ›</button>
           </div>
         </div>

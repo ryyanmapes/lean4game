@@ -103,6 +103,12 @@ describe('local NNG4 release maps', () => {
       cy.get('.visual-map-theme-toggle').click()
       cy.get('.app').should('have.attr', 'data-visual-theme').and('not.equal', initialTheme)
     })
+    cy.get('.visual-map-theme-toggle').should('not.contain.text', 'Light').and('not.contain.text', 'Dark')
+    cy.get('.visual-map-auto-branch-toggle').should('have.attr', 'aria-pressed', 'false').click()
+      .should('have.attr', 'aria-pressed', 'true')
+    cy.window().should(win => {
+      expect(win.localStorage.getItem('visual_auto_branch_switch')).to.equal('true')
+    })
     cy.get('[role="link"][aria-label="Open Tutorial World"]').click({ force: true })
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })

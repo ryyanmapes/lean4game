@@ -206,6 +206,12 @@ describe('NNG4 Addition 1 induction transform mode', () => {
 
     visualHarness().then(harness => harness.clickGoal())
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 }).should('contain.text', 'Stream 2 of 2')
+    visualHarness().then(harness => harness.getProofAudit()).then(audit => {
+      expect(audit.coreLines.at(-1), 'goal click is a Core Lean proof move').to.equal('rfl')
+      expect(audit.interactiveLines.at(-1), 'goal click is an Interactive proof move').to.equal('click_goal')
+      expect(audit.coreLines.some(line => line.includes('?'))).to.equal(false)
+      expect(audit.interactiveLines.some(line => line.includes('?'))).to.equal(false)
+    })
   })
 
   it('keeps transform mode open after add_succ on the successor stream', () => {

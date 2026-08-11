@@ -7,6 +7,7 @@ import {
     setLanguage as setLanguagePreferences,
     setIsSuggestionsMobileMode as setIsSuggestionsMobileModePreferences,
     setIsVisualLightMode as setIsVisualLightModePreferences,
+    setIsVisualAutoBranchSwitching as setIsVisualAutoBranchSwitchingPreferences,
     getWindowDimensions,
     AUTO_SWITCH_THRESHOLD
 } from "../preferences";
@@ -30,6 +31,8 @@ const UsePreferences = () => {
 
     const isVisualLightMode = useAppSelector((state) => state.preferences.isVisualLightMode);
     const setIsVisualLightMode = (isVisualLightMode: boolean) => dispatch(setIsVisualLightModePreferences(isVisualLightMode))
+    const isVisualAutoBranchSwitching = useAppSelector((state) => state.preferences.isVisualAutoBranchSwitching);
+    const setIsVisualAutoBranchSwitching = (enabled: boolean) => dispatch(setIsVisualAutoBranchSwitchingPreferences(enabled))
 
     const automaticallyAdjustLayout = () => {
         const {width} = getWindowDimensions()
@@ -54,11 +57,13 @@ const UsePreferences = () => {
         language,
         isSuggestionsMobileMode,
         isVisualLightMode,
+        isVisualAutoBranchSwitching,
         setLayout,
         setIsSavePreferences,
         setLanguage,
         setIsSuggestionsMobileMode,
         setIsVisualLightMode,
+        setIsVisualAutoBranchSwitching,
     }
 }
 

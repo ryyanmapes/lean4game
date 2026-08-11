@@ -9,11 +9,13 @@ import type { IconProp } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faArrowLeft,
+  faArrowRightArrowLeft,
   faBars,
   faCircleInfo,
   faDownload,
   faEraser,
   faGear,
+  faMoon,
   faSun,
   faUpload,
   faXmark,
@@ -33,8 +35,7 @@ import { useAppSelector } from '../hooks'
 import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
-import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
-import { titleCaseLevel } from './VisualHeader'
+import { getWebsocketUrl } from '../utils/url'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 import { computeVisualProgressFrontier } from './visualWorldProgress'
 import './visual.css'
@@ -49,29 +50,6 @@ const NLABEL = 8
 const NMAX = 16
 const NSPIRAL = 12
 const MINFONT = 12
-const LEVEL_TOOLTIP_SCREEN_FONT_SIZE = 12
-const LEVEL_TOOLTIP_FONT_SIZE = LEVEL_TOOLTIP_SCREEN_FONT_SIZE / ds
-const LEVEL_TOOLTIP_FONT_FAMILY = "'Inter', system-ui, -apple-system, sans-serif"
-const LEVEL_TOOLTIP_FONT = `${LEVEL_TOOLTIP_SCREEN_FONT_SIZE}px ${LEVEL_TOOLTIP_FONT_FAMILY}`
-const LEVEL_TOOLTIP_PAD_X = 10 / ds
-const LEVEL_TOOLTIP_HEIGHT = 26 / ds
-
-let levelTooltipMeasureCanvas: HTMLCanvasElement | null = null
-
-function measureLevelTooltipText(text: string): number {
-  if (typeof document === 'undefined') {
-    return text.length * LEVEL_TOOLTIP_SCREEN_FONT_SIZE * 0.58 / ds
-  }
-
-  levelTooltipMeasureCanvas ??= document.createElement('canvas')
-  const context = levelTooltipMeasureCanvas.getContext('2d')
-  if (!context) {
-    return text.length * LEVEL_TOOLTIP_SCREEN_FONT_SIZE * 0.58 / ds
-  }
-
-  context.font = LEVEL_TOOLTIP_FONT
-  return context.measureText(text).width / ds
-}
 
 interface VisualMapPalette {
   background: string
@@ -151,16 +129,9 @@ function handleMapLinkKeyDown(
   }
 }
 
-interface LevelTooltipInfo {
-  x: number
-  y: number
-  title: string
-  isRight: boolean
-}
-
 type MapLevelMode = 'classic' | 'visual'
 
-function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, title, onHoverChange, levelMode }: {
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, levelMode }: {
   world: string
   level: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -173,8 +144,6 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   unlocked: boolean
   worldSize: number
   palette: VisualMapPalette
-  title?: string
-  onHoverChange?: (info: LevelTooltipInfo | null) => void
   levelMode: MapLevelMode
 }) {
   const gameId = React.useContext(GameIdContext)
@@ -203,8 +172,6 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
         : palette.lockedLevel
   const stroke = !completed && !started && unlocked ? palette.unlockedLevelOutline : 'none'
   const to = `/${gameId}/world/${world}/level/${level}${levelMode === 'visual' ? '/visual' : ''}`
-  const isRight = x >= s * position.x
-
   return (
     <g
       className="level visual-map-link"
@@ -213,8 +180,6 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
       aria-label={`Open ${world} level ${displayLevel}`}
       onClick={() => navigate(to)}
       onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
-      onMouseEnter={() => onHoverChange?.({ x, y, title: title ?? `Level ${displayLevel}`, isRight })}
-      onMouseLeave={() => onHoverChange?.(null)}
     >
       <circle
         className={`level-circle${started ? ' saved-progress' : ''}${!completed && !started && unlocked ? ' unlocked-outline' : ''}`}
@@ -466,10 +431,14 @@ function VisualMapAppBar({
   gameTitle,
   isLightMode,
   onToggleLightMode,
+  autoBranchSwitching,
+  onToggleAutoBranchSwitching,
 }: {
   gameTitle: string
   isLightMode: boolean
   onToggleLightMode: () => void
+  autoBranchSwitching: boolean
+  onToggleAutoBranchSwitching: () => void
 }) {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -487,7 +456,6 @@ function VisualMapAppBar({
         <a
           className="visual-map-back-btn"
           href="/"
-          title={t('Home')}
           aria-label={t('Home')}
         >
           <FontAwesomeIcon icon={toIconProp(faArrowLeft)} />
@@ -500,11 +468,18 @@ function VisualMapAppBar({
           className={`visual-map-theme-toggle${isLightMode ? ' active' : ''}`}
           onClick={onToggleLightMode}
           aria-pressed={isLightMode}
-          title={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
           aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
         >
-          <FontAwesomeIcon icon={toIconProp(faSun)} />
-          <span className="visual-map-theme-label">{isLightMode ? 'Light' : 'Dark'}</span>
+          <FontAwesomeIcon icon={toIconProp(isLightMode ? faSun : faMoon)} />
+        </button>
+        <button
+          type="button"
+          className={`visual-map-auto-branch-toggle${autoBranchSwitching ? ' active' : ''}`}
+          onClick={onToggleAutoBranchSwitching}
+          aria-pressed={autoBranchSwitching}
+          aria-label="Automatically switch to the next proof branch"
+        >
+          <FontAwesomeIcon icon={toIconProp(faArrowRightArrowLeft)} />
         </button>
         <VisualMapMenuButton />
       </div>
@@ -537,7 +512,12 @@ function VisualMapAppBar({
 
 export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelMode }) {
   const gameId = React.useContext(GameIdContext)
-  const { isVisualLightMode, setIsVisualLightMode } = React.useContext(PreferencesContext)
+  const {
+    isVisualLightMode,
+    setIsVisualLightMode,
+    isVisualAutoBranchSwitching,
+    setIsVisualAutoBranchSwitching,
+  } = React.useContext(PreferencesContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
   useRetryUntilData(gameInfo)
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -547,42 +527,17 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   // Subscribe so completion/import updates redraw the imperative selector results below.
   useAppSelector(selectProgress(gameId))
 
-  const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
-  const [levelTooltip, setLevelTooltip] = React.useState<LevelTooltipInfo | null>(null)
   const [viewportSize, setViewportSize] = React.useState(getViewportSize)
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   React.useEffect(() => {
     const onResize = () => {
       const next = getViewportSize()
       setViewportSize(next)
-      if (next.width <= 720 && next.height >= next.width) setLevelTooltip(null)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  React.useEffect(() => {
-    if (!gameInfo.data?.worldSize) return
-    const ws = gameInfo.data.worldSize as Record<string, number>
-    const dataBaseUrl = getDataBaseUrl().replace(/\/$/, '')
-    const promises = Object.entries(ws).flatMap(([worldId, size]) =>
-      Array.from({ length: size }, (_, i) => {
-        const level = i + 1
-        return fetch(`${dataBaseUrl}/${gameId}/level__${worldId}__${level}.json`)
-          .then(r => r.json())
-          .then((d: { title?: string }) => ({ worldId, level, title: d.title ? titleCaseLevel(d.title) : `Level ${level}` }))
-          .catch(() => ({ worldId, level, title: `Level ${level}` }))
-      })
-    )
-    Promise.all(promises).then(results => {
-      const titles: Record<string, Record<number, string>> = {}
-      results.forEach(({ worldId, level, title: t }) => {
-        titles[worldId] = titles[worldId] ?? {}
-        titles[worldId][level] = t
-      })
-      setLevelTitles(titles)
-    })
-  }, [gameId, gameInfo.data])
   const rawLayout: { nodes: Record<string, { position: cytoscape.Position; data: { title?: string } }>; bounds?: { x1: number; x2: number; y1: number; y2: number } } =
     worlds ? computeWorldLayout(worlds) : { nodes: {} }
 
@@ -718,8 +673,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             unlocked={progressFrontier.highlightedLevels[worldId] === i}
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
-            title={levelTitles[worldId]?.[i]}
-            onHoverChange={isPhonePortraitViewport ? undefined : setLevelTooltip}
             levelMode={levelMode}
           />,
         )
@@ -755,35 +708,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
 
   let R = 1.1 * r / Math.sin(Math.PI / (NMAX + 1))
   const padding = R + 2.1 * r
-  // Extra horizontal space so tooltips on edge-of-map levels aren't clipped.
-  // Phones have no hover tooltip and should fit the complete graph width.
-  // Keep just enough room for the outer level orbit on phone. Reusing the
-  // desktop padding here makes the fitted graph's touch targets unnecessarily
-  // small even though phones never display the hover tooltip.
-  const hPadding = isPhonePortraitViewport ? R + 1.2 * r : padding + 250
-
-  // Tooltip rendered last so it appears above all other SVG elements.
-  if (levelTooltip) {
-    const { x: tx, y: ty, title: tooltipText, isRight } = levelTooltip
-    const tooltipW = Math.ceil(measureLevelTooltipText(tooltipText) + 2 * LEVEL_TOOLTIP_PAD_X)
-    const tooltipH = LEVEL_TOOLTIP_HEIGHT
-    const tooltipX = isRight ? tx + r + 5 : tx - r - 5 - tooltipW
-    const tooltipY = ty - tooltipH / 2
-    svgElements.push(
-      <g key="level-tooltip" style={{ pointerEvents: 'none' }}>
-        <rect x={tooltipX} y={tooltipY} width={tooltipW} height={tooltipH} rx={4}
-          fill="rgba(15,23,42,0.93)" stroke="rgba(148,163,184,0.28)" strokeWidth={1} />
-        <text
-          x={isRight ? tooltipX + LEVEL_TOOLTIP_PAD_X : tooltipX + tooltipW - LEVEL_TOOLTIP_PAD_X}
-          y={tooltipY + tooltipH / 2 + 4}
-          textAnchor={isRight ? 'start' : 'end'}
-          fill="#e2e8f0"
-          fontSize={LEVEL_TOOLTIP_FONT_SIZE}
-          fontFamily={LEVEL_TOOLTIP_FONT_FAMILY}
-        >{tooltipText}</text>
-      </g>,
-    )
-  }
+  const hPadding = isPhonePortraitViewport ? R + 0.55 * r : padding + 80
 
   const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
   const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
@@ -791,7 +716,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   // navigation is vertical-only. Desktop/tablet retain their fill-width view.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
     ? isPhonePortraitViewport
-      ? Math.max(0, viewportSize.width - 32)
+      ? Math.max(0, viewportSize.width - 8)
       : Math.max(naturalSvgDisplayWidth, viewportSize.width)
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
@@ -887,6 +812,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         gameTitle={getVisualMapGameTitle(gameId, title)}
         isLightMode={isVisualLightMode}
         onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
+        autoBranchSwitching={isVisualAutoBranchSwitching}
+        onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
       />
       <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg

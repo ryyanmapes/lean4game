@@ -504,19 +504,18 @@ export function findMatchingNodeIds(
 }
 
 /**
- * Return a structural path only when Lean needs one to distinguish multiple
- * visually matching rewrite targets. A unique side-scoped rewrite is more
- * robust without a path because Lean's elaborated arithmetic tree may differ
- * from the display ExprTree.
+ * Return the structural path whenever the chosen target is nested. A side-only
+ * command rewrites the side's root; it does not search that side, so omitting
+ * the path for a unique nested match makes rules such as `mul_one` fail on
+ * `(5 * 1) + 5 * y`.
  */
 export function findDisambiguatingRewritePath(
   root: ExpressionNode,
   targetId: string,
-  predicate: (node: ExpressionNode) => boolean,
+  _predicate: (node: ExpressionNode) => boolean,
 ): number[] | undefined {
-  return findMatchingNodeIds(root, predicate).length === 1
-    ? undefined
-    : findPath(root, targetId) ?? undefined
+  const path = findPath(root, targetId) ?? undefined
+  return path && path.length > 0 ? path : undefined
 }
 
 // --- Apply equality rewrite rule ---

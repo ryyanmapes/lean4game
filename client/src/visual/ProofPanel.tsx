@@ -80,10 +80,10 @@ export function ProofPanel({ proofSteps, leanProofScript, onClose }: ProofPanelP
       <div className="proof-panel" onClick={e => e.stopPropagation()}>
         <div className="proof-panel-header">
           <span className="proof-panel-title">Lean Proof</span>
-          <button className="proof-panel-copy" onClick={handleCopy} title="Copy Lean proof">
+          <button className="proof-panel-copy" onClick={handleCopy} aria-label="Copy Lean proof">
             Copy
           </button>
-          <button className="proof-panel-close" onClick={onClose} title="Close">✕</button>
+          <button className="proof-panel-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         <div className="proof-panel-body">

@@ -39,7 +39,6 @@ export function HypCard({
   isInteractive = true,
   isFailing = false,
   isClickable = false,
-  clickTooltip,
   isTransformable = false,
   isConstructable = false,
   constructOnSingleClick = false,
@@ -97,15 +96,6 @@ export function HypCard({
     mobileList ? 'mobile-list-card' : '',
   ].filter(Boolean).join(' ')
 
-  const title = isClickable
-    ? clickTooltip
-    : isConstructable
-      ? 'Double-click to specify an expression'
-      : isTransformable
-      ? 'Double-click to open transformation view'
-      : card.isTheorem
-      ? 'Drag onto another statement to use this theorem, or back to the theorem bar to delete it'
-      : undefined
   const hypName = card.hyp.names[0] ?? ''
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
 
@@ -162,7 +152,6 @@ export function HypCard({
       onDoubleClick={isInteractive && (isTransformable || isConstructable) && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
-      title={title}
       {...(isInteractive ? listeners : {})}
       {...(isInteractive ? attributes : {})}
     >

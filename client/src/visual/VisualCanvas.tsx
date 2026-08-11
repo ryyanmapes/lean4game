@@ -56,6 +56,7 @@ import {
   stripCasePrefixes,
 } from './proofText'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
+import { PreferencesContext } from '../components/infoview/context'
 
 export { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 
@@ -1105,6 +1106,15 @@ function inferClickGoalIntroNames(
   return `intro ${newNames.join(' ')}`
 }
 
+function inferCreatedHypName(stream: GoalStream, resultStep?: InteractiveGoalsWithHints): string | null {
+  if (!resultStep) return null
+  const goals = resultStep.focusedGoals?.length ? resultStep.focusedGoals : resultStep.goals
+  const beforeNames = new Set(stream.hyps.flatMap(card => card.hyp.names))
+  return goals?.[0]?.goal.hyps
+    .flatMap(hyp => hyp.names)
+    .find(name => name !== '[anonymous]' && !beforeNames.has(name)) ?? null
+}
+
 function nextLeanIntroName(stream: GoalStream, baseName: string): string {
   const existing = new Set(
     stream.hyps.flatMap(card => [
@@ -1192,7 +1202,7 @@ function inferLeanTacticFromVisualInteraction(
       if (isConjunctionText(hypType)) {
         const leftName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}left` : 'left'
         const rightName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}right` : 'right'
-        return `have ${leftName} := And.left ${hypName}; have ${rightName} := And.right ${hypName}; clear ${hypName}`
+        return `rcases ${hypName} with ⟨${leftName}, ${rightName}⟩`
       }
       if (isReflexiveEqualityImplicationText(hypType)) {
         return `specialize ${hypName} rfl`
@@ -1219,9 +1229,11 @@ function inferLeanTacticFromVisualInteraction(
           ? `${secondName} ${firstName}`
           : null
       if (application) {
-        return `have ${nextFreshHypName(stream.hyps, 'h')} := ${application}`
+        return `have ${inferCreatedHypName(stream, resultStep) ?? nextFreshHypName(stream.hyps, 'h')} := ${application}`
       }
     }
+    const createdName = inferCreatedHypName(stream, resultStep)
+    if (createdName) return `have ${createdName} := ${secondName} ${firstName}`
   }
 
   if (playTactic.startsWith('induction ')) return playTactic
@@ -1294,7 +1306,9 @@ function resolveLeanTactic(
     playTactic === 'click_goal' &&
     annotationLeaf === 'intro' &&
     (inferredLeanTactic?.startsWith('intro ') ?? false)
-  if (hasUsableAnnotation && annotationLeanTactic && !shouldPreferNamedIntro) return annotationLeanTactic
+  const shouldPreferStructuralSplit =
+    playTactic.startsWith('click_prop ') && (inferredLeanTactic?.startsWith('rcases ') ?? false)
+  if (hasUsableAnnotation && annotationLeanTactic && !shouldPreferNamedIntro && !shouldPreferStructuralSplit) return annotationLeanTactic
   if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
   if (!isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
   return null
@@ -1818,6 +1832,7 @@ export function VisualCanvas({
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
+  const { isVisualAutoBranchSwitching } = React.useContext(PreferencesContext)
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
   const goalsContainerRef = useRef<HTMLDivElement>(null)
@@ -2514,14 +2529,6 @@ export function VisualCanvas({
 
     if (handledByConfirmedGoalCompletion) {
       onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
-      // "No goals to be solved" is Lean's authoritative statement about the
-      // complete accumulated script. Do not make that fact contingent on
-      // matching a final stale canvas stream: the stale stream is precisely
-      // why the player had a goal card left to click.
-      if (confirmedNoGoalsCompletion && options?.solvedGoalId) {
-        freezeCompletedProof(canvasState, options.solvedGoalId)
-        return true
-      }
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,
         canvasState,
@@ -2530,10 +2537,23 @@ export function VisualCanvas({
         playTactic,
         Boolean(options?.streamSplit),
         activeStreamId,
+        undefined,
+        isVisualAutoBranchSwitching,
       )
 
       setProofTree(nextTree)
       setActiveStreamId(nextActiveId)
+      setProofSteps(prev => [...prev, {
+        command,
+        playTactic,
+        leanTactic: 'rfl',
+        rotation,
+        treeSnapshot: cloneProofTree(nextTree),
+        canvasSnapshot: cloneCanvasState(nextCanvas),
+        activeStreamIdAfter: nextActiveId,
+        transformTargetSnapshot: null,
+        theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
+      }])
 
       if (nextCanvas.completed && options?.solvedGoalId) {
         freezeCompletedProof(canvasState, options.solvedGoalId)
@@ -2586,6 +2606,7 @@ export function VisualCanvas({
           Boolean(options?.streamSplit),
           activeStreamId,
           exactFocusedStreams,
+          isVisualAutoBranchSwitching,
         )
       : {
           nextTree: proofTree,
@@ -3685,6 +3706,7 @@ export function VisualCanvas({
       false,
       activeStreamId,
       exactFocusedStreams,
+      isVisualAutoBranchSwitching,
     )
     const missingForallContinuation =
       target.kind === 'forall_spec' && nextCanvas.streams.length === 0
@@ -3866,6 +3888,7 @@ export function VisualCanvas({
           false,
           activeStreamId,
           exactFocusedStreams,
+          isVisualAutoBranchSwitching,
         )
       : {
           nextTree: proofTree,
@@ -5158,7 +5181,6 @@ export function VisualCanvas({
             className="proof-sidebar-actions-toggle"
             data-testid="proof-actions-toggle"
             aria-label="Proof actions"
-            title="Proof actions"
           >{'\u2630'}</summary>
           <div className="proof-sidebar-actions-menu" data-testid="proof-actions-menu" role="menu">
             <button
@@ -5488,7 +5510,7 @@ export function VisualCanvas({
               type="button"
               className="mobile-page-link proof-link"
               onClick={() => setMobilePage('proof')}
-              title="Open proof"
+              aria-label="Open proof"
             >
               <span>&lt;</span>
               <span>Proof</span>
@@ -5521,7 +5543,7 @@ export function VisualCanvas({
                 type="button"
                 className="mobile-page-link graph-link"
                 onClick={() => setMobilePage('graph')}
-                title="Open proof graph"
+                aria-label="Open proof graph"
               >
                 <span>Graph</span>
                 <span>&gt;</span>
@@ -5789,7 +5811,7 @@ export function VisualCanvas({
                 onClick={() => void undoLastStep()}
                 aria-disabled={isProcessing}
                 className="tr-ctrl-btn active-undo"
-                title="Undo"
+                aria-label="Undo"
               >↩</button>
             </div>
           )}
@@ -5818,7 +5840,7 @@ export function VisualCanvas({
                   type="button"
                   className="mobile-page-link mobile-side-return-link"
                   onClick={() => setMobilePage('main')}
-                  title="Return to level"
+                  aria-label="Return to level"
                 >
                   <span>Back</span>
                   <span>&gt;</span>
@@ -5855,7 +5877,7 @@ export function VisualCanvas({
                   type="button"
                   className="mobile-page-link mobile-side-return-link"
                   onClick={() => setMobilePage('main')}
-                  title="Return to level"
+                  aria-label="Return to level"
                 >
                   <span>&lt;</span>
                   <span>Back</span>
@@ -5887,7 +5909,7 @@ export function VisualCanvas({
             const next = !showProofSidebar
             setProofSidebarOpen(next)
           }}
-          title={showProofSidebar ? 'Close proof view' : 'Open proof view'}
+          aria-label={showProofSidebar ? 'Close proof view' : 'Open proof view'}
         >
           <span>Proof</span>
         </button>

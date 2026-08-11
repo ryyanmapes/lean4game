@@ -1050,6 +1050,10 @@ example (y : Nat) : 5 * (y + 1) = 5 * y + 5 * 1 := by
   drag_rw_lhs [Nat.mul_add]
   rfl
 
+example (y : Nat) : 5 * 1 + 5 * y = 5 + 5 * y := by
+  drag_rw_lhs_at [Nat.mul_one] [1]
+  click_goal
+
 example : 0 ≠ 1 := by
   click_goal
   cases h

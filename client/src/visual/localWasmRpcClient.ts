@@ -183,7 +183,7 @@ class LocalLeanWorker {
           const total = Number(msg.total) || 1
           reportLeanLoading(
             84 + Math.min(10, (loaded / total) * 10),
-            `Loading Lean modules (${loaded} of ${total})…`,
+            'Loading Lean modules…',
           )
         } else if (msg.type === 'stdout') {
           try {

@@ -11,6 +11,13 @@ describe('Visual Lean release landing page', () => {
       .should('contain.text', 'Elevator Pitch')
     cy.get('a.destination[href="/lean4game/index.html#/g/local/NNG4"]')
       .should('contain.text', 'The Natural Numbers Game Classic')
+    cy.get('.hero-mark, .destination-number, .destination-symbol').should('not.exist')
+    cy.get('.destination-arrow').should('have.length', 3).each(arrow => {
+      expect(arrow.text().trim()).to.equal('→')
+    })
+    cy.get('h1').should($title => {
+      expect(getComputedStyle($title[0]).fontFamily).to.equal(getComputedStyle(document.body).fontFamily)
+    })
     cy.get('#credits').scrollIntoView().should('be.visible')
       .and('contain.text', 'Visual Lean was coded with the help of Codex and Claude Code.')
       .and('contain.text', 'license info tbd')

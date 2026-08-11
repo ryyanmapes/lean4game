@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences, loadVisualLightModePreference } from "./local_storage";
+import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualLightModePreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -8,6 +8,7 @@ export interface PreferencesState {
   language: string;
   isSuggestionsMobileMode: boolean;
   isVisualLightMode: boolean;
+  isVisualAutoBranchSwitching: boolean;
 }
 
 export function getWindowDimensions() {
@@ -23,15 +24,18 @@ const defaultPreferencesState: PreferencesState = {
   language: import.meta.env.VITE_CLIENT_DEFAULT_LANGUAGE || "en",
   isSuggestionsMobileMode: 'ontouchstart' in document.documentElement,
   isVisualLightMode: false,
+  isVisualAutoBranchSwitching: false,
 }
 
 const savedPreferences = loadPreferences()
 const savedVisualLightMode = loadVisualLightModePreference()
+const savedVisualAutoBranchSwitching = loadVisualAutoBranchSwitchPreference()
 
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
   ...savedPreferences,
   isVisualLightMode: savedVisualLightMode ?? savedPreferences?.isVisualLightMode ?? defaultPreferencesState.isVisualLightMode,
+  isVisualAutoBranchSwitching: savedVisualAutoBranchSwitching ?? savedPreferences?.isVisualAutoBranchSwitching ?? defaultPreferencesState.isVisualAutoBranchSwitching,
 }
 
 export const preferencesSlice = createSlice({
@@ -53,6 +57,9 @@ export const preferencesSlice = createSlice({
     setIsVisualLightMode: (state, action) => {
       state.isVisualLightMode = action.payload;
     },
+    setIsVisualAutoBranchSwitching: (state, action) => {
+      state.isVisualAutoBranchSwitching = action.payload;
+    },
   },
 });
 
@@ -62,4 +69,5 @@ export const {
   setLanguage,
   setIsSuggestionsMobileMode,
   setIsVisualLightMode,
+  setIsVisualAutoBranchSwitching,
 } = preferencesSlice.actions;

@@ -401,7 +401,10 @@ describe('VisualTest Level 2', () => {
     cy.get('.proof-sidebar-step-text').then(steps => {
       const text = Array.from(steps, step => step.textContent ?? '').join('\n')
       expect(text, 'function application drags render as ordinary have statements')
-        .to.match(/have\s+h\d*\s*:=/u)
+        .to.contain('have h1 := right h')
+      expect(text).to.contain('have h2 := h1 left')
+      expect(text, 'conjunction splitting is represented by one structural Lean step')
+        .to.contain('rcases h1 with ⟨left, right⟩')
       expect(text).not.to.contain('? (drag_to')
     })
   })

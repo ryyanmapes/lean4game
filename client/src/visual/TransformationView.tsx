@@ -904,7 +904,7 @@ export function TransformationView({
               className="tr-swap-btn"
               onClick={handleSwap}
               aria-disabled={isProcessing}
-              title="Edit this side instead"
+              aria-label="Edit this side instead"
             >{workingSide === 'left' ? '→' : '←'}</button>
           </div>
 
@@ -947,7 +947,7 @@ export function TransformationView({
               disabled={!(canUndo ?? rewriteStepCount > 0)}
               aria-disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
-              title="Undo"
+              aria-label="Undo"
             >↩</button>
           </div>
 
@@ -958,7 +958,7 @@ export function TransformationView({
               onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
               aria-disabled={isProcessing}
               className={`tr-ctrl-btn${isReverse ? ' active-reverse' : ''}`}
-              title={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
+              aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
             >↕</button>
           </div>
 
