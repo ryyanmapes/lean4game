@@ -720,7 +720,7 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   if (tactic.name === 'cases') return true
   if (tactic.name === 'symm') {
     const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
-    return parsedHypEquality(card) !== null || typeText.includes('↔')
+    return parsedHypEquality(card) !== null || typeText.includes('↔') || typeText.includes('≠')
   }
   // `tauto` operates on the goal; it does not have a meaningful `at h` form.
   if (tactic.name === 'tauto') return false
@@ -731,7 +731,7 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
   if (tactic.name === 'induction' || tactic.name === 'cases') return false
   if (tactic.name === 'symm') {
     const goalText = TaggedText_stripTags(stream.goal.type)
-    return parsedGoalEquality(stream) !== null || goalText.includes('↔')
+    return parsedGoalEquality(stream) !== null || goalText.includes('↔') || goalText.includes('≠')
   }
   return true
 }
