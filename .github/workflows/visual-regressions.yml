@@ -71,7 +71,7 @@ jobs:
         env:
           CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
           CYPRESS_VISUAL_TIMEOUT: '120000'
-          CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,renders a revisited completed goal'
+          CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,renders a revisited completed goal'
         run: |
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "npm run cypress:run:relay:ready" \

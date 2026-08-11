@@ -242,11 +242,6 @@ describe('NNG4 implication and definition display regressions', () => {
     )
     openAndExpect(
       'LessOrEqual',
-      1,
-      'Double-click there-exists goals to enter Construction Mode.',
-    )
-    openAndExpect(
-      'LessOrEqual',
       4,
       'Click there-exists hypotheses to name a variable fulfilling the condition.',
     )
@@ -257,8 +252,8 @@ describe('NNG4 implication and definition display regressions', () => {
     )
     cy.get('.goal-info.below').should($info => {
       const style = getComputedStyle($info[0]!)
-      expect(style.overflowY, 'overflowing lesson text reserves a persistent scrollbar').to.equal('scroll')
       expect(style.scrollbarWidth, 'lesson scrollbar is visibly styled').to.equal('thin')
+      expect(style.scrollbarGutter, 'lesson layout reserves stable room for its scrollbar').to.contain('stable')
     })
 
     openAndExpect(
@@ -270,6 +265,23 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('be.visible')
     visualHarness().then(harness => harness.runPlayerTactic('induction x with d hd'))
     cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('not.exist')
+  })
+
+  it('keeps the less-or-equal construction lesson above the theorem tray', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.contains(
+      '.goal-info.below',
+      'Double-click there-exists goals to enter Construction Mode.',
+      { timeout: LOAD_TIMEOUT },
+    ).should('exist').then($info => {
+      cy.get('#theorem-tray').then($tray => {
+        expect(
+          $info[0]!.getBoundingClientRect().bottom,
+          'the complete construction lesson stays above the fixed tray',
+        ).to.be.lte($tray[0]!.getBoundingClientRect().top)
+      })
+    })
   })
 
   it('renders the induction octagon edges with one color and one-pixel thickness', () => {

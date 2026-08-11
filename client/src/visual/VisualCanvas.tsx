@@ -2152,26 +2152,37 @@ export function VisualCanvas({
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current
     const goals = goalsContainerRef.current
+    const canvas = combiningCanvasRef.current
     if (isPhonePortrait) { setGoalsTopOverride(null); return }
-    if (!panel || !goals) { setGoalsTopOverride(null); return }
+    if (!goals || !canvas) { setGoalsTopOverride(null); return }
 
     const update = () => {
-      const panelRect = panel.getBoundingClientRect()
-      const viewH = window.innerHeight
+      const canvasRect = canvas.getBoundingClientRect()
+      const panelBottom = panel?.getBoundingClientRect().bottom ?? canvasRect.top
+      const dock = document.getElementById(THEOREM_TRAY_ID)
+      const dockTop = dock?.getBoundingClientRect().top ?? canvasRect.bottom
       const goalsH = goals.offsetHeight
-      const naturalGoalTop = viewH / 2 - goalsH / 2
       const BUFFER = 12
-      const desiredTop = panelRect.bottom + BUFFER
-      setGoalsTopOverride(desiredTop > naturalGoalTop ? desiredTop : null)
+      const naturalGoalTop = canvasRect.top + (canvasRect.height - goalsH) / 2
+      const minTop = Math.max(canvasRect.top + BUFFER, panelBottom + BUFFER)
+      const playableBottom = Math.min(canvasRect.bottom, dockTop)
+      const maxTop = Math.max(minTop, playableBottom - goalsH - BUFFER)
+      // The goal stack can grow when a lesson callout is attached. Position
+      // the complete stack inside the playable canvas so the theorem/tactic
+      // tray never covers the callout on shorter desktop viewports.
+      setGoalsTopOverride(Math.min(maxTop, Math.max(minTop, naturalGoalTop)))
     }
 
     update()
     const obs = new ResizeObserver(update)
-    obs.observe(panel)
+    if (panel) obs.observe(panel)
     obs.observe(goals)
+    obs.observe(canvas)
+    const dock = document.getElementById(THEOREM_TRAY_ID)
+    if (dock) obs.observe(dock)
     window.addEventListener('resize', update)
     return () => { obs.disconnect(); window.removeEventListener('resize', update) }
-  }, [isPhonePortrait, proofTree])
+  }, [isPhonePortrait, proofTree, trayHeight, visualGoalInfos])
 
   useLayoutEffect(() => {
     const goals = goalsContainerRef.current
