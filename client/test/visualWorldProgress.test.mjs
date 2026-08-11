@@ -52,3 +52,19 @@ test('parallel bottom worlds are both frontier nodes after completed ancestors a
   assert.deepEqual(result.frontierWorlds.sort(), ['Implication', 'Multiplication'])
   assert.deepEqual(result.highlightedLevels, { Multiplication: 1, Implication: 1 })
 })
+
+test('completion-neutral levels remain incomplete visually but do not gate the world', () => {
+  const result = computeVisualProgressFrontier({
+    worldIds: ['Power'],
+    edges: [],
+    worldSizes: { Power: 3 },
+    skippedLevels: {},
+    completionNeutralLevels: { Power: [3] },
+    isCompleted: (_world, level) => level < 3,
+  })
+
+  assert.equal(result.actualCompletedLevels.Power[3], false)
+  assert.equal(result.completedLevels.Power[3], true)
+  assert.equal(result.completedWorlds.Power, true)
+  assert.equal(result.nextLevels.Power, null)
+})

@@ -7,6 +7,7 @@ import { GameIdContext } from '../app'
 import { PreferencesContext } from './infoview/context'
 import { HopLoadingIndicator } from '../visual/VisualLoadingScreen'
 import { TelemetryConsent, type TelemetryConsentGate } from './telemetry_consent'
+import { AnnotatedLevelTitle } from './annotated_level_title'
 
 import '../css/classic-loading.css'
 
@@ -49,7 +50,7 @@ export function ClassicLoadingScreen({
           <span className="app-bar-title">{worldTitle ?? ''}</span>
         </div>
         <span className="app-bar-title classic-loading-title">
-          {levelTitle ?? 'The Natural Numbers Game'}
+          <AnnotatedLevelTitle title={levelTitle ?? 'The Natural Numbers Game'} />
         </span>
         <div className="nav-btns">
           <button

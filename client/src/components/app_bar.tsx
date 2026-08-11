@@ -5,7 +5,7 @@ import * as React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faDownload, faUpload, faEraser, faBook, faBookOpen, faGlobe, faHome,
   faArrowRight, faArrowLeft, faXmark, faBars, faCode,
-  faCircleInfo, faTerminal, faGear, faSun } from '@fortawesome/free-solid-svg-icons'
+  faCircleInfo, faTerminal, faSun } from '@fortawesome/free-solid-svg-icons'
 import { GameIdContext } from "../app"
 import { InputModeContext, PreferencesContext, WorldLevelIdContext } from "./infoview/context"
 import { GameInfo, useGetGameInfoQuery } from '../state/api'
@@ -18,6 +18,7 @@ import { useAtom } from 'jotai'
 import { popupAtom, PopupType } from '../store/popup-atoms'
 import { closeNavAtom, navOpenAtom } from '../store/navigation-atoms'
 import { useGameTranslation } from '../utils/translation'
+import { AnnotatedLevelTitle } from './annotated_level_title'
 
 /** navigation buttons for mobile welcome page to switch between intro/tree/inventory. */
 function MobileNavButtons({pageNumber, setPageNumber}:
@@ -132,17 +133,6 @@ function InputModeButton({isDropdown}) {
   </Button>
 }
 
-export function ImpressumButton({isDropdown}) {
-  const [, closeNav] = useAtom(closeNavAtom)
-  const [, setPopup] = useAtom(popupAtom)
-  const { t } = useTranslation()
-  return <Button className="btn btn-inverted"
-    title={t("Impressum")} inverted="true" to="" onClick={(ev) => {setPopup(PopupType.impressum); closeNav()}}>
-    <FontAwesomeIcon icon={faCircleInfo} />
-    {isDropdown && <>&nbsp;{t("Impressum")}</>}
-  </Button>
-}
-
 export function PrivacyButton({isDropdown}) {
   const [, closeNav] = useAtom(closeNavAtom)
   const [, setPopup] = useAtom(popupAtom)
@@ -151,15 +141,6 @@ export function PrivacyButton({isDropdown}) {
     title={t("Privacy Policy")} inverted="true" to="" onClick={(ev) => {setPopup(PopupType.privacy); closeNav()}}>
     <FontAwesomeIcon icon={faCircleInfo} />
     {isDropdown && <>&nbsp;{t("Privacy Policy")}</>}
-  </Button>
-}
-
-export function PreferencesButton() {
-  const [, closeNav] = useAtom(closeNavAtom)
-  const [, setPopup] = useAtom(popupAtom)
-  const { t } = useTranslation()
-  return <Button title={t("Preferences")} inverted="true" to="" onClick={() => {setPopup(PopupType.preferences); closeNav()}}>
-    <FontAwesomeIcon icon={faGear} />&nbsp;{t("Preferences")}
   </Button>
 }
 
@@ -188,12 +169,12 @@ function GameInfoButton() {
   </Button>
 }
 
-function EraseButton () {
+function ResetButton () {
   const [, closeNav] = useAtom(closeNavAtom)
   const [, setPopup] = useAtom(popupAtom)
   const { t } = useTranslation()
-  return <Button title={t("Clear Progress")} inverted="true" to="" onClick={() => {setPopup(PopupType.erase); closeNav()}}>
-    <FontAwesomeIcon icon={faEraser} />&nbsp;{t("Erase")}
+  return <Button title={t("Reset Progress")} inverted="true" to="" onClick={() => {setPopup(PopupType.erase); closeNav()}}>
+    <FontAwesomeIcon icon={faEraser} />&nbsp;{t("Reset")}
   </Button>
 }
 
@@ -273,12 +254,10 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
     </div>
     <div className={'menu dropdown' + (navOpen ? '' : ' hidden')}>
       <GameInfoButton />
-      <EraseButton />
+      <ResetButton />
       <DownloadButton gameId={gameId} gameProgress={gameProgress}/>
       <UploadButton />
-      <ImpressumButton isDropdown={true} />
       <PrivacyButton isDropdown={true} />
-      <PreferencesButton />
     </div>
   </div>
 }
@@ -299,6 +278,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
   const gameInfo = useGetGameInfoQuery({game: gameId})
   const completed = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const difficulty = useAppSelector(selectDifficulty(gameId))
+  const gameProgress = useAppSelector(selectProgress(gameId))
 
   let worldTitle = gameInfo.data?.worlds.nodes[worldId].title
 
@@ -307,7 +287,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
       <>
         {/* MOBILE VERSION */}
         <div>
-          <span className="app-bar-title">{levelTitle}</span>
+          <span className="app-bar-title"><AnnotatedLevelTitle title={levelTitle} /></span>
         </div>
         <div className="nav-btns">
           <InventoryButton pageNumber={pageNumber} setPageNumber={setPageNumber}/>
@@ -320,10 +300,10 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
           <InputModeButton isDropdown={true}/>
           <ThemeModeButton isDropdown />
           <GameInfoButton />
-          <ImpressumButton isDropdown={true} />
           <PrivacyButton isDropdown={true} />
-          <EraseButton />
-          <PreferencesButton />
+          <DownloadButton gameId={gameId} gameProgress={gameProgress}/>
+          <UploadButton />
+          <ResetButton />
         </div>
       </> :
       <>
@@ -333,7 +313,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
           <span className="app-bar-title">{worldTitle && gT(worldTitle)}</span>
         </div>
         <div>
-          <span className="app-bar-title">{levelTitle}</span>
+          <span className="app-bar-title"><AnnotatedLevelTitle title={levelTitle} /></span>
         </div>
         <div className="nav-btns">
           <PreviousButton  />
@@ -344,10 +324,10 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
         </div>
         <div className={'menu dropdown' + (navOpen ? '' : ' hidden')}>
           <GameInfoButton />
-          <ImpressumButton isDropdown={true} />
           <PrivacyButton isDropdown={true} />
-          <EraseButton />
-          <PreferencesButton />
+          <DownloadButton gameId={gameId} gameProgress={gameProgress}/>
+          <UploadButton />
+          <ResetButton />
         </div>
       </>
     }

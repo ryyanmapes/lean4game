@@ -57,7 +57,8 @@ describe('local NNG4 release maps', () => {
     cy.get('.menu.dropdown').should('be.visible')
       .find('.btn')
       .should('have.length.greaterThan', 4)
-    cy.get('.menu.dropdown .btn').filter(':contains("Erase")').should('have.length', 1)
+    cy.get('.menu.dropdown .btn').filter(':contains("Reset")').should('have.length', 1)
+    cy.get('.menu.dropdown').should('not.contain.text', 'Preferences').and('not.contain.text', 'Impressum')
     cy.get('#menu-btn').click()
     cy.get('.menu.dropdown').should('not.be.visible')
 
@@ -104,8 +105,13 @@ describe('local NNG4 release maps', () => {
       cy.get('.app').should('have.attr', 'data-visual-theme').and('not.equal', initialTheme)
     })
     cy.get('.visual-map-theme-toggle').should('not.contain.text', 'Light').and('not.contain.text', 'Dark')
-    cy.get('.visual-map-auto-branch-toggle').should('have.attr', 'aria-pressed', 'false').click()
+      .and('have.attr', 'title')
+    cy.get('.visual-map-menu-btn').click()
+    cy.contains('.visual-map-dropdown button', 'Auto branch switching')
+      .should('have.attr', 'aria-pressed', 'false').click()
       .should('have.attr', 'aria-pressed', 'true')
+    cy.contains('.visual-map-dropdown button', 'Anonymous telemetry')
+      .should('have.attr', 'aria-pressed', 'false')
     cy.window().should(win => {
       expect(win.localStorage.getItem('visual_auto_branch_switch')).to.equal('true')
     })
@@ -117,11 +123,43 @@ describe('local NNG4 release maps', () => {
     cy.visit('/lean4game/index.html#/g/local/NNG4/visual')
     cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
     cy.get('.visual-map-menu-btn').click()
-    cy.contains('.visual-map-dropdown button', 'Erase').click()
-    cy.contains('h2', 'Delete Progress?').should('be.visible')
+    cy.contains('.visual-map-dropdown button', 'Reset').click()
+    cy.contains('h2', 'Reset Progress?').should('be.visible')
     cy.contains('Deleting progress will delete all your proofs').should('not.exist')
     cy.contains('button', 'Download & Delete').should('not.exist')
-    cy.contains('button', 'Delete Progress').should('exist')
+    cy.contains('button', 'Reset Progress').should('exist')
+  })
+
+  it('omits Algorithm entirely and exposes optional Fermat metadata', () => {
+    cy.request('/lean4game/data/g/local/NNG4/game.json').then(response => {
+      expect(response.body.worlds.nodes).not.to.have.property('Algorithm')
+      expect(response.body.worldSize).not.to.have.property('Algorithm')
+      expect(response.body.completionNeutralLevels.Power).to.deep.equal([10])
+      expect(response.body.skippedLevels.Power).not.to.include(10)
+    })
+    cy.request('/lean4game/data/g/local/NNG4/level__Power__10.json').then(response => {
+      expect(response.body.title).to.equal("Fermat's Last Theorem ❌")
+      expect(response.body.completionNeutral).to.equal(true)
+      expect(response.body.visualGoalInfos.some(info =>
+        info.position === 'below' && info.text === 'Good luck!'
+      )).to.equal(true)
+    })
+    cy.request({
+      url: '/lean4game/data/g/local/NNG4/level__Algorithm__1.json',
+      failOnStatusCode: false,
+    }).its('status').should('equal', 404)
+  })
+
+  it('shows Fermat as a playable optional level with an accessible title annotation', () => {
+    cy.visit('/lean4game/index.html#/g/local/NNG4/world/Power/level/10/visual')
+    cy.contains('.visual-info-callout', 'Good luck!', { timeout: 180_000 }).should('be.visible')
+    cy.get('.visual-header-title .level-title-emoji', { timeout: 30_000 })
+      .should('have.attr', 'aria-label', '❌: Does not count towards completion')
+      .trigger('mouseover')
+    cy.contains('.level-title-annotation-text', 'Does not count towards completion')
+      .should('be.visible')
+    cy.get('.visual-header-title .level-title-emoji').click()
+      .should('have.attr', 'aria-expanded', 'true')
   })
 
   it('redirects the removed embedded selector to the release root', () => {

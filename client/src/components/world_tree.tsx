@@ -13,6 +13,7 @@ import { store } from '../state/store'
 import '../css/world_tree.css'
 import { useGameTranslation } from '../utils/translation'
 import { getDataBaseUrl } from '../utils/url'
+import { plainLevelTitle } from './annotated_level_title'
 
 // Settings for the world tree
 cytoscape.use( klay )
@@ -85,8 +86,8 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
   return (
     <Link to={`/${gameId}/world/${world}/level/${level}`}
         className={`level ${completed ? 'completed' : unlocked ? 'unlocked' : 'locked'}`}
-        aria-label={`Open ${world} level ${level}: ${title ?? `Level ${level}`}`}>
-      <title>{title ?? `Level ${level}`}</title>
+        aria-label={`Open ${world} level ${level}: ${plainLevelTitle(title ?? `Level ${level}`, true)}`}>
+      <title>{plainLevelTitle(title ?? `Level ${level}`, true)}</title>
       <circle fill={completed ? lightgreen : unlocked? blue : lightgrey} cx={x} cy={y} r={r} />
       <foreignObject className="level-title-wrapper" x={x} y={y}
           width={1.42*r} height={1.42*r} transform={"translate("+ -.71*r +","+ -.71*r +")"}>
@@ -223,9 +224,10 @@ export function computeWorldLayout(worlds) {
 }
 
 
-export function WorldTreePanel({worlds, worldSize}:
+export function WorldTreePanel({worlds, worldSize, completionNeutralLevels = {}}:
   { worlds: any,
     worldSize: any,
+    completionNeutralLevels?: Record<string, number[]>,
   }) {
   const gameId = React.useContext(GameIdContext)
   const {nodes, bounds}: any = worlds ? computeWorldLayout(worlds) : {nodes: []}
@@ -275,6 +277,7 @@ export function WorldTreePanel({worlds, worldSize}:
   // 0, 1, …, n. Index `0` will be set to `false` if any dependency is not completely solved.
   // Indices `1, …, n` indicate if the corresponding level is completed
   var completed = {}
+  var satisfied = {}
 
   if (worlds && worldSize) {
     // Fill `completed` with the level data.
@@ -283,14 +286,16 @@ export function WorldTreePanel({worlds, worldSize}:
         // index `0` starts off as `true` but can be set to `false` by any edge with non-completed source
         return i == 0 || selectCompleted(gameId, worldId, i)(store.getState())
       })
+      const neutral = new Set(completionNeutralLevels[worldId] ?? [])
+      satisfied[worldId] = completed[worldId].map((done, i) => done || neutral.has(i))
     }
 
     // draw all connecting paths
     for (let i in worlds.edges) {
       const edge = worlds.edges[i]
-      let sourceCompleted = completed[edge[0]].slice(1).every(Boolean)
+      let sourceCompleted = satisfied[edge[0]].slice(1).every(Boolean)
       // if the origin world is not completed, mark the target world as non-playable
-      if (!sourceCompleted) {completed[edge[1]][0] = false}
+      if (!sourceCompleted) {satisfied[edge[1]][0] = false}
       svgElements.push(
         <WorldPath key={`path_${edge[0]}-->${edge[1]}`}
           source={nodes[edge[0]]} target={nodes[edge[1]]} unlocked={sourceCompleted}/>
@@ -304,7 +309,7 @@ export function WorldTreePanel({worlds, worldSize}:
         <WorldIcon world={worldId}
           title={nodes[worldId].data.title || worldId}
           position={position}
-          completedLevels={completed[worldId]}
+          completedLevels={satisfied[worldId]}
           key={`${gameId}-${worldId}`}
           worldSize={worldSize[worldId]}
         />
@@ -317,7 +322,7 @@ export function WorldTreePanel({worlds, worldSize}:
             level={i}
             position={position}
             completed={completed[worldId][i]}
-            unlocked={completed[worldId][i-1]}
+            unlocked={satisfied[worldId][i-1]}
             key={`${gameId}-${worldId}-${i}`}
             worldSize={worldSize[worldId]}
             title={levelTitles[worldId]?.[i]}

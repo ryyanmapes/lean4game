@@ -151,15 +151,6 @@ elab_rules : tactic
 end Game.Tactic
 `)
 
-// Algorithm World is intentionally absent from the browser edition. It is not
-// a proof prerequisite of Advanced Addition; that level's Implication import
-// already supplies every declaration its proof uses. Keeping these umbrella
-// imports would retain nine unused level environments in every browser worker.
-edit('Game.lean', source =>
-  source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
-edit('Game/Levels/AdvAddition/L01add_right_cancel.lean', source =>
-  source.replace(/^import Game\.Levels\.Algorithm\r?\n/m, ''))
-
 // Lean 4.33 separates executable elaborators from ordinary declarations.
 // NNG's tactic modules are imported through Game.Metadata, so make that hop
 // explicitly meta-public; otherwise their syntax is visible in a level while

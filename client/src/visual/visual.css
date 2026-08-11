@@ -3460,6 +3460,24 @@
   color: var(--visual-accent-soft);
 }
 
+.visual-map-dropdown .visual-map-menu-toggle {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  width: 100%;
+}
+
+.visual-map-toggle-state {
+  min-width: 2rem;
+  color: var(--visual-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.visual-map-menu-toggle.active .visual-map-toggle-state {
+  color: var(--visual-accent-soft);
+}
+
 .visual-map-dropdown button.danger {
   color: var(--visual-danger);
 }

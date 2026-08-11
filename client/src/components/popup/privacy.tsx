@@ -18,24 +18,13 @@ export function PrivacyPolicyPopup () {
       </p>
       <p>
         <strong>Anonymous usage statistics.</strong> If you accept the
-        statistics banner shown on the landing page, the site stores a random
+        permission prompt shown before a level loads, the site stores a random
         identifier (UUID) in a cookie and sends events when you start or finish
         a level. Each attempt has a separate random UUID. Ordered proof actions
         are collected in both Visual and classic mode; completion events include
         the final proof scripts. The collector does not store names, email
         addresses, IP addresses, or browser identifiers. Refusing disables
         collection and deletes the telemetry UUID and queued events.
-      </p>
-      <p>
-        <strong>Contact:</strong><br />
-        Marcus Zibrowius<br />
-        Mathematisches Institut der Heinrich-Heine-Universität Düsseldorf<br />
-        Universitätsstr. 1<br />
-        40225 Düsseldorf<br />
-        Germany<br />
-        +49 211 81 13858<br />
-        <a href="https://www.math.uni-duesseldorf.de/~zibrowius/" target="_blank">Contact Details</a><br />
-        <a href="mailto:matvey.lorkish@hhu.de?subject=Lean4Game: <Your%20Question>">Technical Contact</a>
       </p>
     </Trans>
   }

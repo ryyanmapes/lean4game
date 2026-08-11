@@ -103,7 +103,8 @@ function Welcome() {
             {(pageNumber == 0 ?
               <IntroductionPanel introduction={gameInfo.data?.introduction} setPageNumber={setPageNumber} />
             : pageNumber == 1 ?
-              <WorldTreePanel worlds={gameInfo.data?.worlds} worldSize={gameInfo.data?.worldSize} />
+              <WorldTreePanel worlds={gameInfo.data?.worlds} worldSize={gameInfo.data?.worldSize}
+                completionNeutralLevels={gameInfo.data?.completionNeutralLevels} />
             :
               <InventoryPanel levelInfo={inventory?.data} />
             )}
@@ -111,7 +112,8 @@ function Welcome() {
         :
           <Split className="welcome" minSize={0} snapOffset={200}  sizes={[25, 50, 25]}>
             <IntroductionPanel introduction={gameInfo.data?.introduction} setPageNumber={setPageNumber} />
-            <WorldTreePanel worlds={gameInfo.data?.worlds} worldSize={gameInfo.data?.worldSize} />
+            <WorldTreePanel worlds={gameInfo.data?.worlds} worldSize={gameInfo.data?.worldSize}
+              completionNeutralLevels={gameInfo.data?.completionNeutralLevels} />
             <InventoryPanel levelInfo={inventory?.data} />
           </Split>
       }

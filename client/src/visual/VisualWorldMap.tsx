@@ -14,7 +14,6 @@ import {
   faCircleInfo,
   faDownload,
   faEraser,
-  faGear,
   faMoon,
   faSun,
   faUpload,
@@ -38,6 +37,7 @@ import { useTranslation } from 'react-i18next'
 import { getWebsocketUrl } from '../utils/url'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 import { computeVisualProgressFrontier } from './visualWorldProgress'
+import { getConsentState, setConsent } from '../utils/telemetry'
 import './visual.css'
 
 const r = 16
@@ -305,7 +305,6 @@ export function applyNng4VisualLayout(
   place('Implication', at(2 / 3), row(2))
   place('Power', at(1 / 5), row(3))
   place('AdvAddition', at(2 / 3), row(3))
-  place('Algorithm', at(9 / 10), row(3))
   place('LessOrEqual', at(2 / 3), row(4))
   place('AdvMultiplication', center, row(5))
 
@@ -445,6 +444,7 @@ function VisualMapAppBar({
   const [navOpen, setNavOpen] = useAtom(navOpenAtom)
   const [, setPopup] = useAtom(popupAtom)
   const gameProgress = useAppSelector(selectProgress(gameId))
+  const [telemetryEnabled, setTelemetryEnabled] = React.useState(() => getConsentState() === 'accepted')
 
   function closeMenu() {
     setNavOpen(false)
@@ -469,17 +469,9 @@ function VisualMapAppBar({
           onClick={onToggleLightMode}
           aria-pressed={isLightMode}
           aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          title={isLightMode ? 'Light mode' : 'Dark mode'}
         >
           <FontAwesomeIcon icon={toIconProp(isLightMode ? faSun : faMoon)} />
-        </button>
-        <button
-          type="button"
-          className={`visual-map-auto-branch-toggle${autoBranchSwitching ? ' active' : ''}`}
-          onClick={onToggleAutoBranchSwitching}
-          aria-pressed={autoBranchSwitching}
-          aria-label="Automatically switch to the next proof branch"
-        >
-          <FontAwesomeIcon icon={toIconProp(faArrowRightArrowLeft)} />
         </button>
         <VisualMapMenuButton />
       </div>
@@ -494,13 +486,31 @@ function VisualMapAppBar({
           <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Upload')}
         </button>
         <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Erase')}
+          <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Reset')}
         </button>
-        <button onClick={() => { setPopup(PopupType.preferences); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faGear)} />&nbsp;{t('Preferences')}
+        <button
+          type="button"
+          className={`visual-map-menu-toggle${autoBranchSwitching ? ' active' : ''}`}
+          aria-pressed={autoBranchSwitching}
+          onClick={onToggleAutoBranchSwitching}
+        >
+          <FontAwesomeIcon icon={toIconProp(faArrowRightArrowLeft)} />
+          <span>{t('Auto branch switching')}</span>
+          <span className="visual-map-toggle-state" aria-hidden="true">{autoBranchSwitching ? 'On' : 'Off'}</span>
         </button>
-        <button onClick={() => { setPopup(PopupType.impressum); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Impressum')}
+        <button
+          type="button"
+          className={`visual-map-menu-toggle${telemetryEnabled ? ' active' : ''}`}
+          aria-pressed={telemetryEnabled}
+          onClick={() => {
+            const next = !telemetryEnabled
+            setConsent(next)
+            setTelemetryEnabled(next)
+          }}
+        >
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />
+          <span>{t('Anonymous telemetry')}</span>
+          <span className="visual-map-toggle-state" aria-hidden="true">{telemetryEnabled ? 'On' : 'Off'}</span>
         </button>
         <button onClick={() => { setPopup(PopupType.privacy); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Privacy Policy')}
@@ -523,7 +533,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const svgRef = React.useRef<SVGSVGElement>(null)
   const mapPalette = isVisualLightMode ? LIGHT_MAP_PALETTE : DARK_MAP_PALETTE
-  const { worlds, worldSize, skippedLevels, title } = gameInfo.data ?? {}
+  const { worlds, worldSize, skippedLevels, completionNeutralLevels, title } = gameInfo.data ?? {}
   // Subscribe so completion/import updates redraw the imperative selector results below.
   useAppSelector(selectProgress(gameId))
 
@@ -584,13 +594,14 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       edges: worlds.edges,
       worldSizes: worldSize,
       skippedLevels: skippedLevels ?? {},
+      completionNeutralLevels: completionNeutralLevels ?? {},
       isCompleted: (worldId, level) => selectCompleted(gameId, worldId, level)(store.getState()),
     })
 
     for (const worldId of worldIds) {
       completed[worldId] = progressFrontier.completedLevels[worldId]
       started[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
-        i > 0 && !completed[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
+        i > 0 && !progressFrontier.actualCompletedLevels[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
       )
     }
 
@@ -611,11 +622,14 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     }
 
     const totalVisibleLevels = Object.keys(nodes).reduce(
-      (total, worldId) => total + visibleCount(worldId),
+      (total, worldId) => total + visibleCount(worldId) - (completionNeutralLevels?.[worldId]?.length ?? 0),
       0,
     )
     const totalCompletedLevels = Object.keys(nodes).reduce(
-      (total, worldId) => total + completed[worldId].slice(1).filter(Boolean).length - (skippedLevels?.[worldId]?.length ?? 0),
+      (total, worldId) => total + progressFrontier.actualCompletedLevels[worldId]
+        .slice(1)
+        .filter((done, index) => done && !(skippedLevels?.[worldId]?.includes(index + 1) ?? false) &&
+          !(completionNeutralLevels?.[worldId]?.includes(index + 1) ?? false)).length,
       0,
     )
 
@@ -668,9 +682,10 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             displayLevel={visualIndex}
             visualIndex={visualIndex}
             position={position}
-            completed={completed[worldId][i]}
+            completed={progressFrontier.actualCompletedLevels[worldId][i]}
             started={started[worldId][i]}
-            unlocked={progressFrontier.highlightedLevels[worldId] === i}
+            unlocked={progressFrontier.highlightedLevels[worldId] === i ||
+              ((completionNeutralLevels?.[worldId]?.includes(i) ?? false) && completed[worldId][i - 1])}
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
             levelMode={levelMode}

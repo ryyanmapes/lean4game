@@ -124,6 +124,7 @@ async function buildSolutions() {
       level,
       title,
       visualSkip: /^\s*VisualSkipLevel\s*$/mu.test(source),
+      completionNeutral: /^\s*CompletionNeutral\s*$/mu.test(source),
       source: path.relative(repoRoot, file).replaceAll(path.sep, '/'),
       commands: extractMainSolution(source, file),
     })

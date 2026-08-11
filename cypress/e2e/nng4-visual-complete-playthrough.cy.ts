@@ -13,6 +13,7 @@ interface ReferenceSolution {
   level: number
   title: string
   visualSkip: boolean
+  completionNeutral?: boolean
   source: string
   commands: string[]
 }
@@ -47,7 +48,7 @@ interface NameIssue {
 }
 
 const allPlayableSolutions = (solutionFixture.solutions as ReferenceSolution[])
-  .filter(solution => !solution.visualSkip)
+  .filter(solution => !solution.visualSkip && !solution.completionNeutral)
 const requestedWorld = String(Cypress.env('VISUAL_WORLD') ?? '')
 const requestedLevel = Number(Cypress.env('VISUAL_LEVEL') ?? 0)
 const requestedLimit = Number(Cypress.env('VISUAL_LIMIT') ?? 0)

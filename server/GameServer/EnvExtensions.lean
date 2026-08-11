@@ -337,6 +337,8 @@ structure GameLevel where
   preamble : TSyntax `Lean.Parser.Tactic.tacticSeq := default
   /-- When true, Visual Lean hides this level from navigation and the world map. -/
   visualSkipLevel : Bool := false
+  /-- When true, this optional level is playable but is not required for world/game completion. -/
+  completionNeutral : Bool := false
   /-- Optional Visual Lean label overriding the numeric display for special levels. -/
   visualLevelNumber? : Option String := none
   /-- Optional Visual Lean color scheme name for special level styling. -/
@@ -383,6 +385,7 @@ structure LevelInfo where
   template : Option String
   image: Option String
   visualSkipLevel : Bool := false
+  completionNeutral : Bool := false
   visualLevelNumber? : Option String := none
   visualColorScheme? : Option String := none
   visualDramaticStart : Bool := false
@@ -425,6 +428,7 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     template := lvl.template
     image := lvl.image
     visualSkipLevel := lvl.visualSkipLevel
+    completionNeutral := lvl.completionNeutral
     visualLevelNumber? := lvl.visualLevelNumber?
     visualColorScheme? := lvl.visualColorScheme?
     visualDramaticStart := lvl.visualDramaticStart
@@ -535,9 +539,16 @@ def getGameJson (game : «Game») : Json := Id.run do
       |>.filter (fun (_, lvl) => lvl.visualSkipLevel)
       |>.map (fun (i, _) => i)
     (n.toString, toJson skipped))
+  -- Add per-world arrays of optional levels which do not gate completion.
+  let completionNeutralLevels := game.worlds.nodes.toList.map (fun (n, w) =>
+    let neutral : List Nat := w.levels.toList
+      |>.filter (fun (_, lvl) => lvl.completionNeutral)
+      |>.map (fun (i, _) => i)
+    (n.toString, toJson neutral))
   let gameJson := gameJson.mergeObj (Json.mkObj [
     ("worldSize", Json.mkObj worldSize),
     ("skippedLevels", Json.mkObj skippedLevels),
+    ("completionNeutralLevels", Json.mkObj completionNeutralLevels),
   ])
   return gameJson
 

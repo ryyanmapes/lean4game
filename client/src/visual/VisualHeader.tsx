@@ -1,41 +1,5 @@
 import * as React from 'react'
-
-// Always lowercase regardless of position (tactic names, etc.)
-const ALWAYS_LOWERCASE = new Set(['rfl', 'rw'])
-// Lowercase in the middle of a title, but capitalize as first word
-const SMALL_WORDS = new Set(['of', 'the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'with', 'and', 'but', 'or', 'nor'])
-
-export function titleCaseLevel(title: string): string {
-  let capitalizeNext = true
-
-  return title.split(' ').map((word) => {
-    const lower = word.toLowerCase()
-    const alpha = lower.replace(/[^a-z]/g, '')
-    const startsQuotedIdentifier =
-      word.startsWith('`') ||
-      word.startsWith("'") ||
-      word.startsWith('"')
-    const endsSegment = /[:.!?]$/.test(word)
-    let formatted: string
-
-    // Identifiers with underscores stay as-is
-    if (word.includes('_') || startsQuotedIdentifier) {
-      formatted = word
-    } else if (ALWAYS_LOWERCASE.has(alpha)) {
-      formatted = lower
-    } else if (!capitalizeNext && SMALL_WORDS.has(alpha)) {
-      formatted = lower
-    } else {
-      // Capitalize first alphabetic character (handles leading punctuation like '(')
-      formatted = lower.replace(/[a-z]/, c => c.toUpperCase())
-    }
-
-    if (alpha.length > 0) capitalizeNext = false
-    if (endsSegment) capitalizeNext = true
-
-    return formatted
-  }).join(' ')
-}
+import { AnnotatedLevelTitle, plainLevelTitle } from '../components/annotated_level_title'
 
 interface VisualHeaderProps {
   worldId?: string
@@ -71,11 +35,11 @@ export function VisualHeader({
 }: VisualHeaderProps) {
   const emphasizeMap = isCompleted && !hasNext
   const shownLevelId = displayLevelId ?? levelId
-  const formattedTitle = levelTitle ? titleCaseLevel(levelTitle) : ''
+  const plainTitle = levelTitle ? plainLevelTitle(levelTitle) : ''
   const levelLabel = (worldTitle ?? worldId)
     ? `${worldTitle ?? worldId} - ${shownLevelId}`
     : `Level ${shownLevelId}`
-  const splitLongTitle = Boolean(formattedTitle && `${levelLabel}: ${formattedTitle}`.length > 28)
+  const splitLongTitle = Boolean(plainTitle && `${levelLabel}: ${plainTitle}`.length > 28)
 
   return (
     <div className={`visual-header${isCompleted ? ' completed' : ''}`}>
@@ -97,7 +61,7 @@ export function VisualHeader({
         {levelTitle && (
           <>
             <span className="visual-header-separator">:</span>
-            <span className="visual-header-title">{formattedTitle}</span>
+            <span className="visual-header-title"><AnnotatedLevelTitle title={levelTitle} /></span>
           </>
         )}
       </div>

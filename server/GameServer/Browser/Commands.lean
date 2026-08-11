@@ -71,6 +71,7 @@ macro "HiddenLemma" ident* : command => `(command| set_option linter.unusedVaria
 macro "HiddenDefinition" ident* : command => `(command| set_option linter.unusedVariables false)
 
 macro "VisualSkipLevel" : command => `(command| set_option linter.unusedVariables false)
+macro "CompletionNeutral" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualLevelNumber" str : command => `(command| set_option linter.unusedVariables false)
 macro "VisualColorScheme" ident : command => `(command| set_option linter.unusedVariables false)
 macro "VisualDramaticStart" : command => `(command| set_option linter.unusedVariables false)

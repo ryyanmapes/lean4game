@@ -1,0 +1,54 @@
+.annotated-level-title code {
+  font-family: var(--font-code, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 0.95em;
+  color: inherit;
+}
+
+.level-title-annotation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.level-title-emoji {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0 0.08em;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: help;
+}
+
+.level-title-annotation-text {
+  position: absolute;
+  z-index: 100;
+  left: 50%;
+  top: calc(100% + 0.45rem);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 1rem));
+  transform: translateX(-50%);
+  border: 1px solid var(--visual-border-subtle, rgba(148, 163, 184, 0.35));
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--visual-surface, #111827);
+  box-shadow: 0 0.45rem 1.2rem rgba(0, 0, 0, 0.3);
+  color: var(--visual-text-primary, #f8fafc);
+  font-family: var(--font-family, system-ui, sans-serif);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.level-title-annotation:hover .level-title-annotation-text,
+.level-title-annotation:focus-within .level-title-annotation-text,
+.level-title-annotation.open .level-title-annotation-text {
+  opacity: 1;
+  visibility: visible;
+}

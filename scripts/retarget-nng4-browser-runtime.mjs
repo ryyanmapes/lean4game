@@ -25,8 +25,7 @@ fs.mkdirSync(path.dirname(browserMetadataPath), { recursive: true })
 fs.writeFileSync(browserMetadataPath, browserMetadata)
 
 // Keep one stable import header for the lifetime of the browser worker.  The
-// eight world aggregators expose every declaration used by the playable NNG
-// (Algorithm World is intentionally omitted), while the direct meta imports
+// world aggregators expose every declaration used by the playable NNG, while the direct meta imports
 // retain the original player-facing tactic implementations.  Baking this
 // module into the snapshot lets arbitrary level navigation reuse one Lean
 // environment instead of dynamically importing a different level each time.

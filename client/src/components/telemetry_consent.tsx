@@ -49,7 +49,7 @@ export function TelemetryConsent({ gate }: { gate: TelemetryConsentGate }) {
         onClick={gate.postpone}
       >×</button>
       <p className="telemetry-consent-text">
-        Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anynomous telemetry helps us improve the program for future users.
+        Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anonymous telemetry helps us improve the program for future users.
       </p>
       <div className="telemetry-consent-buttons">
         <button

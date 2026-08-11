@@ -342,7 +342,7 @@ export class LocalWasmRpcClient {
     // Game/level presentation metadata is delivered as JSON; the declarations
     // and custom tactics used to elaborate and kernel-check proofs live in the
     // persistent browser environment.
-    // The snapshot contains all non-Algorithm NNG declarations behind one
+    // The snapshot contains all NNG declarations behind one
     // stable facade. Every level must repeat this exact import header: the
     // persistent WASM compiler keys its cached environment by that header.
     const declaration = `${this.initialDeclaration} := by\n${indentProof(instrumentBrowserProof(proofBody))}\n  all_goals browser_report_state\n  all_goals sorry`

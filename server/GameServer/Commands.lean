@@ -161,6 +161,10 @@ skip it; players can still reach it by entering the URL directly. -/
 elab "VisualSkipLevel" : command => do
   modifyCurLevel fun lvl => pure { lvl with visualSkipLevel := true }
 
+/-- Mark this level as optional: it remains playable, but does not gate world or game completion. -/
+elab "CompletionNeutral" : command => do
+  modifyCurLevel fun lvl => pure { lvl with completionNeutral := true }
+
 /-- Override the Visual Lean map label for special levels, e.g. `VisualLevelNumber "Boss"`. -/
 elab "VisualLevelNumber" label:str : command => do
   modifyCurLevel fun lvl => pure { lvl with visualLevelNumber? := some label.getString }
