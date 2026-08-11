@@ -352,28 +352,44 @@ export function TransformationView({
   useLayoutEffect(() => {
     const el = pageRef.current
     if (!el) return
-    const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
-    if (!cards.length) {
-      setMeasuredLayoutKey(ruleDockLayoutKey)
-      return
-    }
-    setCardWidthsByTab(prev => {
-      const previous = prev[selectedTab] ?? {}
-      const next = { ...previous }
-      let changed = false
-      cards.forEach(card => {
-        const id = card.dataset.ruleId
-        if (!id) return
-        const width = card.getBoundingClientRect().width
-        if (Math.abs((next[id] ?? 0) - width) > 0.5) {
-          next[id] = width
-          changed = true
-        }
+    let cancelled = false
+    const measure = () => {
+      if (cancelled) return
+      const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
+      setCardWidthsByTab(prev => {
+        const previous = prev[selectedTab] ?? {}
+        const next = { ...previous }
+        let changed = false
+        cards.forEach(card => {
+          const id = card.dataset.ruleId
+          if (!id) return
+          const width = card.getBoundingClientRect().width
+          if (Math.abs((next[id] ?? 0) - width) > 0.5) {
+            next[id] = width
+            changed = true
+          }
+        })
+        if (!changed) return prev
+        return { ...prev, [selectedTab]: next }
       })
-      if (!changed) return prev
-      return { ...prev, [selectedTab]: next }
-    })
-    setMeasuredLayoutKey(ruleDockLayoutKey)
+    }
+
+    // A cold browser initially lays theorem cards out with its fallback font.
+    // Keep the provisional all-rules row intact until the real fonts settle;
+    // otherwise the first, wider measurement creates one-card pages and the
+    // cards moved to later pages are no longer present to be remeasured.
+    measure()
+    const fontsReady = document.fonts?.ready
+    if (fontsReady) {
+      void fontsReady.then(() => {
+        if (cancelled) return
+        measure()
+        setMeasuredLayoutKey(ruleDockLayoutKey)
+      })
+    } else {
+      setMeasuredLayoutKey(ruleDockLayoutKey)
+    }
+    return () => { cancelled = true }
   }, [ruleDockLayoutKey, selectedTab])
 
   // Keep this in sync with the responsive `.tr-rule-page-cards` gap. Phone
