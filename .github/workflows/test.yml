@@ -103,6 +103,10 @@ jobs:
           test -s .lake/gamedata/game.json
 
       - name: Run Cypress tests (Development mode)
+        env:
+          # Fresh Windows runners occasionally need longer than Cypress's
+          # 30-second default to launch the Electron smoke-test process.
+          CYPRESS_VERIFY_TIMEOUT: '120000'
         run: npm run test
 
   all:
