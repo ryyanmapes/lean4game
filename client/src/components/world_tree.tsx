@@ -14,6 +14,7 @@ import '../css/world_tree.css'
 import { useGameTranslation } from '../utils/translation'
 import { getDataBaseUrl } from '../utils/url'
 import { plainLevelTitle } from './annotated_level_title'
+import { useMapLevelTooltip } from './map_level_tooltip'
 
 // Settings for the world tree
 cytoscape.use( klay )
@@ -63,6 +64,8 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
   let R = 1.1 * r / Math.sin(beta/2)
 
   const gameId = React.useContext(GameIdContext)
+  const levelLabel = plainLevelTitle(title ?? `Level ${level}`, true)
+  const { tooltip, triggerProps } = useMapLevelTooltip(levelLabel)
 
   /** In the spiral, the angle `β` should decrease to avoid big gaps between levels.
    * This is a simplified function, which has little mathematical foundation, but
@@ -83,11 +86,12 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
     // spiraling case
     s * position.y - Math.cos(level * betaSpiral(level)) * (R + 2*r*(level-1)/(NSPIRAL+1))
 
-  return (
+  return (<>
     <Link to={`/${gameId}/world/${world}/level/${level}`}
         className={`level ${completed ? 'completed' : unlocked ? 'unlocked' : 'locked'}`}
-        aria-label={`Open ${world} level ${level}: ${plainLevelTitle(title ?? `Level ${level}`, true)}`}>
-      <title>{plainLevelTitle(title ?? `Level ${level}`, true)}</title>
+        aria-label={`Open ${world} level ${level}: ${levelLabel}`}
+        {...triggerProps}>
+      <title>{levelLabel}</title>
       <circle fill={completed ? lightgreen : unlocked? blue : lightgrey} cx={x} cy={y} r={r} />
       <foreignObject className="level-title-wrapper" x={x} y={y}
           width={1.42*r} height={1.42*r} transform={"translate("+ -.71*r +","+ -.71*r +")"}>
@@ -95,13 +99,11 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
           <p className="level-title" style={{fontSize: Math.floor(r) + "px"}}>
             {level}
           </p>
-          <span className="level-name-tooltip" role="tooltip">
-            {plainLevelTitle(title ?? `Level ${level}`, true)}
-          </span>
         </div>
       </foreignObject>
     </Link>
-  )
+    {tooltip}
+  </>)
 }
 
 /** svg object of one world in the game tree */

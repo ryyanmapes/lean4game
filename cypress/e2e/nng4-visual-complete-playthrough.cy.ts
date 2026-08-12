@@ -3,6 +3,7 @@ import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
 
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
+const dataPath = String(mountPath).replace(/index\.html\/?$/u, '')
 const malformedNamePattern = /(?:_@|_internal|_hyg|^\?m(?:\.|$)|[†✝]|\uFFFD|Ã|Â|â)/u
 // A completed player command should never leave a tactic placeholder or
 // metavariable anywhere in either rendered proof log.
@@ -47,15 +48,28 @@ interface NameIssue {
   value: string
 }
 
-const allPlayableSolutions = (solutionFixture.solutions as ReferenceSolution[])
+const allSolutions = solutionFixture.solutions as ReferenceSolution[]
+const allPlayableSolutions = allSolutions
   .filter(solution => !solution.visualSkip && !solution.completionNeutral)
+const allCompletionNeutralSolutions = allSolutions
+  .filter(solution => !solution.visualSkip && solution.completionNeutral)
+const allSkippedSolutions = allSolutions.filter(solution => solution.visualSkip)
 const requestedWorld = String(Cypress.env('VISUAL_WORLD') ?? '')
 const requestedLevel = Number(Cypress.env('VISUAL_LEVEL') ?? 0)
 const requestedLimit = Number(Cypress.env('VISUAL_LIMIT') ?? 0)
-const playableSolutions = allPlayableSolutions
+const shardTotal = Math.max(1, Number(Cypress.env('VISUAL_SHARD_TOTAL') ?? 1))
+const shardIndex = Number(Cypress.env('VISUAL_SHARD_INDEX') ?? 0)
+const requestedSelection = Boolean(requestedWorld || requestedLevel || requestedLimit)
+const selectedSolutions = allSolutions
   .filter(solution => !requestedWorld || solution.world === requestedWorld)
   .filter(solution => !requestedLevel || solution.level === requestedLevel)
   .slice(0, requestedLimit > 0 ? requestedLimit : undefined)
+  .filter((_, index) => requestedSelection || index % shardTotal === shardIndex)
+const playableSolutions = selectedSolutions
+  .filter(solution => !solution.visualSkip && !solution.completionNeutral)
+const completionNeutralSolutions = selectedSolutions
+  .filter(solution => !solution.visualSkip && solution.completionNeutral)
+const skippedSolutions = selectedSolutions.filter(solution => solution.visualSkip)
 const recordedIssues = new Set<string>()
 
 function levelUrl(solution: ReferenceSolution) {
@@ -126,8 +140,12 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
   before(() => {
     Cypress.config('defaultCommandTimeout', LOAD_TIMEOUT)
     Cypress.config('requestTimeout', LOAD_TIMEOUT)
-    expect(allPlayableSolutions, 'all currently shipped Visual Lean levels').to.have.length(66)
-    expect(playableSolutions, 'selected Visual Lean levels').not.to.have.length(0)
+    expect(allSolutions, 'every shipped level has a reference solution').to.have.length(70)
+    expect(allPlayableSolutions, 'ordinary Visual Lean player levels').to.have.length(66)
+    expect(allCompletionNeutralSolutions, 'completion-neutral Visual Lean levels').to.have.length(1)
+    expect(allSkippedSolutions, 'explicit VisualSkipLevel entries').to.have.length(3)
+    expect(shardIndex, 'shard index is in range').to.be.within(0, shardTotal - 1)
+    expect(selectedSolutions, 'selected level inventory').not.to.have.length(0)
     cy.clearCookies()
     cy.clearLocalStorage()
   })
@@ -223,6 +241,35 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
           cy.location('hash', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
           cy.get('.exercise-panel .exercise', { timeout: LOAD_TIMEOUT }).should('be.visible')
         }
+      })
+    })
+  }
+
+  for (const solution of completionNeutralSolutions) {
+    it(`${solution.world} ${solution.level}: ${solution.title} (completion-neutral contract)`, () => {
+      cy.viewport(1920, 1080)
+      cy.visit(levelUrl(solution))
+      applicationStarted = true
+      cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })
+        .should('be.visible')
+        .and('have.attr', 'data-world-id', solution.world)
+        .and('have.attr', 'data-level-id', String(solution.level))
+      cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+      cy.contains('.visual-info-callout', 'Good luck!').should('be.visible')
+      cy.request(`${dataPath}data/g/local/NNG4/game.json`).then(response => {
+        expect(response.body.completionNeutralLevels[solution.world]).to.include(solution.level)
+      })
+      auditProofState(solution, 'completion-neutral initial state')
+    })
+  }
+
+  for (const solution of skippedSolutions) {
+    it(`${solution.world} ${solution.level}: ${solution.title} (VisualSkipLevel contract)`, () => {
+      cy.request(`${dataPath}data/g/local/NNG4/game.json`).then(response => {
+        expect(response.body.skippedLevels[solution.world], 'server publishes the explicit skip').to.include(solution.level)
+      })
+      cy.request(`${dataPath}data/g/local/NNG4/level__${solution.world}__${solution.level}.json`).then(response => {
+        expect(response.body.title).to.equal(solution.title)
       })
     })
   }

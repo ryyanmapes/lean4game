@@ -26,6 +26,13 @@ export function PrivacyPolicyPopup () {
         addresses, IP addresses, or browser identifiers. Refusing disables
         collection and deletes the telemetry UUID and queued events.
       </p>
+      <p>
+        <strong>Feedback reports.</strong> If you choose to submit the in-level
+        feedback form, the message, current level, mode, and current proof state
+        are sent to the collector. If anonymous usage statistics are enabled,
+        the report also includes your random telemetry UUID; otherwise it is
+        stored without a user identifier.
+      </p>
     </Trans>
   }
 

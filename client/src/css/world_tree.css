@@ -58,45 +58,29 @@ svg .level:hover .level-title {
   opacity: 1;
 }
 
-svg .level-name-tooltip {
-  position: absolute;
-  z-index: 20;
-  left: 50%;
-  bottom: calc(100% + 0.45rem);
+.map-level-name-tooltip {
+  position: fixed;
+  z-index: 10000;
   width: max-content;
-  max-width: 15rem;
-  transform: translateX(-50%);
-  padding: 0.3rem 0.45rem;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  transform: translate(-50%, -100%);
+  padding: 0.48rem 0.68rem;
   border: 1px solid rgba(148, 163, 184, 0.45);
-  border-radius: 0.35rem;
+  border-radius: 0.45rem;
   background: #111827;
   color: #f8fafc;
   font-family: var(--font-family, system-ui, sans-serif);
-  font-size: 0.72rem;
-  line-height: 1.2;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
   text-align: center;
   white-space: normal;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
+  box-shadow: 0 0.45rem 1.25rem rgba(0, 0, 0, 0.45);
 }
 
-svg .level:hover .level-name-tooltip,
-svg .level:focus .level-name-tooltip,
-svg .level:focus-visible .level-name-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-
-@media (hover: none), (pointer: coarse) {
-  svg .level:hover .level-title {
-    opacity: 0;
-  }
-
-  svg .level:hover .level-name-tooltip {
-    opacity: 0;
-    visibility: hidden;
-  }
+.map-level-name-tooltip.is-below {
+  transform: translate(-50%, 0);
 }
 
 svg a.level,

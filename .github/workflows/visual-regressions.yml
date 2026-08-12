@@ -32,9 +32,54 @@ jobs:
           - name: mobile transformation pagination
             id: mobile-pagination
             specs: cypress/e2e/visual-mobile-pagination-stability.cy.ts
-          - name: Advanced Addition 5 playthrough
-            id: advanced-addition-5
+          - name: feedback and release contracts
+            id: feedback-release
+            specs: cypress/e2e/feedback-report.cy.ts,cypress/e2e/nng4-release-routes.cy.ts
+          - name: Addition 1 player canary
+            id: addition-1
             specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            world: Addition
+            level: '1'
+          - name: all levels 1 of 8
+            id: all-levels-0
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '0'
+            shard_total: '8'
+          - name: all levels 2 of 8
+            id: all-levels-1
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '1'
+            shard_total: '8'
+          - name: all levels 3 of 8
+            id: all-levels-2
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '2'
+            shard_total: '8'
+          - name: all levels 4 of 8
+            id: all-levels-3
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '3'
+            shard_total: '8'
+          - name: all levels 5 of 8
+            id: all-levels-4
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '4'
+            shard_total: '8'
+          - name: all levels 6 of 8
+            id: all-levels-5
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '5'
+            shard_total: '8'
+          - name: all levels 7 of 8
+            id: all-levels-6
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '6'
+            shard_total: '8'
+          - name: all levels 8 of 8
+            id: all-levels-7
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            shard_index: '7'
+            shard_total: '8'
     steps:
       - uses: actions/checkout@v4
 
@@ -83,13 +128,15 @@ jobs:
           test -s .lake/gamedata/game.json
 
       - name: Run focused player regressions
-        timeout-minutes: 15
+        timeout-minutes: 45
         env:
           CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
           CYPRESS_LEAN4GAME_MOUNT: /
           CYPRESS_VISUAL_TIMEOUT: '120000'
-          CYPRESS_VISUAL_WORLD: AdvAddition
-          CYPRESS_VISUAL_LEVEL: '5'
+          CYPRESS_VISUAL_WORLD: ${{ matrix.world }}
+          CYPRESS_VISUAL_LEVEL: ${{ matrix.level }}
+          CYPRESS_VISUAL_SHARD_INDEX: ${{ matrix.shard_index }}
+          CYPRESS_VISUAL_SHARD_TOTAL: ${{ matrix.shard_total }}
           CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,renders a revisited completed goal'
         run: |
           npx concurrently -n server,cypress -c blue,green \

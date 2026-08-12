@@ -367,6 +367,15 @@ describe('NNG4 implication and definition display regressions', () => {
     })
     cy.get('[data-testid="hyp-card"][data-hyp-name="n"]')
       .should('have.class', 'potential-drop-target')
+      .then($card => {
+        const style = getComputedStyle($card[0]!)
+        expect(
+          style.getPropertyValue('--bevel-border-color').trim(),
+          'the same purple target color drives every straight and cut-corner edge',
+        ).to.equal(style.getPropertyValue('--visual-drop-target-border').trim())
+        expect(getComputedStyle($card[0]!, '::after').backgroundImage)
+          .to.contain('linear-gradient')
+      })
     cy.get('[data-testid="goal-card"]')
       .should('not.have.class', 'potential-drop-target')
     cy.get('body').trigger('pointerup', {

@@ -29,6 +29,7 @@ import { selectCompleted, selectProgress } from '../state/progress'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
 import { plainLevelTitle } from '../components/annotated_level_title'
+import { useMapLevelTooltip } from '../components/map_level_tooltip'
 import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
 import { navOpenAtom } from '../store/navigation-atoms'
 import { popupAtom, PopupType } from '../store/popup-atoms'
@@ -150,6 +151,8 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
 }) {
   const gameId = React.useContext(GameIdContext)
   const navigate = useNavigate()
+  const levelLabel = plainLevelTitle(title ?? `Level ${displayLevel}`, true)
+  const { tooltip, triggerProps } = useMapLevelTooltip(levelLabel)
   const N = Math.max(worldSize, NMIN)
   const beta = 2 * Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
   let R = 1.1 * r / Math.sin(beta / 2)
@@ -174,14 +177,15 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
         : palette.lockedLevel
   const stroke = !completed && !started && unlocked ? palette.unlockedLevelOutline : 'none'
   const to = `/${gameId}/world/${world}/level/${level}${levelMode === 'visual' ? '/visual' : ''}`
-  return (
+  return (<>
     <g
       className="level visual-map-link"
       role="link"
       tabIndex={0}
-      aria-label={`Open ${world} level ${displayLevel}: ${plainLevelTitle(title ?? `Level ${displayLevel}`, true)}`}
+      aria-label={`Open ${world} level ${displayLevel}: ${levelLabel}`}
       onClick={() => navigate(to)}
       onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
+      {...triggerProps}
     >
       <circle
         className={`level-circle${started ? ' saved-progress' : ''}${!completed && !started && unlocked ? ' unlocked-outline' : ''}`}
@@ -204,13 +208,11 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
           <p className="level-title" style={{ fontSize: `${Math.floor(r)}px` }}>
             {displayLevel}
           </p>
-          <span className="level-name-tooltip" role="tooltip">
-            {plainLevelTitle(title ?? `Level ${displayLevel}`, true)}
-          </span>
         </div>
       </foreignObject>
     </g>
-  )
+    {tooltip}
+  </>)
 }
 
 function endingProgressArc(cx: number, cy: number, radius: number, progress: number) {

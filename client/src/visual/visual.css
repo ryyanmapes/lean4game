@@ -521,8 +521,9 @@
   --bevel-border-color: var(--visual-drop-target-border);
 }
 
-.visual-page .statement-card.variable-card.potential-drop-target {
-  --bevel-border-color: var(--visual-info-ring);
+.visual-page .statement-card.variable-card.potential-drop-target,
+.visual-page .statement-card.variable-only-tactic.potential-drop-target {
+  --bevel-border-color: var(--visual-drop-target-border);
 }
 
 .visual-page .statement-card.variable-card.visual-emphasize,
@@ -2184,8 +2185,8 @@
 
 /* ── Drop target highlight ── */
 .visual-page .potential-drop-target {
-  box-shadow: 0 0 0 2px var(--visual-info-ring), 0 0 14px color-mix(in srgb, var(--visual-info-ring) 45%, transparent);
-  border-color: var(--visual-info-ring);
+  box-shadow: 0 0 0 2px var(--visual-drop-target-border), 0 0 14px var(--visual-drop-target-glow);
+  border-color: var(--visual-drop-target-border);
 }
 
 .visual-page .drop-target-active {

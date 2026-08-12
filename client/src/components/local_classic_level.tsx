@@ -467,7 +467,8 @@ export default function LocalClassicLevel() {
           setCrashed,
         }}>
           <LevelAppBar pageNumber={pageNumber} setPageNumber={setPageNumber}
-            isLoading={false} levelTitle={levelTitle} />
+            isLoading={false} levelTitle={levelTitle}
+            feedbackProofState={() => ({ proofBody, proof })} />
           {mobile ? <div className="app-content level-mobile">
             <LocalExercisePanel
               level={level.data}

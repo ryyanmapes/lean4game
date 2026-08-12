@@ -19,6 +19,7 @@ import { popupAtom, PopupType } from '../store/popup-atoms'
 import { closeNavAtom, navOpenAtom } from '../store/navigation-atoms'
 import { useGameTranslation } from '../utils/translation'
 import { AnnotatedLevelTitle } from './annotated_level_title'
+import { FeedbackReportButton } from './feedback_report'
 
 /** navigation buttons for mobile welcome page to switch between intro/tree/inventory. */
 function MobileNavButtons({pageNumber, setPageNumber}:
@@ -263,11 +264,12 @@ export function WelcomeAppBar({pageNumber, setPageNumber, gameInfo} : {
 }
 
 /** the navigation bar in a level */
-export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPageNumber=undefined} : {
+export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPageNumber=undefined, feedbackProofState} : {
   isLoading: boolean,
   levelTitle: string,
   pageNumber?: number,
   setPageNumber?: any,
+  feedbackProofState?: () => unknown,
 }) {
   const { t } = useTranslation()
   const { t: gT } = useGameTranslation()
@@ -286,6 +288,11 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
     {mobile ?
       <>
         {/* MOBILE VERSION */}
+        <div className="app-bar-left">
+          <HomeButton isDropdown={false} />
+          {feedbackProofState && <FeedbackReportButton gameId={gameId} worldId={worldId}
+            levelId={levelId} mode="classic" getProofState={feedbackProofState} />}
+        </div>
         <div>
           <span className="app-bar-title"><AnnotatedLevelTitle title={levelTitle} /></span>
         </div>
@@ -296,7 +303,6 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
         <div className={'menu dropdown' + (navOpen ? '' : ' hidden')}>
           <NextButton worldSize={gameInfo.data?.worldSize[worldId]} difficulty={difficulty} completed={completed} />
           <PreviousButton />
-          <HomeButton isDropdown={true} />
           <InputModeButton isDropdown={true}/>
           <ThemeModeButton isDropdown />
           <GameInfoButton />
@@ -310,6 +316,8 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
         {/* DESKTOP VERSION */}
         <div className='app-bar-left'>
           <HomeButton isDropdown={false} />
+          {feedbackProofState && <FeedbackReportButton gameId={gameId} worldId={worldId}
+            levelId={levelId} mode="classic" getProofState={feedbackProofState} />}
           <span className="app-bar-title">{worldTitle && gT(worldTitle)}</span>
         </div>
         <div>

@@ -5486,6 +5486,7 @@ export function VisualCanvas({
           onTouchEnd={handleMobileTouchEnd}
         >
           <VisualHeader
+            gameId={gameId}
             worldId={worldId}
             worldTitle={worldTitle ?? undefined}
             levelId={levelId}
@@ -5498,6 +5499,12 @@ export function VisualCanvas({
             onPrev={onPreviousLevel ?? (() => {})}
             onNext={onNextLevel ?? (() => {})}
             onWorldMap={onWorldMap ?? (() => {})}
+            getFeedbackProofState={() => ({
+              proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
+              coreProofBody: [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'),
+              canvasState,
+              activeStreamId,
+            })}
           />
 
           {/* Thinking label — below header, centered */}

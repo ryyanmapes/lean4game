@@ -122,12 +122,45 @@ export function createTelemetryId(): string {
 /** Compatibility name used by the existing visual proof page. */
 export const createSolvingId = createTelemetryId
 
-function telemetryEndpoint(): string {
+function telemetryBaseUrl(): string {
   const runtimeConfigured = typeof window !== 'undefined'
     ? String((window as Window & { __LEAN_TELEMETRY_URL__?: string }).__LEAN_TELEMETRY_URL__ ?? '').trim()
     : ''
   const configured = runtimeConfigured || String(import.meta.env.VITE_TELEMETRY_URL ?? '').trim()
-  return configured ? `${configured.replace(/\/$/u, '')}/v1/events` : ''
+  return configured ? configured.replace(/\/$/u, '') : ''
+}
+
+function telemetryEndpoint(): string {
+  const baseUrl = telemetryBaseUrl()
+  return baseUrl ? `${baseUrl}/v1/events` : ''
+}
+
+export type FeedbackReport = {
+  message: string
+  game_id: string
+  world_id: string
+  level_id: number
+  mode: TelemetryMode
+  proof_state: unknown
+}
+
+export async function submitFeedbackReport(report: FeedbackReport): Promise<boolean> {
+  const baseUrl = telemetryBaseUrl()
+  const message = report.message.trim()
+  if (!baseUrl || !message || message.length > 1000) return false
+  const userId = getConsentState() === 'accepted' ? getOrCreateUserId() : null
+  const response = await fetch(`${baseUrl}/v1/feedback`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      report_id: createTelemetryId(),
+      ...(userId ? { user_uuid: userId } : {}),
+      ...report,
+      message,
+      ts: new Date().toISOString(),
+    }),
+  })
+  return response.ok
 }
 
 function readQueue(): QueuedEvent[] {

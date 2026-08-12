@@ -1,0 +1,119 @@
+.feedback-report-open {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border-color, #354158);
+  border-radius: 0.45rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: 700 1rem/1 monospace;
+  height: 2rem;
+  justify-content: center;
+  margin-left: 0.45rem;
+  min-width: 2rem;
+  padding: 0;
+}
+
+.feedback-report-open:hover,
+.feedback-report-open:focus-visible {
+  border-color: #9b7cff;
+  color: #b99cff;
+}
+
+.feedback-report-dialog {
+  background: #172238;
+  border: 1px solid #485873;
+  border-radius: 0.75rem;
+  color: #f3f5fb;
+  max-width: min(34rem, calc(100vw - 2rem));
+  padding: 0;
+  width: 100%;
+}
+
+.feedback-report-dialog::backdrop {
+  background: rgb(4 10 22 / 72%);
+}
+
+.feedback-report-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1.35rem;
+  position: relative;
+}
+
+.feedback-report-dialog label {
+  font-size: 1rem;
+  line-height: 1.45;
+  padding-right: 2rem;
+}
+
+.feedback-report-dialog textarea {
+  background: #0f192c;
+  border: 1px solid #52617a;
+  border-radius: 0.45rem;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  min-height: 9rem;
+  padding: 0.7rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.feedback-report-dialog textarea:focus {
+  border-color: #9b7cff;
+  outline: 2px solid rgb(155 124 255 / 28%);
+}
+
+.feedback-report-close {
+  background: transparent;
+  border: 0;
+  color: #aeb8ca;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  position: absolute;
+  right: 0.8rem;
+  top: 0.7rem;
+}
+
+.feedback-report-count {
+  color: #9ba8bc;
+  font-size: 0.78rem;
+  margin-top: -0.6rem;
+  text-align: right;
+}
+
+.feedback-report-count.invalid { color: #ff7d86; }
+
+.feedback-report-submit {
+  align-self: flex-start;
+  background: #7650cc;
+  border: 1px solid #9b7cff;
+  border-radius: 0.45rem;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 0.62rem 1rem;
+}
+
+.feedback-report-submit:hover:not(:disabled),
+.feedback-report-submit:focus-visible:not(:disabled) { background: #865ee0; }
+
+.feedback-report-submit:disabled {
+  background: #48505f;
+  border-color: #616978;
+  color: #aeb3bd;
+  cursor: default;
+}
+
+.feedback-report-status { margin: 0; }
+.feedback-report-status.success { color: #68d69a; }
+.feedback-report-status.error { color: #ff8b91; }
+
+@media (max-width: 600px) {
+  .feedback-report-dialog { max-width: calc(100vw - 1rem); }
+  .feedback-report-dialog form { padding: 1.1rem; }
+}
