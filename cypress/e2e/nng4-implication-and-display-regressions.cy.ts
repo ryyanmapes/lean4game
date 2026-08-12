@@ -211,11 +211,31 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="goal-card"] .statement-atomic-form', { timeout: LOAD_TIMEOUT })
       .should('be.visible')
       .and('contain.text', '∃')
+      .then($atomic => {
+        const style = getComputedStyle($atomic[0]!)
+        const cardStyle = getComputedStyle($atomic[0]!.closest('.statement-card')!)
+        expect(style.color, 'atomic form uses the forall-footer grey')
+          .to.equal(cardStyle.getPropertyValue('--visual-forall-footer').trim())
+        expect(style.textAlign, 'atomic form is centered').to.equal('center')
+      })
 
     visualHarness().then(harness => harness.copyTheoremToCanvas('MyNat.le_refl'))
     cy.get('[data-testid="theorem-copy-card"][data-theorem-name="MyNat.le_refl"] .statement-atomic-form')
       .should('be.visible')
       .and('contain.text', '∃')
+
+    cy.get('.theorem-tray-panel .tr-rule-page-cards', { timeout: LOAD_TIMEOUT }).then($row => {
+      const cards = Array.from($row[0]!.querySelectorAll<HTMLElement>('[data-testid="theorem-tray-card"]'))
+      expect(cards.length, 'theorem tray contains cards').to.be.greaterThan(0)
+      const rowCenter = $row[0]!.getBoundingClientRect().top + $row[0]!.getBoundingClientRect().height / 2
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect()
+        expect(Math.abs(rect.top + rect.height / 2 - rowCenter), 'short theorem card is vertically centered')
+          .to.be.lessThan(2)
+        expect(getComputedStyle(card).borderTopColor, 'theorem outline is green')
+          .to.equal('rgba(52, 211, 153, 0.4)')
+      }
+    })
 
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/5/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
@@ -314,6 +334,15 @@ describe('NNG4 implication and definition display regressions', () => {
         '45-degree bands use sqrt(2) CSS pixels so their perpendicular stroke is one pixel',
       ).to.contain('1.414px')
       expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
+    })
+
+    cy.get('[data-tactic-name="induction"]').then($card => {
+      const neutral = getComputedStyle($card[0]!, '::after').backgroundImage
+      $card[0]!.classList.add('visual-emphasize')
+      const highlighted = getComputedStyle($card[0]!, '::after').backgroundImage
+      expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutral)
+      expect(highlighted, 'highlighted edge includes the emphasis purple').to.contain('167, 139, 250')
+      $card[0]!.classList.remove('visual-emphasize')
     })
 
     cy.get('[data-tactic-name="induction"]').then($card => {

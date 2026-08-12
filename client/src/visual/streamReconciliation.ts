@@ -95,13 +95,20 @@ function likelyFocusedContinuation(
     !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
   const isHypRewrite = playTactic?.startsWith('drag_rw_hyp_') ?? false
   const dragGoalApplyGoalType = dragGoalApplyNextGoalType(focusedStream, playTactic)
+  const goalBranch = playTactic === 'click_goal_left' || playTactic === 'click_goal_right'
+    ? splitDisjunctionTargetForRuntime(goalTypeText(focusedStream))
+    : null
+  const selectedGoalBranchType = goalBranch
+    ? normalizePropositionText(goalBranch[playTactic === 'click_goal_left' ? 0 : 1] ?? '')
+    : null
   const requiresStableGoalType =
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false)
   const candidateGoalType = goalTypeText(candidate)
   const allowsGoalTypeChangeWithinSameBranch =
     isGoalRewrite ||
-    (dragGoalApplyGoalType !== null && dragGoalApplyGoalType === candidateGoalType)
+    (dragGoalApplyGoalType !== null && dragGoalApplyGoalType === candidateGoalType) ||
+    (selectedGoalBranchType !== null && selectedGoalBranchType === candidateGoalType)
   const goalTypeMatches = goalTypeText(focusedStream) === candidateGoalType
   const hypContextMatches = hypContextShape(focusedStream) === hypContextShape(candidate)
 

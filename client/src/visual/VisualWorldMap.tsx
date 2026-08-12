@@ -28,13 +28,14 @@ import { useGetGameInfoQuery } from '../state/api'
 import { selectCompleted, selectProgress } from '../state/progress'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
+import { plainLevelTitle } from '../components/annotated_level_title'
+import { getDataBaseUrl, getWebsocketUrl } from '../utils/url'
 import { navOpenAtom } from '../store/navigation-atoms'
 import { popupAtom, PopupType } from '../store/popup-atoms'
 import { useAppSelector } from '../hooks'
 import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
-import { getWebsocketUrl } from '../utils/url'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 import { computeVisualProgressFrontier } from './visualWorldProgress'
 import { getConsentState, setConsent } from '../utils/telemetry'
@@ -131,7 +132,7 @@ function handleMapLinkKeyDown(
 
 type MapLevelMode = 'classic' | 'visual'
 
-function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, levelMode }: {
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, levelMode, title }: {
   world: string
   level: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -145,6 +146,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   worldSize: number
   palette: VisualMapPalette
   levelMode: MapLevelMode
+  title?: string
 }) {
   const gameId = React.useContext(GameIdContext)
   const navigate = useNavigate()
@@ -177,7 +179,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
       className="level visual-map-link"
       role="link"
       tabIndex={0}
-      aria-label={`Open ${world} level ${displayLevel}`}
+      aria-label={`Open ${world} level ${displayLevel}: ${plainLevelTitle(title ?? `Level ${displayLevel}`, true)}`}
       onClick={() => navigate(to)}
       onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
     >
@@ -202,6 +204,9 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
           <p className="level-title" style={{ fontSize: `${Math.floor(r)}px` }}>
             {displayLevel}
           </p>
+          <span className="level-name-tooltip" role="tooltip">
+            {plainLevelTitle(title ?? `Level ${displayLevel}`, true)}
+          </span>
         </div>
       </foreignObject>
     </g>
@@ -534,8 +539,34 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const svgRef = React.useRef<SVGSVGElement>(null)
   const mapPalette = isVisualLightMode ? LIGHT_MAP_PALETTE : DARK_MAP_PALETTE
   const { worlds, worldSize, skippedLevels, completionNeutralLevels, title } = gameInfo.data ?? {}
+  const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
   // Subscribe so completion/import updates redraw the imperative selector results below.
   useAppSelector(selectProgress(gameId))
+
+  React.useEffect(() => {
+    if (!worldSize) return
+    const controller = new AbortController()
+    const base = getDataBaseUrl().replace(/\/$/u, '')
+    const requests = Object.entries(worldSize as Record<string, number>).flatMap(([worldId, size]) =>
+      Array.from({ length: size }, (_, index) => {
+        const level = index + 1
+        return fetch(`${base}/${gameId}/level__${worldId}__${level}.json`, { signal: controller.signal })
+          .then(response => response.ok ? response.json() : null)
+          .then((data: { title?: string } | null) => ({ worldId, level, title: data?.title ?? `Level ${level}` }))
+          .catch(() => ({ worldId, level, title: `Level ${level}` }))
+      }),
+    )
+    void Promise.all(requests).then(results => {
+      if (controller.signal.aborted) return
+      const next: Record<string, Record<number, string>> = {}
+      for (const result of results) {
+        next[result.worldId] ??= {}
+        next[result.worldId]![result.level] = result.title
+      }
+      setLevelTitles(next)
+    })
+    return () => controller.abort()
+  }, [gameId, worldSize])
 
   const [viewportSize, setViewportSize] = React.useState(getViewportSize)
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
@@ -689,6 +720,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
             levelMode={levelMode}
+            title={levelTitles[worldId]?.[i]}
           />,
         )
       }

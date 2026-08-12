@@ -525,6 +525,11 @@
   --bevel-border-color: var(--visual-info-ring);
 }
 
+.visual-page .statement-card.variable-card.visual-emphasize,
+.visual-page .statement-card.variable-only-tactic.visual-emphasize {
+  --bevel-border-color: rgba(167, 139, 250, 0.9);
+}
+
 .visual-page .statement-card.variable-card.drag-fail,
 .visual-page .statement-card.variable-only-tactic.drag-fail {
   --bevel-border-color: var(--visual-danger);
@@ -532,14 +537,15 @@
 
 .visual-page .statement-atomic-form {
   margin-top: 0.24rem;
-  color: var(--visual-text-muted);
+  color: var(--visual-forall-footer);
   font-family: var(--font-family), system-ui, sans-serif;
   font-size: 0.72em;
   font-weight: 400;
   line-height: 1.15;
   white-space: normal;
   overflow-wrap: anywhere;
-  text-align: inherit;
+  width: 100%;
+  text-align: center;
 }
 
 .visual-page .statement-atomic-form.measuring-only {
@@ -576,13 +582,14 @@
   background: rgba(52, 211, 153, 0.14);
 }
 
-/* Integer theorem cards: blue outline instead of green */
+/* Integer notation remains blue inside a theorem, but theorem outlines use
+   the same green affordance as every other reusable theorem. */
 .visual-page .statement-card.int-theorem {
-  border-color: rgba(96, 165, 250, 0.5);
-  background: rgba(96, 165, 250, 0.08);
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
 }
 .visual-page .statement-card.int-theorem:hover {
-  background: rgba(96, 165, 250, 0.14);
+  background: rgba(52, 211, 153, 0.14);
 }
 
 /* Visual Lean emphasis — soft glow on highlighted inventory items and nav buttons */
@@ -1499,6 +1506,13 @@
   background: var(--visual-glass-bg-hover);
 }
 
+/* Clickability/specialization changes behaviour, not theorem identity. */
+.visual-page .statement-card.theorem-copy-card,
+.visual-page .statement-card.theorem-tray-card,
+.visual-page .statement-card.derived-theorem-card {
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
 /* A solved/revisited goal must never inherit the ordinary yellow hover glow,
    including sticky :hover on touch browsers and completed proof branches. */
 .visual-page .statement-card.goal.solved:hover,
@@ -1951,6 +1965,7 @@
   flex-direction: row;
   gap: 0.75rem;
   justify-content: center;
+  align-items: center;
   flex-wrap: nowrap;
   width: 100%;
   overflow: visible;

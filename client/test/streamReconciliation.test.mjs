@@ -986,6 +986,40 @@ test('click_prop specializes a reflexive-equality implication hypothesis in plac
   assert.equal(leaf?.completed, false)
 })
 
+test('right goal choice keeps the selected disjunction continuation among sibling branches', () => {
+  const sibling = stream('sibling', 'Already pending', 'left', [])
+  const focused = stream('focused', 'succ(d) ≤ succ(d2) ∨ succ(d2) ≤ succ(d)', 'right', [])
+  const continuation = stream('focused-next', 'succ(d2) ≤ succ(d)', 'right', [])
+  const beforeTree = {
+    id: 'root',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      { id: 'sibling-leaf', streamId: sibling.id, label: sibling.goal.userName, completed: false, children: [] },
+      { id: 'focused-leaf', streamId: focused.id, label: focused.goal.userName, completed: false, children: [] },
+    ],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [sibling, focused], completed: false },
+    { streams: [sibling, continuation], completed: false },
+    focused,
+    'click_goal_right',
+    false,
+    focused.id,
+    [continuation],
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(result.focusedStreams[0]?.id, continuation.id)
+  assert.equal(result.focusedStreams[0]?.goal.type.text, 'succ(d2) ≤ succ(d)')
+  assert.equal(result.nextActiveId, continuation.id)
+  assert.deepEqual(result.nextCanvas.streams.map(item => item.id), [sibling.id, continuation.id])
+  assert.equal(findLeafForStream(result.nextTree, continuation.id)?.completed, false)
+})
+
 test('click_goal on an explicit forall goal introduces the bound variable before the implication', () => {
   const focusedStream = stream('stream-forall', '∀ (c : ℕ), a * 0 = a * c → 0 = c', 'main', [])
   const beforeTree = {

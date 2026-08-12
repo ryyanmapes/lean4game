@@ -95,6 +95,9 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
           <p className="level-title" style={{fontSize: Math.floor(r) + "px"}}>
             {level}
           </p>
+          <span className="level-name-tooltip" role="tooltip">
+            {plainLevelTitle(title ?? `Level ${level}`, true)}
+          </span>
         </div>
       </foreignObject>
     </Link>
