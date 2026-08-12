@@ -72,6 +72,10 @@ function observeTransformStability(win: Cypress.AUTWindow) {
       if (mutation.type !== 'attributes' || mutation.attributeName !== 'disabled') continue
       const button = mutation.target
       if (!(button instanceof win.HTMLButtonElement) || !button.disabled) continue
+      // Previous/next rule arrows disable normally when pagination reaches an
+      // edge; that is availability, not the transient processing grey-out
+      // this observer is intended to catch.
+      if (button.classList.contains('tr-nav-btn')) continue
       if (!button.closest('.tr-overlay') || button.getAttribute('aria-disabled') !== 'true') continue
       observedWindow.__visualTransientDisabledButtons?.push(
         button.getAttribute('aria-label') ?? button.title ?? button.className,

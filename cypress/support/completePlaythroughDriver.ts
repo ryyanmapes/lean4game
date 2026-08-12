@@ -1163,7 +1163,9 @@ export class CompletePlaythroughDriver {
   async undoLastPlayerStep() {
     const before = proofSignature(harness(this.win).getProofAudit())
     const undo = await waitFor('combining-mode undo button', () =>
-      visible(this.win.document.querySelectorAll<HTMLButtonElement>('.tr-controls .active-undo[title="Undo"]'))[0])
+      visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+        '.tr-controls .active-undo[aria-label="Undo"], .tr-controls .active-undo[title="Undo"]',
+      ))[0])
     click(undo)
     await waitFor('undo to restore the previous player state', () => {
       const audit = harness(this.win).getProofAudit()
