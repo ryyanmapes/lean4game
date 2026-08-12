@@ -54,7 +54,7 @@ describe('loading-screen telemetry consent', { testIsolation: true }, () => {
     visitWithoutConsent(1)
     cy.get('[role="dialog"][aria-label="Anonymous telemetry permission"]', { timeout: 30_000 })
       .should('be.visible')
-      .and('contain.text', "Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anynomous telemetry helps us improve the program for future users.")
+      .and('contain.text', "Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anonymous telemetry helps us improve the program for future users.")
       .within(() => {
         cy.contains('button', 'Refuse').should('be.visible')
         cy.contains('button', 'Accept').should('be.visible')

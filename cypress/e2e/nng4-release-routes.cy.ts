@@ -79,7 +79,7 @@ describe('local NNG4 release maps', () => {
     cy.get('a.level.locked circle').first()
       .should('have.css', 'fill', 'rgb(83, 100, 123)')
     cy.get('a[href*="/level/0"]').should('not.exist')
-    cy.get('a.level title').contains(/rfl tactic/iu, { timeout: 30_000 })
+    cy.get('a.level title').contains(/^rfl$/u, { timeout: 30_000 })
 
     cy.get('a[aria-label="Open Tutorial World"]').click()
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1$/u)
@@ -155,11 +155,13 @@ describe('local NNG4 release maps', () => {
     cy.contains('.visual-info-callout', 'Good luck!', { timeout: 180_000 }).should('be.visible')
     cy.get('.visual-header-title .level-title-emoji', { timeout: 30_000 })
       .should('have.attr', 'aria-label', '❌: Does not count towards completion')
-      .trigger('mouseover')
+      .focus()
     cy.contains('.level-title-annotation-text', 'Does not count towards completion')
       .should('be.visible')
-    cy.get('.visual-header-title .level-title-emoji').click()
+    cy.get('.visual-header-title .level-title-emoji').blur().click()
       .should('have.attr', 'aria-expanded', 'true')
+    cy.contains('.level-title-annotation-text', 'Does not count towards completion')
+      .should('be.visible')
   })
 
   it('redirects the removed embedded selector to the release root', () => {
