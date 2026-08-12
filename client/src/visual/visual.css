@@ -1511,13 +1511,14 @@
 .visual-page .statement-card.theorem-copy-card,
 .visual-page .statement-card.theorem-tray-card,
 .visual-page .statement-card.derived-theorem-card {
-  border-color: rgba(52, 211, 153, 0.4);
+  /* Theorem identity wins over constructable/clickable/hover state. */
+  border-color: rgba(52, 211, 153, 0.4) !important;
 }
 
 .visual-page .statement-card.theorem-copy-card:hover,
 .visual-page .statement-card.theorem-tray-card:hover,
 .visual-page .statement-card.derived-theorem-card:hover {
-  border-color: rgba(52, 211, 153, 0.4);
+  border-color: rgba(52, 211, 153, 0.4) !important;
 }
 
 /* A solved/revisited goal must never inherit the ordinary yellow hover glow,
