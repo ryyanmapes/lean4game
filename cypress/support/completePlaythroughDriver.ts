@@ -1578,6 +1578,30 @@ export class CompletePlaythroughDriver {
     return introducedName
   }
 
+  /** Introduce the declaration's original binders through goal clicks. NNG4
+   * now presents these binders in the goal instead of pre-populating the
+   * canvas, so the reference proof's first command must see the same context
+   * that Lean's theorem body sees. */
+  async prepareInitialBinders(expectedNames: string[]) {
+    for (const expectedName of expectedNames) {
+      const existing = this.hyp(expectedName)
+      if (existing) continue
+      const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+      await this.clickGoal()
+      const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      const actualName = afterNames.find(name => !beforeNames.has(name))
+      if (!actualName) {
+        throw new Error(`Goal click did not introduce declaration binder ${expectedName}: ${JSON.stringify({
+          expectedNames,
+          beforeNames: [...beforeNames],
+          afterNames,
+          audit: harness(this.win).getProofAudit(),
+        })}`)
+      }
+      this.aliases.set(expectedName, actualName)
+    }
+  }
+
   /** Drag the induction tactic card onto a currently visible variable card. */
   async inductVisibleVariable(name: string) {
     await this.induction(`induction ${name} with d hd`)
@@ -1618,23 +1642,27 @@ export class CompletePlaythroughDriver {
       const requestedNames = normalized.replace(/^intro\s*/u, '').trim().split(/\s+/u).filter(Boolean)
       const introductions = requestedNames.length > 0 ? requestedNames : ['h']
       for (const requestedName of introductions) {
-        const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-        await this.clickGoal()
-        let afterNames: string[]
-        try {
-          afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-        } catch {
-          const audit = harness(this.win).getProofAudit()
-          throw new Error(
-            `Intro ${requestedName} left no interactive stream: ${JSON.stringify({
-              completed: audit.completed,
-              coreLines: audit.coreLines,
-              interactiveLines: audit.interactiveLines,
-              proofBody: audit.proofBody,
-            })}`,
-          )
+        let actualName: string | undefined
+        for (let attempt = 0; attempt < 3 && !actualName; attempt += 1) {
+          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+          await this.clickGoal()
+          let afterNames: string[]
+          try {
+            afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          } catch {
+            const audit = harness(this.win).getProofAudit()
+            throw new Error(
+              `Intro ${requestedName} left no interactive stream: ${JSON.stringify({
+                completed: audit.completed,
+                coreLines: audit.coreLines,
+                interactiveLines: audit.interactiveLines,
+                proofBody: audit.proofBody,
+              })}`,
+            )
+          }
+          actualName = afterNames.find(name => !beforeNames.has(name))
         }
-        const actualName = afterNames.find(name => !beforeNames.has(name))
+        if (!actualName) throw new Error(`Intro ${requestedName} did not create a hypothesis card`)
         if (actualName) this.aliases.set(requestedName, actualName)
       }
       return

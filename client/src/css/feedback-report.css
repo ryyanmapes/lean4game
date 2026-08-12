@@ -30,8 +30,15 @@
   width: 100%;
 }
 
-.feedback-report-dialog::backdrop {
+.feedback-report-backdrop {
+  align-items: center;
   background: rgb(4 10 22 / 72%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 12000;
 }
 
 .feedback-report-dialog form {

@@ -8,6 +8,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Addition/L01zero_add.lean",
+      "initialBinderNames": [
+        "n"
+      ],
       "commands": [
         "induction n with d hd",
         "rw [add_zero]",
@@ -24,6 +27,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Addition/L02succ_add.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "induction b with d hd",
         "rw [add_zero]",
@@ -40,6 +47,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Addition/L03add_comm.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "induction b with d hd",
         "rw [add_zero, zero_add]",
@@ -55,6 +66,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Addition/L04add_assoc.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "induction c with d hd",
         "rw [add_zero, add_zero]",
@@ -70,6 +86,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Addition/L05add_right_comm.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "rw [add_assoc]",
         "rw [add_comm b, add_assoc]",
@@ -83,6 +104,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L01add_right_cancel.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "n"
+      ],
       "commands": [
         "induction n with d hd",
         "intro h",
@@ -102,6 +128,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L02add_left_cancel.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "n"
+      ],
       "commands": [
         "repeat rw [add_comm n]",
         "intro h",
@@ -116,6 +147,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L03add_left_eq_self.lean",
+      "initialBinderNames": [
+        "x",
+        "y"
+      ],
       "commands": [
         "intro h",
         "nth_rewrite 2 [← zero_add y] at h",
@@ -130,6 +165,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L04add_right_eq_self.lean",
+      "initialBinderNames": [
+        "x",
+        "y"
+      ],
       "commands": [
         "rw [add_comm]",
         "exact add_left_eq_self y x"
@@ -142,6 +181,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L05add_right_eq_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "cases b with d",
         "intro h",
@@ -161,6 +204,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L06add_left_eq_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "rw [add_comm]",
         "exact add_right_eq_zero b a"
@@ -173,6 +220,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L01mul_le_mul_right.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "t",
+        "h"
+      ],
       "commands": [
         "cases h with d hd",
         "use d * t",
@@ -187,6 +240,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L02mul_left_ne_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "h"
+      ],
       "commands": [
         "intro hb",
         "apply h",
@@ -201,6 +259,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L03eq_succ_of_ne_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "ha"
+      ],
       "commands": [
         "cases a with d",
         "tauto",
@@ -215,6 +277,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L04one_le_of_ne_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "ha"
+      ],
       "commands": [
         "apply eq_succ_of_ne_zero at ha",
         "cases ha with n hn",
@@ -230,6 +296,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L05le_mul_right.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "h"
+      ],
       "commands": [
         "apply mul_left_ne_zero at h",
         "apply one_le_of_ne_zero at h",
@@ -245,6 +316,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L06mul_right_eq_one.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h"
+      ],
       "commands": [
         "have h2 : x * y ≠ 0",
         "rw [h]",
@@ -265,6 +341,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L07mul_ne_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "ha",
+        "hb"
+      ],
       "commands": [
         "apply eq_succ_of_ne_zero at ha",
         "apply eq_succ_of_ne_zero at hb",
@@ -283,6 +365,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L08mul_eq_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "h"
+      ],
       "commands": [
         "have h2 := mul_ne_zero a b",
         "tauto"
@@ -295,6 +382,13 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L09mul_left_cancel.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c",
+        "ha",
+        "h"
+      ],
       "commands": [
         "induction b with d hd generalizing c",
         "rw [mul_zero] at h",
@@ -322,6 +416,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L10mul_right_eq_self.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "ha",
+        "h"
+      ],
       "commands": [
         "nth_rewrite 2 [← mul_one a] at h",
         "exact mul_left_cancel a b 1 ha h"
@@ -334,6 +434,13 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L01exact.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "z",
+        "h1",
+        "h2"
+      ],
       "commands": [
         "exact h1"
       ]
@@ -345,6 +452,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L02exact2.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h"
+      ],
       "commands": [
         "rw [zero_add] at h",
         "rw [zero_add] at h",
@@ -358,6 +470,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L03apply.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h1",
+        "h2"
+      ],
       "commands": [
         "apply h2 at h1",
         "exact h1"
@@ -370,6 +488,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L04succ_inj.lean",
+      "initialBinderNames": [
+        "x",
+        "h"
+      ],
       "commands": [
         "rw [four_eq_succ_three] at h",
         "rw [←succ_eq_add_one] at h",
@@ -384,6 +506,10 @@
       "visualSkip": true,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L05succ_inj2.lean",
+      "initialBinderNames": [
+        "x",
+        "h"
+      ],
       "commands": [
         "apply succ_inj",
         "rw [succ_eq_add_one]",
@@ -398,6 +524,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L06intro.lean",
+      "initialBinderNames": [
+        "x"
+      ],
       "commands": [
         "intro h",
         "exact h"
@@ -410,6 +539,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L07intro2.lean",
+      "initialBinderNames": [
+        "x",
+        "y"
+      ],
       "commands": [
         "intro h",
         "repeat rw [← succ_eq_add_one] at h",
@@ -424,6 +557,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L08ne.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h1",
+        "h2"
+      ],
       "commands": [
         "apply h2 at h1",
         "exact h1"
@@ -436,6 +575,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L09zero_ne_succ.lean",
+      "initialBinderNames": [],
       "commands": [
         "intro h",
         "rw [one_eq_succ_zero] at h",
@@ -450,6 +590,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L10one_ne_zero.lean",
+      "initialBinderNames": [],
       "commands": [
         "symm",
         "exact zero_ne_one"
@@ -462,6 +603,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Implication/L11two_add_two_ne_five.lean",
+      "initialBinderNames": [],
       "commands": [
         "intro h",
         "rw [add_succ, add_succ, add_zero] at h",
@@ -477,6 +619,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L01le_refl.lean",
+      "initialBinderNames": [
+        "x"
+      ],
       "commands": [
         "use 0",
         "rw [add_zero]",
@@ -490,6 +635,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L02zero_le.lean",
+      "initialBinderNames": [
+        "x"
+      ],
       "commands": [
         "use x",
         "rw [zero_add]",
@@ -503,6 +651,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L03le_succ_self.lean",
+      "initialBinderNames": [
+        "x"
+      ],
       "commands": [
         "use 1",
         "rw [succ_eq_add_one]",
@@ -516,6 +667,13 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L04le_trans.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "z",
+        "hxy",
+        "hyz"
+      ],
       "commands": [
         "cases hxy with a ha",
         "cases hyz with b hb",
@@ -531,6 +689,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L05le_zero.lean",
+      "initialBinderNames": [
+        "x",
+        "hx"
+      ],
       "commands": [
         "cases hx with y hy",
         "symm at hy",
@@ -545,6 +707,12 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L06le_antisymm.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "hxy",
+        "hyx"
+      ],
       "commands": [
         "cases hxy with a ha",
         "cases hyx with b hb",
@@ -564,6 +732,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L07or_symm.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h"
+      ],
       "commands": [
         "cases h with hx hy",
         "right",
@@ -579,6 +752,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L08le_total.lean",
+      "initialBinderNames": [
+        "x",
+        "y"
+      ],
       "commands": [
         "induction y with d hd",
         "right",
@@ -611,6 +788,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L09succ_le_succ.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "hx"
+      ],
       "commands": [
         "cases hx with d hd",
         "use d",
@@ -626,6 +808,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L10le_one.lean",
+      "initialBinderNames": [
+        "x",
+        "hx"
+      ],
       "commands": [
         "cases x with y",
         "left",
@@ -645,6 +831,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L11le_two.lean",
+      "initialBinderNames": [
+        "x",
+        "hx"
+      ],
       "commands": [
         "cases x with y",
         "left",
@@ -671,6 +861,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L01mul_one.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "rw [one_eq_succ_zero]",
         "rw [mul_succ]",
@@ -686,6 +879,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L02zero_mul.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "induction m with d hd",
         "rw [mul_zero]",
@@ -703,6 +899,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L03succ_mul.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "induction b with d hd",
         "rw [mul_zero]",
@@ -725,6 +925,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L04mul_comm.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "induction b with d hd",
         "rw [zero_mul]",
@@ -743,6 +947,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L05one_mul.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "rw [mul_comm, mul_one]",
         "rfl"
@@ -755,6 +962,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L06two_mul.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "rw [two_eq_succ_one, succ_mul, one_mul]",
         "rfl"
@@ -767,6 +977,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L07mul_add.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "induction c with d hd",
         "rw [add_zero, mul_zero, add_zero]",
@@ -782,6 +997,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L08add_mul.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "rw [mul_comm, mul_add]",
         "repeat rw [mul_comm c]",
@@ -795,6 +1015,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Multiplication/L09mul_assoc.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "induction c with d hd",
         "rw [mul_zero, mul_zero, mul_zero]",
@@ -813,6 +1038,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L01zero_pow_zero.lean",
+      "initialBinderNames": [],
       "commands": [
         "rw [pow_zero]",
         "rfl"
@@ -825,6 +1051,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L02zero_pow_succ.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "rw [pow_succ]",
         "rw [mul_zero]",
@@ -838,6 +1067,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L03pow_one.lean",
+      "initialBinderNames": [
+        "a"
+      ],
       "commands": [
         "rw [one_eq_succ_zero]",
         "rw [pow_succ]",
@@ -853,6 +1085,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L04one_pow.lean",
+      "initialBinderNames": [
+        "m"
+      ],
       "commands": [
         "induction m with t ht",
         "rw [pow_zero]",
@@ -870,6 +1105,9 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L05pow_two.lean",
+      "initialBinderNames": [
+        "a"
+      ],
       "commands": [
         "rw [two_eq_succ_one]",
         "rw [pow_succ]",
@@ -884,6 +1122,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L06pow_add.lean",
+      "initialBinderNames": [
+        "a",
+        "m",
+        "n"
+      ],
       "commands": [
         "induction n with t ht",
         "rw [add_zero, pow_zero, mul_one]",
@@ -899,6 +1142,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L07mul_pow.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "n"
+      ],
       "commands": [
         "induction n with t Ht",
         "rw [pow_zero, pow_zero, pow_zero, mul_one]",
@@ -916,6 +1164,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L08pow_pow.lean",
+      "initialBinderNames": [
+        "a",
+        "m",
+        "n"
+      ],
       "commands": [
         "induction n with t Ht",
         "rw [mul_zero, pow_zero, pow_zero]",
@@ -931,6 +1184,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Power/L09add_sq.lean",
+      "initialBinderNames": [
+        "a",
+        "b"
+      ],
       "commands": [
         "rw [pow_two, pow_two, pow_two]",
         "rw [add_right_comm]",
@@ -948,6 +1205,12 @@
       "visualSkip": false,
       "completionNeutral": true,
       "source": "NNG4/Game/Levels/Power/L10FLT.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c",
+        "n"
+      ],
       "commands": [
         "xyzzy"
       ]
@@ -959,6 +1222,10 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L01rfl.lean",
+      "initialBinderNames": [
+        "x",
+        "q"
+      ],
       "commands": [
         "rfl"
       ]
@@ -970,6 +1237,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L02rw.lean",
+      "initialBinderNames": [
+        "x",
+        "y",
+        "h"
+      ],
       "commands": [
         "rw [h]",
         "rfl"
@@ -982,6 +1254,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L03two_eq_ss0.lean",
+      "initialBinderNames": [],
       "commands": [
         "rw [two_eq_succ_one]",
         "rw [one_eq_succ_zero]",
@@ -995,6 +1268,7 @@
       "visualSkip": true,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L04rw_backwards.lean",
+      "initialBinderNames": [],
       "commands": [
         "rw [← one_eq_succ_zero]",
         "rw [← two_eq_succ_one]",
@@ -1008,6 +1282,11 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L05add_zero.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "rw [add_zero]",
         "rw [add_zero]",
@@ -1021,6 +1300,11 @@
       "visualSkip": true,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L06add_zero2.lean",
+      "initialBinderNames": [
+        "a",
+        "b",
+        "c"
+      ],
       "commands": [
         "rw [add_zero c]",
         "rw [add_zero]",
@@ -1034,6 +1318,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L07add_succ.lean",
+      "initialBinderNames": [],
       "commands": [
         "rw [one_eq_succ_zero]",
         "rw [add_succ]",
@@ -1048,6 +1333,7 @@
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L08twoaddtwo.lean",
+      "initialBinderNames": [],
       "commands": [
         "nth_rewrite 2 [two_eq_succ_one]",
         "rw [add_succ]",

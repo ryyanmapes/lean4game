@@ -95,6 +95,16 @@ function extractMainSolution(source, sourcePath) {
   return commands
 }
 
+function extractInitialBinderNames(source, sourcePath) {
+  const statement = /\bStatement\b[\s\S]*?:=\s*by\b/u.exec(source)?.[0]
+  if (!statement) throw new Error(`No Statement declaration in ${sourcePath}`)
+  const names = []
+  for (const match of statement.matchAll(/\(([\p{L}_][\p{L}\p{N}_'\s]*)\s*:/gu)) {
+    names.push(...match[1].trim().split(/\s+/u))
+  }
+  return names
+}
+
 async function walk(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true })
   const children = await Promise.all(entries.map(entry => {
@@ -126,6 +136,7 @@ async function buildSolutions() {
       visualSkip: /^\s*VisualSkipLevel\s*$/mu.test(source),
       completionNeutral: /^\s*CompletionNeutral\s*$/mu.test(source),
       source: path.relative(repoRoot, file).replaceAll(path.sep, '/'),
+      initialBinderNames: extractInitialBinderNames(source, file),
       commands: extractMainSolution(source, file),
     })
   }

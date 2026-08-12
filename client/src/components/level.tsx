@@ -587,6 +587,10 @@ function PlayableLevel() {
                   isLoading={!isLevelDataReady}
                   levelTitle={(mobile ? "" : t("Level")) + ` ${levelId} / ${gameInfo.data?.worldSize[worldId]}` +
                     (level?.data?.title && ` : ${gT(level?.data?.title ?? "")}`)}
+                  feedbackProofState={() => ({
+                    proofBody: leanMonacoEditor?.editor?.getValue() ?? '',
+                    proof,
+                  })}
                   />
                 {mobile?
                   // TODO: This is copied from the `Split` component below...

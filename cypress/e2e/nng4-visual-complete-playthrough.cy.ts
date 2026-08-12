@@ -16,6 +16,7 @@ interface ReferenceSolution {
   visualSkip: boolean
   completionNeutral?: boolean
   source: string
+  initialBinderNames: string[]
   commands: string[]
 }
 
@@ -177,6 +178,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
 
       cy.window().then(win => {
         player = new CompletePlaythroughDriver(win)
+        return player.prepareInitialBinders(solution.initialBinderNames)
       })
 
       solution.commands.forEach((command, index) => {

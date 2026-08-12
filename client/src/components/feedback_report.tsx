@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { submitFeedbackReport, type TelemetryMode } from '../utils/telemetry'
 
 import '../css/feedback-report.css'
@@ -20,20 +21,12 @@ export function FeedbackReportButton({
   const [message, setMessage] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [status, setStatus] = React.useState<'idle' | 'sent' | 'error'>('idle')
-  const dialogRef = React.useRef<HTMLDialogElement>(null)
   const textRef = React.useRef<HTMLTextAreaElement>(null)
   const trimmed = message.trim()
   const invalid = !trimmed || message.length > 1000
 
   React.useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) {
-      dialog.showModal()
-      window.setTimeout(() => textRef.current?.focus(), 0)
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
+    if (open) window.setTimeout(() => textRef.current?.focus(), 0)
   }, [open])
 
   function close() {
@@ -74,10 +67,11 @@ export function FeedbackReportButton({
       onClick={() => { setStatus('idle'); setOpen(true) }}>
       !
     </button>
-    <dialog ref={dialogRef} className="feedback-report-dialog" aria-label="Send feedback"
-      onCancel={event => { event.preventDefault(); close() }}
-      onClose={() => setOpen(false)}>
-      <form onSubmit={submit}>
+    {open && createPortal(<div className="feedback-report-backdrop" onMouseDown={event => {
+      if (event.target === event.currentTarget) close()
+    }}>
+      <div className="feedback-report-dialog" role="dialog" aria-modal="true" aria-label="Send feedback">
+        <form onSubmit={submit}>
         <button type="button" className="feedback-report-close" aria-label="Close feedback form"
           onClick={close}>×</button>
         <label htmlFor={`feedback-message-${mode}`}>
@@ -95,7 +89,8 @@ export function FeedbackReportButton({
         </button>
         {status === 'sent' && <p className="feedback-report-status success" role="status">Feedback sent. Thank you!</p>}
         {status === 'error' && <p className="feedback-report-status error" role="alert">Feedback could not be sent. Please try again.</p>}
-      </form>
-    </dialog>
+        </form>
+      </div>
+    </div>, document.body)}
   </>
 }
