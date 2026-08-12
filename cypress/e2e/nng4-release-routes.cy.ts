@@ -157,11 +157,13 @@ describe('local NNG4 release maps', () => {
       .should('have.attr', 'aria-label', '❌: Does not count towards completion')
       .focus()
     cy.contains('.level-title-annotation-text', 'Does not count towards completion')
-      .should('be.visible')
+      .should('have.css', 'visibility', 'visible')
+      .and('have.css', 'opacity', '1')
     cy.get('.visual-header-title .level-title-emoji').blur().click()
       .should('have.attr', 'aria-expanded', 'true')
     cy.contains('.level-title-annotation-text', 'Does not count towards completion')
-      .should('be.visible')
+      .should('have.css', 'visibility', 'visible')
+      .and('have.css', 'opacity', '1')
   })
 
   it('redirects the removed embedded selector to the release root', () => {
