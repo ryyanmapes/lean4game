@@ -52,3 +52,15 @@
   opacity: 1;
   visibility: visible;
 }
+
+/* Long Visual titles normally clip to the compact header. Temporarily open
+   those two clipping ancestors while an annotation is being shown so its
+   tooltip can paint above the proof canvas. */
+.visual-header-center:has(.level-title-annotation:hover),
+.visual-header-center:has(.level-title-annotation:focus-within),
+.visual-header-center:has(.level-title-annotation.open),
+.visual-header-title:has(.level-title-annotation:hover),
+.visual-header-title:has(.level-title-annotation:focus-within),
+.visual-header-title:has(.level-title-annotation.open) {
+  overflow: visible;
+}
