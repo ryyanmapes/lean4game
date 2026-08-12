@@ -1287,7 +1287,9 @@ export class CompletePlaythroughDriver {
   private async selectRewriteDirection(overlay: HTMLElement, reverse: boolean) {
     let lastClickAt = 0
     await waitFor(`rewrite ${reverse ? 'reverse' : 'forward'} direction`, () => {
-      const button = overlay.querySelector<HTMLButtonElement>('button[title^="Mode:"]')
+      const button = overlay.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Mode:"], button[title^="Mode:"]',
+      )
       if (!button) return null
       if (button.classList.contains('active-reverse') === reverse) return true
       if (

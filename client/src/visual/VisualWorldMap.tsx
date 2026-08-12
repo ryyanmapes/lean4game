@@ -763,7 +763,10 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   // navigation is vertical-only. Desktop/tablet retain their fill-width view.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
     ? isPhonePortraitViewport
-      ? Math.max(0, viewportSize.width - 8)
+      // Account for the map's horizontal padding and the vertical scrollbar.
+      // Using the raw viewport width leaves genuine horizontal overflow once
+      // both are present on a narrow mobile browser.
+      ? Math.max(0, viewportSize.width - 16)
       : Math.max(naturalSvgDisplayWidth, viewportSize.width)
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)

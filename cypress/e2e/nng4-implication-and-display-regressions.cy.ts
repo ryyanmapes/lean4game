@@ -215,7 +215,7 @@ describe('NNG4 implication and definition display regressions', () => {
         const style = getComputedStyle($atomic[0]!)
         const cardStyle = getComputedStyle($atomic[0]!.closest('.statement-card')!)
         expect(style.color, 'atomic form uses the forall-footer grey')
-          .to.equal(cardStyle.getPropertyValue('--visual-forall-footer').trim())
+          .to.equal(cardStyle.getPropertyValue('--visual-forall-footer').trim().replace(', .95)', ', 0.95)'))
         expect(style.textAlign, 'atomic form is centered').to.equal('center')
       })
 

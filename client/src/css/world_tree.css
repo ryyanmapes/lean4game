@@ -82,6 +82,7 @@ svg .level-name-tooltip {
 }
 
 svg .level:hover .level-name-tooltip,
+svg .level:focus .level-name-tooltip,
 svg .level:focus-visible .level-name-tooltip {
   opacity: 1;
   visibility: visible;
