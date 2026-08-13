@@ -3861,11 +3861,29 @@ export function VisualCanvas({
     )
     const rotation = action.rotation
     let command = action.command
+    // Rewriting the displayed sides of a comparison must keep the comparison
+    // proposition intact. The drag_rw comparison tactic follows the visual
+    // reduction into the existential definition of ≤, replacing `h : a ≤ b`
+    // with its witness equality. A normal Lean rewrite acts on the proposition
+    // itself and preserves a card that can still accept le_one/succ_le_succ.
+    if (
+      parsedFocusedTarget &&
+      parsedFocusedTarget.relation !== '=' &&
+      transformTarget &&
+      (!path || path.length === 0)
+    ) {
+      const rewriteRule = `${isReverse ? '← ' : ''}${hypLabel}`
+      const targetSuffix = transformTarget.kind === 'hyp'
+        ? ` at ${transformTarget.hypRef}`
+        : ''
+      const comparisonRewrite = `rw [${rewriteRule}]${targetSuffix}`
+      command = rotation ? `${rotation}\n${comparisonRewrite}` : comparisonRewrite
+    }
     // A reverse theorem whose source is a lone pattern variable (notably
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
     // search. The player selected an exact expression, so make that theorem
     // parameter explicit and retain the selected side/path with `conv`.
-    if (explicitReverseArg && transformTarget) {
+    if (explicitReverseArg && transformTarget && parsedFocusedTarget?.relation === '=') {
       const scopedRewrite = explicitReverseRewriteCommand(
         hypLabel,
         explicitReverseArg,

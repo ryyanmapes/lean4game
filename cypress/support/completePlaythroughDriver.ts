@@ -1617,26 +1617,6 @@ export class CompletePlaythroughDriver {
     const parsed = parseRewrite(command)
     for (const rawTarget of parsed.targets) {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
-      const propositionTarget = target === 'goal' ? null : this.hypExact(target)
-      if (propositionTarget && /≤/u.test(propositionTarget.dataset.hypType ?? '')) {
-        // Dragging an equality theorem onto the proposition is the player's
-        // proof-preserving rewrite. Opening transformation mode on ≤ instead
-        // eliminates its existential definition and leaves only a witness and
-        // equality, which cannot subsequently accept le_one/succ_le_succ.
-        for (const rule of parsed.rules) {
-          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-          await this.dragAndWait(
-            await this.sourceCard(rule.name),
-            await waitFor(`≤ hypothesis ${rawTarget}`, () => this.hypExact(target)),
-            `${rule.name} proposition rewrite`,
-          )
-          const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          const createdName = afterNames.find(name => !beforeNames.has(name))
-          if (createdName) target = createdName
-          this.rememberAlias(rawTarget, target)
-        }
-        continue
-      }
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -1925,8 +1905,10 @@ export class CompletePlaythroughDriver {
       })
       initialNames.filter(name => expectedNames.includes(name))
         .forEach(name => this.rememberAlias(name, name))
+      // Induction re-generalizes the later dependent assumptions too, even if
+      // they were visible before the split. Each new branch must introduce
+      // c/ha/h again in declaration order before addressing one of them.
       this.deferredInitialBinderNames = expectedNames.slice(inductionTargetIndex + 1)
-        .filter(name => !initialNames.includes(name))
       for (const expectedName of expectedNames.slice(0, inductionTargetIndex + 1)) {
         if (this.hyp(expectedName)) continue
         throw new Error(`Generalized induction binder ${expectedName} is not visible: ${JSON.stringify({
