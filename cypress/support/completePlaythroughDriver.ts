@@ -1234,21 +1234,11 @@ export class CompletePlaythroughDriver {
     if (/^(?:\u2115|Nat|MyNat)$/u.test(type.trim())) {
       await this.dragTactic('cases', target)
     } else if (type.trim() === 'False') {
-      // False eliminates only a False goal. When the reference proof uses
-      // `cases h` against another proposition, reproduce the explicit player
-      // sequence: drag exfalso to the goal, then drag h to that False goal.
-      let goal = await waitFor('current goal', () => currentGoal(this.win))
-      const goalType = harness(this.win).getCurrentStreamSnapshot().goalType.trim()
-      if (goalType !== 'False') {
-        await this.dragTactic('exfalso', goal)
-        goal = await waitFor('False goal after exfalso', () => {
-          const current = currentGoal(this.win)
-          return harness(this.win).getCurrentStreamSnapshot().goalType.trim() === 'False'
-            ? current
-            : null
-        })
-      }
-      await this.dragAndWait(target, goal, `applying ${match[1]} to the goal`)
+      // `cases h` is its own explicit player interaction and is taught before
+      // exfalso: drag the already-unlocked cases tactic onto the False card.
+      // This does not reintroduce the forbidden False-card-to-arbitrary-goal
+      // shortcut.
+      await this.dragTactic('cases', target)
       await waitFor('False elimination to complete the current branch', () => {
         const audit = harness(this.win).getProofAudit()
         return !audit.processing && audit.completed ? audit : null
