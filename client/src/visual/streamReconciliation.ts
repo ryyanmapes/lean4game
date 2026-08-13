@@ -438,20 +438,28 @@ export function inferLocalTheoremPremiseApplication(
 ): string | null {
   const firstCard = findHypCardByInteractionName(stream, firstName)
   const secondCard = findHypCardByInteractionName(stream, secondName)
-  if (!firstCard || !secondCard || Boolean(firstCard.isTheorem) === Boolean(secondCard.isTheorem)) {
+  const firstIsTheorem = Boolean(firstCard?.isTheorem) || firstName.startsWith(DERIVED_THEOREM_PREFIX)
+  const secondIsTheorem = Boolean(secondCard?.isTheorem) || secondName.startsWith(DERIVED_THEOREM_PREFIX)
+  if (firstIsTheorem === secondIsTheorem) {
     return null
   }
-  const firstType = normalizePropositionText(stripTaggedText(firstCard.hyp.type).trim())
-  const secondType = normalizePropositionText(stripTaggedText(secondCard.hyp.type).trim())
+  const firstType = firstCard
+    ? normalizePropositionText(stripTaggedText(firstCard.hyp.type).trim())
+    : ''
+  const secondType = secondCard
+    ? normalizePropositionText(stripTaggedText(secondCard.hyp.type).trim())
+    : ''
   const firstImplication = splitImplicationTargetForRuntime(firstType)
   const secondImplication = splitImplicationTargetForRuntime(secondType)
   const [functionName, argumentName, theoremName] = firstImplication
     && normalizePropositionText(firstImplication[0]) === normalizePropositionText(secondType)
-    ? [firstName, secondName, firstCard.isTheorem ? firstName : secondName]
+    ? [firstName, secondName, firstIsTheorem ? firstName : secondName]
     : secondImplication
       && normalizePropositionText(secondImplication[0]) === normalizePropositionText(firstType)
-      ? [secondName, firstName, secondCard.isTheorem ? secondName : firstName]
-      : []
+      ? [secondName, firstName, secondIsTheorem ? secondName : firstName]
+      : firstIsTheorem
+        ? [secondImplication ? secondName : firstName, secondImplication ? firstName : secondName, firstName]
+        : [firstImplication ? firstName : secondName, firstImplication ? secondName : firstName, secondName]
   return functionName && argumentName && theoremName
     ? `have ${theoremName} := ${functionName} ${argumentName}`
     : null

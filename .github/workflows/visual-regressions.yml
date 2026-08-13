@@ -40,6 +40,11 @@ jobs:
             specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
             world: Addition
             level: '1'
+          - name: premise application player canary
+            id: premise-application
+            specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts
+            world: AdvAddition
+            level: '1'
           - name: all levels 1 of 8
             id: all-levels-0
             specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts

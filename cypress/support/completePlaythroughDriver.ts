@@ -1275,7 +1275,7 @@ export class CompletePlaythroughDriver {
     // already a visible hypothesis. Apply it through the same card-on-card
     // drag a player uses, rather than applying A → B to the B goal and
     // accidentally creating a duplicate A subgoal.
-    for (let premise = 0; premise < 8; premise += 1) {
+    for (let premise = 0; !match[2] && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const matchingHypothesis = visible(
         this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
@@ -1543,7 +1543,11 @@ export class CompletePlaythroughDriver {
           this.implicitGoalRewriteTarget = introducedName
         }
       } else if (!this.hypExact(target)) {
-        const existingRelation = this.latestRelationHypothesis()
+        const existingRelation = this.latestRelationHypothesis() ?? await waitFor(
+          'expanded relation hypothesis to render',
+          () => this.latestRelationHypothesis(),
+          1_500,
+        ).catch(() => null)
         const existingName = existingRelation?.dataset.hypName
         if (existingName) {
           // Clicking a ≤ proposition replaces it with a witness and equality.

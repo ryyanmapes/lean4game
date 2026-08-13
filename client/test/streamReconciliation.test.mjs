@@ -1168,6 +1168,14 @@ test('local theorem premise drags always produce valid shadowing Lean', () => {
     inferLocalTheoremPremiseApplication(focusedStream, 'h', 'thm_succ_inj'),
     'have thm_succ_inj := thm_succ_inj h',
   )
+  const preReconciliationStream = stream('stream-thm-proof-raw', 'a = b', 'main', [
+    hyp('hyp-theorem', 'thm_succ_inj', 'succ(a) = succ(b) → a = b'),
+    hyp('hyp-p', 'h', 'succ(a) = succ(b)'),
+  ])
+  assert.equal(
+    inferLocalTheoremPremiseApplication(preReconciliationStream, 'thm_succ_inj', 'h'),
+    'have thm_succ_inj := thm_succ_inj h',
+  )
 })
 
 test('drag_to keeps both theorem cards and adds a fresh theorem result card', () => {
