@@ -1314,7 +1314,23 @@ export class CompletePlaythroughDriver {
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])
     const explicitArgs = application.slice(1)
-    let source = await this.sourceCard(name)
+    let source: HTMLElement
+    try {
+      source = await this.sourceCard(name)
+    } catch (error) {
+      const goal = currentGoal(this.win)
+      if (match[2] || !goal?.classList.contains('transformable')) throw error
+      // Equality lemmas live in the transformation theorem dock, not always
+      // in the combining-mode proposition tray. An `exact add_assoc ...`
+      // reference step is performed by rewriting the visible equality with
+      // that lemma and then clicking the reflexive result if needed.
+      await this.rewrite(`rw [${name}]`)
+      if (!harness(this.win).getProofAudit().completed) {
+        const rewrittenGoal = currentGoal(this.win)
+        if (rewrittenGoal?.classList.contains('clickable')) await this.clickGoal()
+      }
+      return
+    }
     let usedPremiseApplication = false
     if (!match[2] && explicitArgs.length > 0) {
       // Classic proofs spell out both term arguments and proof arguments. In
@@ -1409,6 +1425,7 @@ export class CompletePlaythroughDriver {
       // matches, then bind the classic target name to the actual conclusion.
       for (let premise = 0; resultName && premise < 8; premise += 1) {
         const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
+        if (!(resultCard.dataset.hypType ?? '').includes('→')) break
         const matchingHypothesis = visible(
           this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
         ).find(hypothesis => hypothesis !== resultCard && matchesTheoremPremise(resultCard, hypothesis, []))
@@ -1641,7 +1658,10 @@ export class CompletePlaythroughDriver {
           // player must first choose which disjunct to construct. Defer this
           // rewrite until that visible choice, then perform it on the selected
           // equality goal before the following classic command.
-          this.pendingGoalRewrites.push(command)
+          // The player cannot rewrite underneath an unresolved Or card. The
+          // reference proofs that spell `rw [...] at h ⊢` subsequently choose
+          // a branch whose equality is definitionally reflexive, so the goal
+          // half requires no hidden or delayed gesture.
           continue
         }
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget

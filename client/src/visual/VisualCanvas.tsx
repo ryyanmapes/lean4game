@@ -3882,8 +3882,7 @@ export function VisualCanvas({
     if (
       displayedFocusedTarget &&
       displayedFocusedTarget.relation !== '=' &&
-      transformTarget &&
-      (!path || path.length === 0)
+      transformTarget
     ) {
       const rewriteRule = `${isReverse ? '← ' : ''}${hypLabel}`
       const targetSuffix = transformTarget.kind === 'hyp'
