@@ -931,13 +931,10 @@ export class CompletePlaythroughDriver {
     return currentName ? this.hypExact(currentName) ?? card : card
   }
 
-  private latestRelationHypothesis() {
+  private latestRelationName() {
     const snapshot = harness(this.win).getCurrentStreamSnapshot()
-    return Object.keys(snapshot.hypTypes).reverse().map(name => this.hypExact(name))
-      .find(card => card && (
-        card.classList.contains('transformable')
-        || /(?:=|≠|≤)/u.test(card.dataset.hypType ?? '')
-      )) ?? null
+    return Object.entries(snapshot.hypTypes).reverse()
+      .find(([, type]) => /(?:=|≠|≤)/u.test(type))?.[0] ?? null
   }
 
   private async pagedCard(tab: 'Tactics' | 'Theorems', selector: string) {
@@ -1372,8 +1369,16 @@ export class CompletePlaythroughDriver {
       await rewindPages(overlay, 'Previous rule')
       for (let page = 0; page < 100; page += 1) {
         await waitForMeasuredDock()
+        const resolvedName = this.resolveName(name)
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        const reconciledName = snapshot.hypTypes[resolvedName]
+          ? null
+          : this.latestRelationName()
         const rule = visible(overlay.querySelectorAll<HTMLElement>(
-          `[data-rule-label="${cssEscape(this.resolveName(name))}"], [data-rule-label="${cssEscape(name)}"]`,
+          [resolvedName, name, reconciledName]
+            .filter((candidate): candidate is string => Boolean(candidate))
+            .map(candidate => `[data-rule-label="${cssEscape(candidate)}"]`)
+            .join(', '),
         ))[0]
         if (rule) return rule
         const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
@@ -1543,12 +1548,7 @@ export class CompletePlaythroughDriver {
           this.implicitGoalRewriteTarget = introducedName
         }
       } else if (!this.hypExact(target)) {
-        const existingRelation = this.latestRelationHypothesis() ?? await waitFor(
-          'expanded relation hypothesis to render',
-          () => this.latestRelationHypothesis(),
-          1_500,
-        ).catch(() => null)
-        const existingName = existingRelation?.dataset.hypName
+        const existingName = this.latestRelationName()
         if (existingName) {
           // Clicking a ≤ proposition replaces it with a witness and equality.
           // Address that visible equality rather than clicking the unrelated
@@ -1574,8 +1574,7 @@ export class CompletePlaythroughDriver {
         }
       }
       if (target !== 'goal' && !this.hypExact(target)) {
-        const replacement = this.latestRelationHypothesis()
-        const replacementName = replacement?.dataset.hypName
+        const replacementName = this.latestRelationName()
         if (replacementName) {
           this.rememberAlias(rawTarget, replacementName)
           target = replacementName
