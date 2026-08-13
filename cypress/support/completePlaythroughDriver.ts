@@ -1,5 +1,4 @@
 import {
-  expressionsEqual,
   matchAndCapture,
   parse,
   substituteVariables,
@@ -671,15 +670,7 @@ function matchesPartiallyAppliedRule(
     const binderNames = forallBinderNames(card)
     const patternNames = expressionVariableNames(parsedPattern)
     const parsedArgs = explicitArgs.map(parseExplicitArgument)
-    const containsWildcard = (argument: ExpressionNode): boolean => {
-      if (argument.type === 'variable') return argument.name === 'visualWildcard'
-      if (argument.type === 'app') return containsWildcard(argument.arg)
-      if (argument.type === 'binary') {
-        return containsWildcard(argument.left) || containsWildcard(argument.right)
-      }
-      return false
-    }
-    if (parsedArgs.length >= patternNames.length && parsedArgs.every(argument => !containsWildcard(argument))) {
+    if (parsedArgs.length >= patternNames.length) {
       const explicitBindings: Record<string, ExpressionNode> = {}
       parsedArgs.forEach((argument, index) => {
         const patternName = patternNames[index]
@@ -687,7 +678,7 @@ function matchesPartiallyAppliedRule(
         if (patternName) explicitBindings[patternName] = argument
         if (binderName) explicitBindings[binderName] = argument
       })
-      return expressionsEqual(
+      return matchesExplicitArgument(
         parse(expressionText),
         substituteVariables(parsedPattern, explicitBindings),
       )
