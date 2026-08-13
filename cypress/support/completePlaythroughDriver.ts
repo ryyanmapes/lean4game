@@ -86,12 +86,26 @@ function visiblePageSignature(container: HTMLElement) {
 
 async function clickPaginationAndWait(container: HTMLElement, button: HTMLButtonElement, description: string) {
   const before = visiblePageSignature(container)
-  click(button)
+  const ariaLabel = button.getAttribute('aria-label') ?? ''
+  let clicked = false
+  let lastClickAt = 0
   await waitFor(description, () => {
     const current = container.querySelector<HTMLButtonElement>(
-      `button[aria-label="${button.getAttribute('aria-label') ?? ''}"]`,
+      `button[aria-label="${ariaLabel}"]`,
     )
-    return visiblePageSignature(container) !== before || current?.disabled ? true : null
+    if (visiblePageSignature(container) !== before || (clicked && current?.disabled)) return true
+    // Transformation controls intentionally remain visually enabled while a
+    // Lean action is settling, but expose that temporary non-functional state
+    // through aria-disabled. Wait for the same moment a player can click, and
+    // retry if a render boundary still swallowed the event.
+    const now = Date.now()
+    if (current && !current.disabled && current.getAttribute('aria-disabled') !== 'true'
+      && now - lastClickAt >= 100) {
+      click(current)
+      clicked = true
+      lastClickAt = now
+    }
+    return null
   }, 5_000)
 }
 
