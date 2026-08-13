@@ -2196,10 +2196,11 @@ export class CompletePlaythroughDriver {
       return
     }
     if (normalized === 'rfl') {
-      const goal = currentGoal(this.win)
-      if (goal?.classList.contains('clickable') || harness(this.win).getProofAudit().completed) {
-        await this.clickGoal()
-      }
+      // Closing transformation mode and painting its post-rewrite goal happen
+      // in adjacent React commits. Always let clickGoal wait for the same
+      // clickable card a player sees instead of sampling once and silently
+      // skipping rfl during that render boundary.
+      await this.clickGoal()
       // A preceding player action can already have discharged the reference
       // proof's reflexive branch. In that case there is no goal card to click;
       // treating the classic trailing `rfl` as covered avoids inventing an

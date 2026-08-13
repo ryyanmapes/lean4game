@@ -1487,12 +1487,7 @@ function synthesizeForallSpecializationContinuation(
 }
 
 function reflexiveGoalClickAction(expectedGoal: ExpectedRewriteGoal): ClickAction | undefined {
-  // Rewrites rebuild display expressions and may add/remove harmless outer
-  // parentheses. Compare their parsed expression structure so a reflexive
-  // result remains visible for the player's explicit rfl click, without
-  // treating merely definitionally equal but structurally different terms as
-  // already solved.
-  return expectedGoal.relation === '=' && formulasMatch(expectedGoal.lhsStr, expectedGoal.rhsStr)
+  return expectedGoal.relation === '=' && formulasMatchLiterally(expectedGoal.lhsStr, expectedGoal.rhsStr)
     ? {
         playTactic: 'click_goal',
         tooltip: 'Click to complete',
