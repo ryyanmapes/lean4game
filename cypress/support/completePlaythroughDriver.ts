@@ -674,6 +674,7 @@ export class CompletePlaythroughDriver {
   private classicCommandsAlreadyCovered = 0
   private implicitIntroAlreadyPerformed = false
   private preferredRewriteSide: 'left' | 'right' | null = null
+  private implicitGoalRewriteTarget: string | null = null
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -1226,7 +1227,8 @@ export class CompletePlaythroughDriver {
   private async openTransform(target: string) {
     await waitForPlayerIdle(this.win, `${target} to become transformable`)
     let lastAttemptAt = 0
-    await waitFor('transformation view', () => {
+    try {
+      await waitFor('transformation view', () => {
       const overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay')
       if (overlay) return overlay
       const element = target === 'goal' ? currentGoal(this.win) : this.hyp(target)
@@ -1239,7 +1241,18 @@ export class CompletePlaythroughDriver {
         lastAttemptAt = Date.now()
       }
       return null
-    })
+      })
+    } catch (error) {
+      const element = target === 'goal' ? currentGoal(this.win) : this.hyp(target)
+      throw new Error(`Timed out opening transformation target ${target}: ${JSON.stringify({
+        found: Boolean(element),
+        className: element?.className,
+        hypName: element?.dataset.hypName,
+        hypType: element?.dataset.hypType,
+        goalText: element?.dataset.goalText,
+        snapshot: harness(this.win).getCurrentStreamSnapshot(),
+      })}`, { cause: error })
+    }
   }
 
   private async transformRule(name: string) {
@@ -1402,7 +1415,14 @@ export class CompletePlaythroughDriver {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
-        if (!goal.classList.contains('transformable') && goal.classList.contains('clickable')) {
+        if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
+          && this.hyp(this.implicitGoalRewriteTarget)) {
+          // A negated goal becomes `False` after its equality premise is
+          // introduced. Consecutive unqualified `rw` steps continue acting on
+          // that visible premise, exactly where the player made the first
+          // rewrite, rather than trying to transform the inert `False` card.
+          target = this.implicitGoalRewriteTarget
+        } else if (!goal.classList.contains('transformable') && goal.classList.contains('clickable')) {
           // Lean can rewrite inside an implication before `intro`, but the
           // visual player transforms statement cards rather than syntax under
           // an implication. Perform the equivalent player sequence: introduce
@@ -1420,6 +1440,24 @@ export class CompletePlaythroughDriver {
           this.aliases.set('h', introducedName)
           this.implicitIntroAlreadyPerformed = true
           target = introducedName
+          this.implicitGoalRewriteTarget = introducedName
+        }
+      } else if (!this.hyp(target)) {
+        // Induction/cases can move a dependent local hypothesis back into the
+        // goal. Expose it through the same goal click a player must perform,
+        // and then continue addressing its collision-safe displayed name.
+        for (let attempt = 0; attempt < 4 && !this.hyp(target); attempt += 1) {
+          const goal = currentGoal(this.win)
+          if (!goal?.classList.contains('clickable')) break
+          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+          await this.clickGoal()
+          const actualName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+            .find(name => !beforeNames.has(name))
+          if (actualName) {
+            this.aliases.set(rawTarget, actualName)
+            target = actualName
+            this.implicitGoalRewriteTarget = actualName
+          }
         }
       }
       await this.openTransform(target)
@@ -1598,7 +1636,7 @@ export class CompletePlaythroughDriver {
     // declaration binders. When the complete declaration context is already
     // visible, associate it positionally with Lean's binder order instead of
     // trying to introduce a nonexistent extra binder by clicking the goal.
-    if (initialNames.length >= expectedNames.length) {
+    if (initialNames.length > 0) {
       const claimedActualNames = new Set(
         expectedNames.filter(expectedName => initialNames.includes(expectedName)),
       )

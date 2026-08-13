@@ -205,6 +205,19 @@ private partial def visibleExprMatches (pattern actual : Expr) : MetaM Bool := d
   | .mdata _ patternExpr =>
       visibleExprMatches patternExpr actual
 
+private def unfoldVisibleNot (type : Expr) : MetaM Expr := do
+  let type ← instantiateMVars type
+  -- Full transparency is needed specifically at the proposition head:
+  -- `Not` is printed as notation but is opaque to reducible WHNF in current
+  -- Lean releases. WHNF does not descend into equality/arithmetic operands,
+  -- so it cannot silently simplify the expressions the player sees.
+  withTransparency .all (whnf type.consumeMData)
+
+private def isVisibleNegation (type : Expr) : Bool :=
+  match type.consumeMData with
+  | .forallE _ _ body _ => body.consumeMData == .const ``False []
+  | _ => false
+
 private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
   let checkpoint ← getMCtx
   try
@@ -214,8 +227,16 @@ private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
     -- doing the structural visibility check. This still does not simplify
     -- arguments such as arithmetic expressions, so hidden rewrites remain
     -- unavailable until the player performs them.
-    let domain ← withReducible (whnf domain)
-    let argType ← withReducible (whnf argType)
+    let domain ← unfoldVisibleNot domain
+    let argType ← unfoldVisibleNot argType
+    -- `x ≠ y` and its fully displayed `x = y → False` form are the same
+    -- visible proposition even though the generated arrow's binder metadata
+    -- is not guaranteed to match source-written arrow metadata.
+    if isVisibleNegation domain && isVisibleNegation argType then
+      let compatible ← isDefEq domain argType
+      if compatible then return true
+      setMCtx checkpoint
+      return false
     if !(← visibleExprMatches domain argType) then
       setMCtx checkpoint
       return false
@@ -279,7 +300,11 @@ def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option
     for i in [:args.size] do
       let checkpoint ← getMCtx
       let dom ← instantiateMVars (← inferType args[i]!)
-      if (← isProp dom) && (← visiblePropPremiseMatches dom argType) then
+      -- `isProp` can return false for a negation whose data parameter is
+      -- still a metavariable, even though the binder is visibly a
+      -- proposition (`?x ≠ 0`). The structural matcher already rejects data
+      -- binders such as `Nat`, so let it classify every binder directly.
+      if ← visiblePropPremiseMatches dom argType then
         if let some proof ← mkBinderApplicationFromAssignedArgs? fnExpr fnType args i argExpr then
           setMCtx savedMCtx
           return some proof
