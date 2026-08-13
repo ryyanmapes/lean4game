@@ -15,8 +15,14 @@ interface VisualHarness {
   getProofAudit(): {
     completed: boolean
     processing: boolean
+    proofBody: string
     coreLines: string[]
     interactiveLines: string[]
+  }
+  getCurrentStreamSnapshot(): {
+    streamId: string
+    goalType: string
+    hypTypes: Record<string, string>
   }
   getLastTransformRewriteDebug(): unknown
 }
@@ -442,6 +448,57 @@ describe('NNG4 implication and definition display regressions', () => {
       const right = Math.max(...circles.map(circle => circle.getBoundingClientRect().right))
       expect((right - left) / mapRect.width, 'world tree occupies most of the phone width').to.be.greaterThan(0.55)
       expect(map.scrollWidth, 'zoom does not reintroduce horizontal panning').to.be.at.most(map.clientWidth + 2)
+
+      const tutorial = map.querySelector<SVGGraphicsElement>('[data-world-id="Tutorial"] .world-circle')
+      expect(tutorial, 'Tutorial root world').to.exist
+      const tutorialRect = tutorial!.getBoundingClientRect()
+      expect(
+        Math.abs(tutorialRect.left + tutorialRect.width / 2 - (mapRect.left + mapRect.width / 2)),
+        'the first world is horizontally centred',
+      ).to.be.at.most(3)
+
+      const tutorialTitle = map.querySelector<HTMLElement>('[data-world-id="Tutorial"] .world-title')
+      expect(tutorialTitle, 'Tutorial world label').to.exist
+      expect(parseFloat(getComputedStyle(tutorialTitle!).fontSize), 'world labels remain legible').to.be.at.least(14)
+    })
+  })
+
+  it('keeps Addition 3 rewrites on the manually selected stream', () => {
+    cy.viewport(390, 844)
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/3/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b'], 'induction b with d hd')
+      await player.perform('induction b with d hd')
+    })
+
+    cy.get('.mobile-page-link.graph-link', { timeout: LOAD_TIMEOUT }).click()
+    cy.get('.mobile-graph-page.open [data-testid="proof-stream-leaf"][data-completed="false"]', {
+      timeout: LOAD_TIMEOUT,
+    }).should('have.length', 2).eq(1).click({ force: true })
+    cy.get('.mobile-graph-page.open .mobile-side-return-link').click()
+
+    cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+      const snapshot = (win as HarnessWindow).__visualTestHarness?.getCurrentStreamSnapshot()
+      expect(snapshot?.goalType, 'the player-selected successor branch')
+        .to.match(/a\s*\+\s*succ\s*\(?\s*d\s*\)?\s*=\s*succ\s*\(?\s*d\s*\)?\s*\+\s*a/u)
+    }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.performRewriteOnSide('rw [add_succ]', 'left')
+    })
+
+    cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+      const harness = (win as HarnessWindow).__visualTestHarness
+      const snapshot = harness?.getCurrentStreamSnapshot()
+      const audit = harness?.getProofAudit()
+      expect(snapshot?.goalType, 'add_succ rewrites the selected successor goal')
+        .to.match(/succ\s*\(?\s*a\s*\+\s*d\s*\)?/u)
+      expect(audit?.proofBody, 'the backend command rotates to the selected live stream')
+        .to.match(/rotate_left\s+drag_rw_lhs\s+\[(?:MyNat\.)?add_succ\]/u)
+      expect(audit?.coreLines.filter(line => line.includes('?')), 'Core tactics are valid').to.deep.equal([])
+      expect(audit?.interactiveLines.filter(line => line.includes('?')), 'interaction tactics are valid').to.deep.equal([])
     })
   })
 

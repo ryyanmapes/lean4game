@@ -51,7 +51,7 @@ const NMIN = 5
 const NLABEL = 8
 const NMAX = 16
 const NSPIRAL = 12
-const MINFONT = 12
+const MINFONT = 14
 
 interface VisualMapPalette {
   background: string
@@ -604,15 +604,26 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const bounds = (() => {
     const layoutBounds = arrangedLayout.bounds
     if (!layoutBounds || !isPhonePortraitViewport) return layoutBounds
-    const visibleX = Object.entries(nodes)
+    const visibleNodes = Object.entries(nodes)
       .filter(([worldId]) => visibleCount(worldId) > 0)
-      .map(([, node]) => node.position.x)
+    const visibleX = visibleNodes.map(([, node]) => node.position.x)
     if (endingPosition) visibleX.push(endingPosition.x)
     if (visibleX.length === 0) return layoutBounds
+    // The NNG tree is intentionally asymmetric below its root. Fitting the
+    // raw extrema therefore shifts the Tutorial world away from the centre of
+    // a phone even though the whole graph fits. Keep the fitted horizontal
+    // range symmetric around the first/root world; vertical scrolling still
+    // follows the player's current progress.
+    const firstWorldX = nodes.Tutorial?.position.x
+      ?? visibleNodes
+        .slice()
+        .sort(([, left], [, right]) => left.position.y - right.position.y)[0]?.[1].position.x
+      ?? (Math.min(...visibleX) + Math.max(...visibleX)) / 2
+    const halfWidth = Math.max(...visibleX.map(x => Math.abs(x - firstWorldX)))
     return {
       ...layoutBounds,
-      x1: Math.min(...visibleX),
-      x2: Math.max(...visibleX),
+      x1: firstWorldX - halfWidth,
+      x2: firstWorldX + halfWidth,
     }
   })()
 

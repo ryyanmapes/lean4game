@@ -645,7 +645,7 @@ declare global {
 function actionCommandForStream(
   playTactic: string,
   stream: GoalStream | null,
-  leanGoalOrder: string[],
+  currentGoalOrder: string[],
 ): { command: string; rotation: string | null } {
   if (!stream) return { command: playTactic, rotation: null }
   // A literal reflexive equality has a canonical core tactic. Using `rfl`
@@ -656,7 +656,7 @@ function actionCommandForStream(
     stream.goal.clickAction?.tooltip,
     goalIsReflexiveEquality(stream),
   )
-  return commandForGoalAction(command, stream.id, leanGoalOrder)
+  return commandForGoalAction(command, stream.id, currentGoalOrder)
 }
 
 function parsedGoalEquality(stream: GoalStream) {
@@ -1906,7 +1906,6 @@ export function VisualCanvas({
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
-  const leanGoalOrderRef = useRef<string[]>((resumeState?.canvasState ?? initialState).streams.map(stream => stream.id))
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [failingTheoremCopyId, setFailingTheoremCopyId] = useState<string | null>(null)
   const [solvedGoalId, setSolvedGoalId] = useState<string | null>(null)
@@ -2501,7 +2500,7 @@ export function VisualCanvas({
     const inferredAction = actionCommandForStream(
       playTactic,
       focusedStream,
-      leanGoalOrderRef.current,
+      canvasState.streams.map(stream => stream.id),
     )
     const command = options?.commandOverride ?? inferredAction.command
     const rotation = inferredAction.rotation
@@ -2605,7 +2604,6 @@ export function VisualCanvas({
     const leanCanvas = returnedIntroStreams.length > 0
       ? { streams: returnedIntroStreams, completed: false }
       : proofStateToCanvas(result)
-    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -2706,7 +2704,6 @@ export function VisualCanvas({
       pendingMobileInsertionRef.current = null
       return false
     }
-    leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
     const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
     const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
@@ -3714,7 +3711,7 @@ export function VisualCanvas({
     const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
-      leanGoalOrderRef.current,
+      canvasState.streams.map(stream => stream.id),
     )
     closeReductionTooltip()
     updateProcessingState(true)
@@ -3738,7 +3735,6 @@ export function VisualCanvas({
     if (result === null) return false
 
     const leanCanvas = proofStateToCanvas(result)
-    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -3881,7 +3877,7 @@ export function VisualCanvas({
     const action = actionCommandForStream(
       playTactic,
       focusedStream,
-      leanGoalOrderRef.current,
+      canvasState.streams.map(stream => stream.id),
     )
     const rotation = action.rotation
     let command = action.command
@@ -3944,7 +3940,6 @@ export function VisualCanvas({
     // render cycle — after rw, Lean assigns a new mvarId to the goal, so we must update the
     // tracked stream ID to the stream at the same index, otherwise TransformationView unmounts.
     const leanCanvas = proofStateToCanvas(result)
-    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = !result.completed && lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
