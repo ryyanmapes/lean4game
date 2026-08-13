@@ -1206,11 +1206,27 @@ export class CompletePlaythroughDriver {
       if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
       source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
     }
+    const contradictionTarget = !match[2]
+      && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
+      && this.implicitGoalRewriteTarget
+      && this.hyp(this.implicitGoalRewriteTarget)
+        ? this.hyp(this.implicitGoalRewriteTarget)
+        : null
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(this.resolveName(match[2])))
-      : await waitFor('current goal', () => currentGoal(this.win))
+      : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     await this.dragAndWait(source, target, `${command} player drag`)
+    if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
+      const derivedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        .find(candidate => !beforeFinalNames.has(candidate))
+      if (!derivedName) throw new Error(`${command} did not derive the visible contradiction`)
+      await this.dragAndWait(
+        await waitFor(`derived contradiction ${derivedName}`, () => this.hyp(derivedName)),
+        await waitFor('False goal', () => currentGoal(this.win)),
+        `${command} contradiction drag to goal`,
+      )
+    }
     if (match[2]) {
       if (harness(this.win).getProofAudit().completed) {
         throw new Error(`${command} incorrectly completed: ${JSON.stringify({
@@ -1460,6 +1476,16 @@ export class CompletePlaythroughDriver {
           }
         }
       }
+      if (target !== 'goal' && !this.hyp(target)) {
+        const replacement = visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"].transformable'),
+        ).at(-1)
+        const replacementName = replacement?.dataset.hypName
+        if (replacementName) {
+          this.aliases.set(rawTarget, replacementName)
+          target = replacementName
+        }
+      }
       await this.openTransform(target)
       const preferredSide = this.preferredRewriteSide
       if (target === 'goal' && preferredSide) {
@@ -1648,22 +1674,14 @@ export class CompletePlaythroughDriver {
     // declaration binders. When the complete declaration context is already
     // visible, associate it positionally with Lean's binder order instead of
     // trying to introduce a nonexistent extra binder by clicking the goal.
-    if (initialNames.length > 0) {
-      const claimedActualNames = new Set(
-        expectedNames.filter(expectedName => initialNames.includes(expectedName)),
-      )
-      const renamedActualNames = initialNames.filter(name => !claimedActualNames.has(name))
-      let renamedIndex = 0
-      expectedNames.forEach((expectedName, index) => {
-        if (initialNames.includes(expectedName)) {
-          this.aliases.set(expectedName, expectedName)
-          return
-        }
-        const actualName = renamedActualNames[renamedIndex]
-        if (actualName) renamedIndex += 1
-        if (actualName) this.aliases.set(expectedName, actualName)
-      })
-    }
+    // Once the complete context is visible, its hypothesis order is Lean's
+    // declaration order. Use that order as the authority: an exact-looking
+    // name can itself be a collision rename for an earlier binder (for
+    // example expected `ha, h` displayed as `h, h1`).
+    expectedNames.forEach((expectedName, index) => {
+      const actualName = initialNames[index]
+      if (actualName) this.aliases.set(expectedName, actualName)
+    })
     for (const expectedName of expectedNames) {
       if (this.hyp(expectedName)) continue
       throw new Error(`Declaration binder ${expectedName} is not visible after player introductions: ${JSON.stringify({
@@ -1776,6 +1794,10 @@ export class CompletePlaythroughDriver {
       const targetName = /^symm\s+at\s+(\S+)$/u.exec(normalized)?.[1]
       const target = targetName
         ? await waitFor(`hypothesis ${targetName}`, () => this.hyp(targetName))
+        : /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
+          && this.implicitGoalRewriteTarget
+          && this.hyp(this.implicitGoalRewriteTarget)
+          ? this.hyp(this.implicitGoalRewriteTarget)!
         : await waitFor('current goal', () => currentGoal(this.win))
       await this.dragTactic('symm', target)
       return
