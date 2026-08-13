@@ -681,6 +681,7 @@ export class CompletePlaythroughDriver {
   private implicitIntroAlreadyPerformed = false
   private preferredRewriteSide: 'left' | 'right' | null = null
   private implicitGoalRewriteTarget: string | null = null
+  private readonly pendingGoalRewrites: string[] = []
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -1027,6 +1028,7 @@ export class CompletePlaythroughDriver {
     click(option)
     await waitForPlayAttempt(this.win, previousAttempts, `${command} branch player action`)
     await waitForProofChange(this.win, before, `${command} branch selection`)
+    for (const pending of this.pendingGoalRewrites.splice(0)) await this.rewrite(pending)
   }
 
   private async clickGoal() {
@@ -1121,7 +1123,16 @@ export class CompletePlaythroughDriver {
   }
 
   private async sourceCard(name: string) {
-    return this.hyp(name) ?? await this.theorem(name)
+    const local = this.hyp(name)
+    if (local) return local
+    if (this.aliases.has(name)) {
+      const reconciledName = this.latestRelationName()
+      if (reconciledName) {
+        this.rememberAlias(name, reconciledName)
+        return await waitFor(`reconciled hypothesis ${name}`, () => this.hypExact(reconciledName))
+      }
+    }
+    return await this.theorem(name)
   }
 
   async placeTheoremCopy(name: string) {
@@ -1293,7 +1304,15 @@ export class CompletePlaythroughDriver {
         ? this.hypExact(this.implicitGoalRewriteTarget)
         : null
     const target = match[2]
-      ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(match[2]))
+      ? await waitFor(`hypothesis ${match[2]}`, () => {
+          const named = this.hyp(match[2])
+          if (named) return named
+          if (!this.aliases.has(match[2])) return null
+          const reconciledName = this.latestRelationName()
+          if (!reconciledName) return null
+          this.rememberAlias(match[2], reconciledName)
+          return this.hypExact(reconciledName)
+        })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     await this.dragAndWait(source, target, `${command} player drag`)
@@ -1533,6 +1552,15 @@ export class CompletePlaythroughDriver {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        if (!goal.classList.contains('transformable') && snapshot.goalOptionTactics.length > 0) {
+          // Lean can rewrite under an Or before choosing a branch, but the
+          // player must first choose which disjunct to construct. Defer this
+          // rewrite until that visible choice, then perform it on the selected
+          // equality goal before the following classic command.
+          this.pendingGoalRewrites.push(command)
+          continue
+        }
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
           && this.hypExact(this.implicitGoalRewriteTarget)) {
           // A negated goal becomes `False` after its equality premise is
