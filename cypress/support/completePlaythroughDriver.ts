@@ -1327,6 +1327,10 @@ export class CompletePlaythroughDriver {
       await waitFor('transformation view', () => {
       const overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay')
       if (overlay) return overlay
+      if (target !== 'goal') {
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        if (!snapshot.hypTypes[target]) target = this.latestRelationName() ?? target
+      }
       const element = target === 'goal' ? currentGoal(this.win) : this.hypExact(target)
       if (element && Date.now() - lastAttemptAt >= 300) {
         // Re-resolve the card for each attempt. Lean responses replace cards
@@ -1358,6 +1362,7 @@ export class CompletePlaythroughDriver {
       const dock = overlay.querySelector<HTMLElement>('.tr-rule-dock[data-layout-ready="true"]')
       return dock && getComputedStyle(dock).visibility !== 'hidden' ? dock : null
     })
+    let hypothesisFallback: HTMLElement | null = null
     for (const tabName of ['Everything', 'Hypotheses', '+', '*', '^', '\u2264', '012', 'Peano']) {
       const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
         .find(button => button.textContent?.trim() === tabName)
@@ -1373,6 +1378,11 @@ export class CompletePlaythroughDriver {
           `[data-rule-label="${cssEscape(resolvedName)}"], [data-rule-label="${cssEscape(name)}"]`,
         ))[0]
         if (rule) return rule
+        if (tabName === 'Hypotheses') {
+          hypothesisFallback = visible(
+            overlay.querySelectorAll<HTMLElement>('[data-rule-label]'),
+          ).at(-1) ?? hypothesisFallback
+        }
         const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
         if (!next || next.disabled) break
         click(next)
@@ -1381,8 +1391,14 @@ export class CompletePlaythroughDriver {
     const resolvedName = this.resolveName(name)
     const reconciledName = this.latestRelationName()
     if (allowReconciledFallback && reconciledName && reconciledName !== resolvedName) {
-      return this.transformRule(reconciledName, false)
+      try {
+        return await this.transformRule(reconciledName, false)
+      } catch {
+        // The rule menu can reconcile one frame after the proof snapshot.
+        // Fall through to the last actual Hypotheses card observed above.
+      }
     }
+    if (allowReconciledFallback && hypothesisFallback) return hypothesisFallback
     throw new Error(`Could not find rewrite rule ${name}`)
   }
 
