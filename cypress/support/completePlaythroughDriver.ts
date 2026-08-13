@@ -982,26 +982,35 @@ export class CompletePlaythroughDriver {
     await waitFor(`${tab} tray contents`, () =>
       visible(dock.querySelectorAll<HTMLElement>('.tr-tactic-card, .tr-theorem-card, [data-tactic-name], [data-theorem-name]'))[0]
       ?? (dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')?.disabled ? null : dock), 10_000)
-    if (tab === 'Theorems') {
-      // The category selection survives route changes while the proof page is
-      // mounted. Search from the visible All tab so a theorem in +/≤/* is not
-      // accidentally hidden by the category used in the preceding level.
-      await waitFor('All theorem category to activate', () => {
-        const all = dock.querySelector<HTMLButtonElement>('[data-theorem-category="all"]')
-        if (!all) return dock
-        if (all.classList.contains('active')) return all
-        click(all)
-        return null
-      }, 5_000)
-    }
-    await rewindPages(dock, 'Previous')
-    for (let page = 0; page < 100; page += 1) {
-      const card = visible(dock.querySelectorAll<HTMLElement>(selector))[0]
-      if (card) return card
-      const next = dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')
-      if (!next || next.disabled) break
-      click(next)
-      await sleep(40)
+    const categoryIds = tab === 'Theorems'
+      ? Array.from(dock.querySelectorAll<HTMLButtonElement>('[data-theorem-category]'))
+        .map(button => button.dataset.theoremCategory)
+        .filter((id): id is string => Boolean(id))
+      : []
+    // Search every visible theorem category through the same tab clicks and
+    // pagination a player uses. The selection survives route changes, and an
+    // asynchronous All-tab click alone was not sufficient to expose cards
+    // hidden in the 012/+/≤/* buckets.
+    for (const categoryId of categoryIds.length > 0 ? categoryIds : [null]) {
+      if (categoryId) {
+        await waitFor(`${categoryId} theorem category to activate`, () => {
+          const category = dock.querySelector<HTMLButtonElement>(
+            `[data-theorem-category="${cssEscape(categoryId)}"]`,
+          )
+          if (category?.classList.contains('active')) return category
+          if (category && !category.disabled) click(category)
+          return null
+        }, 5_000)
+      }
+      await rewindPages(dock, 'Previous')
+      for (let page = 0; page < 100; page += 1) {
+        const card = visible(dock.querySelectorAll<HTMLElement>(selector))[0]
+        if (card) return card
+        const next = dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')
+        if (!next || next.disabled) break
+        click(next)
+        await sleep(40)
+      }
     }
     throw new Error(`Could not find ${tab.toLowerCase()} card ${selector}`)
   }
@@ -1608,6 +1617,26 @@ export class CompletePlaythroughDriver {
     const parsed = parseRewrite(command)
     for (const rawTarget of parsed.targets) {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
+      const propositionTarget = target === 'goal' ? null : this.hypExact(target)
+      if (propositionTarget && /≤/u.test(propositionTarget.dataset.hypType ?? '')) {
+        // Dragging an equality theorem onto the proposition is the player's
+        // proof-preserving rewrite. Opening transformation mode on ≤ instead
+        // eliminates its existential definition and leaves only a witness and
+        // equality, which cannot subsequently accept le_one/succ_le_succ.
+        for (const rule of parsed.rules) {
+          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+          await this.dragAndWait(
+            await this.sourceCard(rule.name),
+            await waitFor(`≤ hypothesis ${rawTarget}`, () => this.hypExact(target)),
+            `${rule.name} proposition rewrite`,
+          )
+          const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          const createdName = afterNames.find(name => !beforeNames.has(name))
+          if (createdName) target = createdName
+          this.rememberAlias(rawTarget, target)
+        }
+        continue
+      }
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -1691,11 +1720,6 @@ export class CompletePlaythroughDriver {
           }
         }
       }
-      const preservedComparison = target === 'goal'
-        ? null
-        : /≤/u.test(harness(this.win).getCurrentStreamSnapshot().hypTypes[target] ?? '')
-          ? '≤'
-          : null
       await this.openTransform(target)
       const preferredSide = this.preferredRewriteSide
       if (target === 'goal' && preferredSide) {
@@ -1729,18 +1753,6 @@ export class CompletePlaythroughDriver {
         if (button && !button.disabled) click(button)
         return null
       })
-      if (preservedComparison) {
-        const snapshot = harness(this.win).getCurrentStreamSnapshot()
-        const comparisonName = snapshot.hypTypes[target]?.includes(preservedComparison)
-          ? target
-          : Object.entries(snapshot.hypTypes).reverse()
-            .find(([, type]) => type.includes(preservedComparison))?.[0]
-        if (!comparisonName) {
-          throw new Error(`Player rewrite lost the ${preservedComparison} proposition ${rawTarget}: ${JSON.stringify(snapshot)}`)
-        }
-        target = comparisonName
-        this.rememberAlias(rawTarget, comparisonName)
-      }
     }
   }
 
@@ -1888,6 +1900,44 @@ export class CompletePlaythroughDriver {
     const inductionTargetIndex = generalizedInduction
       ? expectedNames.indexOf(generalizedInduction[1])
       : -1
+    if (inductionTargetIndex >= 0) {
+      // Non-dependent assumptions can already be displayed while the natural
+      // variables they depend on remain in the forall goal. Count only cards
+      // introduced by these clicks; counting all cards mapped `a`/`b` onto
+      // the pre-existing `ha`/`h` propositions and made induction a no-op.
+      const initialNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      const namesToIntroduce = expectedNames.slice(0, inductionTargetIndex + 1)
+        .filter(name => !initialNames.includes(name))
+      const introducedNames: string[] = []
+      for (let attempt = 0; attempt < namesToIntroduce.length + 4; attempt += 1) {
+        if (introducedNames.length >= namesToIntroduce.length) break
+        const goal = currentGoal(this.win)
+        if (!goal?.classList.contains('clickable')) break
+        const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        await this.clickGoal()
+        const actualName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(name => !beforeNames.has(name))
+        if (actualName) introducedNames.push(actualName)
+      }
+      namesToIntroduce.forEach((expectedName, index) => {
+        const actualName = introducedNames[index]
+        if (actualName) this.rememberAlias(expectedName, actualName)
+      })
+      initialNames.filter(name => expectedNames.includes(name))
+        .forEach(name => this.rememberAlias(name, name))
+      this.deferredInitialBinderNames = expectedNames.slice(inductionTargetIndex + 1)
+        .filter(name => !initialNames.includes(name))
+      for (const expectedName of expectedNames.slice(0, inductionTargetIndex + 1)) {
+        if (this.hyp(expectedName)) continue
+        throw new Error(`Generalized induction binder ${expectedName} is not visible: ${JSON.stringify({
+          expectedNames,
+          initialNames,
+          introducedNames,
+          aliases: [...this.aliases.entries()],
+        })}`)
+      }
+      return
+    }
     const desiredInitialCount = inductionTargetIndex >= 0
       ? inductionTargetIndex + 1
       : expectedNames.length
