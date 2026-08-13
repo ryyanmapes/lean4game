@@ -13,6 +13,8 @@ interface StreamSnapshot {
   streamId: string
   goalType: string
   hypTypes: Record<string, string>
+  goalPlayTactic: string | null
+  goalOptionTactics: string[]
   currentStreamIsCompleted: boolean
 }
 
@@ -682,6 +684,7 @@ export class CompletePlaythroughDriver {
   private preferredRewriteSide: 'left' | 'right' | null = null
   private implicitGoalRewriteTarget: string | null = null
   private readonly pendingGoalRewrites: string[] = []
+  private deferredInitialBinderNames: string[] = []
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -903,6 +906,28 @@ export class CompletePlaythroughDriver {
     return this.hypExact(this.resolveName(name))
   }
 
+  /** Introduce binders deliberately left in the goal for a generalized
+   * induction. Each generated branch owns a fresh copy, so retain the expected
+   * declaration order and remap it from the cards created in this stream. */
+  private async exposeDeferredInitialBinders(name: string) {
+    if (!this.deferredInitialBinderNames.includes(name) || this.hyp(name)) return
+    const introduced: string[] = []
+    for (let attempt = 0; attempt < this.deferredInitialBinderNames.length; attempt += 1) {
+      const snapshot = harness(this.win).getCurrentStreamSnapshot()
+      if (snapshot.goalPlayTactic !== 'click_goal') break
+      const beforeNames = new Set(Object.keys(snapshot.hypTypes))
+      await this.clickGoal()
+      const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        .find(candidate => !beforeNames.has(candidate))
+      if (!createdName) break
+      introduced.push(createdName)
+    }
+    introduced.forEach((actualName, index) => {
+      const expectedName = this.deferredInitialBinderNames[index]
+      if (expectedName) this.rememberAlias(expectedName, actualName)
+    })
+  }
+
   /** Look up an already-resolved Lean name without following another alias. */
   private hypExact(name: string) {
     const baseSelector = `[data-testid="hyp-card"][data-hyp-name="${cssEscape(name)}"]`
@@ -1063,6 +1088,7 @@ export class CompletePlaythroughDriver {
   private async cases(command: string) {
     const match = /^cases\s+(\S+)/u.exec(command)
     if (!match) throw new Error(`Unsupported cases command: ${command}`)
+    await this.exposeDeferredInitialBinders(match[1])
     const beforeSnapshot = harness(this.win).getCurrentStreamSnapshot()
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
     const target = await waitFor(`hypothesis ${match[1]}`, () => this.hyp(match[1]))
@@ -1123,6 +1149,7 @@ export class CompletePlaythroughDriver {
   }
 
   private async sourceCard(name: string) {
+    await this.exposeDeferredInitialBinders(name)
     const local = this.hyp(name)
     if (local) return local
     if (this.aliases.has(name)) {
@@ -1303,6 +1330,7 @@ export class CompletePlaythroughDriver {
       && this.hypExact(this.implicitGoalRewriteTarget)
         ? this.hypExact(this.implicitGoalRewriteTarget)
         : null
+    if (match[2]) await this.exposeDeferredInitialBinders(match[2])
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => {
           const named = this.hyp(match[2])
@@ -1550,6 +1578,26 @@ export class CompletePlaythroughDriver {
     const parsed = parseRewrite(command)
     for (const rawTarget of parsed.targets) {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
+      const propositionTarget = target === 'goal' ? null : this.hypExact(target)
+      if (propositionTarget && /≤/u.test(propositionTarget.dataset.hypType ?? '')) {
+        // Rewriting a displayed ≤ through its existential reduction would
+        // destroy the proposition card and make later theorems such as
+        // succ_le_succ/le_one inapplicable. Equality-on-proposition dragging
+        // is the player's proof-producing rewrite and preserves the ≤ result.
+        for (const rule of parsed.rules) {
+          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+          await this.dragAndWait(
+            await this.sourceCard(rule.name),
+            await waitFor(`≤ hypothesis ${rawTarget}`, () => this.hypExact(target)),
+            `${rule.name} proposition rewrite`,
+          )
+          const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          const createdName = afterNames.find(name => !beforeNames.has(name))
+          if (createdName) target = createdName
+          this.rememberAlias(rawTarget, target)
+        }
+        continue
+      }
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -1589,8 +1637,10 @@ export class CompletePlaythroughDriver {
           this.implicitGoalRewriteTarget = introducedName
         }
       } else if (!this.hypExact(target)) {
+        await this.exposeDeferredInitialBinders(rawTarget)
+        target = this.resolveName(rawTarget)
         const existingName = this.latestRelationName()
-        if (existingName) {
+        if (!this.hypExact(target) && existingName) {
           // Clicking a ≤ proposition replaces it with a witness and equality.
           // Address that visible equality rather than clicking the unrelated
           // disjunction goal while trying to recover the former ≤ card.
@@ -1801,15 +1851,23 @@ export class CompletePlaythroughDriver {
    * now presents these binders in the goal instead of pre-populating the
    * canvas, so the reference proof's first command must see the same context
    * that Lean's theorem body sees. */
-  async prepareInitialBinders(expectedNames: string[]) {
+  async prepareInitialBinders(expectedNames: string[], firstCommand = '') {
     // First expose the entire declaration context through the same successive
     // goal clicks a player makes. Mapping aliases while only a prefix is
     // visible is ambiguous: a visible `h` may be Lean's collision-safe name
     // for an earlier `ha`, while the declaration's real `h` is still in the
     // goal. That was causing later commands to target the wrong card.
-    for (let attempt = 0; attempt < expectedNames.length + 4; attempt += 1) {
+    const generalizedInduction = /^induction\s+(\S+).+\bgeneralizing\s+/u.exec(firstCommand)
+    const inductionTargetIndex = generalizedInduction
+      ? expectedNames.indexOf(generalizedInduction[1])
+      : -1
+    const desiredInitialCount = inductionTargetIndex >= 0
+      ? inductionTargetIndex + 1
+      : expectedNames.length
+    this.deferredInitialBinderNames = expectedNames.slice(desiredInitialCount)
+    for (let attempt = 0; attempt < desiredInitialCount + 4; attempt += 1) {
       const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      if (names.length >= expectedNames.length) break
+      if (names.length >= desiredInitialCount) break
       const goal = currentGoal(this.win)
       if (!goal?.classList.contains('clickable')) break
       await this.clickGoal()
@@ -1827,11 +1885,11 @@ export class CompletePlaythroughDriver {
     // declaration order. Use that order as the authority: an exact-looking
     // name can itself be a collision rename for an earlier binder (for
     // example expected `ha, h` displayed as `h, h1`).
-    expectedNames.forEach((expectedName, index) => {
+    expectedNames.slice(0, desiredInitialCount).forEach((expectedName, index) => {
       const actualName = initialNames[index]
       if (actualName) this.rememberAlias(expectedName, actualName)
     })
-    for (const expectedName of expectedNames) {
+    for (const expectedName of expectedNames.slice(0, desiredInitialCount)) {
       if (this.hyp(expectedName)) continue
       throw new Error(`Declaration binder ${expectedName} is not visible after player introductions: ${JSON.stringify({
         expectedNames,

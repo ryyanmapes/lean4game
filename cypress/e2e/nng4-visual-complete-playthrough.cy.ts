@@ -178,7 +178,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
 
       cy.window().then(win => {
         player = new CompletePlaythroughDriver(win)
-        return player.prepareInitialBinders(solution.initialBinderNames)
+        return player.prepareInitialBinders(solution.initialBinderNames, solution.commands[0] ?? '')
       })
 
       solution.commands.forEach((command, index) => {
