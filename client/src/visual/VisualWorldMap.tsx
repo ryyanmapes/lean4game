@@ -571,6 +571,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   }, [gameId, worldSize])
 
   const [viewportSize, setViewportSize] = React.useState(getViewportSize)
+  const [phoneScrollbarGutter, setPhoneScrollbarGutter] = React.useState(0)
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
   React.useEffect(() => {
     const onResize = () => {
@@ -787,6 +788,19 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     : 0
   const dx = contentDx != null ? contentDx + extraViewBoxUnits : null
 
+  React.useLayoutEffect(() => {
+    const scrollEl = scrollRef.current
+    if (!scrollEl || !isPhonePortraitViewport) {
+      setPhoneScrollbarGutter(0)
+      return
+    }
+    // Flex centring uses the scroll area's content box, which excludes a
+    // classic vertical scrollbar. Compensate by half of that measured gutter
+    // so the root world is centred in the full phone viewport as well.
+    const gutter = Math.max(0, scrollEl.offsetWidth - scrollEl.clientWidth)
+    setPhoneScrollbarGutter(current => current === gutter ? current : gutter)
+  }, [bounds, isPhonePortraitViewport, svgDisplayWidth, viewportSize])
+
   const appliedFocusRef = React.useRef<string | null>(null)
   const focusMap = React.useCallback(() => {
     const scrollEl = scrollRef.current
@@ -888,6 +902,9 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             ? `${s * bounds.x1 - hPadding - extraViewBoxUnits / 2} ${s * bounds.y1 - padding} ${dx} ${s * (bounds.y2 - bounds.y1) + 2 * padding}`
             : ''}
           className="visual-map-svg world-selection"
+          style={isPhonePortraitViewport && phoneScrollbarGutter > 0
+            ? { transform: `translateX(${phoneScrollbarGutter / 2}px)` }
+            : undefined}
         >
           {svgElements}
         </svg>

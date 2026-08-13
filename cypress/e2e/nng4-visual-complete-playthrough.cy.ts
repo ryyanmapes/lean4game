@@ -198,9 +198,17 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
 
   for (const solution of playableSolutions) {
     it(`${solution.world} ${solution.level}: ${solution.title}`, () => {
-      cy.viewport(1920, 1080)
+      // Exercise the same responsive layout and visible branch controls used
+      // by phone players. The shared driver deliberately switches to a live
+      // sibling and back after every split, then explicitly selects the next
+      // unfinished branch after completing one.
+      cy.viewport(390, 844)
       if (!applicationStarted) {
-        cy.visit(levelUrl(solution))
+        cy.visit(levelUrl(solution), {
+          onBeforeLoad(win) {
+            win.localStorage.setItem('visual_auto_branch_switch', 'false')
+          },
+        })
         applicationStarted = true
       } else {
         cy.window().then(win => {
@@ -288,7 +296,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
 
   for (const solution of completionNeutralSolutions) {
     it(`${solution.world} ${solution.level}: ${solution.title} (completion-neutral contract)`, () => {
-      cy.viewport(1920, 1080)
+      cy.viewport(390, 844)
       cy.visit(levelUrl(solution))
       applicationStarted = true
       cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })

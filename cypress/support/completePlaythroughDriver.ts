@@ -791,6 +791,36 @@ export class CompletePlaythroughDriver {
 
   constructor(private readonly win: DriverWindow) {}
 
+  /** Exercise the same visible stream controls a player uses while every
+   * branch is still live. Switching away and back catches stale active-stream
+   * state before the reference proof starts solving either branch. */
+  private async roundTripLiveProofBranch(expectedSplit: boolean) {
+    if (!expectedSplit) return
+    const before = harness(this.win).getCurrentStreamSnapshot()
+    const nextButton = await waitFor('the next live proof-stream control', () =>
+      visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="stream-nav-next"]:not(:disabled), button[aria-label="Next proof stream"]:not(:disabled)',
+      ))[0] ?? null)
+
+    click(nextButton)
+    const sibling = await waitFor('the player-selected sibling proof stream', () => {
+      const snapshot = harness(this.win).getCurrentStreamSnapshot()
+      return snapshot.streamId !== before.streamId && currentGoal(this.win) ? snapshot : null
+    })
+
+    const previousButton = await waitFor('the previous proof-stream control', () =>
+      visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="stream-nav-prev"]:not(:disabled), button[aria-label="Previous proof stream"]:not(:disabled)',
+      ))[0] ?? null)
+    click(previousButton)
+    await waitFor('the original proof stream after the player switches back', () => {
+      const snapshot = harness(this.win).getCurrentStreamSnapshot()
+      return snapshot.streamId === before.streamId && snapshot.streamId !== sibling.streamId && currentGoal(this.win)
+        ? snapshot
+        : null
+    })
+  }
+
   private normalizedProposition(value: string) {
     return value
       .replace(/->/gu, '→')
@@ -875,9 +905,15 @@ export class CompletePlaythroughDriver {
       )).find(candidate => candidate.dataset.streamId !== previousStreamId)
       if (leaf?.dataset.streamId) return { kind: 'leaf' as const, streamId: leaf.dataset.streamId }
       const arrow = visible(this.win.document.querySelectorAll<HTMLButtonElement>(
-        '[data-testid^="stream-nav-"].toward-incomplete:not(:disabled)',
+        '[data-testid^="stream-nav-"].toward-incomplete:not(:disabled), ' +
+        'button[aria-label="Previous proof stream"].toward-incomplete:not(:disabled), ' +
+        'button[aria-label="Next proof stream"].toward-incomplete:not(:disabled)',
       ))[0]
-      if (arrow) return { kind: 'arrow' as const, testId: arrow.getAttribute('data-testid') ?? '' }
+      if (arrow) return {
+        kind: 'arrow' as const,
+        testId: arrow.getAttribute('data-testid'),
+        ariaLabel: arrow.getAttribute('aria-label'),
+      }
       try {
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
         if (
@@ -898,8 +934,11 @@ export class CompletePlaythroughDriver {
           `[data-testid="proof-stream-leaf"][data-stream-id="${cssEscape(route.streamId)}"]`,
         ))[0] ?? null
       }
+      const arrowSelector = route.testId
+        ? `[data-testid="${cssEscape(route.testId)}"]`
+        : `button[aria-label="${cssEscape(route.ariaLabel ?? '')}"]`
       return visible(this.win.document.querySelectorAll<HTMLButtonElement>(
-        `[data-testid="${cssEscape(route.testId)}"].toward-incomplete:not(:disabled)`,
+        `${arrowSelector}.toward-incomplete:not(:disabled)`,
       ))[0] ?? null
     }
     let lastClickAt = 0
@@ -1231,7 +1270,9 @@ export class CompletePlaythroughDriver {
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
     const target = await waitFor(`hypothesis ${match[1]}`, () => this.hyp(match[1]))
     const type = target.dataset.hypType ?? ''
-    if (/^(?:\u2115|Nat|MyNat)$/u.test(type.trim())) {
+    const casesNumber = /^(?:\u2115|Nat|MyNat)$/u.test(type.trim())
+    const casesOr = type.includes('\u2228')
+    if (casesNumber) {
       await this.dragTactic('cases', target)
     } else if (type.trim() === 'False') {
       // `cases h` is its own explicit player interaction and is taught before
@@ -1264,6 +1305,7 @@ export class CompletePlaythroughDriver {
     for (const expected of expectedNames.slice(actualNames.length)) {
       this.pendingBranchAliases.push({ expected, before: beforeNames })
     }
+    await this.roundTripLiveProofBranch(casesNumber || casesOr)
   }
 
   private async induction(command: string) {
@@ -1299,6 +1341,7 @@ export class CompletePlaythroughDriver {
       ))[0] ?? null
     })
     this.rememberIntroducedNames(command, names)
+    await this.roundTripLiveProofBranch(true)
   }
 
   private async sourceCard(name: string) {
