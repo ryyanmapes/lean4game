@@ -1045,6 +1045,19 @@ private def annotateFromSourceSimple (source : String) : Option StepAnnotation :
   else if src.startsWith "drag_rw [" && src.endsWith "]" then
     let inner := (src.drop 9).dropEnd 1 |>.toString   -- content between the brackets, e.g. "h" or "← h"
     some { playTactic := src, leanTactic := some s!"rw [{inner}]" }
+  else if src.startsWith "drag_goal " then
+    let rawHypName := (src.drop 10).trimAscii.toString
+    let hypName :=
+      if rawHypName.startsWith "← " then
+        (rawHypName.drop 2).trimAscii.toString
+      else
+        rawHypName
+    let firstRw := if rawHypName.startsWith "← " then s!"rw [← {hypName}]" else s!"rw [{hypName}]"
+    let secondRw := if rawHypName.startsWith "← " then s!"rw [{hypName}]" else s!"rw [← {hypName}]"
+    some {
+      playTactic := src
+      leanTactic := some s!"first | exact {hypName} | {firstRw} | {secondRw} | apply {hypName} | exact False.elim {hypName}"
+    }
   else if src.startsWith "drag_" then
     some { playTactic := src, leanTactic := none }
   else if src.startsWith "delete_theorem " then
