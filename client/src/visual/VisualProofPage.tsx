@@ -623,27 +623,7 @@ export function VisualProofPage() {
           }
           if (theoremKind !== 'equality') continue
           const parsed = parseTheoremStatement(statement, thm.displayName || thm.name, thm.name)
-          if (!parsed) continue
-          hyps.push({ ...parsed, category: thm.category })
-
-          // Equality lemmas are useful outside the full-screen transformation
-          // view too: dragging one from Combining Mode directly onto a
-          // transformable proposition is how a player rewrites a goal that is
-          // also constructable (for example a bare `≤` goal). Omitting these
-          // cards made such goals a dead end because double-click correctly
-          // prefers Construction Mode. Keep the same compact quantified layout
-          // and inventory category in both menus.
-          const theoremDisplay = buildEqualityTheoremDisplay(statement)
-          propositionHyps.push({
-            id: thm.name,
-            theoremName: thm.name,
-            label: thm.displayName || thm.name,
-            proposition: theoremDisplay.mainText,
-            reductionForms: inferAtomicReductionForms(theoremDisplay.mainText),
-            forallFooter: theoremDisplay.forallFooter,
-            forallSpecification: theoremDisplay.forallSpecification,
-            category: thm.category,
-          })
+          if (parsed) hyps.push({ ...parsed, category: thm.category })
         }
         setTheoremEqualityHyps(hyps)
         setPropositionTheorems(propositionHyps)
