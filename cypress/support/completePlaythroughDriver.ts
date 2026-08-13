@@ -1,4 +1,9 @@
-import { matchAndCapture, parse } from '../../client/src/visual/expr-engine'
+import {
+  expressionsEqual,
+  matchAndCapture,
+  parse,
+  substituteVariables,
+} from '../../client/src/visual/expr-engine'
 import type { ExpressionNode } from '../../client/src/visual/expr-types'
 
 interface ProofAudit {
@@ -622,6 +627,22 @@ function matchesPartiallyAppliedRule(
     if (!bindings) return false
     const binderNames = forallBinderNames(card)
     const patternNames = expressionVariableNames(parsedPattern)
+    const parsedArgs = explicitArgs.map(parseExplicitArgument)
+    const isWildcard = (argument: ExpressionNode) =>
+      argument.type === 'variable' && argument.name === 'visualWildcard'
+    if (parsedArgs.length >= patternNames.length && parsedArgs.every(argument => !isWildcard(argument))) {
+      const explicitBindings: Record<string, ExpressionNode> = {}
+      parsedArgs.forEach((argument, index) => {
+        const patternName = patternNames[index]
+        const binderName = binderNames[index]
+        if (patternName) explicitBindings[patternName] = argument
+        if (binderName) explicitBindings[binderName] = argument
+      })
+      return expressionsEqual(
+        parse(expressionText),
+        substituteVariables(parsedPattern, explicitBindings),
+      )
+    }
     return explicitArgs.every((argument, index) => {
       const binderName = binderNames[index]
       // Pretty-printed forall names can differ from the equality body's
@@ -629,7 +650,7 @@ function matchesPartiallyAppliedRule(
       // pattern, which is precisely how explicit theorem arguments bind.
       const actual = (patternNames[index] ? bindings[patternNames[index]] : undefined)
         ?? (binderName ? bindings[binderName] : undefined)
-      return actual ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : false
+      return actual ? matchesExplicitArgument(actual, parsedArgs[index]!) : false
     })
   } catch {
     // Explicit Lean arguments are constraints, not hints. If a card's

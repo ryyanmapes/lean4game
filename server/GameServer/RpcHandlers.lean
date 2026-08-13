@@ -1132,6 +1132,13 @@ private def annotateFromSource (source : String) (goalBefore? : Option MVarId :=
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
         else if let some drag := (← parseDragGoal? innerSource) then
           let leanTactic? ← dragGoalAnnotationForParsed? drag goal
+          -- The interaction has already succeeded, so a missing specialized
+          -- annotation is a context-recovery failure rather than an invalid
+          -- proof step. Preserve a valid core proof by replaying drag_goal's
+          -- ordered strategies in ordinary Lean syntax. `first` commits to
+          -- the same first tactic that succeeds and never emits a `?` line.
+          let leanTactic? := leanTactic?.orElse fun _ => some <|
+            s!"first | exact {drag.hypName} | rw [{drag.hypName}] | rw [← {drag.hypName}] | apply {drag.hypName} | exact False.elim {drag.hypName}"
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
         else if let some drag := parseDragApply? innerSource then
           let leanTactic? ← dragApplyAnnotationForParsed? drag goal
