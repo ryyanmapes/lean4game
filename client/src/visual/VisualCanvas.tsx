@@ -3969,6 +3969,35 @@ export function VisualCanvas({
         }
     let nextStream = focusedStreams[0] ?? null
     let preservedAutoCompletedReflexiveGoal = false
+    // A side-scoped `conv` rewrite can expose its temporary expression focus
+    // (for example `x + 0`) as the RPC step's focused goal even though the
+    // actual proof goal is still the enclosing equality. Transformation mode
+    // always rewrites a relation into another relation, so repair that narrow
+    // trace artifact from the expression we just rendered. Otherwise the
+    // player sees a Nat expression as a goal and cannot perform the required
+    // final `rfl` click.
+    if (
+      transformTarget?.kind === 'goal' &&
+      nextStream !== null &&
+      expectedGoal &&
+      parsedGoalTarget(nextStream, comparisonTransformEnabled) === null
+    ) {
+      const returnedStreamId = nextStream.id
+      const repairedStream = synthesizeGoalRewriteContinuation(nextStream, expectedGoal)
+      nextTree = replaceLeafStream(nextTree, returnedStreamId, repairedStream)
+      nextActiveId = repairedStream.id
+      focusedStreams = focusedStreams.map(stream =>
+        stream.id === returnedStreamId ? repairedStream : stream
+      )
+      nextCanvas = {
+        ...nextCanvas,
+        completed: false,
+        streams: nextCanvas.streams.map(stream =>
+          stream.id === returnedStreamId ? repairedStream : stream
+        ),
+      }
+      nextStream = repairedStream
+    }
     if (
       transformTarget?.kind === 'hyp' &&
       nextStream === null &&

@@ -511,6 +511,8 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
       .should('be.visible')
       .and('not.have.class', 'solved')
+      .and('have.attr', 'data-goal-text')
+      .and('match', /x\s*\+\s*0\s*=\s*x\s*\+\s*0/u)
 
     performPlayerGestures(['rfl'])
 
