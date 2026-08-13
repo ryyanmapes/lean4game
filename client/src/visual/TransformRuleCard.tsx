@@ -59,6 +59,8 @@ export function EqualityHypCard({
       id={dragId}
       data-rule-id={dragId}
       data-rule-label={label}
+      data-rule-source={isReverse ? rhsStr : lhsStr}
+      data-rule-target={isReverse ? lhsStr : rhsStr}
       {...listeners}
       {...attributes}
       onClick={onClick}

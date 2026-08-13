@@ -611,7 +611,10 @@ function matchesPartiallyAppliedRule(
   if (explicitArgs.length === 0) return true
   const expressionText = target.dataset.exprText
   const symbol = card.querySelector<HTMLElement>('.tr-symbol')?.textContent ?? ''
-  const sourcePattern = symbol.split('\u2192', 1)[0]?.trim()
+  // OverflowMarquee may render duplicate text nodes for animation, so its
+  // combined textContent is not an authoritative theorem formula. Cards
+  // expose the unformatted source relation explicitly for structural tests.
+  const sourcePattern = card.dataset.ruleSource ?? symbol.split('\u2192', 1)[0]?.trim()
   if (!expressionText || !sourcePattern) return true
   try {
     const parsedPattern = parse(sourcePattern)
@@ -629,9 +632,13 @@ function matchesPartiallyAppliedRule(
       return actual ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : false
     })
   } catch {
-    // If an older card format cannot be parsed, retain the normal visual
-    // target behavior instead of inventing a false negative.
-    return true
+    // Explicit Lean arguments are constraints, not hints. If a card's
+    // formatted formula cannot be parsed, accepting an arbitrary visible
+    // occurrence silently rewrites the wrong subexpression (notably for
+    // commutativity, where almost every multiplication is otherwise valid).
+    // Fail closed and let the driver report that no faithful player target
+    // exists instead of discarding the user's structural selection.
+    return false
   }
 }
 
@@ -1716,6 +1723,22 @@ export class CompletePlaythroughDriver {
           // only the goal half until a branch is selected; replaying the whole
           // `rw [...] at h ⊢` command would incorrectly rewrite h twice.
           this.pendingGoalRewrites.push(command.replace(/\s+at\s+.+$/u, ''))
+          continue
+        }
+        if (goal.classList.contains('constructable') && goal.classList.contains('transformable')) {
+          // Double-click deliberately opens construction for a bare ≤ goal.
+          // Rewriting that same proposition remains available to players by
+          // dragging an equality card directly onto it. Reproduce that gesture
+          // instead of repeatedly opening the construction overlay while
+          // waiting for transformation mode.
+          if (parsed.repeat || parsed.occurrence !== null || parsed.rules.some(rule => rule.reverse || rule.args.length > 0)) {
+            throw new Error(`Unsupported direct goal rewrite on a constructable proposition: ${command}`)
+          }
+          for (const rule of parsed.rules) {
+            const source = await this.sourceCard(rule.name)
+            const liveGoal = await waitFor('current constructable rewrite goal', () => currentGoal(this.win))
+            await this.dragAndWait(source, liveGoal, `${rule.name} direct goal rewrite`)
+          }
           continue
         }
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
