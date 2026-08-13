@@ -1402,7 +1402,23 @@ export class CompletePlaythroughDriver {
       }
       const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       const createdName = afterNames.find(candidate => !beforeFinalNames.has(candidate))
-      if (createdName) this.rememberAlias(match[2], createdName)
+      let resultName = createdName
+      // Applying a generalized induction hypothesis to an equality can leave
+      // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
+      // ordinary proposition-on-implication drags while a visible premise
+      // matches, then bind the classic target name to the actual conclusion.
+      for (let premise = 0; resultName && premise < 8; premise += 1) {
+        const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
+        const matchingHypothesis = visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        ).find(hypothesis => hypothesis !== resultCard && matchesTheoremPremise(resultCard, hypothesis, []))
+        if (!matchingHypothesis) break
+        const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        await this.dragAndWait(resultCard, matchingHypothesis, `${command} remaining premise application`)
+        resultName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(candidate => !namesBeforeApplication.has(candidate)) ?? resultName
+      }
+      if (resultName) this.rememberAlias(match[2], resultName)
     }
   }
 

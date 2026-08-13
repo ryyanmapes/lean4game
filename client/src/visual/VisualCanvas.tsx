@@ -3842,6 +3842,14 @@ export function VisualCanvas({
           })()
         : parsedGoalTarget(focusedStream, comparisonTransformEnabled)
       : null
+    const displayedFocusedTarget = focusedStream
+      ? transformTarget?.kind === 'hyp'
+        ? (() => {
+            const card = focusedStream.hyps.find(candidate => candidate.id === transformTarget.hypId)
+            return card ? parseTransformTarget(TaggedText_stripTags(card.hyp.type).trim()) : null
+          })()
+        : parseTransformTarget(TaggedText_stripTags(focusedStream.goal.type).trim())
+      : null
     const selectedRoot = parsedFocusedTarget
       ? (workingSide === 'left' ? parsedFocusedTarget.lhs : parsedFocusedTarget.rhs)
       : null
@@ -3867,8 +3875,8 @@ export function VisualCanvas({
     // with its witness equality. A normal Lean rewrite acts on the proposition
     // itself and preserves a card that can still accept le_one/succ_le_succ.
     if (
-      parsedFocusedTarget &&
-      parsedFocusedTarget.relation !== '=' &&
+      displayedFocusedTarget &&
+      displayedFocusedTarget.relation !== '=' &&
       transformTarget &&
       (!path || path.length === 0)
     ) {
@@ -3883,7 +3891,7 @@ export function VisualCanvas({
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
     // search. The player selected an exact expression, so make that theorem
     // parameter explicit and retain the selected side/path with `conv`.
-    if (explicitReverseArg && transformTarget && parsedFocusedTarget?.relation === '=') {
+    if (explicitReverseArg && transformTarget && displayedFocusedTarget?.relation === '=') {
       const scopedRewrite = explicitReverseRewriteCommand(
         hypLabel,
         explicitReverseArg,
