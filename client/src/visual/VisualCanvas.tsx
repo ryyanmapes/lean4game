@@ -40,7 +40,7 @@ import {
   replaceLeafStream,
   type ProofStreamTreeNode,
 } from './proofTree'
-import { reconcileProofTreeAfterInteraction } from './streamReconciliation'
+import { inferLocalTheoremPremiseApplication, reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 import { goalInfoVisibleAfterTactics } from './levelPresentation'
 import {
@@ -1232,6 +1232,8 @@ function inferLeanTacticFromVisualInteraction(
         return `have ${inferCreatedHypName(stream, resultStep) ?? nextFreshHypName(stream.hyps, 'h')} := ${application}`
       }
     }
+    const localTheoremApplication = inferLocalTheoremPremiseApplication(stream, firstName, secondName)
+    if (localTheoremApplication) return localTheoremApplication
     const createdName = inferCreatedHypName(stream, resultStep)
     if (createdName) return `have ${createdName} := ${secondName} ${firstName}`
   }

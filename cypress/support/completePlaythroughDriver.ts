@@ -1281,12 +1281,14 @@ export class CompletePlaythroughDriver {
         this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
       ).find(hypothesis => hypothesis !== source && matchesTheoremPremise(source, hypothesis, []))
       if (!matchingHypothesis) break
+      const sourceName = source.dataset.hypName
       const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
       await this.dragAndWait(source, matchingHypothesis, `${command} visible premise application`)
       const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
         .find(candidate => !namesBeforeApplication.has(candidate))
-      if (!createdName) throw new Error(`${command} did not derive its visible-premise conclusion`)
-      source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
+      const replacementName = createdName ?? sourceName
+      if (!replacementName) throw new Error(`${command} did not identify its visible-premise conclusion`)
+      source = await waitFor(`derived theorem ${replacementName}`, () => this.hyp(replacementName))
     }
     const contradictionTarget = !match[2]
       && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())

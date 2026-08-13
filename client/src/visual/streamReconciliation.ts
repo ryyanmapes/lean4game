@@ -428,6 +428,35 @@ function displayNameForRawHyp(rawName: string): string {
   return sanitizeLeanDisplayName(rawName)
 }
 
+/** Recover the ordinary Lean application represented by a successful
+ * theorem-on-premise drag. Derived theorem cards are replaced in place, so
+ * the generated `have` deliberately shadows the previous local theorem. */
+export function inferLocalTheoremPremiseApplication(
+  stream: GoalStream,
+  firstName: string,
+  secondName: string,
+): string | null {
+  const firstCard = findHypCardByInteractionName(stream, firstName)
+  const secondCard = findHypCardByInteractionName(stream, secondName)
+  if (!firstCard || !secondCard || Boolean(firstCard.isTheorem) === Boolean(secondCard.isTheorem)) {
+    return null
+  }
+  const firstType = normalizePropositionText(stripTaggedText(firstCard.hyp.type).trim())
+  const secondType = normalizePropositionText(stripTaggedText(secondCard.hyp.type).trim())
+  const firstImplication = splitImplicationTargetForRuntime(firstType)
+  const secondImplication = splitImplicationTargetForRuntime(secondType)
+  const [functionName, argumentName, theoremName] = firstImplication
+    && normalizePropositionText(firstImplication[0]) === normalizePropositionText(secondType)
+    ? [firstName, secondName, firstCard.isTheorem ? firstName : secondName]
+    : secondImplication
+      && normalizePropositionText(secondImplication[0]) === normalizePropositionText(firstType)
+      ? [secondName, firstName, secondCard.isTheorem ? secondName : firstName]
+      : []
+  return functionName && argumentName && theoremName
+    ? `have ${theoremName} := ${functionName} ${argumentName}`
+    : null
+}
+
 function theoremBaseForCard(card: HypCardType): string {
   return stripDerivedTheoremPrefix(rawHypName(card)) || (card.hyp.names[0] ?? 'theorem')
 }

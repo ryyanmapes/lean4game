@@ -11,7 +11,10 @@ const {
   completeLeafStream,
   findLeafForStream,
 } = require('../../tmp-stream-tests/visual/proofTree.js')
-const { reconcileProofTreeAfterInteraction } = require('../../tmp-stream-tests/visual/streamReconciliation.js')
+const {
+  inferLocalTheoremPremiseApplication,
+  reconcileProofTreeAfterInteraction,
+} = require('../../tmp-stream-tests/visual/streamReconciliation.js')
 const { proofStateToCanvas } = require('../../tmp-stream-tests/visual/leanToCanvas.js')
 
 test('authoritative proof completion discards a stale final focused goal', () => {
@@ -1149,6 +1152,22 @@ test('drag_to keeps a local theorem card green and overwrites it regardless of d
   assert.equal(hypTypeFor(streamB, 'thm_apply'), 'Q')
   assert.equal(findHyp(streamB, 'thm_apply')?.isTheorem, true)
   assert.equal(hypTypeFor(streamB, 'hp'), 'P')
+})
+
+test('local theorem premise drags always produce valid shadowing Lean', () => {
+  const focusedStream = stream('stream-thm-proof', 'a = b', 'main', [
+    hyp('hyp-theorem', 'thm_succ_inj', 'succ(a) = succ(b) → a = b', { isTheorem: true }),
+    hyp('hyp-p', 'h', 'succ(a) = succ(b)'),
+  ])
+
+  assert.equal(
+    inferLocalTheoremPremiseApplication(focusedStream, 'thm_succ_inj', 'h'),
+    'have thm_succ_inj := thm_succ_inj h',
+  )
+  assert.equal(
+    inferLocalTheoremPremiseApplication(focusedStream, 'h', 'thm_succ_inj'),
+    'have thm_succ_inj := thm_succ_inj h',
+  )
 })
 
 test('drag_to keeps both theorem cards and adds a fresh theorem result card', () => {
