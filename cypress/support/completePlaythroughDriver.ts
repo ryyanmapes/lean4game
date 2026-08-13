@@ -1515,6 +1515,15 @@ export class CompletePlaythroughDriver {
       }
       return
     }
+    const isExactCommand = command.startsWith('exact ')
+    if (isExactCommand && !match[2] && explicitArgs.length === 0) {
+      const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
+      // `exact` is the player gesture “drag a proof of the displayed goal to
+      // that goal”. Repeated applications can replace the classic Lean name
+      // several times, so prefer the currently visible proposition of the
+      // right type over a stale historical alias.
+      source = this.visibleHypothesisOfType(goalType) ?? source
+    }
     const sourceWasLocalHypothesis = source.matches('[data-testid="hyp-card"]')
     let usedPremiseApplication = false
     if (!match[2] && explicitArgs.length > 0) {
@@ -1569,6 +1578,7 @@ export class CompletePlaythroughDriver {
       && this.normalizedProposition(source.dataset.hypType ?? '')
         === this.normalizedProposition(currentGoalType)
     const contradictionTarget = !match[2]
+      && !isExactCommand
       && !sourceAlreadyProvesGoal
       && !sourceWasLocalHypothesis
       && /^False$/u.test(currentGoalType)
