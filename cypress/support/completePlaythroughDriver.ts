@@ -1374,6 +1374,7 @@ export class CompletePlaythroughDriver {
       }
       return
     }
+    const sourceWasLocalHypothesis = source.matches('[data-testid="hyp-card"]')
     let usedPremiseApplication = false
     if (!match[2] && explicitArgs.length > 0) {
       // Classic proofs spell out both term arguments and proof arguments. In
@@ -1466,7 +1467,12 @@ export class CompletePlaythroughDriver {
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
       // ordinary proposition-on-implication drags while a visible premise
       // matches, then bind the classic target name to the actual conclusion.
-      for (let premise = 0; resultName && premise < 8; premise += 1) {
+      // A local induction/function hypothesis can remain curried after its
+      // first application. A theorem dragged from the tray, however, has
+      // already had the selected `at h` premise applied by drag_apply; its
+      // derived atomic result must not be fed the same hypothesis again just
+      // because Lean exposes a definitionally reduced arrow type for `≠`.
+      for (let premise = 0; sourceWasLocalHypothesis && resultName && premise < 8; premise += 1) {
         const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
         // The card can also show a definitionally reduced implication below
         // an atomic proposition such as `b ≠ 0`. Only the authoritative main
