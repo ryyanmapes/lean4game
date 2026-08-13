@@ -34,7 +34,7 @@ jobs:
             specs: cypress/e2e/visual-mobile-pagination-stability.cy.ts
           - name: feedback and release contracts
             id: feedback-release
-            specs: cypress/e2e/feedback-report.cy.ts
+            specs: cypress/e2e/feedback-report.cy.ts,cypress/e2e/nng4-release-routes.cy.ts
           - name: Addition 1 player canary
             id: addition-1
             specs: cypress/e2e/nng4-visual-complete-playthrough.cy.ts

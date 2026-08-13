@@ -75,7 +75,7 @@ svg .level:hover .level-title {
   line-height: 1.35;
   text-align: center;
   white-space: normal;
-  pointer-events: none;
+  pointer-events: auto;
   box-shadow: 0 0.45rem 1.25rem rgba(0, 0, 0, 0.45);
 }
 

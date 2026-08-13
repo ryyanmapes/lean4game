@@ -81,9 +81,7 @@ describe('local NNG4 release maps', () => {
     cy.get('a[href*="/level/0"]').should('not.exist')
     cy.get('a.level title').contains(/^rfl$/u, { timeout: 30_000 })
     cy.get('a.level').first().focus()
-      .find('.level-name-tooltip')
-      .should('have.css', 'visibility', 'visible')
-      .and('not.be.empty')
+    cy.get('.map-level-name-tooltip').should('be.visible').and('not.be.empty')
 
     cy.get('a[aria-label="Open Tutorial World"]').click()
     cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1$/u)

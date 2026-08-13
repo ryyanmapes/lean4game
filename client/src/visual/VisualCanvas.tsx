@@ -4695,7 +4695,9 @@ export function VisualCanvas({
         (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
       )
       const minTop = (canvasRect?.top ?? 0) + 84
-      const maxTop = (trayRect?.top ?? window.innerHeight - trayHeight) - 120
+      // Keep enough room for the callout itself. The former 120px reserve
+      // clamped it onto the arrow at shorter desktop heights.
+      const maxTop = (trayRect?.top ?? window.innerHeight - trayHeight) - 48
 
       const nextGuides: HypGoalGuide[] = []
       for (const info of activeHypGoalInfos) {
