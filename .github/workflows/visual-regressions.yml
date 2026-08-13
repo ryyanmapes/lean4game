@@ -146,7 +146,7 @@ jobs:
           CYPRESS_VISUAL_LEVEL: ${{ matrix.level }}
           CYPRESS_VISUAL_SHARD_INDEX: ${{ matrix.shard_index }}
           CYPRESS_VISUAL_SHARD_TOTAL: ${{ matrix.shard_total }}
-          CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,requires an explicit exfalso gesture,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,does not show a green goal'
+          CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,changes an arbitrary goal to False through an explicit exfalso gesture,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,does not show a green goal'
         run: |
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "node scripts/run-cypress-ready.cjs run --spec ${{ matrix.specs }} --browser electron" \

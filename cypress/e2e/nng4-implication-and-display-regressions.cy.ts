@@ -308,14 +308,14 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-tactic-name="exfalso"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
   })
 
-  it('requires an explicit exfalso gesture before proving an arbitrary goal from False', () => {
+  it('changes an arbitrary goal to False through an explicit exfalso gesture', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
-    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('not.have.attr', 'data-goal-text', 'False')
 
     cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
       const player = new CompletePlaythroughDriver(win)
-      await player.introduceOneForall()
-      await player.perform('intro hx')
       await player.applyTacticToGoal('exfalso')
     })
 
