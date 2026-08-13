@@ -907,14 +907,13 @@ export class CompletePlaythroughDriver {
     const baseSelector = `[data-testid="hyp-card"][data-hyp-name="${cssEscape(name)}"]`
     try {
       const streamId = harness(this.win).getCurrentStreamSnapshot().streamId
-      const current = visible(this.win.document.querySelectorAll<HTMLElement>(
+      return visible(this.win.document.querySelectorAll<HTMLElement>(
         `${baseSelector}[data-stream-id="${cssEscape(streamId)}"]`,
-      ))[0]
-      if (current) return current
+      ))[0] ?? null
     } catch {
       // The harness can briefly disappear while React changes proof branches.
+      return visible(this.win.document.querySelectorAll<HTMLElement>(baseSelector))[0] ?? null
     }
-    return visible(this.win.document.querySelectorAll<HTMLElement>(baseSelector))[0] ?? null
   }
 
   private refreshCard(card: HTMLElement) {
@@ -1352,7 +1351,7 @@ export class CompletePlaythroughDriver {
     }
   }
 
-  private async transformRule(name: string) {
+  private async transformRule(name: string, allowReconciledFallback = true): Promise<HTMLElement> {
     const overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
     const waitForMeasuredDock = () => waitFor('measured rewrite menu', () => {
@@ -1370,21 +1369,20 @@ export class CompletePlaythroughDriver {
       for (let page = 0; page < 100; page += 1) {
         await waitForMeasuredDock()
         const resolvedName = this.resolveName(name)
-        const snapshot = harness(this.win).getCurrentStreamSnapshot()
-        const reconciledName = snapshot.hypTypes[resolvedName]
-          ? null
-          : this.latestRelationName()
         const rule = visible(overlay.querySelectorAll<HTMLElement>(
-          [resolvedName, name, reconciledName]
-            .filter((candidate): candidate is string => Boolean(candidate))
-            .map(candidate => `[data-rule-label="${cssEscape(candidate)}"]`)
-            .join(', '),
+          `[data-rule-label="${cssEscape(resolvedName)}"], [data-rule-label="${cssEscape(name)}"]`,
         ))[0]
         if (rule) return rule
         const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
         if (!next || next.disabled) break
         click(next)
       }
+    }
+    const snapshot = harness(this.win).getCurrentStreamSnapshot()
+    const resolvedName = this.resolveName(name)
+    const reconciledName = !snapshot.hypTypes[resolvedName] ? this.latestRelationName() : null
+    if (allowReconciledFallback && reconciledName && reconciledName !== resolvedName) {
+      return this.transformRule(reconciledName, false)
     }
     throw new Error(`Could not find rewrite rule ${name}`)
   }
