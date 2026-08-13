@@ -67,12 +67,30 @@ async function waitFor<T>(
   throw new Error(`Timed out waiting for ${description}`)
 }
 
+function visiblePageSignature(container: HTMLElement) {
+  const indicator = container.querySelector<HTMLElement>('.tr-page-indicator')?.textContent?.trim() ?? ''
+  const cards = visible(container.querySelectorAll<HTMLElement>(
+    '[data-tactic-name], [data-theorem-name], .tr-tactic-card, .tr-theorem-card',
+  )).map(card => card.dataset.tacticName ?? card.dataset.theoremName ?? card.id ?? card.textContent?.trim() ?? '')
+  return JSON.stringify({ indicator, cards })
+}
+
+async function clickPaginationAndWait(container: HTMLElement, button: HTMLButtonElement, description: string) {
+  const before = visiblePageSignature(container)
+  click(button)
+  await waitFor(description, () => {
+    const current = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${button.getAttribute('aria-label') ?? ''}"]`,
+    )
+    return visiblePageSignature(container) !== before || current?.disabled ? true : null
+  }, 5_000)
+}
+
 async function rewindPages(container: HTMLElement, ariaLabel: string) {
   for (let page = 0; page < 100; page += 1) {
     const previous = container.querySelector<HTMLButtonElement>(`button[aria-label="${ariaLabel}"]`)
     if (!previous || previous.disabled) return
-    click(previous)
-    await sleep(35)
+    await clickPaginationAndWait(container, previous, `${ariaLabel.toLowerCase()} pagination to change`)
   }
   throw new Error(`Could not rewind ${ariaLabel.toLowerCase()} pagination`)
 }
@@ -1043,10 +1061,18 @@ export class CompletePlaythroughDriver {
     await waitFor(`${tab} tray contents`, () =>
       visible(dock.querySelectorAll<HTMLElement>('.tr-tactic-card, .tr-theorem-card, [data-tactic-name], [data-theorem-name]'))[0]
       ?? (dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')?.disabled ? null : dock), 10_000)
-    const categoryIds = tab === 'Theorems'
+    const discoveredCategoryIds = tab === 'Theorems'
       ? Array.from(dock.querySelectorAll<HTMLButtonElement>('[data-theorem-category]'))
         .map(button => button.dataset.theoremCategory)
         .filter((id): id is string => Boolean(id))
+      : []
+    // All is the authoritative player-visible listing and contains every
+    // unlocked theorem. Search it first, then the narrower buckets as a
+    // defensive fallback. A previously selected category survives between
+    // levels, so relying on DOM order made the test skip cards while the dock
+    // was still adaptively repacking its pages.
+    const categoryIds = discoveredCategoryIds.length > 0
+      ? ['all', ...discoveredCategoryIds.filter(id => id !== 'all')]
       : []
     // Search every visible theorem category through the same tab clicks and
     // pagination a player uses. The selection survives route changes, and an
@@ -1069,11 +1095,17 @@ export class CompletePlaythroughDriver {
         if (card) return card
         const next = dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')
         if (!next || next.disabled) break
-        click(next)
-        await sleep(40)
+        await clickPaginationAndWait(dock, next, 'theorem pagination to advance')
       }
     }
-    throw new Error(`Could not find ${tab.toLowerCase()} card ${selector}`)
+    const available = visible(dock.querySelectorAll<HTMLElement>('[data-theorem-name], [data-tactic-name]'))
+      .map(card => card.dataset.theoremName ?? card.dataset.tacticName)
+      .filter(Boolean)
+    throw new Error(
+      `Could not find ${tab.toLowerCase()} card ${selector}; ` +
+      `active category=${dock.querySelector<HTMLElement>('[data-theorem-category].active')?.dataset.theoremCategory ?? 'none'}; ` +
+      `visible cards=${JSON.stringify(available)}`,
+    )
   }
 
   private tactic(name: string) {
