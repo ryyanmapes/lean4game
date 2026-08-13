@@ -1425,7 +1425,8 @@ export class CompletePlaythroughDriver {
       // matches, then bind the classic target name to the actual conclusion.
       for (let premise = 0; resultName && premise < 8; premise += 1) {
         const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
-        if (!(resultCard.dataset.hypType ?? '').includes('→')) break
+        const displayedProposition = resultCard.querySelector<HTMLElement>('.proposition')?.textContent ?? ''
+        if (!displayedProposition.includes('→')) break
         const matchingHypothesis = visible(
           this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
         ).find(hypothesis => hypothesis !== resultCard && matchesTheoremPremise(resultCard, hypothesis, []))
@@ -1658,10 +1659,10 @@ export class CompletePlaythroughDriver {
           // player must first choose which disjunct to construct. Defer this
           // rewrite until that visible choice, then perform it on the selected
           // equality goal before the following classic command.
-          // The player cannot rewrite underneath an unresolved Or card. The
-          // reference proofs that spell `rw [...] at h ⊢` subsequently choose
-          // a branch whose equality is definitionally reflexive, so the goal
-          // half requires no hidden or delayed gesture.
+          // The player cannot rewrite underneath an unresolved Or card. Defer
+          // only the goal half until a branch is selected; replaying the whole
+          // `rw [...] at h ⊢` command would incorrectly rewrite h twice.
+          this.pendingGoalRewrites.push(command.replace(/\s+at\s+.+$/u, ''))
           continue
         }
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
@@ -2033,7 +2034,14 @@ export class CompletePlaythroughDriver {
       return
     }
     if (normalized === 'rfl') {
-      await this.clickGoal()
+      const goal = currentGoal(this.win)
+      if (goal?.classList.contains('clickable') || harness(this.win).getProofAudit().completed) {
+        await this.clickGoal()
+      }
+      // A preceding player action can already have discharged the reference
+      // proof's reflexive branch. In that case there is no goal card to click;
+      // treating the classic trailing `rfl` as covered avoids inventing an
+      // extra interaction while the completed-state audit remains strict.
       return
     }
     if (/^intro(?:\s+|$)/u.test(normalized)) {
