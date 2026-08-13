@@ -1008,15 +1008,6 @@ function splitImplicationText(text: string): [string, string] | null {
   return premise && codomain ? [premise, codomain] : null
 }
 
-/** A theorem card is function-shaped when either its displayed proposition or
- * one of Lean's reducible forms is an implication. In particular, `A ≠ B`
- * reduces to `A = B → False`; using only the headline made application depend
- * on which definitionally equivalent spelling happened to be rendered. */
-function theoremHasImplication(theorem: PropositionTheorem): boolean {
-  return [theorem.proposition, ...(theorem.reductionForms ?? [])]
-    .some(candidate => splitImplicationText(candidate) !== null)
-}
-
 function splitEqualityText(text: string): [string, string] | null {
   const normalized = stripOuterParens(text)
   let depth = 0
@@ -1376,6 +1367,7 @@ export interface VisualProofResumeState {
 }
 
 interface TheoremApplicationDerivation {
+  kind: 'application' | 'rewrite'
   command: string
   hypName: string
   hypType: string
@@ -1422,6 +1414,7 @@ function deriveTheoremApplication(
         premiseRef,
       )
       return {
+        kind: 'application',
         command: `have ${hypName} := ${application}`,
         hypName,
         hypType: resultType,
@@ -1438,6 +1431,7 @@ function deriveTheoremApplication(
       const to = rewriteRightToLeft ? premiseEquality.lhsStr : premiseEquality.rhsStr
       const arrow = rewriteRightToLeft ? '← ' : ''
       return {
+        kind: 'rewrite',
         command: `have ${hypName} := ${theorem.theoremName}; rw [${arrow}${premiseRef}] at ${hypName}`,
         hypName,
         hypType: replaceIdentifier(theoremText, from, to),
@@ -3160,7 +3154,10 @@ export function VisualCanvas({
           // explicit data arguments are inferred from the proposition instead
           // of accidentally treating that proposition as the first data
           // argument (for example `eq_succ_of_ne_zero h`).
-          const playTactic = targetCard && theoremHasImplication(theoremTemplate)
+          const theoremDerivation = targetCard && targetStream
+            ? safelyDeriveTheoremApplication(theoremTemplate, targetCard, targetStream)
+            : null
+          const playTactic = targetCard && theoremDerivation?.kind === 'application'
             ? interactionToPlayTactic({
                 type: 'drag_apply',
                 theoremName: theoremTemplate.theoremName,
@@ -3172,9 +3169,6 @@ export function VisualCanvas({
                 nameB: targetName,
                 reverse,
               })
-          const theoremDerivation = targetCard && targetStream
-            ? safelyDeriveTheoremApplication(theoremTemplate, targetCard, targetStream)
-            : null
           applyDroppedInteraction(playTactic, activeId, {
             ...(placementHint ? { placementHint } : {}),
             ...(targetStream ? { targetStreamId: targetStream.id } : {}),
@@ -3298,8 +3292,13 @@ export function VisualCanvas({
           }
         }
 
+        const theoremDerivation = sourceTheoremCopy && targetCard && targetStream
+          ? safelyDeriveTheoremApplication(sourceTheoremCopy.theorem, targetCard, targetStream)
+          : targetTheoremCopy && sourceCard && sourceStream
+            ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
+            : null
         const playTactic = sourceTheoremCopy && targetCard
-          && theoremHasImplication(sourceTheoremCopy.theorem)
+          && theoremDerivation?.kind === 'application'
           ? interactionToPlayTactic({
               type: 'drag_apply',
               theoremName: sourceTheoremCopy.theorem.theoremName,
@@ -3308,11 +3307,6 @@ export function VisualCanvas({
           : interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
         const consumedTheoremCopyIds = [sourceTheoremCopy?.id, targetTheoremCopy?.id]
           .filter((id): id is string => Boolean(id))
-        const theoremDerivation = sourceTheoremCopy && targetCard && targetStream
-          ? safelyDeriveTheoremApplication(sourceTheoremCopy.theorem, targetCard, targetStream)
-          : targetTheoremCopy && sourceCard && sourceStream
-            ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
-            : null
         applyDroppedInteraction(playTactic, activeId, {
           ...(placementHint ? { placementHint } : {}),
           ...(targetStream ? { targetStreamId: targetStream.id } : {}),
