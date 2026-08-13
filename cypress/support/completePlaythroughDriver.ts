@@ -1564,9 +1564,14 @@ export class CompletePlaythroughDriver {
       if (!replacementName) throw new Error(`${command} did not identify its visible-premise conclusion`)
       source = await waitFor(`derived theorem ${replacementName}`, () => this.hyp(replacementName))
     }
+    const currentGoalType = harness(this.win).getCurrentStreamSnapshot().goalType.trim()
+    const sourceAlreadyProvesGoal = Boolean(source.dataset.hypType)
+      && this.normalizedProposition(source.dataset.hypType ?? '')
+        === this.normalizedProposition(currentGoalType)
     const contradictionTarget = !match[2]
+      && !sourceAlreadyProvesGoal
       && !sourceWasLocalHypothesis
-      && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
+      && /^False$/u.test(currentGoalType)
       && this.implicitGoalRewriteTarget
       && this.hypExact(this.implicitGoalRewriteTarget)
         ? this.hypExact(this.implicitGoalRewriteTarget)
@@ -1631,7 +1636,11 @@ export class CompletePlaythroughDriver {
         resultName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !namesBeforeApplication.has(candidate)) ?? resultName
       }
-      if (resultName) this.rememberAlias(match[2], resultName)
+      if (resultName) {
+        this.rememberAlias(match[2], resultName)
+        const resultType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName]
+        if (resultType?.trim() === 'False') this.implicitGoalRewriteTarget = null
+      }
     }
   }
 
