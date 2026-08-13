@@ -68,10 +68,19 @@ async function waitFor<T>(
 }
 
 function visiblePageSignature(container: HTMLElement) {
-  const indicator = container.querySelector<HTMLElement>('.tr-page-indicator')?.textContent?.trim() ?? ''
+  const indicator = Array.from(container.querySelectorAll<HTMLElement>('[class*="page-indicator"]'))
+    .filter(element => element.offsetParent !== null)
+    .map(element => element.textContent?.trim() ?? '')
+    .join('|')
   const cards = visible(container.querySelectorAll<HTMLElement>(
-    '[data-tactic-name], [data-theorem-name], .tr-tactic-card, .tr-theorem-card',
-  )).map(card => card.dataset.tacticName ?? card.dataset.theoremName ?? card.id ?? card.textContent?.trim() ?? '')
+    '[data-tactic-name], [data-theorem-name], [data-rule-id], [data-rule-label], .statement-card',
+  )).map(card => card.dataset.tacticName
+    ?? card.dataset.theoremName
+    ?? card.dataset.ruleId
+    ?? card.dataset.ruleLabel
+    ?? card.id
+    ?? card.textContent?.trim()
+    ?? '')
   return JSON.stringify({ indicator, cards })
 }
 
