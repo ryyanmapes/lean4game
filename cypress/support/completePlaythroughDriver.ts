@@ -673,10 +673,18 @@ function matchesPartiallyAppliedRule(
     if (parsedArgs.length >= patternNames.length) {
       const explicitBindings: Record<string, ExpressionNode> = {}
       parsedArgs.forEach((argument, index) => {
-        const patternName = patternNames[index]
         const binderName = binderNames[index]
+        // The source side is reversed when the player swaps rewrite
+        // direction, while forall binders remain in theorem-argument order.
+        // Bind by the named forall whenever that name occurs in the source;
+        // only use source-order variables when the pretty-printer omitted or
+        // renamed the binder. Binding both could overwrite two different
+        // variables and turn `mul_comm a (_ * b)` into `_ * _`, accepting an
+        // unrelated multiplication card.
+        const patternName = binderName && patternNames.includes(binderName)
+          ? binderName
+          : patternNames[index]
         if (patternName) explicitBindings[patternName] = argument
-        if (binderName) explicitBindings[binderName] = argument
       })
       return matchesExplicitArgument(
         parse(expressionText),
@@ -1547,6 +1555,7 @@ export class CompletePlaythroughDriver {
       source = await waitFor(`derived theorem ${replacementName}`, () => this.hyp(replacementName))
     }
     const contradictionTarget = !match[2]
+      && !sourceWasLocalHypothesis
       && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
       && this.implicitGoalRewriteTarget
       && this.hypExact(this.implicitGoalRewriteTarget)
