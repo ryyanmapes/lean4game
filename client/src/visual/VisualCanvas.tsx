@@ -3613,6 +3613,20 @@ export function VisualCanvas({
     const target = constructionTarget
     const focusedStream = canvasState.streams.find(s => s.id === target.streamId) ?? null
     if (!focusedStream) return false
+    // Construction bricks display collision-safe names such as `a1`, but Lean
+    // must receive the underlying local name stored on the card (`playName`).
+    // Translate whole identifier tokens only, so a variable `a` never alters
+    // a function name such as `add`.
+    const leanExprStr = focusedStream.hyps.reduce((expression, card) => {
+      const displayName = card.hyp.names[0]
+      const playName = card.hyp.playName
+      if (!displayName || !playName || displayName === playName) return expression
+      const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+      return expression.replace(
+        new RegExp(`(?<![\\p{L}\\p{N}_'])${escaped}(?![\\p{L}\\p{N}_'])`, 'gu'),
+        playName,
+      )
+    }, exprStr)
     const constructionAnchor = target.kind === 'forall_spec'
       ? target.sourceKind === 'hyp'
         ? (() => {
@@ -3633,7 +3647,7 @@ export function VisualCanvas({
 
     // Use a core Lean existential step rather than `use`, which may not be
     // imported in smaller test games such as VisualTest.
-    let playTactic = `refine Exists.intro (${exprStr}) ?_`
+    let playTactic = `refine Exists.intro (${leanExprStr}) ?_`
     let placementHint: PlacementHint | undefined
     let consumedTheoremCopyIds: string[] | undefined
     let specializationName: string | null = null
@@ -3647,7 +3661,7 @@ export function VisualCanvas({
       // display, so collision suffixes remain h1/h2 rather than h_1/h_2.
       const leanName = `${DERIVED_THEOREM_PREFIX}${displayName}`
       specializationName = displayName
-      const argExpr = `(${exprStr})`
+      const argExpr = `(${leanExprStr})`
       playTactic = `specialize_forall_as ${leanName} ${target.sourceRef} ${target.prompt.varName} ${argExpr}`
 
       if (target.sourceKind === 'theorem_copy' && target.sourceId) {

@@ -589,7 +589,8 @@ function PlayableLevel() {
                     (level?.data?.title && ` : ${gT(level?.data?.title ?? "")}`)}
                   feedbackProofState={() => ({
                     proofBody: leanMonacoEditor?.editor?.getValue() ?? '',
-                    proof,
+                    completed: proof?.completed ?? false,
+                    goals: proof?.steps.at(-1)?.goals ?? [],
                   })}
                   />
                 {mobile?

@@ -3101,7 +3101,13 @@
   .visual-page.phone-portrait.tr-overlay .tr-rule-card {
     min-width: 4.75rem;
     max-width: min(18rem, calc(100vw - 6.5rem));
-    padding: 0.5rem 0.45rem;
+    padding: 0.45rem 0.3rem;
+  }
+
+  .visual-page.phone-portrait.tr-overlay .tr-rule-card h3,
+  .visual-page.phone-portrait.tr-overlay .tr-symbol,
+  .visual-page.phone-portrait.tr-overlay .tr-forall-footer {
+    font-size: 0.65rem;
   }
 
   .visual-page.phone-portrait.tr-overlay .tr-rule-page-cards {

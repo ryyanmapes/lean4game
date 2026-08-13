@@ -327,8 +327,12 @@ syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
   let a : Ident := ⟨stx[2]⟩
   let b : Ident := ⟨stx[3]⟩
   withMainContext do
-    let aRaw ← resolveVisualOperand a
-    let bRaw ← resolveVisualOperand b
+    -- Preserve global theorem foralls until premise matching. Elaborating a
+    -- bare theorem as a term can eagerly create an application metavariable;
+    -- after the application context is restored that makes the dragged
+    -- proposition look like the theorem's first explicit data argument.
+    let aRaw ← resolveVisualOperand a true
+    let bRaw ← resolveVisualOperand b true
     let aProjected ← projectIffOperand aRaw isRev
     let bProjected ← projectIffOperand bRaw isRev
 
@@ -1074,6 +1078,16 @@ example (x y : Nat) (h : x = y) : y = x := by
 
 private theorem succInjLocal (x y : Nat) (h : Nat.succ x = Nat.succ y) : x = y := by
   exact Nat.succ.inj h
+
+private theorem explicitPremiseLocal (x : Nat) (_h : x = x) : True := by
+  trivial
+
+-- Dragging a proposition onto a theorem must infer preceding explicit data
+-- binders from that proposition; it is ordinary dependent function
+-- application, not a special case for any particular theorem.
+example (x : Nat) (h : x = x) : True := by
+  drag_to explicitPremiseLocal h
+  exact thm_explicitPremiseLocal
 
 example (x : Nat) : x + 1 = 4 → True := by
   intro h
