@@ -134,6 +134,44 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
   })
 }
 
+function assertCompletedProofRestores(solution: ReferenceSolution, completedAudit: ProofAudit) {
+  const autosaveKey = `visual-proof-autosave/g/local/NNG4/${solution.world}/${solution.level}`
+  cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+    const stored = JSON.parse(win.localStorage.getItem(autosaveKey) ?? 'null')
+    expect(stored?.session?.canvasState?.completed, 'completed canvas reached autosave').to.equal(true)
+    expect(stored?.session?.proofSteps, 'completed proof steps reached autosave').to.have.length.greaterThan(0)
+    expect(stored?.session?.proofBody, 'completed proof body reached autosave').to.equal(completedAudit.proofBody)
+  })
+
+  // Leave the route completely, then reopen it as a returning player. This
+  // exercises persistence and Lean revalidation, not merely React state.
+  cy.window().then(win => { win.location.hash = '#/g/local/NNG4/visual' })
+  cy.get('[data-testid="visual-world-map"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+  cy.window().then(win => { win.location.hash = levelHash(solution) })
+  cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })
+    .should('be.visible')
+    .and('have.attr', 'data-world-id', solution.world)
+    .and('have.attr', 'data-level-id', String(solution.level))
+
+  auditProofState(solution, 'restored completed proof').then(restoredAudit => {
+    expect(restoredAudit.completed, 'reopened proof remains Lean-complete').to.equal(true)
+    expect(restoredAudit.proofBody, 'reopened interactive proof is restored').to.equal(completedAudit.proofBody)
+    expect(restoredAudit.coreProofBody, 'reopened Core proof is restored').to.equal(completedAudit.coreProofBody)
+  })
+  cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+    .should('be.visible')
+    .and('have.class', 'solved')
+    .then($goal => {
+      const style = getComputedStyle($goal[0]!)
+      expect(style.borderColor, 'restored completed goal has no yellow border').not.to.equal('rgb(234, 179, 8)')
+      expect(style.boxShadow, 'restored completed goal has no yellow glow').not.to.contain('234, 179, 8')
+    })
+  cy.get('.visual-header').should('have.class', 'completed')
+  cy.get('.tr-controls .active-undo[aria-label="Undo"]', { timeout: LOAD_TIMEOUT })
+    .should('be.visible')
+    .and('have.attr', 'aria-disabled', 'false')
+}
+
 describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false }, () => {
   let applicationStarted = false
   let player: CompletePlaythroughDriver
@@ -193,6 +231,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         expect(audit.completed, `${solution.world} ${solution.level} completes visually`).to.equal(true)
         expect(audit.coreLines, 'Core proof log is populated').not.to.deep.equal([])
         expect(audit.interactiveLines, 'Interactive proof log is populated').not.to.deep.equal([])
+        assertCompletedProofRestores(solution, audit)
         // Focused diagnostic runs must not turn their selected level into the
         // synthetic "last level" and exercise an unrelated classic export.
         // The unfiltered 66-level playthrough still validates the handoff on

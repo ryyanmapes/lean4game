@@ -5489,7 +5489,10 @@ export function VisualCanvas({
         isConstructable={streamInteractionsEnabled && isConstructable}
         isClickable={streamInteractionsEnabled && isClickable}
         clickTooltip={clickAction?.tooltip}
-        isSolved={Boolean(previouslyCompleted) || canvasState.completed || solvedGoalId === stream.id || currentStreamIsCompleted}
+        // Historical completion unlocks navigation, but it is not evidence
+        // that the proof currently shown was restored. Green belongs only to
+        // an actually solved loaded proof (or solved branch).
+        isSolved={canvasState.completed || solvedGoalId === stream.id || currentStreamIsCompleted}
         visualInfos={visibleVisualGoalInfos}
         infoPositions={infoPositions}
         showDropTarget={activeDraggedTactic ? isTacticTarget : activeDragId !== null}

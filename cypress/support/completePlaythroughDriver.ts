@@ -573,7 +573,13 @@ function forallBinderNames(card: HTMLElement): string[] {
   const footer = card.querySelector<HTMLElement>(
     '.tr-forall-footer, .statement-forall-footer',
   )?.textContent ?? ''
-  return Array.from(footer.matchAll(/[({]\s*([^\s:(){}]+)/gu), match => match[1])
+  // Lean commonly groups binders as `(a b : ℕ)`. Reading only the first name
+  // made a partially applied commutativity rule such as `mul_comm a (_ * b)`
+  // look like `mul_comm a _`, so the player driver could choose an entirely
+  // different visible occurrence. Preserve every name in each binder group.
+  return Array.from(footer.matchAll(/[({]\s*([^:(){}]+?)\s*:\s*[^(){}]+[)}]/gu))
+    .flatMap(match => match[1].trim().split(/\s+/u))
+    .filter(Boolean)
 }
 
 function matchesPartiallyAppliedRule(
@@ -1309,8 +1315,18 @@ export class CompletePlaythroughDriver {
   }
 
   private async applyOrExact(command: string) {
-    const match = /^(?:apply|exact)\s+(.+?)(?:\s+at\s+(\S+))?$/u.exec(command)
-    if (!match) throw new Error(`Unsupported theorem application: ${command}`)
+    const applicationMatch = /^(?:apply|exact)\s+(.+)$/u.exec(command)
+    if (!applicationMatch) throw new Error(`Unsupported theorem application: ${command}`)
+    // Do not make the `at h` suffix optional in the same expression as a
+    // lazy application capture: JavaScript may legally satisfy that regex by
+    // swallowing the entire suffix into group 1. That made `at` and `h` look
+    // like explicit theorem arguments, producing a second, invalid drag.
+    const atMatch = /^(.*?)\s+at\s+(\S+)$/u.exec(applicationMatch[1])
+    const match: [string, string, string?] = [
+      applicationMatch[0],
+      atMatch?.[1] ?? applicationMatch[1],
+      atMatch?.[2],
+    ]
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])
     const explicitArgs = application.slice(1)

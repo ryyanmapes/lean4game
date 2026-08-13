@@ -415,7 +415,7 @@ describe('NNG4 implication and definition display regressions', () => {
     })
   })
 
-  it('renders a revisited completed goal with only the green solved glow', () => {
+  it('does not show a green goal when completion metadata has no restorable proof', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`, {
       onBeforeLoad(win) {
         win.localStorage.setItem('game_progress', JSON.stringify({
@@ -436,12 +436,13 @@ describe('NNG4 implication and definition display regressions', () => {
       },
     })
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
-      .should('have.class', 'solved')
+      .should('not.have.class', 'solved')
       .then($goal => {
         const style = getComputedStyle($goal[0]!)
-        expect(style.borderColor, 'completed goal border is green').not.to.equal('rgb(234, 179, 8)')
-        expect(style.boxShadow, 'completed goal has no yellow warning glow').not.to.contain('234, 179, 8')
+        expect(style.borderColor, 'unrestored goal retains its normal incomplete border').to.equal('rgb(234, 179, 8)')
+        expect(style.boxShadow, 'unrestored goal retains its incomplete glow').to.contain('234, 179, 8')
       })
+    cy.get('.visual-header').should('not.have.class', 'completed')
   })
 
   it('rewrites the selected x to x + 0 with reverse add_zero', () => {

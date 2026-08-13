@@ -405,12 +405,21 @@ export function VisualProofPage() {
           }
           const saved = loadVisualProofAutosave(gameId, worldId, levelId)
           let validatedResume: VisualProofResumeState | null = null
-          if (saved && saved.proofBody.trim().length > 0) {
+          if (saved && saved.proofBody.trim().length > 0 && saved.proofSteps.length > 0) {
             try {
               const restoredProof = await client.sendProofUpdate(
                 [proofPreludeRef.current, saved.proofBody].filter(Boolean).join('\n'),
               )
-              if (restoredProof !== null) {
+              const restoredCanvas = restoredProof === null ? null : proofStateToCanvas(restoredProof)
+              // Completion metadata and the visual autosave are independent.
+              // Only trust the green solved state when Lean accepted the saved
+              // script *and* its authoritative completion result agrees with
+              // the saved canvas. A torn/stale save is safer to discard than
+              // to display as a solved proof with an empty or partial script.
+              if (
+                restoredCanvas !== null &&
+                restoredCanvas.completed === saved.canvasState.completed
+              ) {
                 validatedResume = saved
               } else {
                 discardVisualProofAutosave(gameId, worldId, levelId)
