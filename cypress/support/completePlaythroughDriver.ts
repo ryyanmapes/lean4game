@@ -1241,7 +1241,16 @@ export class CompletePlaythroughDriver {
       await this.dragTactic('cases', target)
       await waitFor('False elimination to complete the current branch', () => {
         const audit = harness(this.win).getProofAudit()
-        return !audit.processing && audit.completed ? audit : null
+        if (audit.processing) return null
+        if (audit.completed) return audit
+        try {
+          return harness(this.win).getCurrentStreamSnapshot().currentStreamIsCompleted ? audit : null
+        } catch {
+          // A zero-goal cases result can briefly leave no selected stream while
+          // the proof tree reconciles. That is itself a completed branch, and
+          // the next driver action will use the normal branch navigator.
+          return audit
+        }
       })
       return
     } else {

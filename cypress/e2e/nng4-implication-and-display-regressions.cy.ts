@@ -302,7 +302,7 @@ describe('NNG4 implication and definition display regressions', () => {
       10,
       'Note that showing a contradiction is a valid way to complete any proof!',
     )
-    cy.contains('.goal-info.below', 'Drag the tactic exfalso to ANY goal to set it to False.')
+    cy.contains('.goal-info.below', 'Drag the tactic `exfalso` to ANY goal to set it to `False`.')
       .should('be.visible')
     cy.get('[data-tactic-name="exfalso"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
   })
