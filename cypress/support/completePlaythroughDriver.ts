@@ -1234,12 +1234,20 @@ export class CompletePlaythroughDriver {
     if (/^(?:\u2115|Nat|MyNat)$/u.test(type.trim())) {
       await this.dragTactic('cases', target)
     } else if (type.trim() === 'False') {
-      // In the visual player, eliminating a False hypothesis is represented
-      // by applying that proposition card to the goal. A preceding theorem
-      // application may have replaced the fixture's original name (for
-      // example `h`) with a fresh card (`h2`); `this.hyp` has already resolved
-      // that alias, so drive the visible card exactly as a player would.
-      const goal = await waitFor('current goal', () => currentGoal(this.win))
+      // False eliminates only a False goal. When the reference proof uses
+      // `cases h` against another proposition, reproduce the explicit player
+      // sequence: drag exfalso to the goal, then drag h to that False goal.
+      let goal = await waitFor('current goal', () => currentGoal(this.win))
+      const goalType = harness(this.win).getCurrentStreamSnapshot().goalType.trim()
+      if (goalType !== 'False') {
+        await this.dragTactic('exfalso', goal)
+        goal = await waitFor('False goal after exfalso', () => {
+          const current = currentGoal(this.win)
+          return harness(this.win).getCurrentStreamSnapshot().goalType.trim() === 'False'
+            ? current
+            : null
+        })
+      }
       await this.dragAndWait(target, goal, `applying ${match[1]} to the goal`)
       await waitFor('False elimination to complete the current branch', () => {
         const audit = harness(this.win).getProofAudit()
@@ -2150,6 +2158,11 @@ export class CompletePlaythroughDriver {
   /** Drag the induction tactic card onto a currently visible variable card. */
   async inductVisibleVariable(name: string) {
     await this.induction(`induction ${name} with d hd`)
+  }
+
+  /** Drag a named Combining Mode tactic onto the current goal. */
+  async applyTacticToGoal(name: string) {
+    await this.dragTactic(name, await waitFor('current goal', () => currentGoal(this.win)))
   }
 
   private async introduceLeadingForalls() {

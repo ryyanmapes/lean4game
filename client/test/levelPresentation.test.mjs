@@ -21,6 +21,7 @@ test('adds the requested LessOrEqual lesson callouts only to NNG4', () => {
     [4, NNG4_VISUAL_LESSON_TEXT.leHyp],
     [7, NNG4_VISUAL_LESSON_TEXT.or],
     [8, NNG4_VISUAL_LESSON_TEXT.induction],
+    [10, NNG4_VISUAL_LESSON_TEXT.exfalso],
   ])
   for (const [level, text] of expected) {
     const infos = goalInfosForLevel('g/local/NNG4', 'LessOrEqual', level, [])

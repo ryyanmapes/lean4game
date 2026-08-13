@@ -296,6 +296,34 @@ describe('NNG4 implication and definition display regressions', () => {
       await new CompletePlaythroughDriver(win).inductVisibleVariable(introducedName)
     })
     cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('not.exist')
+
+    openAndExpect(
+      'LessOrEqual',
+      10,
+      'Note that showing a contradiction is a valid way to complete any proof!',
+    )
+    cy.contains('.goal-info.below', 'Drag the tactic exfalso to ANY goal to set it to False.')
+      .should('be.visible')
+    cy.get('[data-tactic-name="exfalso"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+  })
+
+  it('requires an explicit exfalso gesture before proving an arbitrary goal from False', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.introduceOneForall()
+      await player.perform('intro hx')
+      await player.applyTacticToGoal('exfalso')
+    })
+
+    cy.get('[data-testid="goal-card"]')
+      .should('have.attr', 'data-goal-text', 'False')
+      .and('not.have.class', 'solved')
+    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar-step-text').last().should('have.text', 'exfalso')
+    cy.get('.proof-sidebar-step.unknown').should('not.exist')
   })
 
   it('keeps the less-or-equal construction lesson above the theorem tray', () => {

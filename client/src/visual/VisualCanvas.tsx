@@ -725,7 +725,7 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
     return parsedHypEquality(card) !== null || typeText.includes('↔') || typeText.includes('≠')
   }
   // `tauto` operates on the goal; it does not have a meaningful `at h` form.
-  if (tactic.name === 'tauto') return false
+  if (tactic.name === 'tauto' || tactic.name === 'exfalso') return false
   return true
 }
 
@@ -1272,7 +1272,7 @@ function inferLeanTacticFromVisualInteraction(
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
     if (hypType === 'False') {
       const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
-      return goalType === 'False' ? `exact ${hypName}` : `exfalso\nexact ${hypName}`
+      return goalType === 'False' ? `exact ${hypName}` : null
     }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
     const iffSides = splitIffText(hypType)

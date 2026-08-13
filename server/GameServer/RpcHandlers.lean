@@ -902,7 +902,9 @@ private def dragGoalAnnotationForParsed? (drag : ParsedDragGoal) (goal : MVarId)
         tryDirection (!drag.reverse)
 
   if hypType == .const ``False [] then
-    return some s!"exact False.elim {drag.hypName}"
+    if goalType == .const ``False [] then
+      return some s!"exact {drag.hypName}"
+    return none
 
   if ← typeIsIff? hypTypeRaw then
     if let some rewriteAnn ← rewriteAnnotation? then
@@ -1056,7 +1058,7 @@ private def annotateFromSourceSimple (source : String) : Option StepAnnotation :
     let secondRw := if rawHypName.startsWith "← " then s!"rw [{hypName}]" else s!"rw [← {hypName}]"
     some {
       playTactic := src
-      leanTactic := some s!"first | exact {hypName} | {firstRw} | {secondRw} | apply {hypName} | exact False.elim {hypName}"
+      leanTactic := some s!"first | exact {hypName} | {firstRw} | {secondRw} | apply {hypName}"
     }
   else if src.startsWith "drag_" then
     some { playTactic := src, leanTactic := none }
@@ -1151,7 +1153,7 @@ private def annotateFromSource (source : String) (goalBefore? : Option MVarId :=
           -- ordered strategies in ordinary Lean syntax. `first` commits to
           -- the same first tactic that succeeds and never emits a `?` line.
           let leanTactic? := leanTactic?.orElse fun _ => some <|
-            s!"first | exact {drag.hypName} | rw [{drag.hypName}] | rw [← {drag.hypName}] | apply {drag.hypName} | exact False.elim {drag.hypName}"
+            s!"first | exact {drag.hypName} | rw [{drag.hypName}] | rw [← {drag.hypName}] | apply {drag.hypName}"
           pure <| some { playTactic := innerSource, leanTactic := leanTactic? }
         else if let some drag := parseDragApply? innerSource then
           let leanTactic? ← dragApplyAnnotationForParsed? drag goal

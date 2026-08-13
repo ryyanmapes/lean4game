@@ -10,6 +10,9 @@ const OR_TEXT =
   'yourself by specifying the goal too early!'
 const INDUCTION_TEXT =
   "Induct after only 'a' is introduced to get a more general inductive hypothesis."
+const EXFALSO_TEXT =
+  'Note that showing a contradiction is a valid way to complete any proof! \n' +
+  ' Drag the tactic `exfalso` to ANY goal to set it to `False`.'
 
 function isNng4Game(gameId: string): boolean {
   const parts = gameId.split('/').filter(Boolean)
@@ -48,6 +51,8 @@ export function goalInfosForLevel(
       return [...fetchedInfos, belowGoal(OR_TEXT)]
     case 8:
       return [...fetchedInfos, belowGoal(INDUCTION_TEXT, { hideAfterTactic: 'induction' })]
+    case 10:
+      return [...fetchedInfos, belowGoal(EXFALSO_TEXT)]
     default:
       return fetchedInfos
   }
@@ -64,4 +69,5 @@ export const NNG4_VISUAL_LESSON_TEXT = {
   implicationThree: IMPLICATION_THREE_TEXT,
   or: OR_TEXT,
   induction: INDUCTION_TEXT,
+  exfalso: EXFALSO_TEXT,
 } as const

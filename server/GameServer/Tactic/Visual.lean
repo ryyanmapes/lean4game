@@ -467,11 +467,6 @@ syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
     let hType ← whnf hTypeRaw
     let goal ← whnf (← getMainTarget)
 
-    -- False hypothesis closes any goal via exfalso
-    if hType == .const ``False [] then
-      evalTactic (← `(tactic| exact False.elim $h))
-      return
-
     -- Iff (possibly forall-quantified): try rewriting in the requested direction.
     if ← typeIsIff hTypeRaw then
       if ← tryRewrite h.raw isRev then return
@@ -1112,9 +1107,16 @@ example : 0 ≠ 1 := by
   cases h
 
 example (P Q : Prop) (h : False) : P ∧ Q := by
+  fail_if_success drag_goal h
+  exfalso
   drag_goal h
 
 example (n : Nat) (h : False) : n = 42 := by
+  fail_if_success drag_goal h
+  exfalso
+  drag_goal h
+
+example (h : False) : False := by
   drag_goal h
 
 private theorem flipEqLocal (x y : Nat) : x = y → y = x := by
