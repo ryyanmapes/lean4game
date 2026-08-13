@@ -1008,6 +1008,15 @@ function splitImplicationText(text: string): [string, string] | null {
   return premise && codomain ? [premise, codomain] : null
 }
 
+/** A theorem card is function-shaped when either its displayed proposition or
+ * one of Lean's reducible forms is an implication. In particular, `A ≠ B`
+ * reduces to `A = B → False`; using only the headline made application depend
+ * on which definitionally equivalent spelling happened to be rendered. */
+function theoremHasImplication(theorem: PropositionTheorem): boolean {
+  return [theorem.proposition, ...(theorem.reductionForms ?? [])]
+    .some(candidate => splitImplicationText(candidate) !== null)
+}
+
 function splitEqualityText(text: string): [string, string] | null {
   const normalized = stripOuterParens(text)
   let depth = 0
@@ -3151,7 +3160,7 @@ export function VisualCanvas({
           // explicit data arguments are inferred from the proposition instead
           // of accidentally treating that proposition as the first data
           // argument (for example `eq_succ_of_ne_zero h`).
-          const playTactic = targetCard && splitImplicationText(theoremTemplate.proposition) !== null
+          const playTactic = targetCard && theoremHasImplication(theoremTemplate)
             ? interactionToPlayTactic({
                 type: 'drag_apply',
                 theoremName: theoremTemplate.theoremName,
@@ -3290,7 +3299,7 @@ export function VisualCanvas({
         }
 
         const playTactic = sourceTheoremCopy && targetCard
-          && splitImplicationText(sourceTheoremCopy.theorem.proposition) !== null
+          && theoremHasImplication(sourceTheoremCopy.theorem)
           ? interactionToPlayTactic({
               type: 'drag_apply',
               theoremName: sourceTheoremCopy.theorem.theoremName,

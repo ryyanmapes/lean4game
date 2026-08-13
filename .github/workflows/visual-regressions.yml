@@ -148,6 +148,7 @@ jobs:
           CYPRESS_VISUAL_SHARD_TOTAL: ${{ matrix.shard_total }}
           CYPRESS_VISUAL_REGRESSION: 'zero-ne-one,zero-ne-succ,specializes collision-renamed binders,shows the definitionally expanded form,shows the requested level lesson labels,changes an arbitrary goal to False through an explicit exfalso gesture,keeps the less-or-equal construction lesson,renders the induction octagon,renders cases as an octagonal,uses the wider phone world-map,keeps Addition 3 rewrites on the manually selected stream,does not show a green goal,rewrites the selected x to x + 0 with reverse add_zero'
         run: |
+          node scripts/generate-nng4-visual-solutions.mjs
           npx concurrently -n server,cypress -c blue,green \
             "npm start" "node scripts/run-cypress-ready.cjs run --spec ${{ matrix.specs }} --browser electron" \
             -k -s first --hide server

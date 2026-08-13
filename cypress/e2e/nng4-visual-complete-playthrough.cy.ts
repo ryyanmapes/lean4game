@@ -246,12 +246,20 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         // the actual final playable level.
         if (solution !== allPlayableSolutions.at(-1)) return
 
-        cy.get('.proof-sidebar', { timeout: LOAD_TIMEOUT }).then(sidebar => {
-          if (!sidebar.hasClass('open')) {
-            cy.wrap(sidebar).find('.proof-sidebar-tab').click()
+        cy.get('body').then(body => {
+          const mobileProofLink = body.find<HTMLButtonElement>('button[aria-label="Open proof"]')
+          if (mobileProofLink.length > 0 && mobileProofLink.is(':visible')) {
+            cy.wrap(mobileProofLink).click()
+            cy.get('.mobile-proof-page').should('have.class', 'open')
+            return
           }
+          cy.get('.proof-sidebar', { timeout: LOAD_TIMEOUT }).then(sidebar => {
+            if (!sidebar.hasClass('open')) {
+              cy.wrap(sidebar).find('.proof-sidebar-tab').click()
+            }
+          })
+          cy.get('.proof-sidebar').should('have.class', 'open')
         })
-        cy.get('.proof-sidebar').should('have.class', 'open')
         cy.window().then(win => {
           cy.stub(win, 'open').as('openClassic')
         })

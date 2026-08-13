@@ -442,8 +442,10 @@ async function finishPointerDrag(
   startY: number,
   pointerId: number,
 ) {
-  target.scrollIntoView({ block: 'center', inline: 'center' })
-  await sleep(POLL_MS)
+  // The source and target are brought into view before pointer-down. Scrolling
+  // after a drag begins changes dnd-kit's measured collision rectangles and is
+  // not part of the corresponding player gesture. On phones it could turn a
+  // valid rewrite into an ignored drop between pointer-down and pointer-up.
   const end = target.getBoundingClientRect()
   const endX = end.left + end.width / 2
   const endY = end.top + end.height / 2

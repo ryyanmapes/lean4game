@@ -787,6 +787,15 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     ? (svgDisplayWidth - naturalSvgDisplayWidth) / ds
     : 0
   const dx = contentDx != null ? contentDx + extraViewBoxUnits : null
+  // Shift the drawing inside the fixed-width SVG rather than translating the
+  // SVG box itself. A CSS transform centred the root but made the transformed
+  // edge contribute horizontal overflow on narrow browsers.
+  const phoneViewBoxShift = isPhonePortraitViewport
+    && phoneScrollbarGutter > 0
+    && dx != null
+    && svgDisplayWidth != null
+    ? phoneScrollbarGutter * dx / (2 * svgDisplayWidth)
+    : 0
 
   React.useLayoutEffect(() => {
     const scrollEl = scrollRef.current
@@ -899,12 +908,9 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
           xmlnsXlink="http://www.w3.org/1999/xlink"
           width={svgDisplayWidth ?? ''}
           viewBox={bounds
-            ? `${s * bounds.x1 - hPadding - extraViewBoxUnits / 2} ${s * bounds.y1 - padding} ${dx} ${s * (bounds.y2 - bounds.y1) + 2 * padding}`
+            ? `${s * bounds.x1 - hPadding - extraViewBoxUnits / 2 - phoneViewBoxShift} ${s * bounds.y1 - padding} ${dx} ${s * (bounds.y2 - bounds.y1) + 2 * padding}`
             : ''}
           className="visual-map-svg world-selection"
-          style={isPhonePortraitViewport && phoneScrollbarGutter > 0
-            ? { transform: `translateX(${phoneScrollbarGutter / 2}px)` }
-            : undefined}
         >
           {svgElements}
         </svg>
