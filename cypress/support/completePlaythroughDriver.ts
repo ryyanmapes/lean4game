@@ -982,6 +982,18 @@ export class CompletePlaythroughDriver {
     await waitFor(`${tab} tray contents`, () =>
       visible(dock.querySelectorAll<HTMLElement>('.tr-tactic-card, .tr-theorem-card, [data-tactic-name], [data-theorem-name]'))[0]
       ?? (dock.querySelector<HTMLButtonElement>('button[aria-label="Next"]')?.disabled ? null : dock), 10_000)
+    if (tab === 'Theorems') {
+      // The category selection survives route changes while the proof page is
+      // mounted. Search from the visible All tab so a theorem in +/≤/* is not
+      // accidentally hidden by the category used in the preceding level.
+      await waitFor('All theorem category to activate', () => {
+        const all = dock.querySelector<HTMLButtonElement>('[data-theorem-category="all"]')
+        if (!all) return dock
+        if (all.classList.contains('active')) return all
+        click(all)
+        return null
+      }, 5_000)
+    }
     await rewindPages(dock, 'Previous')
     for (let page = 0; page < 100; page += 1) {
       const card = visible(dock.querySelectorAll<HTMLElement>(selector))[0]
@@ -1922,8 +1934,13 @@ export class CompletePlaythroughDriver {
     )
     if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
-    await this.introduceLeadingForalls()
     const normalized = command.trim()
+    // A generalized induction is only general if its later declaration
+    // binders remain in the goal. Those binders are introduced and mapped by
+    // the first later command that actually addresses one of them.
+    if (this.deferredInitialBinderNames.length === 0) {
+      await this.introduceLeadingForalls()
+    }
     if (this.implicitIntroAlreadyPerformed) {
       this.implicitIntroAlreadyPerformed = false
       if (/^intro(?:\s+|$)/u.test(normalized)) return
