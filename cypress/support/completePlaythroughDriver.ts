@@ -554,7 +554,7 @@ function rewriteSource(source: string) {
 }
 
 function matchesExplicitArgument(actual: ExpressionNode, expected: ExpressionNode): boolean {
-  if (expected.type === 'variable' && expected.name === '_') return true
+  if (expected.type === 'variable' && expected.name === 'visualWildcard') return true
   if (actual.type !== expected.type) return false
   if (actual.type === 'variable' && expected.type === 'variable') return actual.name === expected.name
   if (actual.type === 'constant' && expected.type === 'constant') return actual.value === expected.value
@@ -567,6 +567,27 @@ function matchesExplicitArgument(actual: ExpressionNode, expected: ExpressionNod
       && matchesExplicitArgument(actual.right, expected.right)
   }
   return false
+}
+
+function parseExplicitArgument(argument: string): ExpressionNode {
+  // `_` is valid Lean placeholder syntax but is intentionally not an
+  // arithmetic-parser identifier. Give it a private parseable wildcard name
+  // so structural argument matching does not fall into the permissive catch
+  // path and accept the first unrelated occurrence.
+  return parse(argument.replace(/(^|[^\p{L}\p{N}_'])_([^\p{L}\p{N}_']|$)/gu, '$1visualWildcard$2'))
+}
+
+function expressionVariableNames(node: ExpressionNode, result: string[] = []): string[] {
+  if (node.type === 'variable') {
+    if (node.name !== '_' && !result.includes(node.name)) result.push(node.name)
+    return result
+  }
+  if (node.type === 'app') return expressionVariableNames(node.arg, result)
+  if (node.type === 'binary') {
+    expressionVariableNames(node.left, result)
+    expressionVariableNames(node.right, result)
+  }
+  return result
 }
 
 function forallBinderNames(card: HTMLElement): string[] {
@@ -593,13 +614,19 @@ function matchesPartiallyAppliedRule(
   const sourcePattern = symbol.split('\u2192', 1)[0]?.trim()
   if (!expressionText || !sourcePattern) return true
   try {
-    const bindings = matchAndCapture(parse(expressionText), parse(sourcePattern))
+    const parsedPattern = parse(sourcePattern)
+    const bindings = matchAndCapture(parse(expressionText), parsedPattern)
     if (!bindings) return false
     const binderNames = forallBinderNames(card)
+    const patternNames = expressionVariableNames(parsedPattern)
     return explicitArgs.every((argument, index) => {
       const binderName = binderNames[index]
-      const actual = binderName ? bindings[binderName] : undefined
-      return actual ? matchesExplicitArgument(actual, parse(argument)) : false
+      // Pretty-printed forall names can differ from the equality body's
+      // parser names. Fall back to positional variables in the rewrite
+      // pattern, which is precisely how explicit theorem arguments bind.
+      const actual = (patternNames[index] ? bindings[patternNames[index]] : undefined)
+        ?? (binderName ? bindings[binderName] : undefined)
+      return actual ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : false
     })
   } catch {
     // If an older card format cannot be parsed, retain the normal visual
@@ -631,7 +658,7 @@ function matchesTheoremPremise(
       // premise drags, just as Lean/player function application does.
       if (!actual) return true
       const argument = explicitArgs[index]
-      return argument ? matchesExplicitArgument(actual, parse(argument)) : true
+      return argument ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : true
     })
   } catch {
     return false
@@ -1441,7 +1468,11 @@ export class CompletePlaythroughDriver {
       // matches, then bind the classic target name to the actual conclusion.
       for (let premise = 0; resultName && premise < 8; premise += 1) {
         const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
-        const displayedProposition = resultCard.querySelector<HTMLElement>('.proposition')?.textContent ?? ''
+        // The card can also show a definitionally reduced implication below
+        // an atomic proposition such as `b ≠ 0`. Only the authoritative main
+        // hypothesis type determines whether another premise application is
+        // valid; the grey reduction is explanatory, not another function.
+        const displayedProposition = resultCard.dataset.hypType ?? ''
         if (!displayedProposition.includes('→')) break
         const matchingHypothesis = visible(
           this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
