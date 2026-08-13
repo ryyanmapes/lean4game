@@ -112,8 +112,9 @@ describe('local NNG4 release maps', () => {
     cy.get('.map-level-name-tooltip').should('be.visible').and('not.be.empty')
       .then($tooltip => {
         const bounds = $tooltip[0]!.getBoundingClientRect()
+        const viewportWidth = $tooltip[0]!.ownerDocument.defaultView!.innerWidth
         expect(bounds.left, 'tooltip is not clipped on the left').to.be.at.least(8)
-        expect(bounds.right, 'tooltip is not clipped on the right').to.be.at.most(innerWidth - 8)
+        expect(bounds.right, 'tooltip is not clipped on the right').to.be.at.most(viewportWidth - 8)
         expect(Number.parseFloat(getComputedStyle($tooltip[0]!).fontSize), 'readable map label').to.be.at.least(14)
         expect(Number.parseInt(getComputedStyle($tooltip[0]!).zIndex, 10), 'above the SVG map').to.be.at.least(1000)
         expect($tooltip.closest('svg'), 'tooltip escapes the SVG stacking context').to.have.length(0)
