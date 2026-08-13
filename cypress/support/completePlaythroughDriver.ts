@@ -786,6 +786,7 @@ export class CompletePlaythroughDriver {
   private preferredRewriteSide: 'left' | 'right' | null = null
   private implicitGoalRewriteTarget: string | null = null
   private readonly pendingGoalRewrites: string[] = []
+  private readonly pendingPostConstructionGoalRewrites: string[] = []
   private deferredInitialBinderNames: string[] = []
 
   constructor(private readonly win: DriverWindow) {}
@@ -1802,19 +1803,14 @@ export class CompletePlaythroughDriver {
           continue
         }
         if (goal.classList.contains('constructable') && goal.classList.contains('transformable')) {
-          // Double-click deliberately opens construction for a bare ≤ goal.
-          // Rewriting that same proposition remains available to players by
-          // dragging an equality card directly onto it. Reproduce that gesture
-          // instead of repeatedly opening the construction overlay while
-          // waiting for transformation mode.
-          if (parsed.repeat || parsed.occurrence !== null || parsed.rules.some(rule => rule.reverse || rule.args.length > 0)) {
-            throw new Error(`Unsupported direct goal rewrite on a constructable proposition: ${command}`)
-          }
-          for (const rule of parsed.rules) {
-            const source = await this.sourceCard(rule.name)
-            const liveGoal = await waitFor('current constructable rewrite goal', () => currentGoal(this.win))
-            await this.dragAndWait(source, liveGoal, `${rule.name} direct goal rewrite`)
-          }
+          // The current UI deliberately opens Construction Mode, rather than
+          // Transformation Mode, for a proposition such as a bare ≤ goal. A
+          // player can make the same proof by choosing the witness first and
+          // rewriting the resulting equality in normal Transformation Mode.
+          // Preserve that established interaction model and translate the
+          // classic proof order instead of requiring equality cards in the
+          // Combining Mode tray.
+          this.pendingPostConstructionGoalRewrites.push(command.replace(/\s+at\s+.+$/u, ''))
           continue
         }
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
@@ -2042,6 +2038,9 @@ export class CompletePlaythroughDriver {
     doubleClick(goal)
     await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
     await this.submitConstruction(parseConstructionExpr(match[1]), command)
+    for (const pending of this.pendingPostConstructionGoalRewrites.splice(0)) {
+      await this.rewrite(pending)
+    }
   }
 
   /** Introduce exactly one leading forall by clicking the goal, returning the
@@ -2171,6 +2170,15 @@ export class CompletePlaythroughDriver {
     if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
     const normalized = command.trim()
+    if (
+      this.pendingPostConstructionGoalRewrites.length > 0
+      && !/^(?:(?:repeat\s+)?rw\s|nth_rewrite\s|use\s)/u.test(normalized)
+    ) {
+      throw new Error(
+        `Constructable-goal rewrite must be followed by witness construction; ` +
+        `pending=${JSON.stringify(this.pendingPostConstructionGoalRewrites)}, next=${command}`,
+      )
+    }
     // A generalized induction is only general if its later declaration
     // binders remain in the goal. Those binders are introduced and mapped by
     // the first later command that actually addresses one of them.
