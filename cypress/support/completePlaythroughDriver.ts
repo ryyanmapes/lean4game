@@ -616,9 +616,14 @@ function matchesTheoremPremise(
     )
     if (!bindings) return false
     const binders = forallBinderNames(theorem)
-    return explicitArgs.every((argument, index) => {
-      const actual = bindings[binders[index]]
-      return actual ? matchesExplicitArgument(actual, parse(argument)) : false
+    return binders.every((binder, index) => {
+      const actual = bindings[binder]
+      // A premise often determines only some of a theorem's forall binders.
+      // Check every binder it does determine and leave the rest for later
+      // premise drags, just as Lean/player function application does.
+      if (!actual) return true
+      const argument = explicitArgs[index]
+      return argument ? matchesExplicitArgument(actual, parse(argument)) : true
     })
   } catch {
     return false
@@ -867,8 +872,12 @@ export class CompletePlaythroughDriver {
   }
 
   private hyp(name: string) {
-    const resolved = this.resolveName(name)
-    const baseSelector = `[data-testid="hyp-card"][data-hyp-name="${cssEscape(resolved)}"]`
+    return this.hypExact(this.resolveName(name))
+  }
+
+  /** Look up an already-resolved Lean name without following another alias. */
+  private hypExact(name: string) {
+    const baseSelector = `[data-testid="hyp-card"][data-hyp-name="${cssEscape(name)}"]`
     try {
       const streamId = harness(this.win).getCurrentStreamSnapshot().streamId
       const current = visible(this.win.document.querySelectorAll<HTMLElement>(
@@ -1139,7 +1148,7 @@ export class CompletePlaythroughDriver {
         `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(sourceName(theoremName))}"]`,
       ),
     )[0])
-    const hypothesis = await waitFor(`hypothesis ${hypName}`, () => this.hyp(this.resolveName(hypName)))
+    const hypothesis = await waitFor(`hypothesis ${hypName}`, () => this.hyp(hypName))
     const source = direction === 'theorem-to-hypothesis' ? copy : hypothesis
     const target = direction === 'theorem-to-hypothesis' ? hypothesis : copy
     const description = `${theoremName} ${direction}`
@@ -1183,15 +1192,19 @@ export class CompletePlaythroughDriver {
     let source = await this.sourceCard(name)
     let usedPremiseApplication = false
     if (!match[2] && explicitArgs.length > 0) {
-      const matchingHypothesis = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      ).find(hypothesis => matchesTheoremPremise(source, hypothesis, explicitArgs))
-      if (matchingHypothesis) {
+      // Classic proofs spell out both term arguments and proof arguments. In
+      // Visual Lean, proof arguments are ordinary function application: drag
+      // each A onto the current A -> B card, then drag the resulting B onward.
+      // This also lets earlier premise applications infer forall arguments
+      // that only become determined by a later premise.
+      for (const argument of explicitArgs) {
+        const matchingHypothesis = this.hyp(argument)
+        if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, explicitArgs)) continue
         const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-        await this.dragAndWait(source, matchingHypothesis, `${command} premise application`)
+        await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
         const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !namesBeforeApplication.has(candidate))
-        if (!createdName) throw new Error(`${command} did not derive its theorem conclusion`)
+        if (!createdName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
         usedPremiseApplication = true
       }
@@ -1209,11 +1222,11 @@ export class CompletePlaythroughDriver {
     const contradictionTarget = !match[2]
       && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
       && this.implicitGoalRewriteTarget
-      && this.hyp(this.implicitGoalRewriteTarget)
-        ? this.hyp(this.implicitGoalRewriteTarget)
+      && this.hypExact(this.implicitGoalRewriteTarget)
+        ? this.hypExact(this.implicitGoalRewriteTarget)
         : null
     const target = match[2]
-      ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(this.resolveName(match[2])))
+      ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(match[2]))
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     await this.dragAndWait(source, target, `${command} player drag`)
@@ -1247,7 +1260,7 @@ export class CompletePlaythroughDriver {
       await waitFor('transformation view', () => {
       const overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay')
       if (overlay) return overlay
-      const element = target === 'goal' ? currentGoal(this.win) : this.hyp(target)
+      const element = target === 'goal' ? currentGoal(this.win) : this.hypExact(target)
       if (element && Date.now() - lastAttemptAt >= 300) {
         // Re-resolve the card for each attempt. Lean responses replace cards
         // during reconciliation, so retaining the element found before the
@@ -1259,7 +1272,7 @@ export class CompletePlaythroughDriver {
       return null
       })
     } catch (error) {
-      const element = target === 'goal' ? currentGoal(this.win) : this.hyp(target)
+      const element = target === 'goal' ? currentGoal(this.win) : this.hypExact(target)
       throw new Error(`Timed out opening transformation target ${target}: ${JSON.stringify({
         found: Boolean(element),
         className: element?.className,
@@ -1432,7 +1445,7 @@ export class CompletePlaythroughDriver {
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         if (!goal.classList.contains('transformable') && this.implicitGoalRewriteTarget
-          && this.hyp(this.implicitGoalRewriteTarget)) {
+          && this.hypExact(this.implicitGoalRewriteTarget)) {
           // A negated goal becomes `False` after its equality premise is
           // introduced. Consecutive unqualified `rw` steps continue acting on
           // that visible premise, exactly where the player made the first
@@ -1449,7 +1462,7 @@ export class CompletePlaythroughDriver {
           await this.clickGoal()
           const snapshot = harness(this.win).getCurrentStreamSnapshot()
           const introducedName = Object.keys(snapshot.hypTypes)
-            .find(name => !beforeNames.has(name) && this.hyp(name)?.classList.contains('transformable'))
+            .find(name => !beforeNames.has(name) && this.hypExact(name)?.classList.contains('transformable'))
           if (!introducedName) {
             throw new Error(`Rewriting under an implication did not introduce a transformable premise (${command})`)
           }
@@ -1458,11 +1471,11 @@ export class CompletePlaythroughDriver {
           target = introducedName
           this.implicitGoalRewriteTarget = introducedName
         }
-      } else if (!this.hyp(target)) {
+      } else if (!this.hypExact(target)) {
         // Induction/cases can move a dependent local hypothesis back into the
         // goal. Expose it through the same goal click a player must perform,
         // and then continue addressing its collision-safe displayed name.
-        for (let attempt = 0; attempt < 4 && !this.hyp(target); attempt += 1) {
+        for (let attempt = 0; attempt < 4 && !this.hypExact(target); attempt += 1) {
           const goal = currentGoal(this.win)
           if (!goal?.classList.contains('clickable')) break
           const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
@@ -1476,7 +1489,7 @@ export class CompletePlaythroughDriver {
           }
         }
       }
-      if (target !== 'goal' && !this.hyp(target)) {
+      if (target !== 'goal' && !this.hypExact(target)) {
         const replacement = visible(
           this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"].transformable'),
         ).at(-1)
@@ -1796,8 +1809,8 @@ export class CompletePlaythroughDriver {
         ? await waitFor(`hypothesis ${targetName}`, () => this.hyp(targetName))
         : /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
           && this.implicitGoalRewriteTarget
-          && this.hyp(this.implicitGoalRewriteTarget)
-          ? this.hyp(this.implicitGoalRewriteTarget)!
+          && this.hypExact(this.implicitGoalRewriteTarget)
+          ? this.hypExact(this.implicitGoalRewriteTarget)!
         : await waitFor('current goal', () => currentGoal(this.win))
       await this.dragTactic('symm', target)
       return
