@@ -1239,19 +1239,9 @@ export class CompletePlaythroughDriver {
       // This does not reintroduce the forbidden False-card-to-arbitrary-goal
       // shortcut.
       await this.dragTactic('cases', target)
-      await waitFor('False elimination to complete the current branch', () => {
-        const audit = harness(this.win).getProofAudit()
-        if (audit.processing) return null
-        if (audit.completed) return audit
-        try {
-          return harness(this.win).getCurrentStreamSnapshot().currentStreamIsCompleted ? audit : null
-        } catch {
-          // A zero-goal cases result can briefly leave no selected stream while
-          // the proof tree reconciles. That is itself a completed branch, and
-          // the next driver action will use the normal branch navigator.
-          return audit
-        }
-      })
+      // dragTactic already waits for Lean to accept the play and for the proof
+      // signature to change. A `cases` result with zero goals has no successor
+      // stream to select; the normal post-command audit owns completion checks.
       return
     } else {
       const before = proofSignature(harness(this.win).getProofAudit())
