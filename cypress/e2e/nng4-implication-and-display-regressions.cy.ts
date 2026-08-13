@@ -304,6 +304,7 @@ describe('NNG4 implication and definition display regressions', () => {
     )
     cy.contains('.goal-info.below', 'Drag the tactic `exfalso` to ANY goal to set it to `False`.')
       .should('be.visible')
+    cy.contains('.tr-tab-btn', 'Tactics', { timeout: LOAD_TIMEOUT }).click()
     cy.get('[data-tactic-name="exfalso"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
   })
 

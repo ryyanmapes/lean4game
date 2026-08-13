@@ -1302,3 +1302,38 @@ test('click_prop keeps disjunction case hypotheses green when the source card is
   assert.equal(leftBranch.goal.userName, 'inl thm_left')
   assert.equal(rightBranch.goal.userName, 'inr thm_right')
 })
+
+test('cases on False completes only the focused branch without synthesizing case streams', () => {
+  const focusedStream = stream('stream-false', 'A', 'false-branch', [
+    hyp('hyp-false', 'h', 'False'),
+  ])
+  const siblingStream = stream('stream-sibling', 'B', 'sibling', [])
+  const beforeTree = {
+    id: 'root-false',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      { id: 'leaf-false', streamId: focusedStream.id, label: 'false-branch', completed: false, children: [] },
+      { id: 'leaf-sibling', streamId: siblingStream.id, label: 'sibling', completed: false, children: [] },
+    ],
+  }
+  const beforeCanvas = { streams: [focusedStream, siblingStream], completed: false }
+  const afterCanvas = { streams: [siblingStream], completed: false }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    beforeCanvas,
+    afterCanvas,
+    focusedStream,
+    'cases h',
+    false,
+    focusedStream.id,
+    [],
+  )
+
+  assert.deepEqual(result.focusedStreams, [])
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [siblingStream.id])
+  assert.deepEqual(result.nextCanvas.streams.map(candidate => candidate.id), [siblingStream.id])
+  assert.equal(result.nextCanvas.completed, false)
+})

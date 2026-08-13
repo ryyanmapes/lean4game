@@ -738,6 +738,15 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
   return true
 }
 
+function casesTacticSplits(card: HypCardType): boolean {
+  const typeText = normalizeFormulaText(
+    card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type),
+  )
+  // Eliminating False closes the focused branch; unlike cases on a number,
+  // disjunction, or existential proof, it creates no successor streams.
+  return typeText !== 'False'
+}
+
 function natContextVarNames(stream: GoalStream): string[] {
   return stream.hyps
     .filter(card => {
@@ -3092,7 +3101,9 @@ export function VisualCanvas({
         }
         if (tacticTemplate.name === 'cases') {
           const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
-          applyDroppedInteraction(playTactic, activeId, { streamSplit: true })
+          applyDroppedInteraction(playTactic, activeId, {
+            streamSplit: casesTacticSplits(targetCard),
+          })
           return
         }
         const placementHint: PlacementHint = {
@@ -4845,9 +4856,13 @@ export function VisualCanvas({
     const stream = requireInteractiveCurrentStream()
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
+    const casesMatch = /^cases\s+(\S+)/u.exec(command.trim())
+    const casesTarget = casesMatch ? requireHypCard(stream, casesMatch[1]!) : null
     const accepted = await latestApplyInteraction(command, stream.id, {
       solvedGoalId: stream.id,
-      streamSplit: /^(?:induction|cases|have)\b/u.test(command.trim()),
+      streamSplit: casesTarget
+        ? casesTacticSplits(casesTarget)
+        : /^(?:induction|have)\b/u.test(command.trim()),
       targetStreamId: stream.id,
     })
     if (!accepted) {
@@ -4920,7 +4935,7 @@ export function VisualCanvas({
     if (tacticName === 'cases') {
       const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetPlayName })
       await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
-        streamSplit: true,
+        streamSplit: casesTacticSplits(targetCard),
         targetStreamId: stream.id,
       })
       return
