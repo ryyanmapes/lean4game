@@ -675,6 +675,7 @@ function parseConstructionExpr(source: string): ConstructionExpr {
 
 export class CompletePlaythroughDriver {
   private readonly aliases = new Map<string, string>()
+  private readonly aliasTypes = new Map<string, string>()
   private readonly pendingBranchAliases: Array<{ expected: string; before: Set<string> }> = []
   private classicCommandsAlreadyCovered = 0
   private implicitIntroAlreadyPerformed = false
@@ -861,14 +862,40 @@ export class CompletePlaythroughDriver {
         const pending = this.pendingBranchAliases[index]
         const createdName = names.find(name => !pending.before.has(name))
         if (!createdName) continue
-        this.aliases.set(pending.expected, createdName)
+        this.rememberAlias(pending.expected, createdName)
         this.pendingBranchAliases.splice(index, 1)
       }
     }
   }
 
   private resolveName(name: string) {
-    return this.aliases.get(name) ?? name
+    const resolved = this.aliases.get(name) ?? name
+    try {
+      const snapshot = harness(this.win).getCurrentStreamSnapshot()
+      if (snapshot.hypTypes[resolved]) return resolved
+      const rememberedType = this.aliasTypes.get(name)
+      if (rememberedType && /(?:→|=|≠|≤|∨|∧|False)/u.test(rememberedType)) {
+        const reconciled = Object.entries(snapshot.hypTypes)
+          .find(([, type]) => this.normalizedProposition(type) === rememberedType)?.[0]
+        if (reconciled) {
+          this.aliases.set(name, reconciled)
+          return reconciled
+        }
+      }
+    } catch {
+      // The harness can briefly disappear between proof streams.
+    }
+    return resolved
+  }
+
+  private rememberAlias(expected: string, actual: string) {
+    this.aliases.set(expected, actual)
+    try {
+      const type = harness(this.win).getCurrentStreamSnapshot().hypTypes[actual]
+      if (type) this.aliasTypes.set(expected, this.normalizedProposition(type))
+    } catch {
+      // The name remains useful even if the proof stream is between renders.
+    }
   }
 
   private hyp(name: string) {
@@ -888,6 +915,29 @@ export class CompletePlaythroughDriver {
       // The harness can briefly disappear while React changes proof branches.
     }
     return visible(this.win.document.querySelectorAll<HTMLElement>(baseSelector))[0] ?? null
+  }
+
+  private refreshCard(card: HTMLElement) {
+    const hypName = card.dataset.hypName
+    if (!hypName) return card
+    const exact = this.hypExact(hypName)
+    if (exact) return exact
+    const hypType = card.dataset.hypType
+    if (!hypType) return card
+    const normalizedType = this.normalizedProposition(hypType)
+    const snapshot = harness(this.win).getCurrentStreamSnapshot()
+    const currentName = Object.entries(snapshot.hypTypes)
+      .find(([, type]) => this.normalizedProposition(type) === normalizedType)?.[0]
+    return currentName ? this.hypExact(currentName) ?? card : card
+  }
+
+  private latestRelationHypothesis() {
+    const snapshot = harness(this.win).getCurrentStreamSnapshot()
+    return Object.keys(snapshot.hypTypes).reverse().map(name => this.hypExact(name))
+      .find(card => card && (
+        card.classList.contains('transformable')
+        || /(?:=|≠|≤)/u.test(card.dataset.hypType ?? '')
+      )) ?? null
   }
 
   private async pagedCard(tab: 'Tactics' | 'Theorems', selector: string) {
@@ -936,6 +986,8 @@ export class CompletePlaythroughDriver {
 
   private async dragAndWait(source: HTMLElement, target: HTMLElement, description: string) {
     await waitForPlayerIdle(this.win, `${description} to become available`)
+    source = this.refreshCard(source)
+    target = this.refreshCard(target)
     const before = proofSignature(harness(this.win).getProofAudit())
     const previousAttempts = playLog(this.win).length
     await drag(source, target)
@@ -961,8 +1013,8 @@ export class CompletePlaythroughDriver {
       const predecessor = nextFresh(beforeNames, 'd')
       beforeNames.add(predecessor)
       const inductionHyp = nextFresh(beforeNames, 'hd')
-      this.aliases.set(induction[1], predecessor)
-      this.aliases.set(induction[2], inductionHyp)
+      this.rememberAlias(induction[1], predecessor)
+      this.rememberAlias(induction[2], inductionHyp)
     }
   }
 
@@ -1048,7 +1100,7 @@ export class CompletePlaythroughDriver {
     const actualNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       .filter(name => !beforeNames.has(name))
     for (let index = 0; index < Math.min(expectedNames.length, actualNames.length); index += 1) {
-      this.aliases.set(expectedNames[index], actualNames[index])
+      this.rememberAlias(expectedNames[index], actualNames[index])
     }
     for (const expected of expectedNames.slice(actualNames.length)) {
       this.pendingBranchAliases.push({ expected, before: beforeNames })
@@ -1249,7 +1301,7 @@ export class CompletePlaythroughDriver {
       }
       const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       const createdName = afterNames.find(candidate => !beforeFinalNames.has(candidate))
-      if (createdName) this.aliases.set(match[2], createdName)
+      if (createdName) this.rememberAlias(match[2], createdName)
     }
   }
 
@@ -1466,12 +1518,21 @@ export class CompletePlaythroughDriver {
           if (!introducedName) {
             throw new Error(`Rewriting under an implication did not introduce a transformable premise (${command})`)
           }
-          this.aliases.set('h', introducedName)
+          this.rememberAlias('h', introducedName)
           this.implicitIntroAlreadyPerformed = true
           target = introducedName
           this.implicitGoalRewriteTarget = introducedName
         }
       } else if (!this.hypExact(target)) {
+        const existingRelation = this.latestRelationHypothesis()
+        const existingName = existingRelation?.dataset.hypName
+        if (existingName) {
+          // Clicking a ≤ proposition replaces it with a witness and equality.
+          // Address that visible equality rather than clicking the unrelated
+          // disjunction goal while trying to recover the former ≤ card.
+          this.rememberAlias(rawTarget, existingName)
+          target = existingName
+        }
         // Induction/cases can move a dependent local hypothesis back into the
         // goal. Expose it through the same goal click a player must perform,
         // and then continue addressing its collision-safe displayed name.
@@ -1483,19 +1544,17 @@ export class CompletePlaythroughDriver {
           const actualName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
             .find(name => !beforeNames.has(name))
           if (actualName) {
-            this.aliases.set(rawTarget, actualName)
+            this.rememberAlias(rawTarget, actualName)
             target = actualName
             this.implicitGoalRewriteTarget = actualName
           }
         }
       }
       if (target !== 'goal' && !this.hypExact(target)) {
-        const replacement = visible(
-          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"].transformable'),
-        ).at(-1)
+        const replacement = this.latestRelationHypothesis()
         const replacementName = replacement?.dataset.hypName
         if (replacementName) {
-          this.aliases.set(rawTarget, replacementName)
+          this.rememberAlias(rawTarget, replacementName)
           target = replacementName
         }
       }
@@ -1619,7 +1678,7 @@ export class CompletePlaythroughDriver {
       source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName!))
     }
     if (!createdName) throw new Error(`${command} has no player-supplied specialization arguments`)
-    this.aliases.set(expectedName, createdName)
+    this.rememberAlias(expectedName, createdName)
   }
 
   private async deriveTypedHave(command: string) {
@@ -1638,7 +1697,7 @@ export class CompletePlaythroughDriver {
     const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       .find(name => !beforeNames.has(name))
     if (!createdName) throw new Error(`${command} did not create a theorem card`)
-    this.aliases.set(expectedName, createdName)
+    this.rememberAlias(expectedName, createdName)
     // The one visible drag derives the theorem directly. In the fixture's
     // classic proof the following rewrite and exact commands instead fill a
     // temporary `have` subgoal, so they require no additional player action.
@@ -1680,7 +1739,12 @@ export class CompletePlaythroughDriver {
       if (names.length >= expectedNames.length) break
       const goal = currentGoal(this.win)
       if (!goal?.classList.contains('clickable')) break
+      const beforeCount = names.length
       await this.clickGoal()
+      await waitFor('introduced declaration binder to render', () => {
+        const current = harness(this.win).getCurrentStreamSnapshot()
+        return Object.keys(current.hypTypes).length > beforeCount ? true : null
+      })
     }
     const initialNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
     // Display-name collision handling is intentionally allowed to rename
@@ -1693,7 +1757,7 @@ export class CompletePlaythroughDriver {
     // example expected `ha, h` displayed as `h, h1`).
     expectedNames.forEach((expectedName, index) => {
       const actualName = initialNames[index]
-      if (actualName) this.aliases.set(expectedName, actualName)
+      if (actualName) this.rememberAlias(expectedName, actualName)
     })
     for (const expectedName of expectedNames) {
       if (this.hyp(expectedName)) continue
@@ -1767,7 +1831,7 @@ export class CompletePlaythroughDriver {
           actualName = afterNames.find(name => !beforeNames.has(name))
         }
         if (!actualName) throw new Error(`Intro ${requestedName} did not create a hypothesis card`)
-        if (actualName) this.aliases.set(requestedName, actualName)
+        if (actualName) this.rememberAlias(requestedName, actualName)
       }
       return
     }
