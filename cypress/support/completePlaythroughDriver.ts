@@ -1378,9 +1378,8 @@ export class CompletePlaythroughDriver {
         click(next)
       }
     }
-    const snapshot = harness(this.win).getCurrentStreamSnapshot()
     const resolvedName = this.resolveName(name)
-    const reconciledName = !snapshot.hypTypes[resolvedName] ? this.latestRelationName() : null
+    const reconciledName = this.latestRelationName()
     if (allowReconciledFallback && reconciledName && reconciledName !== resolvedName) {
       return this.transformRule(reconciledName, false)
     }
@@ -1576,6 +1575,16 @@ export class CompletePlaythroughDriver {
         if (replacementName) {
           this.rememberAlias(rawTarget, replacementName)
           target = replacementName
+        }
+      }
+      if (target !== 'goal') {
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        if (!snapshot.hypTypes[target]) {
+          const currentRelationName = this.latestRelationName()
+          if (currentRelationName) {
+            this.rememberAlias(rawTarget, currentRelationName)
+            target = currentRelationName
+          }
         }
       }
       await this.openTransform(target)
