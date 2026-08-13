@@ -2154,6 +2154,25 @@ export class CompletePlaythroughDriver {
       await this.deriveTypedHave(normalized)
       return
     }
+    const repeatedApplication = /^repeat\s+apply\s+(.+?)\s+at\s+(\S+)$/u.exec(normalized)
+    if (repeatedApplication) {
+      const [, theoremApplication, targetName] = repeatedApplication
+      const theoremName = sourceName(splitTopLevelWhitespace(theoremApplication)[0] ?? theoremApplication)
+      let applications = 0
+      for (; applications < 32; applications += 1) {
+        const source = await this.sourceCard(theoremName)
+        const target = this.hyp(targetName)
+        if (!target || !matchesTheoremPremise(source, target, [])) break
+        await this.applyOrExact(`apply ${theoremApplication} at ${targetName}`)
+      }
+      if (applications === 0) {
+        throw new Error(`${normalized} had no player-applicable premise`)
+      }
+      if (applications === 32) {
+        throw new Error(`${normalized} exceeded the repeated player-application limit`)
+      }
+      return
+    }
     if (/^(?:apply|exact)\s/u.test(normalized)) {
       await this.applyOrExact(normalized)
       return
