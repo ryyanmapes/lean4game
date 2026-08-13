@@ -1271,6 +1271,23 @@ export class CompletePlaythroughDriver {
       if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
       source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
     }
+    // Specializing forall binders can expose an implication whose premise is
+    // already a visible hypothesis. Apply it through the same card-on-card
+    // drag a player uses, rather than applying A → B to the B goal and
+    // accidentally creating a duplicate A subgoal.
+    for (let premise = 0; premise < 8; premise += 1) {
+      source = this.refreshCard(source)
+      const matchingHypothesis = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      ).find(hypothesis => hypothesis !== source && matchesTheoremPremise(source, hypothesis, []))
+      if (!matchingHypothesis) break
+      const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+      await this.dragAndWait(source, matchingHypothesis, `${command} visible premise application`)
+      const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        .find(candidate => !namesBeforeApplication.has(candidate))
+      if (!createdName) throw new Error(`${command} did not derive its visible-premise conclusion`)
+      source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
+    }
     const contradictionTarget = !match[2]
       && /^False$/u.test(harness(this.win).getCurrentStreamSnapshot().goalType.trim())
       && this.implicitGoalRewriteTarget
@@ -1739,12 +1756,11 @@ export class CompletePlaythroughDriver {
       if (names.length >= expectedNames.length) break
       const goal = currentGoal(this.win)
       if (!goal?.classList.contains('clickable')) break
-      const beforeCount = names.length
       await this.clickGoal()
-      await waitFor('introduced declaration binder to render', () => {
-        const current = harness(this.win).getCurrentStreamSnapshot()
-        return Object.keys(current.hypTypes).length > beforeCount ? true : null
-      })
+      // The proof audit can settle a frame before the card list paints. Give
+      // that normal reconciliation one player-sized beat before deciding
+      // whether another declaration binder remains.
+      await sleep(250)
     }
     const initialNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
     // Display-name collision handling is intentionally allowed to rename
