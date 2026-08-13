@@ -1180,7 +1180,6 @@ export class CompletePlaythroughDriver {
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])
     const explicitArgs = application.slice(1)
-    const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     let source = await this.sourceCard(name)
     let usedPremiseApplication = false
     if (!match[2] && explicitArgs.length > 0) {
@@ -1210,6 +1209,7 @@ export class CompletePlaythroughDriver {
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => this.hyp(this.resolveName(match[2])))
       : await waitFor('current goal', () => currentGoal(this.win))
+    const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     await this.dragAndWait(source, target, `${command} player drag`)
     if (match[2]) {
       if (harness(this.win).getProofAudit().completed) {
@@ -1219,7 +1219,7 @@ export class CompletePlaythroughDriver {
         })}`)
       }
       const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      const createdName = afterNames.find(candidate => !beforeNames.has(candidate))
+      const createdName = afterNames.find(candidate => !beforeFinalNames.has(candidate))
       if (createdName) this.aliases.set(match[2], createdName)
     }
   }
@@ -1631,6 +1631,18 @@ export class CompletePlaythroughDriver {
    * canvas, so the reference proof's first command must see the same context
    * that Lean's theorem body sees. */
   async prepareInitialBinders(expectedNames: string[]) {
+    // First expose the entire declaration context through the same successive
+    // goal clicks a player makes. Mapping aliases while only a prefix is
+    // visible is ambiguous: a visible `h` may be Lean's collision-safe name
+    // for an earlier `ha`, while the declaration's real `h` is still in the
+    // goal. That was causing later commands to target the wrong card.
+    for (let attempt = 0; attempt < expectedNames.length + 4; attempt += 1) {
+      const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      if (names.length >= expectedNames.length) break
+      const goal = currentGoal(this.win)
+      if (!goal?.classList.contains('clickable')) break
+      await this.clickGoal()
+    }
     const initialNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
     // Display-name collision handling is intentionally allowed to rename
     // declaration binders. When the complete declaration context is already
@@ -1653,21 +1665,13 @@ export class CompletePlaythroughDriver {
       })
     }
     for (const expectedName of expectedNames) {
-      const existing = this.hyp(expectedName)
-      if (existing) continue
-      const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-      await this.clickGoal()
-      const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      const actualName = afterNames.find(name => !beforeNames.has(name))
-      if (!actualName) {
-        throw new Error(`Goal click did not introduce declaration binder ${expectedName}: ${JSON.stringify({
-          expectedNames,
-          beforeNames: [...beforeNames],
-          afterNames,
-          audit: harness(this.win).getProofAudit(),
-        })}`)
-      }
-      this.aliases.set(expectedName, actualName)
+      if (this.hyp(expectedName)) continue
+      throw new Error(`Declaration binder ${expectedName} is not visible after player introductions: ${JSON.stringify({
+        expectedNames,
+        initialNames,
+        aliases: [...this.aliases.entries()],
+        audit: harness(this.win).getProofAudit(),
+      })}`)
     }
   }
 
