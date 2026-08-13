@@ -1647,8 +1647,8 @@ export class CompletePlaythroughDriver {
           this.aliases.set(expectedName, expectedName)
           return
         }
-        const actualName = renamedActualNames[renamedIndex] ?? initialNames[index]
-        renamedIndex += 1
+        const actualName = renamedActualNames[renamedIndex]
+        if (actualName) renamedIndex += 1
         if (actualName) this.aliases.set(expectedName, actualName)
       })
     }

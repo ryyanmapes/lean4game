@@ -113,7 +113,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ../NNG4/.lake/build
-          key: focused-nng4-${{ runner.os }}-${{ steps.nng4-revision.outputs.sha }}
+          # NNG4's build imports this checkout's GameServer sources. Keying
+          # only on NNG4 restored stale tactic oleans after lean4game backend
+          # changes, so CI (and downstream browser releases) could test old
+          # semantics while the client came from the new commit.
+          key: focused-nng4-${{ runner.os }}-${{ steps.nng4-revision.outputs.sha }}-${{ hashFiles('server/**/*.lean', 'server/lakefile.lean', 'server/lean-toolchain') }}
 
       - name: Install JavaScript dependencies and build relay
         run: |

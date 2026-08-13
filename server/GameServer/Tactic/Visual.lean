@@ -1138,6 +1138,8 @@ private theorem oneNeZeroRewriteLocal : (1 : Nat) ≠ 0 := by
   intro h
   cases h
 
+private axiom visibleNotLocal (x : Nat) : x = 0 → False
+
 -- Dragging a proposition onto a theorem must infer preceding explicit data
 -- binders from that proposition; it is ordinary dependent function
 -- application, not a special case for any particular theorem.
@@ -1153,6 +1155,11 @@ example (x : Nat) (h : x ≠ 0) : True := by
 
 example (x : Nat) (h : x = 0 → False) : True := by
   drag_apply explicitNotPremiseLocal h
+  exact thm_explicitNotPremiseLocal
+
+example (x : Nat) : True := by
+  have thm_visibleNot : x = 0 → False := visibleNotLocal x
+  drag_apply explicitNotPremiseLocal thm_visibleNot
   exact thm_explicitNotPremiseLocal
 
 example (x y : Nat) (h : x * y = 1) : True := by
