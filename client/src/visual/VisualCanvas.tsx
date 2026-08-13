@@ -3136,7 +3136,7 @@ export function VisualCanvas({
           // explicit data arguments are inferred from the proposition instead
           // of accidentally treating that proposition as the first data
           // argument (for example `eq_succ_of_ne_zero h`).
-          const playTactic = targetCard
+          const playTactic = targetCard && splitImplicationText(theoremTemplate.proposition) !== null
             ? interactionToPlayTactic({
                 type: 'drag_apply',
                 theoremName: theoremTemplate.theoremName,
@@ -3275,6 +3275,7 @@ export function VisualCanvas({
         }
 
         const playTactic = sourceTheoremCopy && targetCard
+          && splitImplicationText(sourceTheoremCopy.theorem.proposition) !== null
           ? interactionToPlayTactic({
               type: 'drag_apply',
               theoremName: sourceTheoremCopy.theorem.theoremName,

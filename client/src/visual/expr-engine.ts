@@ -30,6 +30,7 @@ interface BinaryOpInfo {
 }
 
 const BINARY_OPS: Record<string, BinaryOpInfo> = {
+  '^': { op: '^', precedence: 7, associativity: 'right' },
   '*': { op: '*', precedence: 6, associativity: 'left' },
   '/': { op: '/', precedence: 6, associativity: 'left' },
   '+': { op: '+', precedence: 5, associativity: 'left' },
@@ -194,6 +195,7 @@ function flattenApp(tree: ExprTree): ExprTree[] {
 }
 
 const OP_CONSTS: Record<string, Op> = {
+  'HPow.hPow': '^',
   'HAdd.hAdd': '+',
   'HMul.hMul': '*',
   'HSub.hSub': '-',
@@ -260,7 +262,7 @@ function opPrecedence(op: Op): number {
 }
 
 function isArithmeticOp(op: Op): boolean {
-  return op === '+' || op === '-' || op === '*' || op === '/'
+  return op === '^' || op === '+' || op === '-' || op === '*' || op === '/'
 }
 
 function isRelationOp(op: Op): boolean {

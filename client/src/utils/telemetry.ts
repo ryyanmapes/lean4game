@@ -126,7 +126,12 @@ function telemetryBaseUrl(): string {
   const runtimeConfigured = typeof window !== 'undefined'
     ? String((window as Window & { __LEAN_TELEMETRY_URL__?: string }).__LEAN_TELEMETRY_URL__ ?? '').trim()
     : ''
-  const configured = runtimeConfigured || String(import.meta.env.VITE_TELEMETRY_URL ?? '').trim()
+  if (runtimeConfigured) {
+    try { sessionStorage.setItem('leanTelemetryRuntimeUrl', runtimeConfigured) } catch {}
+  }
+  let persistedRuntime = ''
+  try { persistedRuntime = sessionStorage.getItem('leanTelemetryRuntimeUrl') ?? '' } catch {}
+  const configured = runtimeConfigured || persistedRuntime || String(import.meta.env.VITE_TELEMETRY_URL ?? '').trim()
   return configured ? configured.replace(/\/$/u, '') : ''
 }
 
@@ -149,6 +154,14 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
   const message = report.message.trim()
   if (!baseUrl || !message || message.length > 1000) return false
   const userId = getConsentState() === 'accepted' ? getOrCreateUserId() : null
+  const seen = new WeakSet<object>()
+  const proofState = JSON.parse(JSON.stringify(report.proof_state, (_key, value: unknown) => {
+    if (typeof value === 'bigint') return value.toString()
+    if (typeof value !== 'object' || value === null) return value
+    if (seen.has(value)) return '[Circular]'
+    seen.add(value)
+    return value
+  }))
   const response = await fetch(`${baseUrl}/v1/feedback`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -156,6 +169,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
       report_id: createTelemetryId(),
       ...(userId ? { user_uuid: userId } : {}),
       ...report,
+      proof_state: proofState,
       message,
       ts: new Date().toISOString(),
     }),

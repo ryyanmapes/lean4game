@@ -1599,8 +1599,18 @@ export class CompletePlaythroughDriver {
     // visible, associate it positionally with Lean's binder order instead of
     // trying to introduce a nonexistent extra binder by clicking the goal.
     if (initialNames.length >= expectedNames.length) {
+      const claimedActualNames = new Set(
+        expectedNames.filter(expectedName => initialNames.includes(expectedName)),
+      )
+      const renamedActualNames = initialNames.filter(name => !claimedActualNames.has(name))
+      let renamedIndex = 0
       expectedNames.forEach((expectedName, index) => {
-        const actualName = initialNames[index]
+        if (initialNames.includes(expectedName)) {
+          this.aliases.set(expectedName, expectedName)
+          return
+        }
+        const actualName = renamedActualNames[renamedIndex] ?? initialNames[index]
+        renamedIndex += 1
         if (actualName) this.aliases.set(expectedName, actualName)
       })
     }

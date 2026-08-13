@@ -208,6 +208,14 @@ private partial def visibleExprMatches (pattern actual : Expr) : MetaM Bool := d
 private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
   let checkpoint ← getMCtx
   try
+    -- `forallMetaTelescopeReducing` can expose the theorem premise's head
+    -- definition (notably `Not`) while the local hypothesis retains the
+    -- surface constant. Normalize both heads at the same transparency before
+    -- doing the structural visibility check. This still does not simplify
+    -- arguments such as arithmetic expressions, so hidden rewrites remain
+    -- unavailable until the player performs them.
+    let domain ← withReducible (whnf domain)
+    let argType ← withReducible (whnf argType)
     if !(← visibleExprMatches domain argType) then
       setMCtx checkpoint
       return false

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 const {
   applyTheoremRewrite,
+  exprTreeToNode,
   findDisambiguatingRewritePath,
   findMatchingNodeIds,
   formatFormulaText,
@@ -94,6 +95,25 @@ test('keeps backend paths for nested rewrites, including unique matches', () => 
   const ambiguousTarget = ambiguousGoal.right
   assert.deepEqual(
     findDisambiguatingRewritePath(ambiguousGoal, ambiguousTarget.id, node => matchesPattern(node, lhs)),
+    [2],
+  )
+})
+
+test('models powers with both visible operands so exponent rewrites use the second child', () => {
+  const app = (func, arg) => ({ tag: 'app', func, arg })
+  const powTree = [
+    { tag: 'const', name: 'MyNat' },
+    { tag: 'const', name: 'Nat' },
+    { tag: 'const', name: 'MyNat' },
+    { tag: 'const', name: 'MyNat.instHPow' },
+    { tag: 'fvar', name: 'a' },
+    { tag: 'lit', n: 1 },
+  ].reduce((func, arg) => app(func, arg), { tag: 'const', name: 'HPow.hPow' })
+  const power = exprTreeToNode(powTree)
+
+  assert.equal(printExpression(power), 'a ^ 1')
+  assert.deepEqual(
+    findDisambiguatingRewritePath(power, power.right.id, node => node.type === 'constant' && node.value === 1),
     [2],
   )
 })

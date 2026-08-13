@@ -1082,12 +1082,21 @@ private theorem succInjLocal (x y : Nat) (h : Nat.succ x = Nat.succ y) : x = y :
 private theorem explicitPremiseLocal (x : Nat) (_h : x = x) : True := by
   trivial
 
+private theorem explicitNotPremiseLocal (x : Nat) (_h : x ≠ 0) : True := by
+  trivial
+
 -- Dragging a proposition onto a theorem must infer preceding explicit data
 -- binders from that proposition; it is ordinary dependent function
 -- application, not a special case for any particular theorem.
 example (x : Nat) (h : x = x) : True := by
   drag_to explicitPremiseLocal h
   exact thm_explicitPremiseLocal
+
+-- `Not` is reducible. Premise application must normalize both the theorem
+-- domain and local proposition consistently while still inferring `x`.
+example (x : Nat) (h : x ≠ 0) : True := by
+  drag_apply explicitNotPremiseLocal h
+  exact thm_explicitNotPremiseLocal
 
 example (x : Nat) : x + 1 = 4 → True := by
   intro h
