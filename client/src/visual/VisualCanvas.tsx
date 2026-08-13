@@ -3131,12 +3131,23 @@ export function VisualCanvas({
                 droppedPosition: targetCard.position,
               }
             : undefined
-          const playTactic = interactionToPlayTactic({
-            type: 'drag_to',
-            nameA: theoremTemplate.theoremName,
-            nameB: targetName,
-            reverse,
-          })
+          // A tray theorem dropped on a proposition is ordinary function
+          // application. Use the backend's binder-aware application tactic so
+          // explicit data arguments are inferred from the proposition instead
+          // of accidentally treating that proposition as the first data
+          // argument (for example `eq_succ_of_ne_zero h`).
+          const playTactic = targetCard
+            ? interactionToPlayTactic({
+                type: 'drag_apply',
+                theoremName: theoremTemplate.theoremName,
+                hypName: targetName,
+              })
+            : interactionToPlayTactic({
+                type: 'drag_to',
+                nameA: theoremTemplate.theoremName,
+                nameB: targetName,
+                reverse,
+              })
           const theoremDerivation = targetCard && targetStream
             ? safelyDeriveTheoremApplication(theoremTemplate, targetCard, targetStream)
             : null
@@ -3146,8 +3157,6 @@ export function VisualCanvas({
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
             ...(theoremDerivation ? {
-              commandOverride: theoremDerivation.command,
-              leanTacticOverride: theoremDerivation.command,
               syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
             } : {}),
           })
@@ -3265,7 +3274,13 @@ export function VisualCanvas({
           }
         }
 
-        const playTactic = interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
+        const playTactic = sourceTheoremCopy && targetCard
+          ? interactionToPlayTactic({
+              type: 'drag_apply',
+              theoremName: sourceTheoremCopy.theorem.theoremName,
+              hypName: targetName,
+            })
+          : interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName, reverse })
         const consumedTheoremCopyIds = [sourceTheoremCopy?.id, targetTheoremCopy?.id]
           .filter((id): id is string => Boolean(id))
         const theoremDerivation = sourceTheoremCopy && targetCard && targetStream
@@ -3283,8 +3298,6 @@ export function VisualCanvas({
               ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) }
               : {}),
           ...(theoremDerivation ? {
-            commandOverride: theoremDerivation.command,
-            leanTacticOverride: theoremDerivation.command,
             syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
           } : {}),
         })

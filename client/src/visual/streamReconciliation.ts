@@ -103,7 +103,8 @@ function likelyFocusedContinuation(
     : null
   const requiresStableGoalType =
     (playTactic?.startsWith('click_prop ') ?? false) ||
-    (playTactic?.startsWith('drag_to ') ?? false)
+    (playTactic?.startsWith('drag_to ') ?? false) ||
+    (playTactic?.startsWith('drag_apply ') ?? false)
   const candidateGoalType = goalTypeText(candidate)
   const allowsGoalTypeChangeWithinSameBranch =
     isGoalRewrite ||
@@ -996,6 +997,11 @@ function synthesizeContinuationStream(
     if (!sourceName || !targetName) return null
     return synthesizeDragToStream(focusedStream, sourceName, targetName)
   }
+  if (playTactic.startsWith('drag_apply ')) {
+    const [, theoremName, premiseName] = playTactic.trim().split(/\s+/)
+    if (!theoremName || !premiseName) return null
+    return synthesizeDragToStream(focusedStream, theoremName, premiseName)
+  }
   if (playTactic.startsWith('drag_goal ')) {
     return synthesizeDragGoalApplyStream(focusedStream, playTactic)
   }
@@ -1368,7 +1374,8 @@ export function reconcileProofTreeAfterInteraction(
   const interactionRequiresFollowUp =
     streamSplit ||
     (playTactic?.startsWith('click_prop ') ?? false) ||
-    (playTactic?.startsWith('drag_to ') ?? false)
+    (playTactic?.startsWith('drag_to ') ?? false) ||
+    (playTactic?.startsWith('drag_apply ') ?? false)
   const solvesFocusedGoal =
     (playTactic?.startsWith('drag_goal ') ?? false) || solvesFocusedByReflexiveClick
   const hasSiblingBranches = siblingStreamsByBeforeId.size > 0

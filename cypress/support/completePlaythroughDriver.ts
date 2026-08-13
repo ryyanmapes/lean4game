@@ -1224,12 +1224,22 @@ export class CompletePlaythroughDriver {
   }
 
   private async openTransform(target: string) {
-    const element = target === 'goal'
-      ? await waitFor('current goal', () => currentGoal(this.win))
-      : await waitFor(`hypothesis ${target}`, () => this.hyp(target))
-    doubleClick(element)
-    await waitFor('transformation view', () =>
-      this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
+    await waitForPlayerIdle(this.win, `${target} to become transformable`)
+    let lastAttemptAt = 0
+    await waitFor('transformation view', () => {
+      const overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay')
+      if (overlay) return overlay
+      const element = target === 'goal' ? currentGoal(this.win) : this.hyp(target)
+      if (element && Date.now() - lastAttemptAt >= 300) {
+        // Re-resolve the card for each attempt. Lean responses replace cards
+        // during reconciliation, so retaining the element found before the
+        // final React commit can send a perfectly realistic double-click to a
+        // detached node and silently do nothing.
+        doubleClick(element)
+        lastAttemptAt = Date.now()
+      }
+      return null
+    })
   }
 
   private async transformRule(name: string) {
@@ -1583,6 +1593,17 @@ export class CompletePlaythroughDriver {
    * canvas, so the reference proof's first command must see the same context
    * that Lean's theorem body sees. */
   async prepareInitialBinders(expectedNames: string[]) {
+    const initialNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+    // Display-name collision handling is intentionally allowed to rename
+    // declaration binders. When the complete declaration context is already
+    // visible, associate it positionally with Lean's binder order instead of
+    // trying to introduce a nonexistent extra binder by clicking the goal.
+    if (initialNames.length >= expectedNames.length) {
+      expectedNames.forEach((expectedName, index) => {
+        const actualName = initialNames[index]
+        if (actualName) this.aliases.set(expectedName, actualName)
+      })
+    }
     for (const expectedName of expectedNames) {
       const existing = this.hyp(expectedName)
       if (existing) continue

@@ -591,6 +591,10 @@ function PlayableLevel() {
                     proofBody: leanMonacoEditor?.editor?.getValue() ?? '',
                     completed: proof?.completed ?? false,
                     goals: proof?.steps.at(-1)?.goals ?? [],
+                    proof: {
+                      completed: proof?.completed ?? false,
+                      stepCount: proof?.steps.length ?? 0,
+                    },
                   })}
                   />
                 {mobile?
