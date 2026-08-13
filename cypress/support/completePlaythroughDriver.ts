@@ -1617,8 +1617,12 @@ export class CompletePlaythroughDriver {
           lastPlay: playLog(this.win).at(-1),
         })}`)
       }
-      const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      const createdName = afterNames.find(candidate => !beforeFinalNames.has(candidate))
+      const createdName = sourceWasLocalHypothesis
+        ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(candidate => !beforeFinalNames.has(candidate))
+        : await waitFor(`${command} derived conclusion card`, () =>
+            Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+              .find(candidate => !beforeFinalNames.has(candidate)) ?? null)
       let resultName = createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
