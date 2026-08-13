@@ -18,6 +18,7 @@ interface VisualHarness {
     coreLines: string[]
     interactiveLines: string[]
   }
+  getLastTransformRewriteDebug(): unknown
 }
 
 type HarnessWindow = Cypress.AUTWindow & {
@@ -491,9 +492,13 @@ describe('NNG4 implication and definition display regressions', () => {
     })
 
     cy.window().should(win => {
-      const audit = (win as HarnessWindow).__visualTestHarness?.getProofAudit()
+      const harness = (win as HarnessWindow).__visualTestHarness
+      const audit = harness?.getProofAudit()
       expect(audit?.processing, 'rewrite has finished').to.equal(false)
-      expect(audit?.completed, 'rewrite alone does not complete the visual level').to.equal(false)
+      expect(
+        audit?.completed,
+        `rewrite alone does not complete the visual level; debug=${JSON.stringify(harness?.getLastTransformRewriteDebug())}`,
+      ).to.equal(false)
       expect(
         (win as HarnessWindow).__visualUnmeasuredDockWasVisible,
         'rewrite dock is hidden until its final pagination and height are measured',
