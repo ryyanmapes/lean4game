@@ -1149,7 +1149,25 @@ export class CompletePlaythroughDriver {
     const snapshot = harness(this.win).getCurrentStreamSnapshot()
     const names = new Set(Object.keys(snapshot.hypTypes))
     const target = await waitFor(`hypothesis ${match[1]}`, () => this.hyp(match[1]))
-    await this.dragTactic('induction', target)
+    const beforeState = playerStateSignature(this.win)
+    const previousAttempts = playLog(this.win).length
+    await waitForPlayerIdle(this.win, 'induction drag to become available')
+    await drag(await this.tactic('induction'), this.refreshCard(target))
+    try {
+      await waitForPlayAttempt(this.win, previousAttempts, 'induction drag player action')
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; ` +
+        `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
+        { cause: error },
+      )
+    }
+    // Splitting a proof stream can commit the new branch graph before the
+    // proof-pane text is reconciled. The player-visible state transition is
+    // the authoritative completion signal for this gesture; the per-command
+    // audit immediately afterwards still validates both proof panes.
+    await waitFor('induction drag to update the player state', () =>
+      playerStateSignature(this.win) !== beforeState ? true : null)
     await waitFor('induction branch to become the current canvas stream', () => {
       const current = harness(this.win).getCurrentStreamSnapshot()
       if (!current.streamId || current.streamId === snapshot.streamId) return null
@@ -1590,26 +1608,6 @@ export class CompletePlaythroughDriver {
     const parsed = parseRewrite(command)
     for (const rawTarget of parsed.targets) {
       let target = rawTarget === 'goal' ? 'goal' : this.resolveName(rawTarget)
-      const propositionTarget = target === 'goal' ? null : this.hypExact(target)
-      if (propositionTarget && /≤/u.test(propositionTarget.dataset.hypType ?? '')) {
-        // Rewriting a displayed ≤ through its existential reduction would
-        // destroy the proposition card and make later theorems such as
-        // succ_le_succ/le_one inapplicable. Equality-on-proposition dragging
-        // is the player's proof-producing rewrite and preserves the ≤ result.
-        for (const rule of parsed.rules) {
-          const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-          await this.dragAndWait(
-            await this.sourceCard(rule.name),
-            await waitFor(`≤ hypothesis ${rawTarget}`, () => this.hypExact(target)),
-            `${rule.name} proposition rewrite`,
-          )
-          const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          const createdName = afterNames.find(name => !beforeNames.has(name))
-          if (createdName) target = createdName
-          this.rememberAlias(rawTarget, target)
-        }
-        continue
-      }
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -1693,6 +1691,11 @@ export class CompletePlaythroughDriver {
           }
         }
       }
+      const preservedComparison = target === 'goal'
+        ? null
+        : /≤/u.test(harness(this.win).getCurrentStreamSnapshot().hypTypes[target] ?? '')
+          ? '≤'
+          : null
       await this.openTransform(target)
       const preferredSide = this.preferredRewriteSide
       if (target === 'goal' && preferredSide) {
@@ -1726,6 +1729,18 @@ export class CompletePlaythroughDriver {
         if (button && !button.disabled) click(button)
         return null
       })
+      if (preservedComparison) {
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        const comparisonName = snapshot.hypTypes[target]?.includes(preservedComparison)
+          ? target
+          : Object.entries(snapshot.hypTypes).reverse()
+            .find(([, type]) => type.includes(preservedComparison))?.[0]
+        if (!comparisonName) {
+          throw new Error(`Player rewrite lost the ${preservedComparison} proposition ${rawTarget}: ${JSON.stringify(snapshot)}`)
+        }
+        target = comparisonName
+        this.rememberAlias(rawTarget, comparisonName)
+      }
     }
   }
 
