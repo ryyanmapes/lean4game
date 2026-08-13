@@ -1402,7 +1402,7 @@ export class CompletePlaythroughDriver {
       }
       const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       const createdName = afterNames.find(candidate => !beforeFinalNames.has(candidate))
-      let resultName = createdName
+      let resultName = createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
       // ordinary proposition-on-implication drags while a visible premise

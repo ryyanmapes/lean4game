@@ -814,7 +814,12 @@ function formulasMatchLiterally(left: string, right: string): boolean {
 }
 
 function worldAllowsComparisonTransform(worldId: string): boolean {
-  return worldId === 'Continuity'
+  // Comparisons are first-class transform targets everywhere they appear.
+  // Restricting this to Continuity made a double-click on `h : a ≤ b` fall
+  // through to its single-click eliminator in NNG, destroying the proposition
+  // before an equality rewrite could be applied to it.
+  void worldId
+  return true
 }
 
 function backendWorkingSideForRelation(
