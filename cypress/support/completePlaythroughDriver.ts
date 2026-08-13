@@ -446,8 +446,18 @@ async function finishPointerDrag(
   // not part of the corresponding player gesture. On phones it could turn a
   // valid rewrite into an ignored drop between pointer-down and pointer-up.
   const end = target.getBoundingClientRect()
-  const endX = end.left + end.width / 2
-  const endY = end.top + end.height / 2
+  // Nested expression targets overlap all of their descendants. Dropping at
+  // the bounding-box centre can therefore resolve to a smaller child even
+  // when the player selected the highlighted parent (for example the right
+  // child of `a * (b * c)`). Aim at the target's own operator/text instead;
+  // that is the visible, unambiguous part of the expression a player uses.
+  const ownExpressionPart = target.matches('.tr-expression-node')
+    ? Array.from(target.children).find(child =>
+        child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
+    : undefined
+  const dropRect = ownExpressionPart?.getBoundingClientRect() ?? end
+  const endX = dropRect.left + dropRect.width / 2
+  const endY = dropRect.top + dropRect.height / 2
   const ownerDocument = source.ownerDocument
   const moveTarget = ownerDocument.body
   const PointerEventCtor = ownerDocument.defaultView?.PointerEvent ?? PointerEvent
@@ -1794,10 +1804,18 @@ export class CompletePlaythroughDriver {
       const targetIndex = remainingOccurrence === null ? 0 : remainingOccurrence - 1
       const target = targets[targetIndex]
       if (target) {
+        const intendedTargetId = target.dataset.exprId
         const before = proofSignature(harness(this.win).getProofAudit())
         const previousAttempts = playLog(this.win).length
         await session.finish(target)
         await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
+        const resolvedTargetId = harness(this.win).getLastDragDebug()?.resolvedOverId
+        if (intendedTargetId && resolvedTargetId !== intendedTargetId) {
+          throw new Error(
+            `Rewrite ${rule.name} resolved to expression ${resolvedTargetId ?? 'none'} ` +
+            `instead of the player-selected expression ${intendedTargetId}`,
+          )
+        }
         await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
         return true
       }
