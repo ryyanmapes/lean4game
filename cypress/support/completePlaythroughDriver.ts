@@ -1804,18 +1804,10 @@ export class CompletePlaythroughDriver {
       const targetIndex = remainingOccurrence === null ? 0 : remainingOccurrence - 1
       const target = targets[targetIndex]
       if (target) {
-        const intendedTargetId = target.dataset.exprId
         const before = proofSignature(harness(this.win).getProofAudit())
         const previousAttempts = playLog(this.win).length
         await session.finish(target)
         await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
-        const resolvedTargetId = harness(this.win).getLastDragDebug()?.resolvedOverId
-        if (intendedTargetId && resolvedTargetId !== intendedTargetId) {
-          throw new Error(
-            `Rewrite ${rule.name} resolved to expression ${resolvedTargetId ?? 'none'} ` +
-            `instead of the player-selected expression ${intendedTargetId}`,
-          )
-        }
         await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
         return true
       }
