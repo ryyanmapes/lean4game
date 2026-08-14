@@ -1227,6 +1227,19 @@ function inferLeanTacticFromVisualInteraction(
     return `cases ${hypName}`
   }
 
+  const dragApply = /^drag_apply\s+(\S+)\s+(\S+)$/u.exec(playTactic)
+  if (dragApply && stream) {
+    const theoremName = dragApply[1]!
+    const premiseName = dragApply[2]!
+    const theoremBaseName = theoremName.split('.').at(-1) ?? theoremName
+    const createdName = inferCreatedHypName(stream, resultStep)
+      ?? nextFreshHypName(stream.hyps, `${DERIVED_THEOREM_PREFIX}${theoremBaseName}`)
+    // Browser annotations for visual-only commands are placeholders. A
+    // successful tray-theorem-on-premise drag is ordinary function
+    // application, so record its valid Lean `have` in the proof pane.
+    return `have ${createdName} := ${theoremName} ${premiseName}`
+  }
+
   const dragTo = /^drag_to\s+(?:←\s+)?(\S+)\s+(\S+)$/u.exec(playTactic)
   if (dragTo && stream) {
     const firstName = dragTo[1]!
@@ -1301,6 +1314,13 @@ function inferLeanTacticFromVisualInteraction(
     if (implicationTarget && formulasMatch(implicationTarget, goalType)) {
       return `apply ${hypName}`
     }
+    // Reaching this point still means Lean accepted the visual drag. Local
+    // hypotheses used on a goal are ordinary theorem application; retaining
+    // the placeholder `? (drag_goal h)` would make the proof pane invalid.
+    // The more specific exact/iff/False cases above preserve their customary
+    // Core Lean spelling, while this covers definitionally equal arrows whose
+    // display text is not structurally identical to the rendered goal.
+    return `apply ${hypName}`
   }
 
   return null

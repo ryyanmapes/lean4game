@@ -4,13 +4,31 @@ function browserCompatibleProof(proofBody: string): string {
   return lines.map((line, index) => {
     const tautoMatch = line.match(/^(\s*)tauto\s*$/u)
     if (tautoMatch) {
-      if (lines[index - 1]?.trim() === 'have h2 := mul_ne_zero a b') {
+      const directMulNeZero = lines[index - 1]?.trim().match(
+        /^have\s+\S+\s*:=\s*(?:MyNat\.)?mul_ne_zero\s+(\S+)\s+(\S+)$/u,
+      )
+      const precedingLines = lines.slice(0, index).map(previous => previous.trim())
+      const firstSpecialization = precedingLines.map(previous => previous.match(
+        /^specialize_forall_as\s+(\S+)\s+(?:MyNat\.)?mul_ne_zero\s+\S+\s+\((.+)\)$/u,
+      )).find((match): match is RegExpMatchArray => Boolean(match))
+      const secondSpecialization = firstSpecialization
+        ? precedingLines.map(previous => previous.match(
+            new RegExp(`^specialize_forall_as\\s+\\S+\\s+${firstSpecialization[1]}\\s+\\S+\\s+\\((.+)\\)$`, 'u'),
+          )).find((match): match is RegExpMatchArray => Boolean(match))
+        : undefined
+      const equalityCases = directMulNeZero
+        ? [directMulNeZero[1], directMulNeZero[2]]
+        : firstSpecialization && secondSpecialization
+          ? [firstSpecialization[2], secondSpecialization[1]]
+          : null
+      if (equalityCases) {
         // `simp_all` alone does not split the two decidable equality cases in
         // mul_eq_zero. Make those cases explicit, then let the core simplifier
         // discharge the same propositional argument. This remains transient
         // compiler input: the player's authored action is still shown as
         // `tauto`, and Lean kernel-checks the resulting proof.
-        return `${tautoMatch[1]}by_cases ha : a = 0 <;> by_cases hb : b = 0 <;> simp_all`
+        return `${tautoMatch[1]}by_cases hVisualTautoA : ${equalityCases[0]} = 0 <;> ` +
+          `by_cases hVisualTautoB : ${equalityCases[1]} = 0 <;> simp_all`
       }
       // The compact browser `tauto` elaborator reaches an unsupported dynamic
       // evaluator path in the purpose-linked WASM runtime. Its final proof

@@ -347,9 +347,11 @@ function visible<T extends Element>(elements: Iterable<T>): T[] {
 }
 
 function click(element: Element) {
-  element.scrollIntoView({ block: 'center', inline: 'center' })
   const view = element.ownerDocument.defaultView
   if (!view) throw new Error('Cannot activate an element without a browser window')
+  if (element instanceof view.HTMLElement && !isWithinViewport(element)) {
+    element.scrollIntoView({ block: 'center', inline: 'center' })
+  }
   // Buttons already implement the browser's complete activation behavior.
   // Preceding their native click with synthetic mouse-down events can start
   // the canvas drag sensor in Chromium and cause React to ignore the button.
@@ -885,6 +887,7 @@ export class CompletePlaythroughDriver {
    * state before the reference proof starts solving either branch. */
   private async roundTripLiveProofBranch(expectedSplit: boolean) {
     if (!expectedSplit) return
+    await waitForPlayerIdle(this.win, 'the new proof branches to become selectable')
     const before = harness(this.win).getCurrentStreamSnapshot()
     const nextButton = await waitFor('the next live proof-stream control', () =>
       visible(this.win.document.querySelectorAll<HTMLButtonElement>(
@@ -897,6 +900,7 @@ export class CompletePlaythroughDriver {
       return snapshot.streamId !== before.streamId && currentGoal(this.win) ? snapshot : null
     })
 
+    await waitForPlayerIdle(this.win, 'the sibling proof branch to become selectable')
     const previousButton = await waitFor('the previous proof-stream control', () =>
       visible(this.win.document.querySelectorAll<HTMLButtonElement>(
         '[data-testid="stream-nav-prev"]:not(:disabled), button[aria-label="Previous proof stream"]:not(:disabled)',
@@ -1564,15 +1568,17 @@ export class CompletePlaythroughDriver {
   private async applyOrExact(command: string) {
     const applicationMatch = /^(?:apply|exact)\s+(.+)$/u.exec(command)
     if (!applicationMatch) throw new Error(`Unsupported theorem application: ${command}`)
-    // Do not make the `at h` suffix optional in the same expression as a
-    // lazy application capture: JavaScript may legally satisfy that regex by
-    // swallowing the entire suffix into group 1. That made `at` and `h` look
-    // like explicit theorem arguments, producing a second, invalid drag.
-    const atMatch = /^(.*?)\s+at\s+(\S+)$/u.exec(applicationMatch[1])
+    // Parse a trailing `at h` as its own two top-level tokens. Keeping it out
+    // of a lazy optional regex prevents `at` and `h` from being mistaken for
+    // explicit theorem arguments and ultimately dragged onto the goal.
+    const applicationParts = splitTopLevelWhitespace(applicationMatch[1])
+    const atIndex = applicationParts.length >= 3 && applicationParts.at(-2) === 'at'
+      ? applicationParts.length - 2
+      : -1
     const match: [string, string, string?] = [
       applicationMatch[0],
-      atMatch?.[1] ?? applicationMatch[1],
-      atMatch?.[2],
+      atIndex >= 0 ? applicationParts.slice(0, atIndex).join(' ') : applicationMatch[1],
+      atIndex >= 0 ? applicationParts.at(-1) : undefined,
     ]
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])

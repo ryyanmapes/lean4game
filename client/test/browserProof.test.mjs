@@ -12,7 +12,18 @@ test('splits both equality cases for the mul_eq_zero tauto action', () => {
     instrumentBrowserProof(`have h2 := mul_ne_zero a b
 tauto`),
     `have h2 := mul_ne_zero a b
-by_cases ha : a = 0 <;> by_cases hb : b = 0 <;> simp_all`,
+by_cases hVisualTautoA : a = 0 <;> by_cases hVisualTautoB : b = 0 <;> simp_all`,
+  )
+})
+
+test('recognizes the player-generated mul_ne_zero specialization before tauto', () => {
+  assert.equal(
+    instrumentBrowserProof(`specialize_forall_as thm_h2 MyNat.mul_ne_zero a (a)
+specialize_forall_as thm_thm_h22 thm_h2 b (b)
+tauto`),
+    `specialize_forall_as thm_h2 MyNat.mul_ne_zero a (a)
+specialize_forall_as thm_thm_h22 thm_h2 b (b)
+by_cases hVisualTautoA : a = 0 <;> by_cases hVisualTautoB : b = 0 <;> simp_all`,
   )
 })
 
