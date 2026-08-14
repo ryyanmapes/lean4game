@@ -1738,6 +1738,17 @@ export class CompletePlaythroughDriver {
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => {
           const named = this.hyp(match[2])
+          if (named && matchesTheoremPremise(source, named, [])) return named
+          // Browser reconciliation keeps earlier derived cards visible. A
+          // classic name such as `h` therefore can still point at the first
+          // link in a chain (`b ≠ 0`) after the player has visibly derived the
+          // next one (`1 ≤ b`). Follow the unique proposition that matches
+          // the specialized theorem premise, exactly as a player choosing the
+          // highlighted card does.
+          const matchingVisibleHypothesis = visible(
+            this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+          ).find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
+          if (matchingVisibleHypothesis) return matchingVisibleHypothesis
           if (named) return named
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
