@@ -1,3 +1,15 @@
+import {
+  COMBINING_THEOREM_ORDER,
+  TRANSFORM_THEOREM_ORDER,
+} from './theoremOrder.generated.js'
+
+export {
+  COMBINING_THEOREM_ENTRIES,
+  COMBINING_THEOREM_ORDER,
+  TRANSFORM_THEOREM_ENTRIES,
+  TRANSFORM_THEOREM_ORDER,
+} from './theoremOrder.generated.js'
+
 export type TheoremBucket = 'add' | 'ne' | 'le' | 'mul' | 'other'
 
 export const THEOREM_BUCKETS: ReadonlyArray<{ id: TheoremBucket; label: string }> = [
@@ -24,8 +36,32 @@ export function mirroredTheoremGroupKey(name: string): string {
 export function compareTheoremNames(left: string, right: string): number {
   const leftName = baseName(left)
   const rightName = baseName(right)
+  const leftRank = TRANSFORM_THEOREM_ORDER.indexOf(leftName)
+  const rightRank = TRANSFORM_THEOREM_ORDER.indexOf(rightName)
+  if (leftRank !== rightRank) {
+    if (leftRank === -1) return 1
+    if (rightRank === -1) return -1
+    return leftRank - rightRank
+  }
   const groupOrder = mirroredTheoremGroupKey(leftName).localeCompare(mirroredTheoremGroupKey(rightName))
   return groupOrder || leftName.localeCompare(rightName)
+}
+
+export function compareCombiningTheoremNames(
+  left: { theoremName: string },
+  right: { theoremName: string },
+): number {
+  const leftName = baseName(left.theoremName)
+  const rightName = baseName(right.theoremName)
+  const leftRank = COMBINING_THEOREM_ORDER.indexOf(leftName)
+  const rightRank = COMBINING_THEOREM_ORDER.indexOf(rightName)
+  if (leftRank !== rightRank) {
+    if (leftRank === -1) return 1
+    if (rightRank === -1) return -1
+    return leftRank - rightRank
+  }
+  return mirroredTheoremGroupKey(leftName).localeCompare(mirroredTheoremGroupKey(rightName))
+    || leftName.localeCompare(rightName)
 }
 
 export function theoremBucket(theorem: {
@@ -51,12 +87,7 @@ export function theoremBucket(theorem: {
 export function compareBucketTheorems(
   left: { theoremName: string },
   right: { theoremName: string },
-  bucket: TheoremBucket,
+  _bucket: TheoremBucket,
 ): number {
-  if (bucket === 'add') {
-    const leftSuccInj = baseName(left.theoremName) === 'succ_inj'
-    const rightSuccInj = baseName(right.theoremName) === 'succ_inj'
-    if (leftSuccInj !== rightSuccInj) return leftSuccInj ? 1 : -1
-  }
-  return compareTheoremNames(left.theoremName, right.theoremName)
+  return compareCombiningTheoremNames(left, right)
 }

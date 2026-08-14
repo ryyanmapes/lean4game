@@ -1,0 +1,34 @@
+# Global lower-menu order for proposition theorems in Combining Mode.
+# Format: category | unqualified Lean theorem name | full Lean statement
+# Reorder whole lines. Each category tab uses its subset of this global list,
+# preserving the order below.
+
++ | succ_inj | (a b : ℕ) (h : succ a = succ b) : a = b
++ | add_left_eq_zero | (a b : ℕ) (h : a + b = 0) : b = 0
++ | add_right_eq_zero | (a b : ℕ) (h : a + b = 0) : a = 0
++ | add_left_eq_self | (x y : ℕ) (h : x + y = y) : x = 0
++ | add_right_eq_self | (x y : ℕ) (h : x + y = x) : y = 0
++ | add_left_cancel | (a b n : ℕ) (h : n + a = n + b) : a = b
++ | add_right_cancel | (a b n : ℕ) (h : a + n = b + n) : a = b
+* | mul_eq_zero | (a b : ℕ) (h : a * b = 0) : a = 0 ∨ b = 0
+* | mul_right_eq_one | (x y : ℕ) (h : x * y = 1) : x = 1
+* | mul_left_cancel | (a b c : ℕ) (ha : a ≠ 0) (h : a * b = a * c) : b = c
+* | mul_left_ne_zero | (a b : ℕ) (h : a * b ≠ 0) : b ≠ 0
+* | mul_ne_zero | (a b : ℕ) (ha : a ≠ 0) (hb : b ≠ 0) : a * b ≠ 0
+* | mul_le_mul_right | (a b t : ℕ) (h : a ≤ b) : a * t ≤ b * t
+≠ | zero_ne_one | 0 ≠ 1
+≠ | one_ne_zero | 1 ≠ 0
+≠ | zero_ne_succ | (a : ℕ) : 0 ≠ succ a
+≤ | le_refl | (x : ℕ) : x ≤ x
+≤ | le_antisymm | (x y : ℕ) (hxy : x ≤ y) (hyx : y ≤ x) : x = y
+≤ | le_trans | (x y z : ℕ) (hxy : x ≤ y) (hyz : y ≤ z) : x ≤ z
+≤ | le_total | (x y : ℕ) : x ≤ y ∨ y ≤ x
+≤ | zero_le | (x : ℕ) : 0 ≤ x
+≤ | le_succ_self | (x : ℕ) : x ≤ succ x
+≤ | eq_succ_of_ne_zero | (a : ℕ) (ha : a ≠ 0) : ∃ n, a = succ n
+≤ | succ_le_succ | (x y : ℕ) (hx : succ x ≤ succ y) : x ≤ y
+≤ | one_le_of_ne_zero | (a : ℕ) (ha : a ≠ 0) : 1 ≤ a
+≤ | le_mul_right | (a b : ℕ) (h : a * b ≠ 0) : a ≤ a * b
+≤ | le_zero | (x : ℕ) (hx : x ≤ 0) : x = 0
+≤ | le_one | (x : ℕ) (hx : x ≤ 1) : x = 0 ∨ x = 1
+≤ | le_two | (x : ℕ) (hx : x ≤ 2) : x = 0 ∨ x = 1 ∨ x = 2

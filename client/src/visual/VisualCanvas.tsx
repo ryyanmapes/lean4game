@@ -28,7 +28,7 @@ import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
-import { compareBucketTheorems, THEOREM_BUCKETS, theoremBucket } from './theoremOrdering'
+import { compareCombiningTheoremNames, THEOREM_BUCKETS, theoremBucket } from './theoremOrdering'
 import type { TheoremBucket } from './theoremOrdering'
 import {
   cloneProofTree,
@@ -1638,15 +1638,8 @@ function TheoremTray({
     const filtered = theoremCategory === 'all'
       ? theorems
       : theorems.filter(theorem => theoremBucket(theorem) === theoremCategory)
-    return [...filtered].sort((left, right) => {
-      const leftBucket = theoremBucket(left)
-      const rightBucket = theoremBucket(right)
-      if (theoremCategory === 'all' && leftBucket !== rightBucket) {
-        const bucketOrder = ['add', 'ne', 'le', 'mul', 'other']
-        return bucketOrder.indexOf(leftBucket) - bucketOrder.indexOf(rightBucket)
-      }
-      return compareBucketTheorems(left, right, theoremCategory === 'all' ? leftBucket : theoremCategory)
-    })
+    // Every view is a stable subset of the single editable global order.
+    return [...filtered].sort(compareCombiningTheoremNames)
   }, [theoremCategory, theorems])
   const items: (PropositionTheorem | VisualTactic)[] =
     visibleTab === 'tactics' ? tactics : visibleTab === 'theorems' ? visibleTheorems : []

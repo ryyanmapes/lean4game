@@ -1,3 +1,5 @@
+import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
+
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
 const NNG4_ADDITION_LEVEL1 = `${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`
 const LOAD_TIMEOUT = 600000
@@ -214,32 +216,44 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
   })
 
-  it('keeps transform mode open after add_succ on the successor stream', () => {
-    visualHarness().then(harness => harness.dragTacticToHyp('induction', 'n'))
-    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
+  it('applies player-dragged add_succ to the successor branch selected in the proof graph', () => {
+    cy.viewport(390, 844)
+    let player: CompletePlaythroughDriver
 
-    cy.get('[data-testid="goal-card"]', { timeout: 60000 }).should($goal => {
-      expect($goal.attr('data-goal-text')).to.contain('succ')
-      expect($goal).to.have.class('transformable')
-    })
-    visualHarness().then(harness => harness.openGoalTransform())
-
-    cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
-    cy.get('.visual-page.tr-transformation-overlay').then($overlay => {
-      const originalOverlay = $overlay[0]!
-      visualHarness().then(harness => harness.rewriteGoalInTransform('add_succ'))
-      cy.get('.visual-page.tr-transformation-overlay').should($nextOverlay => {
-        expect($nextOverlay[0], 'rewrite does not remount and flash the overlay').to.equal(originalOverlay)
-      })
+    cy.window({ timeout: LOAD_TIMEOUT }).then(async win => {
+      player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['n'], 'induction n with d hd')
+      await player.perform('induction n with d hd')
     })
 
-    visualHarness().then(harness => harness.getTransformStatus()).then(status => {
-      expect(status.isOpen).to.equal(true)
-      expect(status.targetKind).to.equal('goal')
+    cy.get('.mobile-page-link.graph-link', { timeout: 60000 }).click()
+    cy.get('.mobile-graph-page.open [data-testid="proof-stream-leaf"][data-completed="false"]', {
+      timeout: 60000,
+    }).should('have.length', 2).eq(1).click({ force: true })
+    cy.get('.mobile-graph-page.open .mobile-side-return-link').click()
+
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.goalType, 'the graph-selected successor branch').to.match(/0\s*\+\s*succ/u)
     })
 
-    cy.get('.tr-back-btn').should('be.visible')
-    cy.get('[data-testid="stream-nav-label"]').should('contain.text', 'Stream 2 of 2')
+    cy.then(async () => {
+      await player.performRewriteOnSide('rw [add_succ]', 'left')
+    })
+
+    visualHarness().then(harness => {
+      const snapshot = harness.getCurrentStreamSnapshot()
+      const debug = harness.getLastTransformRewriteDebug()
+      expect(snapshot.goalType, 'the selected branch receives add_succ').to.match(/succ\s*\(?\s*0\s*\+\s*d/u)
+      expect(debug?.focusedGoalType, 'the submitted rewrite targets the selected successor goal')
+        .to.match(/0\s*\+\s*succ/u)
+      expect(debug?.nextGoalType, 'Lean returns the rewritten successor goal')
+        .to.match(/succ\s*\(?\s*0\s*\+\s*d/u)
+    })
+    cy.window().then(win => {
+      const entries = JSON.parse(win.localStorage.getItem('playlog/g/local/NNG4/Addition/1') ?? '[]')
+      expect(entries.at(-1), 'the real pointer drag is accepted').to.include({ succeeded: true })
+      expect(entries.at(-1)?.playTactic).to.match(/drag_rw_lhs \[(?:MyNat\.)?add_succ\]/u)
+    })
   })
 
   it('keeps the base-case reflexive goal live even after the successor stream was solved first', () => {

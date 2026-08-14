@@ -131,6 +131,49 @@ function proofSignature(audit: ProofAudit) {
   })
 }
 
+/** Player actions must affect the proof stream the player is looking at, not
+ * merely append a valid tactic somewhere else in Lean's outstanding-goal
+ * list. Keep this signature independent of the global proof log so a command
+ * accepted on a sibling branch cannot satisfy the assertion. */
+function selectedStreamSignature(win: DriverWindow) {
+  const audit = harness(win).getProofAudit()
+  try {
+    const snapshot = harness(win).getCurrentStreamSnapshot()
+    return JSON.stringify({
+      completed: audit.completed,
+      streamId: snapshot.streamId,
+      goalType: snapshot.goalType,
+      hypTypes: snapshot.hypTypes,
+      currentStreamIsCompleted: snapshot.currentStreamIsCompleted,
+    })
+  } catch {
+    return JSON.stringify({ completed: audit.completed, streamId: null })
+  }
+}
+
+async function waitForSelectedStreamChange(
+  win: DriverWindow,
+  previous: string,
+  description: string,
+) {
+  try {
+    await waitFor(`${description} to update the selected proof branch`, () => {
+      const audit = harness(win).getProofAudit()
+      return !audit.processing && selectedStreamSignature(win) !== previous ? true : null
+    }, INTERACTION_TIMEOUT)
+  } catch (error) {
+    throw new Error(
+      `${description} changed the proof log but not the player-selected branch: ${JSON.stringify({
+        before: JSON.parse(previous),
+        after: JSON.parse(selectedStreamSignature(win)),
+        lastPlay: playLog(win).at(-1),
+        lastDrag: harness(win).getLastDragDebug(),
+      })}`,
+      { cause: error },
+    )
+  }
+}
+
 function playerStateSignature(win: DriverWindow) {
   let snapshot: StreamSnapshot | null = null
   try {
@@ -251,6 +294,7 @@ async function dragChangedProof(
   target: HTMLElement,
   previous: string,
 ) {
+  const previousSelectedStream = selectedStreamSignature(win)
   const previousAttempts = playLog(win).length
   await drag(source, target)
   const deadline = Date.now() + 1_000
@@ -290,6 +334,7 @@ async function dragChangedProof(
   )
   if (!attempt.succeeded) throw new Error(`Player rewrite was rejected: ${attempt.playTactic}`)
   await waitForProofChange(win, previous, 'dragged interaction to update the proof')
+  await waitForSelectedStreamChange(win, previousSelectedStream, 'dragged rewrite')
   return true
 }
 
@@ -1205,6 +1250,7 @@ export class CompletePlaythroughDriver {
     source = this.refreshCard(source)
     target = this.refreshCard(target)
     const before = proofSignature(harness(this.win).getProofAudit())
+    const selectedStreamBefore = selectedStreamSignature(this.win)
     const previousAttempts = playLog(this.win).length
     await drag(source, target)
     try {
@@ -1217,6 +1263,7 @@ export class CompletePlaythroughDriver {
       )
     }
     await waitForProofChange(this.win, before, description)
+    await waitForSelectedStreamChange(this.win, selectedStreamBefore, description)
   }
 
   private async dragTactic(name: string, target: HTMLElement) {
@@ -1243,10 +1290,16 @@ export class CompletePlaythroughDriver {
         `[data-testid="goal-choice-option"][data-play-tactic="${playTactic}"]`,
       ))
     const before = proofSignature(harness(this.win).getProofAudit())
+    const selectedStreamBefore = selectedStreamSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(option)
     await waitForPlayAttempt(this.win, previousAttempts, `${command} branch player action`)
     await waitForProofChange(this.win, before, `${command} branch selection`)
+    await waitForSelectedStreamChange(
+      this.win,
+      selectedStreamBefore,
+      `${command} goal choice`,
+    )
     for (const pending of this.pendingGoalRewrites.splice(0)) await this.rewrite(pending)
   }
 
@@ -1263,7 +1316,7 @@ export class CompletePlaythroughDriver {
     })
     if (target.completed) return
     const goal = target.goal
-    const before = playerStateSignature(this.win)
+    const before = selectedStreamSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(goal)
     let lastRetry = Date.now()
@@ -1273,10 +1326,7 @@ export class CompletePlaythroughDriver {
       const current = currentGoal(this.win)
       if (current?.classList.contains('clickable') && !current.classList.contains('solved')) click(current)
     })
-    await waitFor('goal click to update the visible player state', () => {
-      const audit = harness(this.win).getProofAudit()
-      return !audit.processing && playerStateSignature(this.win) !== before ? true : null
-    }, INTERACTION_TIMEOUT)
+    await waitForSelectedStreamChange(this.win, before, 'goal click')
   }
 
   private async cases(command: string) {
@@ -1452,6 +1502,7 @@ export class CompletePlaythroughDriver {
     const target = direction === 'theorem-to-hypothesis' ? hypothesis : copy
     const description = `${theoremName} ${direction}`
     const before = proofSignature(harness(this.win).getProofAudit())
+    const selectedStreamBefore = selectedStreamSignature(this.win)
     const previousAttempts = playLog(this.win).length
     const session = await beginPointerDrag(source, 94)
     await waitFor(`${description} drag activation`, () =>
@@ -1467,6 +1518,7 @@ export class CompletePlaythroughDriver {
       )
     }
     await waitForProofChange(this.win, before, description)
+    await waitForSelectedStreamChange(this.win, selectedStreamBefore, description)
   }
 
   async undoLastPlayerStep() {
@@ -1828,10 +1880,16 @@ export class CompletePlaythroughDriver {
       const target = targets[targetIndex]
       if (target) {
         const before = proofSignature(harness(this.win).getProofAudit())
+        const selectedStreamBefore = selectedStreamSignature(this.win)
         const previousAttempts = playLog(this.win).length
         await session.finish(target)
         await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
         await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
+        await waitForSelectedStreamChange(
+          this.win,
+          selectedStreamBefore,
+          `${rule.name} rewrite`,
+        )
         return true
       }
       session.cancel()
@@ -2049,6 +2107,7 @@ export class CompletePlaythroughDriver {
       return button && !button.disabled ? button : null
     })
     const before = proofSignature(harness(this.win).getProofAudit())
+    const selectedStreamBefore = selectedStreamSignature(this.win)
     const previousAttempts = playLog(this.win).length
     click(done)
     let lastRetry = Date.now()
@@ -2066,6 +2125,11 @@ export class CompletePlaythroughDriver {
       },
     )
     await waitForProofChange(this.win, before, `${description} construction`)
+    await waitForSelectedStreamChange(
+      this.win,
+      selectedStreamBefore,
+      `${description} construction`,
+    )
   }
 
   private async specializeHave(command: string) {
