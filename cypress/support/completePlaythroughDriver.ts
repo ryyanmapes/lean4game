@@ -477,6 +477,22 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     await sleep(50)
     target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
   }
+  if (mobileScroll && !receivesPointerAtCenter(target)) {
+    // `scrollIntoView()` may align an inner card beneath the fixed mobile goal
+    // rather than in the actually exposed part of the proof column.  Move the
+    // owning scroller by the measured delta, exactly as a player drags the
+    // list while holding the theorem, and resolve the remounted card once
+    // more before releasing.
+    const scrollRect = mobileScroll.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const desiredY = scrollRect.top + scrollRect.height * 0.58
+    mobileScroll.scrollTop += targetRect.top + targetRect.height / 2 - desiredY
+    await sleep(75)
+    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+  }
+  if (!receivesPointerAtCenter(target)) {
+    throw new Error(`Player drag destination remained obscured after scrolling: ${target.id}`)
+  }
   await finishPointerDrag(source, target, travelStartX, travelStartY, 91)
 }
 
@@ -1696,7 +1712,7 @@ export class CompletePlaythroughDriver {
       // arguments are ordinary proposition-card drags. Treating every token
       // as a forall specialization left implications unapplied and then
       // dragged the generalized theorem onto the goal.
-      for (const argument of explicitArgs) {
+      for (const [argumentIndex, argument] of explicitArgs.entries()) {
         source = this.refreshCard(source)
         const typesBeforeArgument = harness(this.win).getCurrentStreamSnapshot().hypTypes
         const namesBeforeArgument = new Set(Object.keys(typesBeforeArgument))
@@ -1728,7 +1744,31 @@ export class CompletePlaythroughDriver {
           && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] !== sourceTypeBeforeArgument
             ? sourceNameBeforeArgument
             : null
-        const resultName = createdName ?? retainedName ?? changedName
+        const nextArgument = explicitArgs[argumentIndex + 1]
+        const visibleDerivedName = createdName ?? retainedName ?? changedName ?? await waitFor(
+          `${command} visible conclusion after ${argument}`,
+          () => {
+            const nextPremise = nextArgument ? this.hyp(nextArgument) : null
+            const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
+            const candidate = visible(
+              this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+            ).find(card => {
+              const candidateName = card.dataset.hypName
+              const candidateType = card.dataset.hypType ?? ''
+              if (!candidateName || !candidateType) return false
+              const wasChangedOrCreated = typesBeforeArgument[candidateName] == null ||
+                this.normalizedProposition(typesBeforeArgument[candidateName] ?? '') !==
+                  this.normalizedProposition(candidateType)
+              if (!wasChangedOrCreated) return false
+              return nextPremise
+                ? matchesTheoremPremise(card, nextPremise, [])
+                : this.normalizedProposition(candidateType) === this.normalizedProposition(goalType)
+            })
+            return candidate?.dataset.hypName ?? null
+          },
+          3_000,
+        ).catch(() => null)
+        const resultName = createdName ?? retainedName ?? changedName ?? visibleDerivedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }

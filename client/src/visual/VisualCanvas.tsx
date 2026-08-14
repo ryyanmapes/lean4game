@@ -3006,10 +3006,18 @@ export function VisualCanvas({
     const tacticTemplate = active.data.current?.visualTactic
       ? active.data.current.tactic as VisualTactic
       : null
+    // The backend's selected stream can be one render ahead of canvasState
+    // after switching or completing a sibling branch.  Cards are rendered
+    // from that live stream, so drop resolution must use the same source of
+    // truth; otherwise a visibly highlighted hypothesis has no matching card
+    // here and the drop is silently discarded.
+    const interactionStreams = currentStream
+      ? [currentStream, ...canvasState.streams.filter(stream => stream.id !== currentStream.id)]
+      : canvasState.streams
     const sourceTheoremCopy = getTheoremCopyById(activeId)
-    const sourceStream = canvasState.streams.find(s => s.hyps.some(h => h.id === activeId))
+    const sourceStream = interactionStreams.find(s => s.hyps.some(h => h.id === activeId))
     const sourceCard = sourceStream?.hyps.find(h => h.id === activeId)
-    const goalIds = new Set(canvasState.streams.map(s => s.id))
+    const goalIds = new Set(interactionStreams.map(s => s.id))
     const draggedRect = active.rect.current.initial
     const draggedWidth = draggedRect?.width ?? DEFAULT_WIDTH
     const draggedHeight = draggedRect?.height ?? DEFAULT_HEIGHT
@@ -3112,7 +3120,7 @@ export function VisualCanvas({
     }
 
     if (tacticTemplate) {
-      const targetGoalStream = canvasState.streams.find(stream => stream.id === overId)
+      const targetGoalStream = interactionStreams.find(stream => stream.id === overId)
       if (targetGoalStream && tacticCanTargetGoal(tacticTemplate, targetGoalStream)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
         applyDroppedInteraction(playTactic, activeId, {
@@ -3122,7 +3130,7 @@ export function VisualCanvas({
         return
       }
 
-      const targetStream = canvasState.streams.find(s => s.hyps.some(h => h.id === overId))
+      const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
       const targetCard = targetStream?.hyps.find(h => h.id === overId)
       const targetName = interactionHypName(targetCard)
       if (targetCard && targetStream && targetName && tacticCanTargetHyp(tacticTemplate, targetCard)) {
@@ -3179,7 +3187,7 @@ export function VisualCanvas({
           return
         }
 
-        const targetStream = canvasState.streams.find(s => s.hyps.some(h => h.id === overId))
+        const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
         const targetCard = targetStream?.hyps.find(h => h.id === overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
@@ -3270,7 +3278,7 @@ export function VisualCanvas({
         })
       } else {
         // Dropped on another hyp card → drag_to (source onto target)
-        const targetStream = canvasState.streams.find(s => s.hyps.some(h => h.id === overId))
+        const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
         const targetCard = targetStream?.hyps.find(h => h.id === overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
@@ -3555,10 +3563,34 @@ export function VisualCanvas({
       return
     }
     if (!clickAction.playTactic) return
+    // The rendered goal can carry newer semantic metadata than the matching
+    // canvas stream while browser results are being reconciled.  In
+    // particular, a definitionally reflexive goal such as `zero = 0` is
+    // rendered with "Click to complete" even if the stored stream still has
+    // the generic `click_goal` action.  Preserve the command implied by the
+    // card the player actually clicked so replay records `rfl`, not the
+    // overloaded custom click tactic (which Lean may interpret as `Iff.rfl`).
+    const coreCommand = coreCommandForGoalClick(
+      clickAction.playTactic,
+      clickAction.tooltip,
+      clickAction.tooltip?.trim().toLowerCase() === 'click to complete',
+    )
+    const commandOverride = coreCommand === clickAction.playTactic
+      ? undefined
+      : commandForGoalAction(
+          coreCommand,
+          streamId,
+          goalOrderForAction(
+            leanGoalOrderRef.current,
+            canvasState.streams.map(stream => stream.id),
+            streamId,
+          ),
+        ).command
     applyInteraction(clickAction.playTactic, streamId, {
       solvedGoalId: streamId,
       streamSplit: clickAction.streamSplit,
       targetStreamId: streamId,
+      commandOverride,
     })
   }
 
@@ -3695,7 +3727,14 @@ export function VisualCanvas({
     // a function name such as `add`.
     const leanExprStr = focusedStream.hyps.reduce((expression, card) => {
       const displayName = card.hyp.names[0]
-      const playName = card.hyp.playName
+      const rawPlayName = card.hyp.playName
+      // Some browser proof states expose a compiler-generated fvar name such
+      // as `a._@._internal...`.  That identifier is useful for matching RPC
+      // state but cannot be parsed in a tactic term.  The collision-safe name
+      // printed on the card is the reference a player can actually enter.
+      const playName = rawPlayName && !rawPlayName.includes('@') && !rawPlayName.includes('._internal.')
+        ? rawPlayName
+        : displayName
       if (!displayName || !playName || displayName === playName) return expression
       const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
       return expression.replace(
