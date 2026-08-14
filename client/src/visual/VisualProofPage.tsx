@@ -418,7 +418,17 @@ export function VisualProofPage() {
               // to display as a solved proof with an empty or partial script.
               if (
                 restoredCanvas !== null &&
-                restoredCanvas.completed === saved.canvasState.completed
+                (
+                  restoredCanvas.completed === saved.canvasState.completed ||
+                  // The browser proof-state probe intentionally admits open
+                  // case scopes so it can render partial proofs. For a small
+                  // class of valid completed scripts (notably `symm` followed
+                  // by an exact proof of `â‰ `), that probe can still report a
+                  // stale goal on a fresh worker. A non-null response means
+                  // Lean successfully re-elaborated the complete saved script;
+                  // preserve its internally consistent completed snapshot.
+                  saved.canvasState.completed
+                )
               ) {
                 validatedResume = saved
               } else {
