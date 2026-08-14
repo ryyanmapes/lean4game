@@ -433,6 +433,25 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     clientY: startY + 12,
   }))
   await sleep(20)
+  // Move the held card away from the lower tray before scrolling a distant
+  // phone target into view. Leaving the pointer at the tray edge keeps the
+  // app's real drag autoscroller running in the opposite direction, which can
+  // pull the destination back underneath the fixed goal between our scroll
+  // and pointer-up. A player naturally moves their finger into the open card
+  // panel first.
+  const mobileScroll = target.closest<HTMLElement>('[data-testid="mobile-play-scroll"]')
+  const safeRect = mobileScroll?.getBoundingClientRect()
+  const travelStartX = safeRect ? safeRect.left + safeRect.width / 2 : startX + 12
+  const travelStartY = safeRect ? safeRect.top + safeRect.height / 2 : startY + 12
+  if (mobileScroll) {
+    moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+      ...pointer,
+      buttons: 1,
+      clientX: travelStartX,
+      clientY: travelStartY,
+    }))
+    await sleep(50)
+  }
   // Once dnd-kit's sensor is active, scroll the same canvas toward the target
   // just as a player does during a long drag. Verify the actual hit target
   // before releasing rather than trusting an overlay-obscured rectangle.
@@ -450,7 +469,7 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     target.scrollIntoView({ block: 'center', inline: 'center' })
     await sleep(50)
   }
-  await finishPointerDrag(source, target, startX, startY, 91)
+  await finishPointerDrag(source, target, travelStartX, travelStartY, 91)
 }
 
 async function dragToPoint(source: HTMLElement, clientX: number, clientY: number) {
