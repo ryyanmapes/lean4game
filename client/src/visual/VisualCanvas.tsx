@@ -683,7 +683,14 @@ function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTr
 
 function goalIsReflexiveEquality(stream: GoalStream): boolean {
   const parsedGoal = parsedGoalEquality(stream)
-  return parsedGoal ? formulasMatchLiterally(parsedGoal.lhsStr, parsedGoal.rhsStr) : false
+  if (!parsedGoal) return false
+  if (formulasMatchLiterally(parsedGoal.lhsStr, parsedGoal.rhsStr)) return true
+  // Lean only advertises the plain goal click on an equality when
+  // reflexivity can close it. Trust that semantic signal as well as the
+  // printed spelling: the compact browser pretty-printer can report a
+  // definitionally equal goal such as `zero = 0`, which is not textually
+  // identical but must still record and replay the player's click as `rfl`.
+  return stream.goal.clickAction?.playTactic === 'click_goal'
 }
 
 function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
@@ -3125,13 +3132,17 @@ export function VisualCanvas({
             predecessorName: nextFreshHypName(targetStream.hyps, 'd'),
             inductionHypName: nextFreshHypName(targetStream.hyps, 'hd'),
           })
-          applyDroppedInteraction(playTactic, activeId, { streamSplit: true })
+          applyDroppedInteraction(playTactic, activeId, {
+            streamSplit: true,
+            targetStreamId: targetStream.id,
+          })
           return
         }
         if (tacticTemplate.name === 'cases') {
           const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
           applyDroppedInteraction(playTactic, activeId, {
             streamSplit: casesTacticSplits(targetCard),
+            targetStreamId: targetStream.id,
           })
           return
         }
@@ -3147,7 +3158,10 @@ export function VisualCanvas({
           tacticName: tacticTemplate.name,
           targetHypName: targetName,
         })
-        applyDroppedInteraction(playTactic, activeId, { placementHint })
+        applyDroppedInteraction(playTactic, activeId, {
+          placementHint,
+          targetStreamId: targetStream.id,
+        })
       }
       return
     }
@@ -5173,14 +5187,11 @@ export function VisualCanvas({
       coreLines,
       interactiveLines,
       visibleNames: streams.flatMap(stream =>
-        stream.hyps.flatMap(card => [
-          ...card.hyp.names,
-          ...(card.hyp.playName ? [card.hyp.playName] : []),
-        ])
+        stream.hyps.flatMap(card => card.hyp.names)
       ),
       visibleTypes: streams.flatMap(stream => [
-        TaggedText_stripTags(stream.goal.type).trim(),
-        ...stream.hyps.map(card => TaggedText_stripTags(card.hyp.type).trim()),
+        formatFormulaText(TaggedText_stripTags(stream.goal.type).trim()),
+        ...stream.hyps.map(card => formatFormulaText(TaggedText_stripTags(card.hyp.type).trim())),
       ]),
     }
   }

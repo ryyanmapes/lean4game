@@ -1002,6 +1002,17 @@ export class CompletePlaythroughDriver {
   }
 
   private async navigateFromCompletedBranch() {
+    const reconcilePendingBranchAliases = () => {
+      if (this.pendingBranchAliases.length === 0) return
+      const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {
+        const pending = this.pendingBranchAliases[index]
+        const createdName = names.find(name => !pending.before.has(name))
+        if (!createdName) continue
+        this.rememberAlias(pending.expected, createdName)
+        this.pendingBranchAliases.splice(index, 1)
+      }
+    }
     let before: StreamSnapshot | null = null
     try {
       before = harness(this.win).getCurrentStreamSnapshot()
@@ -1009,7 +1020,13 @@ export class CompletePlaythroughDriver {
       // A solved branch may deliberately leave the canvas without a current
       // stream until the player selects an incomplete graph leaf.
     }
-    if (before && !before.currentStreamIsCompleted && currentGoal(this.win)) return
+    if (before && !before.currentStreamIsCompleted && currentGoal(this.win)) {
+      // Auto branch switching may already have selected the successor before
+      // the next reference step starts. Reconcile the names introduced only
+      // on that branch even when no navigation click is necessary.
+      reconcilePendingBranchAliases()
+      return
+    }
 
     const previousStreamId = before?.streamId ?? null
     // The proof tree and the completed-stream snapshot are updated by separate
@@ -1121,16 +1138,7 @@ export class CompletePlaythroughDriver {
         leaves,
       })}`, { cause: error })
     }
-    if (this.pendingBranchAliases.length > 0) {
-      const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {
-        const pending = this.pendingBranchAliases[index]
-        const createdName = names.find(name => !pending.before.has(name))
-        if (!createdName) continue
-        this.rememberAlias(pending.expected, createdName)
-        this.pendingBranchAliases.splice(index, 1)
-      }
-    }
+    reconcilePendingBranchAliases()
   }
 
   private resolveName(name: string) {
