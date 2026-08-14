@@ -2528,7 +2528,11 @@ export function VisualCanvas({
         focusedStream.id,
       ),
     )
-    const command = options?.commandOverride ?? inferredAction.command
+    const command = options?.commandOverride ?? (
+      playTactic === 'click_goal' && goalIsReflexiveEquality(focusedStream)
+        ? 'rfl'
+        : inferredAction.command
+    )
     const rotation = inferredAction.rotation
     setGoalChoiceMenu(null)
     closeReductionTooltip()

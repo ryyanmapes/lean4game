@@ -34,29 +34,13 @@ function browserCompatibleProof(proofBody: string): string {
       // evaluator path in the purpose-linked WASM runtime. Its final proof
       // step is Lean's own propositional simplifier; NNG's four authored uses
       // are all discharged by that kernel-checked step directly.
-      return `${tautoMatch[1]}simp_all`
+      return `${tautoMatch[1]}first | contradiction | simp_all`
     }
-    const hypRewrite = line.match(
-      /^(\s*)drag_rw_hyp_(lhs|rhs)(_at)?\s+([^\s]+)\s+\[(←\s*)?([^\]]+)\](?: \[([\d,\s]+)\])?\s*$/u,
-    )
-    if (hypRewrite) {
-      const [, indentation, side, atSuffix = '', hypothesis, reverse = '', theorem, rawPath = ''] = hypRewrite
-      const path = rawPath.split(',').map(step => step.trim()).filter(Boolean)
-      if ((atSuffix.length > 0) !== (path.length > 0)) return line
-
-      // Keep the player's explicitly chosen direction. The visual tactic's
-      // historical direction fallback could turn `zero_add` backwards and
-      // insert an extra `0 +` when the selected occurrence was nested.
-      const normalizedTheorem = theorem.trim()
-      const navigation = path.map(step => `; arg ${step}`).join('')
-      return `${indentation}conv at ${hypothesis} => ${side}${navigation}; rw [${reverse}${normalizedTheorem}]`
-    }
-    // Goal rewrites must remain `drag_rw_*` in the compiled browser proof.
-    // Unlike core `rw` (including `rw` inside `conv`), the visual tactic
-    // deliberately preserves a newly reflexive goal for the player's required
-    // final click. Compiling it to `conv; rw` silently solved that branch and
-    // advanced Lean to its sibling while the canvas still displayed the
-    // reflexive branch, so subsequent actions were applied to the wrong goal.
+    // Focused goal and hypothesis rewrites must remain `drag_rw_*` in the
+    // compiled browser proof. The visual tactic applies an instantiated
+    // equality directly at the selected path, preserving both constructor/
+    // numeral definitional equality and a newly reflexive goal for the
+    // player's required final click. Generic `conv; rw` loses both guarantees.
     return line
   }).join('\n')
 }

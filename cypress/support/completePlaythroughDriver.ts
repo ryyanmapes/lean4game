@@ -396,11 +396,11 @@ function doubleClick(element: HTMLElement) {
 }
 
 async function drag(source: HTMLElement, target: HTMLElement) {
-  // Fixed-position mobile cards can already be simultaneously visible. A
-  // needless scrollIntoView on one of them scrolls its transformed canvas and
-  // can push the other card above the viewport just before pointer-down.
+  // Start from the source while it is visible. On a long mobile card stack the
+  // source and destination cannot always fit onscreen together; scrolling the
+  // destination before pointer-down can move the source away and make the
+  // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
-  if (!isWithinViewport(target)) target.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
@@ -433,6 +433,17 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     clientY: startY + 12,
   }))
   await sleep(20)
+  // Once dnd-kit's sensor is active, scroll the same canvas toward the target
+  // just as a player does during a long drag. Verify the actual hit target
+  // before releasing rather than trusting an overlay-obscured rectangle.
+  if (!isWithinViewport(target) || !receivesPointerAtCenter(target)) {
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    await sleep(50)
+  }
+  if (!receivesPointerAtCenter(target)) {
+    target.scrollIntoView({ block: 'end', inline: 'nearest' })
+    await sleep(50)
+  }
   await finishPointerDrag(source, target, startX, startY, 91)
 }
 
@@ -608,6 +619,15 @@ function isWithinViewport(element: HTMLElement) {
     && rect.top >= 0
     && rect.right <= view!.innerWidth
     && rect.bottom <= view!.innerHeight
+}
+
+function receivesPointerAtCenter(element: HTMLElement) {
+  const rect = element.getBoundingClientRect()
+  const hit = element.ownerDocument.elementFromPoint(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2,
+  )
+  return Boolean(hit && (hit === element || element.contains(hit)))
 }
 
 function currentGoal(win: DriverWindow) {
@@ -1383,10 +1403,17 @@ export class CompletePlaythroughDriver {
       // stream to select; the normal post-command audit owns completion checks.
       return
     } else {
+      await waitForPlayerIdle(this.win, `clicking ${match[1]} to become available`)
       const before = proofSignature(harness(this.win).getProofAudit())
       const previousAttempts = playLog(this.win).length
       click(target)
-      await waitForPlayAttempt(this.win, previousAttempts, `clicking ${match[1]} player action`)
+      let lastRetry = Date.now()
+      await waitForPlayAttempt(this.win, previousAttempts, `clicking ${match[1]} player action`, () => {
+        if (Date.now() - lastRetry < 250) return
+        lastRetry = Date.now()
+        const current = this.hyp(match[1])
+        if (current) click(current)
+      })
       await waitForProofChange(this.win, before, `clicking ${match[1]} to split it`)
     }
     await waitFor('cases result to become the current canvas stream', () => {
@@ -1610,34 +1637,42 @@ export class CompletePlaythroughDriver {
       source = this.visibleHypothesisOfType(goalType) ?? source
     }
     const sourceWasLocalHypothesis = source.matches('[data-testid="hyp-card"]')
-    let usedPremiseApplication = false
-    if (!match[2] && explicitArgs.length > 0) {
-      // Classic proofs spell out both term arguments and proof arguments. In
-      // Visual Lean, proof arguments are ordinary function application: drag
-      // each A onto the current A -> B card, then drag the resulting B onward.
-      // This also lets earlier premise applications infer forall arguments
-      // that only become determined by a later premise.
+    if (!match[2]) {
+      // Follow Lean's application order one argument at a time. Forall term
+      // arguments use Construction Mode; once those binders are gone, proof
+      // arguments are ordinary proposition-card drags. Treating every token
+      // as a forall specialization left implications unapplied and then
+      // dragged the generalized theorem onto the goal.
       for (const argument of explicitArgs) {
-        const matchingHypothesis = this.hyp(argument)
-        if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, explicitArgs)) continue
-        const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-        await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
+        source = this.refreshCard(source)
+        const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        if (source.classList.contains('constructable')) {
+          doubleClick(source)
+          await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+          await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
+        } else {
+          const matchingHypothesis = this.hyp(argument)
+          if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, [])) {
+            throw new Error(`${command} cannot apply visible proof argument ${argument}`)
+          }
+          await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
+        }
         const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          .find(candidate => !namesBeforeApplication.has(candidate))
+          .find(candidate => !namesBeforeArgument.has(candidate))
         if (!createdName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
-        usedPremiseApplication = true
       }
-    }
-    for (const argument of usedPremiseApplication ? [] : explicitArgs) {
-      const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-      doubleClick(source)
-      await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
-      await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
-      const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-        .find(candidate => !namesBeforeArgument.has(candidate))
-      if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
-      source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
+    } else {
+      for (const argument of explicitArgs) {
+        const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        doubleClick(source)
+        await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+        await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
+        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(candidate => !namesBeforeArgument.has(candidate))
+        if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
+        source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
+      }
     }
     // Specializing forall binders can expose an implication whose premise is
     // already a visible hypothesis. Apply it through the same card-on-card
@@ -2223,7 +2258,17 @@ export class CompletePlaythroughDriver {
     if (!match) throw new Error(`Unsupported use command: ${command}`)
     const goal = await waitFor('current goal', () => currentGoal(this.win))
     doubleClick(goal)
-    await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+    let lastRetry = Date.now()
+    await waitFor('construction view', () => {
+      const overlay = this.win.document.querySelector('.tr-construction-overlay')
+      if (overlay) return overlay
+      if (Date.now() - lastRetry >= 250) {
+        lastRetry = Date.now()
+        const current = currentGoal(this.win)
+        if (current) doubleClick(current)
+      }
+      return null
+    })
     await this.submitConstruction(parseConstructionExpr(match[1]), command)
     for (const pending of this.pendingPostConstructionGoalRewrites.splice(0)) {
       await this.rewrite(pending)

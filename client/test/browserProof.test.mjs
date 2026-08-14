@@ -4,7 +4,7 @@ import test from 'node:test'
 const { instrumentBrowserProof } = await import('../../tmp-browser-proof-tests/browserProof.js')
 
 test('uses Lean propositional simplification for the browser tauto action', () => {
-  assert.equal(instrumentBrowserProof('tauto'), 'simp_all')
+  assert.equal(instrumentBrowserProof('tauto'), 'first | contradiction | simp_all')
 })
 
 test('splits both equality cases for the mul_eq_zero tauto action', () => {
@@ -96,7 +96,7 @@ test('preserves selected paths through reverse add_zero rewrites', () => {
   )
   assert.equal(
     instrumentBrowserProof('drag_rw_hyp_lhs_at h [← add_zero] [2, 1]'),
-    'conv at h => lhs; arg 2; arg 1; rw [← add_zero]',
+    'drag_rw_hyp_lhs_at h [← add_zero] [2, 1]',
   )
 })
 
