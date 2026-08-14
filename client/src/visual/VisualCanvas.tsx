@@ -699,12 +699,7 @@ function goalIsReflexiveEquality(stream: GoalStream): boolean {
     normalizeZeroNotation(equalitySides[0]),
     normalizeZeroNotation(equalitySides[1]),
   )) return true
-  // Lean only advertises the plain goal click on an equality when
-  // reflexivity can close it. Trust that semantic signal as well as the
-  // printed spelling: the compact browser pretty-printer can report a
-  // definitionally equal goal such as `zero = 0`, which is not textually
-  // identical but must still record and replay the player's click as `rfl`.
-  return stream.goal.clickAction?.playTactic === 'click_goal'
+  return false
 }
 
 function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
