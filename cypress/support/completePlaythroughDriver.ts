@@ -394,8 +394,11 @@ function doubleClick(element: HTMLElement) {
 }
 
 async function drag(source: HTMLElement, target: HTMLElement) {
-  source.scrollIntoView({ block: 'center', inline: 'center' })
-  target.scrollIntoView({ block: 'center', inline: 'center' })
+  // Fixed-position mobile cards can already be simultaneously visible. A
+  // needless scrollIntoView on one of them scrolls its transformed canvas and
+  // can push the other card above the viewport just before pointer-down.
+  if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
+  if (!isWithinViewport(target)) target.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
@@ -591,6 +594,18 @@ async function beginPointerDrag(source: HTMLElement, pointerId = 92) {
 
 function cssEscape(value: string) {
   return CSS.escape(value)
+}
+
+function isWithinViewport(element: HTMLElement) {
+  const rect = element.getBoundingClientRect()
+  const view = element.ownerDocument.defaultView
+  return Boolean(view)
+    && rect.width > 0
+    && rect.height > 0
+    && rect.left >= 0
+    && rect.top >= 0
+    && rect.right <= view!.innerWidth
+    && rect.bottom <= view!.innerHeight
 }
 
 function currentGoal(win: DriverWindow) {
