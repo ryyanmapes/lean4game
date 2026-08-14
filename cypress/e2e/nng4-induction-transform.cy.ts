@@ -66,6 +66,20 @@ function visualHarness() {
   })
 }
 
+function selectVisibleBranch(
+  goalPattern: RegExp,
+  direction: 'next' | 'prev',
+) {
+  visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+    if (!goalPattern.test(snapshot.goalType)) {
+      cy.get(`[data-testid="stream-nav-${direction}"]`, { timeout: 60000 }).click()
+    }
+  })
+  visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+    expect(snapshot.goalType, `the ${direction} player-selected proof branch`).to.match(goalPattern)
+  })
+}
+
 function watchGoalCardDoubleClicks() {
   cy.window().then(win => {
     ;(win as Cypress.AUTWindow & { __goalCardDblClicks?: number }).__goalCardDblClicks = 0
@@ -211,13 +225,9 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
 
     visualHarness().then(harness => harness.clickGoal())
-    // Auto branch switching is a player preference and defaults off. Verify
-    // the branch just completed, then choose its live sibling explicitly.
-    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
-      expect(snapshot.currentStreamIsCompleted).to.equal(true)
-    })
-    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
-    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 }).should('contain.text', 'Stream 2 of 2')
+    // Auto branch switching is a player preference. Follow the visible goal
+    // and navigate only when the live successor was not selected already.
+    selectVisibleBranch(/0\s*\+\s*succ/u, 'next')
     visualHarness().then(harness => harness.getProofAudit()).then(audit => {
       expect(audit.coreLines.at(-1), 'goal click is a Core Lean proof move').to.equal('rfl')
       expect(audit.interactiveLines.at(-1), 'goal click is an Interactive proof move').to.equal('click_goal')
@@ -293,12 +303,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('.tr-back-btn').click()
     visualHarness().then(harness => harness.dragHypToGoal('hd'))
 
-    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
-      expect(snapshot.currentStreamIsCompleted).to.equal(true)
-    })
-    cy.get('[data-testid="stream-nav-prev"]', { timeout: 60000 }).click()
-    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
-      .should('contain.text', 'Stream 1 of 2')
+    selectVisibleBranch(/0\s*\+\s*0\s*=\s*0/u, 'prev')
 
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       expect(snapshot.goalType).to.contain('0 + 0 = 0')
@@ -352,12 +357,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
       }
     })
 
-    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
-      expect(snapshot.currentStreamIsCompleted).to.equal(true)
-    })
-    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
-    cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
-      .should('contain.text', 'Stream 2 of 2')
+    selectVisibleBranch(/0\s*\+\s*succ/u, 'next')
 
     visualHarness().then(harness => harness.dragHypToGoal('hd'))
 
