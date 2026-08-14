@@ -524,6 +524,18 @@ async function finishPointerDrag(
     }))
     await sleep(12)
   }
+  // Let dnd-kit's final collision measurement settle on the release target.
+  // A real player naturally pauses for at least a frame before releasing; an
+  // immediate synthetic pointerup could retain the hypothesis crossed on the
+  // preceding move even though the pointer was visibly over the goal.
+  await sleep(50)
+  moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+    ...pointer,
+    buttons: 1,
+    clientX: endX,
+    clientY: endY,
+  }))
+  await sleep(25)
   moveTarget.dispatchEvent(new PointerEventCtor('pointerup', {
     ...pointer,
     buttons: 0,

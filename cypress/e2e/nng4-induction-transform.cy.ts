@@ -155,7 +155,11 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('[data-rule-label="add_zero"]').click()
 
     cy.window({ timeout: 60000 }).should(win => {
-      const entries = JSON.parse(win.localStorage.getItem('playlog/Addition/1') ?? '[]')
+      const entries = JSON.parse(
+        win.localStorage.getItem('playlog/g/local/NNG4/Addition/1')
+          ?? win.localStorage.getItem('playlog/Addition/1')
+          ?? '[]',
+      )
       expect(entries.at(-1)?.playTactic).to.match(/^drag_rw_lhs \[(?:MyNat\.)?add_zero\]$/)
       expect(entries.at(-1)?.succeeded).to.equal(true)
     })
@@ -207,6 +211,12 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
 
     visualHarness().then(harness => harness.clickGoal())
+    // Auto branch switching is a player preference and defaults off. Verify
+    // the branch just completed, then choose its live sibling explicitly.
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.currentStreamIsCompleted).to.equal(true)
+    })
+    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 }).should('contain.text', 'Stream 2 of 2')
     visualHarness().then(harness => harness.getProofAudit()).then(audit => {
       expect(audit.coreLines.at(-1), 'goal click is a Core Lean proof move').to.equal('rfl')
@@ -283,6 +293,10 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     cy.get('.tr-back-btn').click()
     visualHarness().then(harness => harness.dragHypToGoal('hd'))
 
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.currentStreamIsCompleted).to.equal(true)
+    })
+    cy.get('[data-testid="stream-nav-prev"]', { timeout: 60000 }).click()
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 1 of 2')
 
@@ -338,6 +352,10 @@ describe('NNG4 Addition 1 induction transform mode', () => {
       }
     })
 
+    visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
+      expect(snapshot.currentStreamIsCompleted).to.equal(true)
+    })
+    cy.get('[data-testid="stream-nav-next"]', { timeout: 60000 }).click()
     cy.get('[data-testid="stream-nav-label"]', { timeout: 60000 })
       .should('contain.text', 'Stream 2 of 2')
 
