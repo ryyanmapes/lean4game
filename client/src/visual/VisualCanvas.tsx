@@ -683,17 +683,21 @@ function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTr
 }
 
 function goalIsReflexiveEquality(stream: GoalStream): boolean {
+  const rawGoal = TaggedText_stripTags(stream.goal.type).trim()
   const parsedGoal = parsedGoalEquality(stream)
-  if (!parsedGoal) return false
-  if (formulasMatchLiterally(parsedGoal.lhsStr, parsedGoal.rhsStr)) return true
+  const equalitySides = parsedGoal
+    ? [parsedGoal.lhsStr, parsedGoal.rhsStr] as const
+    : splitEqualityText(formatFormulaText(rawGoal))
+  if (!equalitySides) return false
+  if (formulasMatchLiterally(equalitySides[0], equalitySides[1])) return true
   // The browser pretty-printer can preserve the constructor spelling on one
   // side while rendering numeral notation on the other (`zero = 0`).  Those
   // are the same kernel term, so the player's click must be recorded as rfl.
   const normalizeZeroNotation = (formula: string) => normalizeFormulaText(formula)
     .replace(/\b(?:(?:MyNat|Nat)\.)?zero\b/gu, '0')
   if (formulasMatchLiterally(
-    normalizeZeroNotation(parsedGoal.lhsStr),
-    normalizeZeroNotation(parsedGoal.rhsStr),
+    normalizeZeroNotation(equalitySides[0]),
+    normalizeZeroNotation(equalitySides[1]),
   )) return true
   // Lean only advertises the plain goal click on an equality when
   // reflexivity can close it. Trust that semantic signal as well as the
@@ -3012,8 +3016,9 @@ export function VisualCanvas({
     const theoremTemplate = active.data.current?.theoremTemplate
       ? active.data.current.theorem as PropositionTheorem
       : null
-    const tacticTemplate = active.data.current?.visualTactic
-      ? active.data.current.tactic as VisualTactic
+    const activeTactic = active.data.current?.tactic as VisualTactic | undefined
+    const tacticTemplate = active.data.current?.visualTactic && activeTactic
+      ? activeTactic
       // The lower tray can repack/remount while a branch interaction is
       // settling. dnd-kit preserves the active id in that case, but its
       // component-owned data may be gone by pointer-up. The stable card id is
@@ -3766,20 +3771,22 @@ export function VisualCanvas({
     // must receive the underlying local name stored on the card (`playName`).
     // Translate whole identifier tokens only, so a variable `a` never alters
     // a function name such as `add`.
+    const inaccessibleDisplayNames: string[] = []
     const leanExprStr = focusedStream.hyps.reduce((expression, card) => {
       const displayName = card.hyp.names[0]
       const rawPlayName = card.hyp.playName
       // Some browser proof states expose a compiler-generated fvar name such
-      // as `a._@._internal...`. Preserve that exact reference with Lean's
-      // escaped-identifier syntax; the collision-safe display label is not
-      // necessarily an elaborator-visible name after cases or induction.
-      const playName = rawPlayName && (rawPlayName.includes('@') || rawPlayName.includes('._internal.'))
-        // Escaped identifiers are the Lean syntax for referring to fvars
-        // whose generated names contain punctuation. Falling back to the
-        // pretty display name is unsafe: after cases/induction that label may
-        // no longer be a resolvable Lean identifier.
-        ? `«${rawPlayName.replace(/»/gu, '')}»`
-        : rawPlayName ?? displayName
+      // as `a._@._internal...`. It cannot be referenced from tactic syntax;
+      // collect its collision-safe card label and make that label accessible
+      // with `rename_i` in the generated command below.
+      const inaccessible = Boolean(rawPlayName) &&
+        (rawPlayName!.includes('@') || rawPlayName!.includes('._internal.'))
+      if (inaccessible && displayName && !inaccessibleDisplayNames.includes(displayName)) {
+        inaccessibleDisplayNames.push(displayName)
+      }
+      // `rename_i` below makes hygienic locals elaborator-visible under the
+      // exact collision-safe labels shown to the player.
+      const playName = inaccessible ? displayName : rawPlayName ?? displayName
       if (!displayName || !playName || displayName === playName) return expression
       const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
       return expression.replace(
@@ -3839,8 +3846,11 @@ export function VisualCanvas({
       }
     }
 
+    const commandTactic = inaccessibleDisplayNames.length > 0
+      ? `rename_i ${inaccessibleDisplayNames.join(' ')}; ${playTactic}`
+      : playTactic
     const { command, rotation } = actionCommandForStream(
-      playTactic,
+      commandTactic,
       focusedStream,
       goalOrderForAction(
         leanGoalOrderRef.current,

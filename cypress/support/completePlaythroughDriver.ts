@@ -396,13 +396,14 @@ function doubleClick(element: HTMLElement) {
 }
 
 async function drag(source: HTMLElement, target: HTMLElement) {
+  const targetIdentity = captureDragTargetIdentity(target)
   // Start from the source while it is visible. On a long mobile card stack the
   // source and destination cannot always fit onscreen together; scrolling the
   // destination before pointer-down can move the source away and make the
   // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
-  target = (source.ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+  target = resolveRemountedDragTarget(source.ownerDocument, targetIdentity, target)
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
   const startY = start.top + start.height / 2
@@ -470,12 +471,12 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     // column before releasing it.
     target.scrollIntoView({ block: 'center', inline: 'nearest' })
     await sleep(50)
-    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+    target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   }
   if (!receivesPointerAtCenter(target)) {
     target.scrollIntoView({ block: 'center', inline: 'center' })
     await sleep(50)
-    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+    target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   }
   if (mobileScroll && !receivesPointerAtCenter(target)) {
     // `scrollIntoView()` may align an inner card beneath the fixed mobile goal
@@ -488,12 +489,12 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     const desiredY = scrollRect.top + scrollRect.height * 0.58
     mobileScroll.scrollTop += targetRect.top + targetRect.height / 2 - desiredY
     await sleep(75)
-    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+    target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   }
   if (!receivesPointerAtCenter(target)) {
     throw new Error(`Player drag destination remained obscured after scrolling: ${target.id}`)
   }
-  await finishPointerDrag(source, target, travelStartX, travelStartY, 91)
+  await finishPointerDrag(source, target, travelStartX, travelStartY, 91, targetIdentity)
 }
 
 async function dragToPoint(source: HTMLElement, clientX: number, clientY: number) {
@@ -550,6 +551,7 @@ async function finishPointerDrag(
   startX: number,
   startY: number,
   pointerId: number,
+  targetIdentity: DragTargetIdentity = captureDragTargetIdentity(target),
 ) {
   // The source and target are brought into view before pointer-down. Scrolling
   // after a drag begins changes dnd-kit's measured collision rectangles and is
@@ -592,7 +594,7 @@ async function finishPointerDrag(
   // Drag activation can remount/reflow a mobile card stack during those
   // travel frames. Re-measure the stable target immediately before release;
   // otherwise the old centre may now be occupied by the fixed goal card.
-  const liveTarget = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+  const liveTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   const liveOwnExpressionPart = liveTarget.matches('.tr-expression-node')
     ? Array.from(liveTarget.children).find(child =>
         child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
@@ -616,7 +618,7 @@ async function finishPointerDrag(
   // The app's own auto-scroller can move the card during that settling
   // frame. Sample once more at the actual release instant so a long mobile
   // drag lands on the same visible portion a player's finger is over.
-  const settledTarget = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? liveTarget
+  const settledTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, liveTarget)
   const settledPoint = pointerPointWithin(settledTarget)
   if (settledPoint) {
     releaseX = settledPoint.x
@@ -684,6 +686,60 @@ async function beginPointerDrag(source: HTMLElement, pointerId = 92) {
 
 function cssEscape(value: string) {
   return CSS.escape(value)
+}
+
+interface DragTargetIdentity {
+  id: string
+  testId?: string
+  streamId?: string
+  hypName?: string
+  hypType?: string
+  theoremName?: string
+}
+
+function captureDragTargetIdentity(target: HTMLElement): DragTargetIdentity {
+  return {
+    id: target.id,
+    testId: target.dataset.testid,
+    streamId: target.dataset.streamId,
+    hypName: target.dataset.hypName,
+    hypType: target.dataset.hypType,
+    theoremName: target.dataset.theoremName,
+  }
+}
+
+function resolveRemountedDragTarget(
+  ownerDocument: Document,
+  identity: DragTargetIdentity,
+  fallback: HTMLElement,
+): HTMLElement {
+  const exact = identity.id
+    ? ownerDocument.getElementById(identity.id) as HTMLElement | null
+    : null
+  if (!identity.testId) return exact?.isConnected ? exact : fallback
+
+  // Phone layouts can keep a hidden desktop twin with the same DOM id.
+  // Resolve among visible semantic twins before using getElementById(), which
+  // is allowed to return that hidden first occurrence.
+  const candidates = visible(ownerDocument.querySelectorAll<HTMLElement>(
+    `[data-testid="${cssEscape(identity.testId)}"]`,
+  )).filter(candidate =>
+    (!identity.hypName || candidate.dataset.hypName === identity.hypName) &&
+    (!identity.hypType || candidate.dataset.hypType === identity.hypType) &&
+    (!identity.theoremName || candidate.dataset.theoremName === identity.theoremName),
+  )
+  let currentStreamId: string | undefined
+  try {
+    const view = ownerDocument.defaultView as DriverWindow | null
+    currentStreamId = view ? harness(view).getCurrentStreamSnapshot().streamId : undefined
+  } catch {
+    // The audit bridge can be between React commits while the card remounts.
+  }
+  return candidates.find(candidate => candidate.dataset.streamId === currentStreamId)
+    ?? candidates.find(candidate => candidate.dataset.streamId === identity.streamId)
+    ?? candidates[0]
+    ?? (exact?.isConnected ? exact : null)
+    ?? fallback
 }
 
 function isWithinViewport(element: HTMLElement) {
@@ -1804,7 +1860,11 @@ export class CompletePlaythroughDriver {
           },
           3_000,
         ).catch(() => null)
-        const resultName = createdName ?? retainedName ?? changedName ?? visibleDerivedName
+        const reusedName = sourceNameBeforeArgument
+          && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] != null
+            ? sourceNameBeforeArgument
+            : null
+        const resultName = createdName ?? retainedName ?? changedName ?? visibleDerivedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
