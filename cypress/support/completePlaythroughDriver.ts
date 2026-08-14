@@ -437,11 +437,17 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // just as a player does during a long drag. Verify the actual hit target
   // before releasing rather than trusting an overlay-obscured rectangle.
   if (!isWithinViewport(target) || !receivesPointerAtCenter(target)) {
-    target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    // Centre the destination inside its nearest scrolling ancestor. On the
+    // phone layout, `nearest` can leave the first theorem card underneath the
+    // fixed goal stack; dnd-kit then quite correctly reports the adjacent
+    // reorder divider as the drop target even though the card exists in the
+    // DOM. A player scrolls the obscured card into the open middle of the
+    // column before releasing it.
+    target.scrollIntoView({ block: 'center', inline: 'nearest' })
     await sleep(50)
   }
   if (!receivesPointerAtCenter(target)) {
-    target.scrollIntoView({ block: 'end', inline: 'nearest' })
+    target.scrollIntoView({ block: 'center', inline: 'center' })
     await sleep(50)
   }
   await finishPointerDrag(source, target, startX, startY, 91)
@@ -1646,6 +1652,8 @@ export class CompletePlaythroughDriver {
       for (const argument of explicitArgs) {
         source = this.refreshCard(source)
         const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        const sourceNameBeforeArgument = source.dataset.hypName
+        const sourceTypeBeforeArgument = source.dataset.hypType
         if (source.classList.contains('constructable')) {
           doubleClick(source)
           await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
@@ -1657,10 +1665,22 @@ export class CompletePlaythroughDriver {
           }
           await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
         }
-        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
+        const createdName = Object.keys(snapshotAfterArgument.hypTypes)
           .find(candidate => !namesBeforeArgument.has(candidate))
-        if (!createdName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
-        source = await waitFor(`derived theorem ${createdName}`, () => this.hyp(createdName))
+        // A workspace theorem application may update the existing card in
+        // place instead of allocating another hypothesis name. That is a
+        // normal player-visible result (and is what chained applications of
+        // `mul_left_cancel ... ha h` do), so follow the changed card rather
+        // than requiring every premise drag to grow the hypothesis list.
+        const retainedName = sourceNameBeforeArgument
+          && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] != null
+          && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] !== sourceTypeBeforeArgument
+            ? sourceNameBeforeArgument
+            : null
+        const resultName = createdName ?? retainedName
+        if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
+        source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
     } else {
       for (const argument of explicitArgs) {
