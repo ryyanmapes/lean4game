@@ -32,6 +32,9 @@ jobs:
           - name: mobile transformation pagination
             id: mobile-pagination
             specs: cypress/e2e/visual-mobile-pagination-stability.cy.ts
+          - name: Addition 1 completed-branch rewrite
+            id: addition-1-branch-order
+            specs: cypress/e2e/nng4-induction-transform.cy.ts
           - name: feedback and release contracts
             id: feedback-release
             specs: cypress/e2e/feedback-report.cy.ts

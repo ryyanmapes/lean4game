@@ -33,22 +33,12 @@ function browserCompatibleProof(proofBody: string): string {
       const navigation = path.map(step => `; arg ${step}`).join('')
       return `${indentation}conv at ${hypothesis} => ${side}${navigation}; rw [${reverse}${normalizedTheorem}]`
     }
-    const goalRewrite = line.match(
-      /^(\s*)drag_rw_(lhs|rhs)(_at)? \[(←\s*)?([^\]]+)\](?: \[([\d,\s]+)\])?\s*$/u,
-    )
-    if (goalRewrite) {
-      const [, indentation, side, atSuffix = '', reverse = '', theorem, rawPath = ''] = goalRewrite
-      const path = rawPath.split(',').map(step => step.trim()).filter(Boolean)
-      if ((atSuffix.length > 0) !== (path.length > 0)) return line
-
-      // The purpose-linked Cauli matcher is unreliable for overloaded terms
-      // and some reverse rewrites. Compile the same explicitly selected
-      // side/path through Lean's core conv/rw machinery. The player's authored
-      // drag_rw command remains unchanged in both proof logs.
-      const normalizedTheorem = theorem.trim()
-      const navigation = path.map(step => `; arg ${step}`).join('')
-      return `${indentation}conv => ${side}${navigation}; rw [${reverse}${normalizedTheorem}]`
-    }
+    // Goal rewrites must remain `drag_rw_*` in the compiled browser proof.
+    // Unlike core `rw` (including `rw` inside `conv`), the visual tactic
+    // deliberately preserves a newly reflexive goal for the player's required
+    // final click. Compiling it to `conv; rw` silently solved that branch and
+    // advanced Lean to its sibling while the canvas still displayed the
+    // reflexive branch, so subsequent actions were applied to the wrong goal.
     return line
   }).join('\n')
 }

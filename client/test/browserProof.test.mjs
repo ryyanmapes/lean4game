@@ -23,7 +23,7 @@ case succ =>
   drag_rw_lhs [MyNat.add_succ]`),
     `induction n with d hd
 case succ =>
-  conv => lhs; rw [MyNat.add_succ]
+  drag_rw_lhs [MyNat.add_succ]
   all_goals browser_report_state
   all_goals sorry`,
   )
@@ -42,34 +42,46 @@ case zero =>
   all_goals browser_report_state
   all_goals sorry
 case succ =>
-  conv => lhs; rw [MyNat.add_succ]
+  drag_rw_lhs [MyNat.add_succ]
   all_goals browser_report_state
   all_goals sorry`,
   )
 })
 
-test('uses Lean core rewriting on the selected side for nested add_zero', () => {
+test('does not silently complete the base branch before the successor rewrite', () => {
+  const proof = `induction n with d hd
+drag_rw_lhs [MyNat.add_zero]
+rfl
+drag_rw_lhs [MyNat.add_succ]`
+  assert.equal(
+    instrumentBrowserProof(proof),
+    proof,
+    'browser compilation must preserve the same four player-selected goals',
+  )
+})
+
+test('preserves the visual goal rewrite so a reflexive result is not auto-closed', () => {
   assert.equal(
     instrumentBrowserProof(`case zero =>
   drag_rw_rhs_at [MyNat.add_zero] [2]`),
     `case zero =>
-  conv => rhs; arg 2; rw [MyNat.add_zero]
+  drag_rw_rhs_at [MyNat.add_zero] [2]
   all_goals browser_report_state
   all_goals sorry`,
   )
 })
 
-test('uses Lean core rewriting for a reverse rewrite on the selected side', () => {
+test('preserves a reverse visual goal rewrite on the selected side', () => {
   assert.equal(
     instrumentBrowserProof('drag_rw_rhs [← MyNat.succ_eq_add_one]'),
-    'conv => rhs; rw [← MyNat.succ_eq_add_one]',
+    'drag_rw_rhs [← MyNat.succ_eq_add_one]',
   )
 })
 
 test('preserves selected paths through reverse add_zero rewrites', () => {
   assert.equal(
     instrumentBrowserProof('drag_rw_rhs_at [← MyNat.add_zero] [1]'),
-    'conv => rhs; arg 1; rw [← MyNat.add_zero]',
+    'drag_rw_rhs_at [← MyNat.add_zero] [1]',
   )
   assert.equal(
     instrumentBrowserProof('drag_rw_hyp_lhs_at h [← add_zero] [2, 1]'),
@@ -80,6 +92,6 @@ test('preserves selected paths through reverse add_zero rewrites', () => {
 test('keeps the selected side path when expanding a variable with reverse add_zero', () => {
   assert.equal(
     instrumentBrowserProof('drag_rw_rhs_at [← add_zero] [2]'),
-    'conv => rhs; arg 2; rw [← add_zero]',
+    'drag_rw_rhs_at [← add_zero] [2]',
   )
 })

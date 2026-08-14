@@ -8,7 +8,6 @@ import Lean.Meta.Tactic.Assert
 import Lean.Meta.Tactic.Intro
 import Lean.Meta.Tactic.Rename
 import Lean.Parser.Extension
-import Lean.Util.OccursCheck
 import GameServer.GoalClick
 import GameServer.PremiseApplication
 import GameServer.Browser.ProofProbe
@@ -595,16 +594,6 @@ private def instantiateRewriteTheoremAtExpr (e : Expr) (h : Ident) (symm : Bool)
       argsApplied := argsApplied.push (← instantiateMVars arg)
     instantiateMVars (mkAppN baseThm argsApplied)
 
-private def rewriteAtExpr (mvarId : MVarId) (e thm : Expr) (stx : Syntax) (symm : Bool) :
-    TacticM RewriteResult := do
-  let mvarCounterSaved := (← getMCtx).mvarCounter
-  unless ← occursCheck mvarId thm do
-    throwErrorAt stx "Occurs check failed: Expression{indentExpr thm}\ncontains the goal {Expr.mvar mvarId}"
-  let r ← mvarId.rewrite e thm symm
-  let mctx ← getMCtx
-  let mvarIds := r.mvarIds.filter fun newMVarId => (mctx.getDecl newMVarId |>.index) >= mvarCounterSaved
-  pure { r with mvarIds }
-
 private structure FocusedRewriteResult where
   eNew : Expr
   eqProof : Expr
@@ -669,10 +658,28 @@ private partial def focusedRewriteExpr
       let thm ← instantiateMVars thm
       if eNew.hasMVar || thm.hasMVar then
         throwErrorAt h "drag_rw: reverse rewrite has parameters that are not determined by the selected expression"
+      if e == eNew then
+        throwErrorAt h "drag_rw: rewrite does not change the selected expression"
       let eqProof ← mkAppM ``Eq.symm #[thm]
       return { eNew, eqProof, mvarIds := [] }
-    let r ← rewriteAtExpr mvarId e thm h.raw symm
-    pure { eNew := r.eNew, eqProof := r.eqProof, mvarIds := r.mvarIds }
+    -- Apply the already-instantiated equality proof directly to the selected
+    -- expression. Definitional matching reconciles overloaded numerals with
+    -- their constructor forms (for example, displayed `0 + 0` can internally
+    -- be `0 + zero`). The caller replaces the selected side itself; unlike the
+    -- `rw` tactic this never performs a trailing `rfl` or advances to a sibling.
+    let thmType ← withReducible (whnf (← inferType thm))
+    let some (_, leftExpr, rightExpr) ← matchEq? thmType
+      | throwErrorAt h "drag_rw: rewrite theorem did not elaborate to an equality"
+    unless ← isDefEq e leftExpr do
+      throwErrorAt h "drag_rw: rewrite source no longer matches the selected expression"
+    Term.synthesizeSyntheticMVarsNoPostponing
+    let eNew ← instantiateMVars rightExpr
+    let thm ← instantiateMVars thm
+    if eNew.hasMVar || thm.hasMVar then
+      throwErrorAt h "drag_rw: rewrite has parameters that are not determined by the selected expression"
+    if e == eNew then
+      throwErrorAt h "drag_rw: rewrite does not change the selected expression"
+    pure { eNew, eqProof := thm, mvarIds := [] }
   | k :: rest =>
     let e' ← withReducible (whnf e)
     let flat := e'.getAppArgs

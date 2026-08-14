@@ -216,7 +216,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
   })
 
-  it('applies player-dragged add_succ to the successor branch selected in the proof graph', () => {
+  it('applies player-dragged add_succ after completing the base branch and switching in the proof graph', () => {
     cy.viewport(390, 844)
     let player: CompletePlaythroughDriver
 
@@ -224,16 +224,19 @@ describe('NNG4 Addition 1 induction transform mode', () => {
       player = new CompletePlaythroughDriver(win)
       await player.prepareInitialBinders(['n'], 'induction n with d hd')
       await player.perform('induction n with d hd')
+      await player.perform('rw [add_zero]')
+      await player.perform('rfl')
     })
 
     cy.get('.mobile-page-link.graph-link', { timeout: 60000 }).click()
     cy.get('.mobile-graph-page.open [data-testid="proof-stream-leaf"][data-completed="false"]', {
       timeout: 60000,
-    }).should('have.length', 2).eq(1).click({ force: true })
+    }).should('have.length', 1).click({ force: true })
     cy.get('.mobile-graph-page.open .mobile-side-return-link').click()
 
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       expect(snapshot.goalType, 'the graph-selected successor branch').to.match(/0\s*\+\s*succ/u)
+      expect(snapshot.canvasStreamIds, 'the completed base branch is absent from Lean live goals').to.have.length(1)
     })
 
     cy.then(async () => {
