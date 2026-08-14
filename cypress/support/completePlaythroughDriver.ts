@@ -1754,10 +1754,15 @@ export class CompletePlaythroughDriver {
     })
     let hypothesisFallback: HTMLElement | null = null
     for (const tabName of ['Everything', 'Hypotheses', '+', '*', '^', '\u2264', '012', 'Peano']) {
-      const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
+      const findTab = () => Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
         .find(button => button.textContent?.trim() === tabName)
+      const tab = findTab()
       if (tab && !tab.classList.contains('active')) {
         click(tab)
+        await waitFor(`${tabName} rewrite category to become active`, () => {
+          const current = findTab()
+          return current?.classList.contains('active') ? true : null
+        })
       }
       await waitForMeasuredDock()
       await rewindPages(overlay, 'Previous rule')
@@ -1775,7 +1780,11 @@ export class CompletePlaythroughDriver {
         }
         const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
         if (!next || next.disabled) break
-        click(next)
+        await clickPaginationAndWait(
+          overlay,
+          next,
+          `${tabName} rewrite pagination to change`,
+        )
       }
     }
     const resolvedName = this.resolveName(name)
