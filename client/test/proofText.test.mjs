@@ -5,6 +5,7 @@ import test from 'node:test'
 const {
   buildStructuredProof,
   commandForGoalAction,
+  goalOrderForAction,
   coreCommandForGoalClick,
   displayedProofLines,
   displayedProofSteps,
@@ -83,6 +84,21 @@ test('goal navigation is deferred until an action and records the shortest left 
       command: 'rotate_left\ndrag_rw_lhs [add_succ]',
       rotation: 'rotate_left',
     },
+  )
+})
+
+test('actions retain Lean goal order after the UI selects a different proof-tree branch', () => {
+  assert.deepEqual(
+    goalOrderForAction(['succ', 'zero'], ['zero', 'succ'], 'succ'),
+    ['succ', 'zero'],
+  )
+  assert.equal(rotationForGoal(
+    goalOrderForAction(['succ', 'zero'], ['zero', 'succ'], 'succ'),
+    'succ',
+  ), null)
+  assert.deepEqual(
+    goalOrderForAction(['old-succ', 'old-zero'], ['zero', 'succ'], 'succ'),
+    ['zero', 'succ'],
   )
 })
 

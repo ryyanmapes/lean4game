@@ -2352,12 +2352,17 @@ export class CompletePlaythroughDriver {
     if (repeatedApplication) {
       const [, theoremApplication, targetName] = repeatedApplication
       const theoremName = sourceName(splitTopLevelWhitespace(theoremApplication)[0] ?? theoremApplication)
+      let currentTargetName = this.resolveName(targetName)
       let applications = 0
       for (; applications < 32; applications += 1) {
         const source = await this.sourceCard(theoremName)
-        const target = this.hyp(targetName)
+        const target = this.hypExact(currentTargetName)
         if (!target || !matchesTheoremPremise(source, target, [])) break
-        await this.applyOrExact(`apply ${theoremApplication} at ${targetName}`)
+        await this.applyOrExact(`apply ${theoremApplication} at ${currentTargetName}`)
+        // applyOrExact records the concrete card produced by the drag. Follow
+        // that card on the next repetition instead of resolving the original
+        // classic name again after React has reconciled the stream.
+        currentTargetName = this.resolveName(currentTargetName)
       }
       if (applications === 0) {
         throw new Error(`${normalized} had no player-applicable premise`)
@@ -2365,6 +2370,7 @@ export class CompletePlaythroughDriver {
       if (applications === 32) {
         throw new Error(`${normalized} exceeded the repeated player-application limit`)
       }
+      this.rememberAlias(targetName, currentTargetName)
       return
     }
     if (/^(?:apply|exact)\s/u.test(normalized)) {

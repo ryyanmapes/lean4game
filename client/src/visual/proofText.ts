@@ -56,6 +56,17 @@ export function rotationForGoal(goalOrder: string[], targetGoalId: string): stri
   return targetIndex === 1 ? 'rotate_left' : `rotate_left ${targetIndex}`
 }
 
+/** Prefer Lean's actual outstanding-goal order, which can differ from the
+ * proof tree's presentation order after the player changes branches.  Fall
+ * back to the rendered order when stream reconciliation has replaced an id. */
+export function goalOrderForAction(
+  leanGoalOrder: string[],
+  renderedGoalOrder: string[],
+  targetGoalId: string,
+): string[] {
+  return leanGoalOrder.includes(targetGoalId) ? leanGoalOrder : renderedGoalOrder
+}
+
 export function commandForGoalAction(
   playTactic: string,
   targetGoalId: string,

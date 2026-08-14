@@ -46,6 +46,7 @@ import { goalInfoVisibleAfterTactics } from './levelPresentation'
 import {
   buildStructuredProof,
   commandForGoalAction,
+  goalOrderForAction,
   coreCommandForGoalClick,
   displayedProofLines,
   displayedProofSteps,
@@ -1909,6 +1910,11 @@ export function VisualCanvas({
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
+  // The proof tree is kept in a stable player-facing order, while `rotate_left`
+  // permanently changes Lean's outstanding-goal order. Keep both: using the
+  // rendered order for a second action after a graph navigation can silently
+  // rotate back to a different branch.
+  const leanGoalOrderRef = useRef<string[]>((resumeState?.canvasState ?? initialState).streams.map(stream => stream.id))
   const [failingCardId, setFailingCardId] = useState<string | null>(null)
   const [failingTheoremCopyId, setFailingTheoremCopyId] = useState<string | null>(null)
   const [solvedGoalId, setSolvedGoalId] = useState<string | null>(null)
@@ -2503,7 +2509,11 @@ export function VisualCanvas({
     const inferredAction = actionCommandForStream(
       playTactic,
       focusedStream,
-      canvasState.streams.map(stream => stream.id),
+      goalOrderForAction(
+        leanGoalOrderRef.current,
+        canvasState.streams.map(stream => stream.id),
+        focusedStream.id,
+      ),
     )
     const command = options?.commandOverride ?? inferredAction.command
     const rotation = inferredAction.rotation
@@ -2607,6 +2617,7 @@ export function VisualCanvas({
     const leanCanvas = returnedIntroStreams.length > 0
       ? { streams: returnedIntroStreams, completed: false }
       : proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -2707,6 +2718,7 @@ export function VisualCanvas({
       pendingMobileInsertionRef.current = null
       return false
     }
+    leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
     const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
     const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
@@ -3714,7 +3726,11 @@ export function VisualCanvas({
     const { command, rotation } = actionCommandForStream(
       playTactic,
       focusedStream,
-      canvasState.streams.map(stream => stream.id),
+      goalOrderForAction(
+        leanGoalOrderRef.current,
+        canvasState.streams.map(stream => stream.id),
+        focusedStream.id,
+      ),
     )
     closeReductionTooltip()
     updateProcessingState(true)
@@ -3738,6 +3754,7 @@ export function VisualCanvas({
     if (result === null) return false
 
     const leanCanvas = proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
@@ -3880,7 +3897,11 @@ export function VisualCanvas({
     const action = actionCommandForStream(
       playTactic,
       focusedStream,
-      canvasState.streams.map(stream => stream.id),
+      goalOrderForAction(
+        leanGoalOrderRef.current,
+        canvasState.streams.map(stream => stream.id),
+        focusedStream.id,
+      ),
     )
     const rotation = action.rotation
     let command = action.command
@@ -3943,6 +3964,7 @@ export function VisualCanvas({
     // render cycle — after rw, Lean assigns a new mvarId to the goal, so we must update the
     // tracked stream ID to the stream at the same index, otherwise TransformationView unmounts.
     const leanCanvas = proofStateToCanvas(result)
+    leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
     const mergedCanvas = mergeCanvasState(leanCanvas, canvasState)
     const exactFocusedStreams = !result.completed && lastStep?.focusedGoals !== undefined
       ? interactiveGoalsToStreams(lastStep.focusedGoals)
