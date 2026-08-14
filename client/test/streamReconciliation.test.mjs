@@ -1337,3 +1337,41 @@ test('cases on False completes only the focused branch without synthesizing case
   assert.deepEqual(result.nextCanvas.streams.map(candidate => candidate.id), [siblingStream.id])
   assert.equal(result.nextCanvas.completed, false)
 })
+
+test('symm at a hypothesis stays on the selected branch when the browser reports only its sibling', () => {
+  const focusedStream = stream('stream-symm', 'a = 0', 'succ', [
+    hyp('hyp-a', 'a', 'â„•'),
+    hyp('hyp-h', 'h', 'succ(a) = 0'),
+  ])
+  const siblingStream = stream('stream-zero', 'a = 0', 'zero', [
+    hyp('hyp-a', 'a', 'â„•'),
+    hyp('hyp-h', 'h', 'a + 0 = 0'),
+  ])
+  const beforeTree = {
+    id: 'root-symm',
+    streamId: null,
+    label: null,
+    completed: false,
+    children: [
+      { id: 'leaf-zero', streamId: siblingStream.id, label: 'zero', completed: false, children: [] },
+      { id: 'leaf-symm', streamId: focusedStream.id, label: 'succ', completed: false, children: [] },
+    ],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [siblingStream, focusedStream], completed: false },
+    { streams: [siblingStream], completed: false },
+    focusedStream,
+    'symm at h',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(hypTypeFor(result.focusedStreams[0], 'h'), '0 = succ(a)')
+  assert.deepEqual(result.nextCanvas.streams.map(candidate => candidate.id), [
+    siblingStream.id,
+    focusedStream.id,
+  ])
+})

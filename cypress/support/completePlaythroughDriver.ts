@@ -924,7 +924,11 @@ function parseConstructionExpr(source: string): ConstructionExpr {
 export class CompletePlaythroughDriver {
   private readonly aliases = new Map<string, string>()
   private readonly aliasTypes = new Map<string, string>()
-  private readonly pendingBranchAliases: Array<{ expected: string; before: Set<string> }> = []
+  private readonly pendingBranchAliases: Array<{
+    expected: string
+    before: Set<string>
+    reusedName?: string
+  }> = []
   private classicCommandsAlreadyCovered = 0
   private implicitIntroAlreadyPerformed = false
   private preferredRewriteSide: 'left' | 'right' | null = null
@@ -1035,6 +1039,9 @@ export class CompletePlaythroughDriver {
       for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {
         const pending = this.pendingBranchAliases[index]
         const createdName = names.find(name => !pending.before.has(name))
+          ?? (pending.reusedName && names.includes(pending.reusedName)
+            ? pending.reusedName
+            : undefined)
         if (!createdName) continue
         this.rememberAlias(pending.expected, createdName)
         this.pendingBranchAliases.splice(index, 1)
@@ -1428,6 +1435,7 @@ export class CompletePlaythroughDriver {
     const beforeSnapshot = harness(this.win).getCurrentStreamSnapshot()
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
     const target = await waitFor(`hypothesis ${match[1]}`, () => this.hyp(match[1]))
+    const eliminatedDisplayName = target.dataset.hypName
     const type = target.dataset.hypType ?? ''
     const casesNumber = /^(?:\u2115|Nat|MyNat)$/u.test(type.trim())
     const casesOr = type.includes('\u2228')
@@ -1469,7 +1477,11 @@ export class CompletePlaythroughDriver {
       this.rememberAlias(expectedNames[index], actualNames[index])
     }
     for (const expected of expectedNames.slice(actualNames.length)) {
-      this.pendingBranchAliases.push({ expected, before: beforeNames })
+      this.pendingBranchAliases.push({
+        expected,
+        before: beforeNames,
+        ...(eliminatedDisplayName ? { reusedName: eliminatedDisplayName } : {}),
+      })
     }
     await this.roundTripLiveProofBranch(casesNumber || casesOr)
   }
@@ -1686,7 +1698,8 @@ export class CompletePlaythroughDriver {
       // dragged the generalized theorem onto the goal.
       for (const argument of explicitArgs) {
         source = this.refreshCard(source)
-        const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        const typesBeforeArgument = harness(this.win).getCurrentStreamSnapshot().hypTypes
+        const namesBeforeArgument = new Set(Object.keys(typesBeforeArgument))
         const sourceNameBeforeArgument = source.dataset.hypName
         const sourceTypeBeforeArgument = source.dataset.hypType
         if (source.classList.contains('constructable')) {
@@ -1703,6 +1716,8 @@ export class CompletePlaythroughDriver {
         const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
         const createdName = Object.keys(snapshotAfterArgument.hypTypes)
           .find(candidate => !namesBeforeArgument.has(candidate))
+        const changedName = Object.entries(snapshotAfterArgument.hypTypes)
+          .find(([candidate, type]) => typesBeforeArgument[candidate] !== type)?.[0]
         // A workspace theorem application may update the existing card in
         // place instead of allocating another hypothesis name. That is a
         // normal player-visible result (and is what chained applications of
@@ -1713,7 +1728,7 @@ export class CompletePlaythroughDriver {
           && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] !== sourceTypeBeforeArgument
             ? sourceNameBeforeArgument
             : null
-        const resultName = createdName ?? retainedName
+        const resultName = createdName ?? retainedName ?? changedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }

@@ -661,7 +661,8 @@ function actionCommandForStream(
 }
 
 function parsedGoalEquality(stream: GoalStream) {
-  return parseGoalEquality(TaggedText_stripTags(stream.goal.type).trim())
+  const raw = TaggedText_stripTags(stream.goal.type).trim()
+  return parseGoalEquality(raw) ?? parseGoalEquality(formatFormulaText(raw))
 }
 
 function parsedHypEquality(card: HypCardType) {

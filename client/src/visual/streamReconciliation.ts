@@ -94,6 +94,7 @@ function likelyFocusedContinuation(
     (playTactic?.startsWith('drag_rw_') ?? false) &&
     !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
   const isHypRewrite = playTactic?.startsWith('drag_rw_hyp_') ?? false
+  const isHypSymmetry = /^symm\s+at\s+\S+$/u.test(playTactic ?? '')
   const dragGoalApplyGoalType = dragGoalApplyNextGoalType(focusedStream, playTactic)
   const goalBranch = playTactic === 'click_goal_left' || playTactic === 'click_goal_right'
     ? splitDisjunctionTargetForRuntime(goalTypeText(focusedStream))
@@ -112,6 +113,12 @@ function likelyFocusedContinuation(
     (selectedGoalBranchType !== null && selectedGoalBranchType === candidateGoalType)
   const goalTypeMatches = goalTypeText(focusedStream) === candidateGoalType
   const hypContextMatches = hypContextShape(focusedStream) === hypContextShape(candidate)
+
+  // In a multi-goal browser proof, a successful `symm at h` can report an
+  // unchanged sibling alongside (or instead of) its focused continuation.
+  // The focused branch must retain its goal and change its local context;
+  // never promote the unchanged sibling merely because its goal is equal.
+  if (isHypSymmetry) return goalTypeMatches && !hypContextMatches
 
   if (requiresStableGoalType && !goalTypeMatches) return false
   if (streamShape(candidate) === streamShape(focusedStream)) return true
@@ -1042,6 +1049,37 @@ function synthesizeContinuationStream(
   if (playTactic.startsWith('drag_goal ')) {
     return synthesizeDragGoalApplyStream(focusedStream, playTactic)
   }
+  const symmetry = /^symm(?:\s+at\s+(\S+))?$/u.exec(playTactic.trim())
+  if (symmetry) {
+    const targetName = symmetry[1]
+    if (targetName) {
+      const targetCard = findHypCardByInteractionName(focusedStream, targetName)
+      if (!targetCard) return null
+      const equality = splitEqualityTarget(stripTaggedText(targetCard.hyp.type).trim())
+      if (!equality) return null
+      const swappedType = `${equality[1]} = ${equality[0]}`
+      return {
+        ...focusedStream,
+        hyps: focusedStream.hyps.map(card => card.id === targetCard.id
+          ? buildNamedHyp(card, rawHypName(card), swappedType, Boolean(card.isTheorem))
+          : card),
+      }
+    }
+    const equality = splitEqualityTarget(goalDisplayText(focusedStream))
+    if (!equality) return null
+    const swappedType = `${equality[1]} = ${equality[0]}`
+    return {
+      ...focusedStream,
+      goal: {
+        ...focusedStream.goal,
+        mvarId: undefined,
+        type: { text: swappedType },
+        clickAction: buildGoalClickAction(swappedType),
+        reductionForms: [],
+      },
+      reductionForms: [],
+    }
+  }
   if (playTactic === 'click_goal') {
     return synthesizeGoalIntroStream(focusedStream)
   }
@@ -1412,7 +1450,8 @@ export function reconcileProofTreeAfterInteraction(
     streamSplit ||
     (playTactic?.startsWith('click_prop ') ?? false) ||
     (playTactic?.startsWith('drag_to ') ?? false) ||
-    (playTactic?.startsWith('drag_apply ') ?? false)
+    (playTactic?.startsWith('drag_apply ') ?? false) ||
+    /^symm(?:\s+at\s+\S+)?$/u.test(playTactic ?? '')
   const solvesFocusedGoal =
     (playTactic?.startsWith('drag_goal ') ?? false) || solvesFocusedByReflexiveClick
   const hasSiblingBranches = siblingStreamsByBeforeId.size > 0
