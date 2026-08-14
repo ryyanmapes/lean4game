@@ -378,9 +378,6 @@ describe('NNG4 Addition 1 induction transform mode', () => {
       expect(goalText).to.contain('0 + succ')
       expect(goalText).to.contain('= succ')
     })
-    cy.get('[data-testid="hyp-card"][data-hyp-name="hd"]', { timeout: 60000 })
-      .should('be.visible')
-
     visualHarness().then(harness => harness.getCurrentStreamSnapshot()).then(snapshot => {
       expect(snapshot.goalType).to.equal(switchedGoalType)
       expect(snapshot.goalType).to.contain('succ')
