@@ -402,6 +402,7 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
+  target = (source.ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
   const startY = start.top + start.height / 2
@@ -452,6 +453,11 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     }))
     await sleep(50)
   }
+  // Scrolling the source and activating dnd-kit can reconcile the mobile card
+  // list. Resolve the destination by its stable card id again; otherwise its
+  // detached pre-scroll rectangle can point at the fixed goal even though the
+  // replacement card is visibly lower in the theorem column.
+  target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
   // Once dnd-kit's sensor is active, scroll the same canvas toward the target
   // just as a player does during a long drag. Verify the actual hit target
   // before releasing rather than trusting an overlay-obscured rectangle.
@@ -464,10 +470,12 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     // column before releasing it.
     target.scrollIntoView({ block: 'center', inline: 'nearest' })
     await sleep(50)
+    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
   }
   if (!receivesPointerAtCenter(target)) {
     target.scrollIntoView({ block: 'center', inline: 'center' })
     await sleep(50)
+    target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
   }
   await finishPointerDrag(source, target, travelStartX, travelStartY, 91)
 }
