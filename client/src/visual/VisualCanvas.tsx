@@ -686,6 +686,15 @@ function goalIsReflexiveEquality(stream: GoalStream): boolean {
   const parsedGoal = parsedGoalEquality(stream)
   if (!parsedGoal) return false
   if (formulasMatchLiterally(parsedGoal.lhsStr, parsedGoal.rhsStr)) return true
+  // The browser pretty-printer can preserve the constructor spelling on one
+  // side while rendering numeral notation on the other (`zero = 0`).  Those
+  // are the same kernel term, so the player's click must be recorded as rfl.
+  const normalizeZeroNotation = (formula: string) => normalizeFormulaText(formula)
+    .replace(/\b(?:(?:MyNat|Nat)\.)?zero\b/gu, '0')
+  if (formulasMatchLiterally(
+    normalizeZeroNotation(parsedGoal.lhsStr),
+    normalizeZeroNotation(parsedGoal.rhsStr),
+  )) return true
   // Lean only advertises the plain goal click on an equality when
   // reflexivity can close it. Trust that semantic signal as well as the
   // printed spelling: the compact browser pretty-printer can report a
@@ -3005,7 +3014,16 @@ export function VisualCanvas({
       : null
     const tacticTemplate = active.data.current?.visualTactic
       ? active.data.current.tactic as VisualTactic
-      : null
+      // The lower tray can repack/remount while a branch interaction is
+      // settling. dnd-kit preserves the active id in that case, but its
+      // component-owned data may be gone by pointer-up. The stable card id is
+      // enough to recover the same unlocked tactic the player is holding.
+      : activeId.startsWith('visual_tactic_')
+        ? visualTactics.find(tactic =>
+            `visual_tactic_${tactic.id}` === activeId ||
+            `visual_tactic_${tactic.name}` === activeId,
+          ) ?? null
+        : null
     // The backend's selected stream can be one render ahead of canvasState
     // after switching or completing a sibling branch.  Cards are rendered
     // from that live stream, so drop resolution must use the same source of
@@ -3014,6 +3032,32 @@ export function VisualCanvas({
     const interactionStreams = currentStream
       ? [currentStream, ...canvasState.streams.filter(stream => stream.id !== currentStream.id)]
       : canvasState.streams
+    const resolveHypDropTarget = (id: string | undefined): {
+      stream: GoalStream | undefined
+      card: HypCardType | undefined
+    } => {
+      const directStream = interactionStreams.find(stream => stream.hyps.some(card => card.id === id))
+      const directCard = directStream?.hyps.find(card => card.id === id)
+      if (directStream && directCard) return { stream: directStream, card: directCard }
+
+      // A just-selected branch may render its newer card instance one React
+      // commit before canvasState receives that instance. Recover the target
+      // from the semantic data on the card actually under the pointer.
+      const element = id ? document.getElementById(id) : null
+      const streamId = element?.dataset.streamId
+      const hypName = element?.dataset.hypName
+      const hypType = element?.dataset.hypType
+      const stream = (streamId
+        ? interactionStreams.find(candidate => candidate.id === streamId)
+        : undefined) ?? currentStream ?? undefined
+      const card = stream?.hyps.find(candidate =>
+        (hypName && candidate.hyp.names[0] === hypName) ||
+        (hypType && formatFormulaText(
+          candidate.hyp.typeBody ?? TaggedText_stripTags(candidate.hyp.type),
+        ) === hypType),
+      )
+      return { stream, card }
+    }
     const sourceTheoremCopy = getTheoremCopyById(activeId)
     const sourceStream = interactionStreams.find(s => s.hyps.some(h => h.id === activeId))
     const sourceCard = sourceStream?.hyps.find(h => h.id === activeId)
@@ -3130,8 +3174,7 @@ export function VisualCanvas({
         return
       }
 
-      const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
-      const targetCard = targetStream?.hyps.find(h => h.id === overId)
+      const { stream: targetStream, card: targetCard } = resolveHypDropTarget(overId)
       const targetName = interactionHypName(targetCard)
       if (targetCard && targetStream && targetName && tacticCanTargetHyp(tacticTemplate, targetCard)) {
         if (tacticTemplate.name === 'induction') {
@@ -3187,8 +3230,7 @@ export function VisualCanvas({
           return
         }
 
-        const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
-        const targetCard = targetStream?.hyps.find(h => h.id === overId)
+        const { stream: targetStream, card: targetCard } = resolveHypDropTarget(overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
         if (targetName) {
@@ -3278,8 +3320,7 @@ export function VisualCanvas({
         })
       } else {
         // Dropped on another hyp card → drag_to (source onto target)
-        const targetStream = interactionStreams.find(s => s.hyps.some(h => h.id === overId))
-        const targetCard = targetStream?.hyps.find(h => h.id === overId)
+        const { stream: targetStream, card: targetCard } = resolveHypDropTarget(overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
         if (!targetName) return
@@ -3729,12 +3770,16 @@ export function VisualCanvas({
       const displayName = card.hyp.names[0]
       const rawPlayName = card.hyp.playName
       // Some browser proof states expose a compiler-generated fvar name such
-      // as `a._@._internal...`.  That identifier is useful for matching RPC
-      // state but cannot be parsed in a tactic term.  The collision-safe name
-      // printed on the card is the reference a player can actually enter.
-      const playName = rawPlayName && !rawPlayName.includes('@') && !rawPlayName.includes('._internal.')
-        ? rawPlayName
-        : displayName
+      // as `a._@._internal...`. Preserve that exact reference with Lean's
+      // escaped-identifier syntax; the collision-safe display label is not
+      // necessarily an elaborator-visible name after cases or induction.
+      const playName = rawPlayName && (rawPlayName.includes('@') || rawPlayName.includes('._internal.'))
+        // Escaped identifiers are the Lean syntax for referring to fvars
+        // whose generated names contain punctuation. Falling back to the
+        // pretty display name is unsafe: after cases/induction that label may
+        // no longer be a resolvable Lean identifier.
+        ? `«${rawPlayName.replace(/»/gu, '')}»`
+        : rawPlayName ?? displayName
       if (!displayName || !playName || displayName === playName) return expression
       const escaped = displayName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
       return expression.replace(

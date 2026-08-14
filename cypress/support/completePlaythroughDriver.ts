@@ -589,6 +589,18 @@ async function finishPointerDrag(
     }))
     await sleep(12)
   }
+  // Drag activation can remount/reflow a mobile card stack during those
+  // travel frames. Re-measure the stable target immediately before release;
+  // otherwise the old centre may now be occupied by the fixed goal card.
+  const liveTarget = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+  const liveOwnExpressionPart = liveTarget.matches('.tr-expression-node')
+    ? Array.from(liveTarget.children).find(child =>
+        child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
+    : undefined
+  const liveDropRect = liveOwnExpressionPart?.getBoundingClientRect() ?? liveTarget.getBoundingClientRect()
+  const unobscuredPoint = pointerPointWithin(liveTarget)
+  let releaseX = unobscuredPoint?.x ?? liveDropRect.left + liveDropRect.width / 2
+  let releaseY = unobscuredPoint?.y ?? liveDropRect.top + liveDropRect.height / 2
   // Let dnd-kit's final collision measurement settle on the release target.
   // A real player naturally pauses for at least a frame before releasing; an
   // immediate synthetic pointerup could retain the hypothesis crossed on the
@@ -597,15 +609,31 @@ async function finishPointerDrag(
   moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
     ...pointer,
     buttons: 1,
-    clientX: endX,
-    clientY: endY,
+    clientX: releaseX,
+    clientY: releaseY,
   }))
   await sleep(25)
+  // The app's own auto-scroller can move the card during that settling
+  // frame. Sample once more at the actual release instant so a long mobile
+  // drag lands on the same visible portion a player's finger is over.
+  const settledTarget = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? liveTarget
+  const settledPoint = pointerPointWithin(settledTarget)
+  if (settledPoint) {
+    releaseX = settledPoint.x
+    releaseY = settledPoint.y
+    moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+      ...pointer,
+      buttons: 1,
+      clientX: releaseX,
+      clientY: releaseY,
+    }))
+    await sleep(12)
+  }
   moveTarget.dispatchEvent(new PointerEventCtor('pointerup', {
     ...pointer,
     buttons: 0,
-    clientX: endX,
-    clientY: endY,
+    clientX: releaseX,
+    clientY: releaseY,
   }))
 }
 
@@ -670,13 +698,22 @@ function isWithinViewport(element: HTMLElement) {
     && rect.bottom <= view!.innerHeight
 }
 
-function receivesPointerAtCenter(element: HTMLElement) {
+function pointerPointWithin(element: HTMLElement): { x: number; y: number } | null {
   const rect = element.getBoundingClientRect()
-  const hit = element.ownerDocument.elementFromPoint(
-    rect.left + rect.width / 2,
-    rect.top + rect.height / 2,
-  )
-  return Boolean(hit && (hit === element || element.contains(hit)))
+  const fractions = [0.5, 0.7, 0.3, 0.85, 0.15]
+  for (const yFraction of fractions) {
+    for (const xFraction of fractions) {
+      const x = rect.left + rect.width * xFraction
+      const y = rect.top + rect.height * yFraction
+      const hit = element.ownerDocument.elementFromPoint(x, y)
+      if (hit && (hit === element || element.contains(hit))) return { x, y }
+    }
+  }
+  return null
+}
+
+function receivesPointerAtCenter(element: HTMLElement) {
+  return pointerPointWithin(element) !== null
 }
 
 function currentGoal(win: DriverWindow) {
@@ -1756,10 +1793,9 @@ export class CompletePlaythroughDriver {
               const candidateName = card.dataset.hypName
               const candidateType = card.dataset.hypType ?? ''
               if (!candidateName || !candidateType) return false
-              const wasChangedOrCreated = typesBeforeArgument[candidateName] == null ||
-                this.normalizedProposition(typesBeforeArgument[candidateName] ?? '') !==
-                  this.normalizedProposition(candidateType)
-              if (!wasChangedOrCreated) return false
+              // Browser reconciliation may reuse both the theorem card name
+              // and its optimistic displayed type. The semantic next premise
+              // (or final goal) is stronger evidence than identity churn.
               return nextPremise
                 ? matchesTheoremPremise(card, nextPremise, [])
                 : this.normalizedProposition(candidateType) === this.normalizedProposition(goalType)
