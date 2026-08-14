@@ -16,8 +16,19 @@ type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
 function openLastIncompleteBranch() {
   cy.get('[data-testid="proof-stream-leaf"][data-completed="false"]', { timeout: LOAD_TIMEOUT })
     .last()
-    .click({ force: true })
-  cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    .then(leaf => {
+      const streamId = leaf.attr('data-stream-id')
+      expect(streamId, 'incomplete proof leaf stream id').to.be.a('string').and.not.be.empty
+      cy.wrap(leaf).click({ force: true })
+      cy.get(
+        `[data-testid="proof-stream-leaf"][data-stream-id="${CSS.escape(streamId!)}"]`,
+        { timeout: LOAD_TIMEOUT },
+      ).should('have.attr', 'data-current', 'true')
+      cy.get(
+        `[data-testid="goal-card"][data-stream-id="${CSS.escape(streamId!)}"]`,
+        { timeout: LOAD_TIMEOUT },
+      ).should('be.visible')
+    })
 }
 
 describe('LessOrEqual level 8 goal choices', () => {

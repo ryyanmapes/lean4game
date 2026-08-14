@@ -28,7 +28,7 @@ jobs:
             specs: cypress/e2e/nng4-implication-and-display-regressions.cy.ts,cypress/e2e/visual-mobile-theorem-regressions.cy.ts
           - name: lesson loading and guidance
             id: lesson-guidance
-            specs: cypress/e2e/visual-loading-and-implication-guides.cy.ts
+            specs: cypress/e2e/visual-loading-and-implication-guides.cy.ts,cypress/e2e/nng4-less-or-equal-total-goal-choice.cy.ts
           - name: mobile transformation pagination
             id: mobile-pagination
             specs: cypress/e2e/visual-mobile-pagination-stability.cy.ts
