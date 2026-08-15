@@ -908,9 +908,10 @@ syntax (name := click_goal) "click_goal" : tactic
       match goalWhnf with
       | .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr =>
           if ← withReducible (isDefEq lhsExpr rhsExpr) then
-            liftMetaTactic fun mvarId => withReducible do
-              mvarId.refl
-              pure []
+            -- Cauli's browser build can select `Iff.rfl` when `MVarId.refl`
+            -- is used after this reducible fallback, even though the target is
+            -- an equality.  Supply the equality constructor explicitly.
+            evalTacticString "exact Eq.refl _"
           else
             throwError "click_goal: goal is an equality but not solvable by `rfl`.\n\
               goal : {goal}"
