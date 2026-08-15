@@ -2382,6 +2382,18 @@ export function VisualCanvas({
   useEffect(() => {
     const navigableIds = collectActiveStreamIds(proofTree)
     const liveIds = collectLiveStreamIds(proofTree)
+    // Proof-wide completion and a live proof-tree leaf are mutually
+    // exclusive.  Lean's focused response can transiently report completion
+    // after discharging only the selected cases/induction branch.  Revoke
+    // that stale canvas flag first; on the following render the orphan repair
+    // below can attach the returned live stream to its logical tree leaf.
+    if (canvasState.completed && liveIds.length > 0) {
+      setCanvasState(previous => previous.completed
+        ? { ...previous, completed: false }
+        : previous)
+      setSolvedGoalId(null)
+      return
+    }
     const orphanedCanvasStreams = canvasState.completed
       ? []
       : canvasState.streams.filter(stream => !findLeafForStream(proofTree, stream.id))

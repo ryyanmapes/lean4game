@@ -2096,7 +2096,9 @@ export class CompletePlaythroughDriver {
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const finalSourceName = source.dataset.hypName
-    const finalSourceType = source.dataset.hypType ?? ''
+    const finalSourceType = source.dataset.hypType
+      ?? source.querySelector<HTMLElement>('.proposition')?.textContent
+      ?? ''
     const finalTargetName = target.dataset.hypName
     const finalTargetType = finalTargetName
       ? harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] ?? target.dataset.hypType ?? ''
@@ -2155,14 +2157,17 @@ export class CompletePlaythroughDriver {
         const rightWasPresent = beforeFinalNames.has(right.dataset.hypName ?? '') ? 1 : 0
         return leftArrows - rightArrows || leftWasPresent - rightWasPresent
       })[0]?.dataset.hypName ?? null
-      const createdName = sourceWasLocalHypothesis
-        ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          .find(candidate => !beforeFinalNames.has(candidate))
-        : await waitFor(`${command} derived conclusion card`, () =>
-            Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-              .find(candidate =>
-                !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
-              ) ?? null).catch(() => null)
+      const createdName = await waitFor(`${command} derived conclusion card`, () =>
+        Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .filter(([candidate]) =>
+            !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
+          )
+          // Applying a tray theorem can mount both an intermediate curried
+          // card and its atomic conclusion in one response.  The latter is
+          // the card a player follows for the next `at h` step.
+          .sort(([, leftType], [, rightType]) =>
+            (leftType.match(/→/gu) ?? []).length - (rightType.match(/→/gu) ?? []).length
+          )[0]?.[0] ?? null).catch(() => null)
       const changedTargetName = finalTargetName
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] != null
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] !== finalTargetType
