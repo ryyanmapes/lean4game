@@ -3174,8 +3174,17 @@ export class CompletePlaythroughDriver {
         return
       } catch (error) {
         if (/^\d+$/u.test(value)) throw error
+        const snapshot = harness(this.win).getCurrentStreamSnapshot()
+        const pendingBinder = this.pendingBranchAliases.find(pending => pending.expected === expr.value)
+        const pendingCandidates = pendingBinder
+          ? Object.entries(snapshot.hypTypes)
+              .filter(([name, type]) =>
+                !pendingBinder.before.has(name) && /^(?:ℕ|Nat|MyNat)$/u.test(type.trim()),
+              )
+              .map(([name]) => name)
+          : []
         const claimedNames = new Set(this.aliases.values())
-        const candidates = Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+        const unclaimedCandidates = Object.entries(snapshot.hypTypes)
           .filter(([name, type]) =>
             /^(?:ℕ|Nat|MyNat)$/u.test(type.trim()) && !claimedNames.has(name),
           )
@@ -3184,13 +3193,24 @@ export class CompletePlaythroughDriver {
         // before the historical `cases ... with d` alias is reconciled. When
         // exactly one unclaimed natural-number card exists, it is the brick a
         // player sees for that introduced binder.
-        if (candidates.length === 1) {
-          value = candidates[0]!
+        const replacement = pendingCandidates.length === 1
+          ? pendingCandidates[0]
+          : unclaimedCandidates.length === 1
+            ? unclaimedCandidates[0]
+            : null
+        if (replacement) {
+          value = replacement
           this.rememberAlias(expr.value, value)
           await this.clickConstructionBrick(`var_${value}`)
           return
         }
-        throw error
+        throw new Error(`${error instanceof Error ? error.message : String(error)}; constructionAlias=${JSON.stringify({
+          requested: expr.value,
+          resolved: value,
+          pendingCandidates,
+          unclaimedCandidates,
+          visibleHypotheses: snapshot.hypTypes,
+        })}`)
       }
     }
     await this.clickConstructionBrick(expr.op === '+' ? 'fn_add' : 'fn_mul')
