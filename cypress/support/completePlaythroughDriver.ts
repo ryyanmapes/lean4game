@@ -2463,9 +2463,9 @@ export class CompletePlaythroughDriver {
           }
           if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
           if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
-          if (previousResultStructurallyMatches) return previousResult
           if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
+          if (previousResultStructurallyMatches) return previousResult
           if (rememberedTarget) return rememberedTarget
           if (named && matchingCards.includes(named)) return named
           const matchingVisibleHypothesis = matchingCards.at(-1)
@@ -3175,6 +3175,30 @@ export class CompletePlaythroughDriver {
     throw new Error(`Could not find construction brick ${brickId}`)
   }
 
+  private async constructionBrickIds(tabName: string, prefix: string) {
+    const overlay = await waitFor('construction view', () =>
+      this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'))
+    const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
+      .find(button => button.textContent?.trim() === tabName)
+    if (tab && !tab.classList.contains('active')) {
+      click(tab)
+      await sleep(30)
+    }
+    await rewindPages(overlay, 'Previous construction item')
+    const ids = new Set<string>()
+    for (let page = 0; page < 100; page += 1) {
+      visible(overlay.querySelectorAll<HTMLButtonElement>('[data-brick-id]')).forEach(brick => {
+        const id = brick.dataset.brickId
+        if (id?.startsWith(prefix)) ids.add(id)
+      })
+      const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next construction item"]')
+      if (!next || next.disabled) break
+      click(next)
+      await sleep(30)
+    }
+    return [...ids]
+  }
+
   private async construct(expr: ConstructionExpr) {
     if (expr.kind === 'atom') {
       let value = this.resolveName(expr.value)
@@ -3199,12 +3223,22 @@ export class CompletePlaythroughDriver {
             /^(?:ℕ|Nat|MyNat)$/u.test(type.trim()) && !claimedNames.has(name),
           )
           .map(([name]) => name)
+        // Construction Mode can expose locally renamed variables that are
+        // absent from the selected proof-stream snapshot. Inspect the same
+        // Variables palette the player sees and exclude names already bound
+        // by the reference proof; in the successor branch of `cases a with
+        // d`, this identifies the collision-safe `n` brick.
+        const paletteCandidates = (await this.constructionBrickIds('Variables', 'var_'))
+          .map(id => id.slice('var_'.length))
+          .filter(name => !claimedNames.has(name))
         // A cases successor branch can paint its collision-safe variable name
         // before the historical `cases ... with d` alias is reconciled. When
         // exactly one unclaimed natural-number card exists, it is the brick a
         // player sees for that introduced binder.
         const replacement = pendingCandidates.length === 1
           ? pendingCandidates[0]
+          : paletteCandidates.length === 1
+            ? paletteCandidates[0]
           : unclaimedCandidates.length === 1
             ? unclaimedCandidates[0]
             : null
@@ -3218,6 +3252,7 @@ export class CompletePlaythroughDriver {
           requested: expr.value,
           resolved: value,
           pendingCandidates,
+          paletteCandidates,
           unclaimedCandidates,
           visibleHypotheses: snapshot.hypTypes,
         })}`)
