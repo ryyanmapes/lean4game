@@ -483,18 +483,21 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     await sleep(50)
     target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   }
-  if (mobileScroll && !receivesPointerAtCenter(target)) {
-    // `scrollIntoView()` may align an inner card beneath the fixed mobile goal
-    // rather than in the actually exposed part of the proof column.  Move the
-    // owning scroller by the measured delta, exactly as a player drags the
-    // list while holding the theorem, and resolve the remounted card once
-    // more before releasing.
+  if (mobileScroll) {
+    // Merely being hittable is not enough on phones. A card just below the
+    // fixed goal sits inside the auto-scroll activation band; while the held
+    // theorem approaches it, the list moves and the release coordinate lands
+    // on the preceding card. Put every mobile destination in the open middle
+    // of its scroll viewport, exactly as a player does before letting go.
     const scrollRect = mobileScroll.getBoundingClientRect()
     const targetRect = target.getBoundingClientRect()
     const desiredY = scrollRect.top + scrollRect.height * 0.58
-    mobileScroll.scrollTop += targetRect.top + targetRect.height / 2 - desiredY
-    await sleep(75)
-    target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
+    const scrollDelta = targetRect.top + targetRect.height / 2 - desiredY
+    if (Math.abs(scrollDelta) > 8) {
+      mobileScroll.scrollTop += scrollDelta
+      await sleep(75)
+      target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
+    }
   }
   // Keep performing the pointer gesture even when elementFromPoint reports a
   // drag overlay or another overlapping card. dnd-kit's pointer-within
