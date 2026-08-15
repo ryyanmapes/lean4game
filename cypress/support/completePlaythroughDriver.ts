@@ -1032,6 +1032,52 @@ function propositionCardName(card: HTMLElement) {
   return card.dataset.hypName ?? card.dataset.theoremName ?? ''
 }
 
+function inferredForallArgumentsForPremise(
+  theorem: HTMLElement,
+  hypothesis: HTMLElement,
+): string[] | null {
+  const binders = forallBinderNames(theorem)
+  const targetType = cardProposition(hypothesis)
+  if (binders.length === 0 || !targetType) return null
+
+  const proposition = cardProposition(theorem)
+  const body = proposition.replace(/^\s*∀\s*(?:\([^)]*\)\s*)*,?\s*/u, '')
+  const premises: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index]
+    if (char === '(' || char === '[' || char === '{') depth += 1
+    else if (char === ')' || char === ']' || char === '}') depth -= 1
+    else if (char === '→' && depth === 0) {
+      premises.push(body.slice(start, index).trim())
+      start = index + 1
+    }
+  }
+
+  for (const premiseText of premises) {
+    try {
+      const bindings = matchAndCapture(
+        parse(targetType.replace(/≠/gu, '=')),
+        parse(premiseText.replace(/≠/gu, '=')),
+      )
+      if (!bindings) continue
+      const arguments = binders.map(binder => bindings[binder])
+      // Only specialize when the remembered proposition determines every
+      // visible forall binder. Partial guesses can silently choose the wrong
+      // branch-local variable; leaving those binders for an explicit player
+      // construction is safer and faithful to what is rendered.
+      if (arguments.every((argument): argument is ExpressionNode => Boolean(argument))) {
+        return arguments.map(printExpression)
+      }
+    } catch {
+      // Try the next visible premise. Parser failure is not evidence that a
+      // binder can be inferred.
+    }
+  }
+  return null
+}
+
 function matchesTheoremPremise(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
@@ -2209,7 +2255,23 @@ export class CompletePlaythroughDriver {
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
     } else {
-      for (const argument of explicitArgs) {
+      const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
+        ? this.propositionCardExact(this.previousApplyAtResultName)
+        : null
+      const inferredArguments = explicitArgs.length === 0
+        && previousResult
+        && matchesTheoremPremise(source, previousResult, [])
+          ? inferredForallArgumentsForPremise(source, previousResult)
+          : null
+      // A classic `apply f at h` can infer outer forall parameters from a
+      // later proposition premise. Reproduce that with the same Construction
+      // Mode gesture a player uses, then continue applying the visible proof
+      // premises below. For example, an equality `a*d = a*a2` determines
+      // `c := a2` in `∀ c, a ≠ 0 → a*d = a*c → d = c`.
+      const specializationArguments = explicitArgs.length > 0
+        ? explicitArgs
+        : inferredArguments ?? []
+      for (const argument of specializationArguments) {
         const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
         doubleClick(source)
         await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
