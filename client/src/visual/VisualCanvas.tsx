@@ -577,6 +577,26 @@ function interactionHypName(card?: HypCardType | null): string | undefined {
   return card?.hyp.playName ?? card?.hyp.names[0]
 }
 
+/** Convert compiler-generated local references into tactic syntax Lean can
+ * parse. Cards retain the raw hygienic name for reconciliation, but a name
+ * such as `a._@._internal...` cannot occur directly in a player command. */
+function accessibleInteractionCommand(playTactic: string, stream: GoalStream): string | null {
+  const inaccessible = stream.hyps.flatMap(card => {
+    const displayName = card.hyp.names[0]
+    const playName = card.hyp.playName
+    if (!displayName || !playName) return []
+    if (!playName.includes('@') && !playName.includes('._internal.')) return []
+    return [{ displayName, playName }]
+  })
+  if (inaccessible.length === 0) return null
+
+  let accessibleTactic = playTactic
+  for (const { displayName, playName } of inaccessible) {
+    accessibleTactic = accessibleTactic.replaceAll(playName, displayName)
+  }
+  return `rename_i ${inaccessible.map(({ displayName }) => displayName).join(' ')}; ${accessibleTactic}`
+}
+
 /** Mobile columns separate data variables from propositions. `isTheorem` only
  * marks generated theorem cards, while Lean's `isAssumption` covers ordinary
  * proposition hypotheses such as `hd : P`. */
@@ -2553,6 +2573,18 @@ export function VisualCanvas({
         focusedStream.id,
       ),
     )
+    const accessibleCommand = accessibleInteractionCommand(playTactic, focusedStream)
+    const accessibleAction = accessibleCommand
+      ? commandForGoalAction(
+          accessibleCommand,
+          focusedStream.id,
+          goalOrderForAction(
+            leanGoalOrderRef.current,
+            canvasState.streams.map(stream => stream.id),
+            focusedStream.id,
+          ),
+        )
+      : null
     const command = options?.commandOverride ?? (
       playTactic === 'click_goal' && goalIsReflexiveEquality(focusedStream)
         ? commandForGoalAction(
@@ -2564,7 +2596,7 @@ export function VisualCanvas({
               focusedStream.id,
             ),
           ).command
-        : inferredAction.command
+        : accessibleAction?.command ?? inferredAction.command
     )
     const rotation = inferredAction.rotation
     setGoalChoiceMenu(null)

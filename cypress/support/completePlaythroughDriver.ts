@@ -1303,9 +1303,15 @@ export class CompletePlaythroughDriver {
     const resolved = this.aliases.get(name) ?? name
     try {
       const snapshot = harness(this.win).getCurrentStreamSnapshot()
-      if (snapshot.hypTypes[resolved]) return resolved
       const rememberedType = this.aliasTypes.get(name)
-      if (rememberedType && /(?:→|=|≠|≤|∨|∧|False)/u.test(rememberedType)) {
+      const resolvedType = snapshot.hypTypes[resolved]
+      // Short Lean names are reused independently across cases/induction
+      // branches. A historical alias is live only when its proposition still
+      // agrees with the card in the currently selected branch.
+      if (resolvedType && (!rememberedType || this.normalizedProposition(resolvedType) === rememberedType)) {
+        return resolved
+      }
+      if (rememberedType) {
         const reconciled = Object.entries(snapshot.hypTypes)
           .find(([, type]) => this.normalizedProposition(type) === rememberedType)?.[0]
         if (reconciled) {
@@ -1313,6 +1319,7 @@ export class CompletePlaythroughDriver {
           return reconciled
         }
       }
+      if (resolvedType) return resolved
     } catch {
       // The harness can briefly disappear between proof streams.
     }
@@ -1831,6 +1838,10 @@ export class CompletePlaythroughDriver {
           : []))
         const sourceNameBeforeArgument = source.dataset.hypName
         const sourceTypeBeforeArgument = source.dataset.hypType
+        const sourceArrowBeforeArgument = sourceTypeBeforeArgument?.indexOf('→') ?? -1
+        const expectedConclusionAfterArgument = sourceArrowBeforeArgument >= 0 && sourceTypeBeforeArgument
+          ? this.normalizedProposition(sourceTypeBeforeArgument.slice(sourceArrowBeforeArgument + 1))
+          : null
         if (source.classList.contains('constructable')) {
           doubleClick(source)
           await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
@@ -1926,6 +1937,10 @@ export class CompletePlaythroughDriver {
               // Browser reconciliation may reuse both the theorem card name
               // and its optimistic displayed type. The semantic next premise
               // (or final goal) is stronger evidence than identity churn.
+              if (
+                expectedConclusionAfterArgument &&
+                this.normalizedProposition(candidateType) === expectedConclusionAfterArgument
+              ) return true
               return nextPremise
                 ? matchesTheoremPremise(card, nextPremise, [])
                 : this.normalizedProposition(candidateType) === this.normalizedProposition(goalType)
@@ -2005,14 +2020,30 @@ export class CompletePlaythroughDriver {
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
           ).find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
           if (matchingVisibleHypothesis) return matchingVisibleHypothesis
+          // The lightweight display matcher does not unfold numeral notation
+          // (`1` versus `succ 0`). If the branch-local named card survived,
+          // let Lean perform that authoritative definitional-equality check.
           if (named) return named
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
           if (!reconciledName) return null
+          const reconciled = this.hypExact(reconciledName)
+          if (!reconciled || !matchesTheoremPremise(source, reconciled, [])) return null
           this.rememberAlias(match[2], reconciledName)
-          return this.hypExact(reconciledName)
+          return reconciled
         })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
+    if (isExactCommand && !match[2]) {
+      // The final proposition application can mount its conclusion one React
+      // commit after Lean accepts the drag. `exact` always means choosing the
+      // currently visible card whose proposition is the displayed goal, not
+      // whichever curried theorem name appeared first in an audit snapshot.
+      const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
+      source = await waitFor(
+        `${command} visible proof of the current goal`,
+        () => this.visibleHypothesisOfType(goalType),
+      )
+    }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const finalSourceName = source.dataset.hypName
     const finalSourceType = source.dataset.hypType ?? ''
@@ -2043,13 +2074,33 @@ export class CompletePlaythroughDriver {
       // the atomic conclusion in the same update; choosing merely the first
       // new name binds the classic alias to the stale `A → B` card.
       const semanticConclusionName = expectedFinalConclusion
-        ? await waitFor(`${command} semantic conclusion card`, () => visible(
-            this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-          ).find(card =>
-            Boolean(card.dataset.hypName) &&
-            this.normalizedProposition(card.dataset.hypType ?? '') === expectedFinalConclusion,
-          )?.dataset.hypName ?? null).catch(() => null)
+        ? await waitFor(`${command} semantic conclusion card`, () => {
+            const snapshotMatch = Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+              .find(([, type]) => this.normalizedProposition(type) === expectedFinalConclusion)?.[0]
+            if (snapshotMatch) return snapshotMatch
+            return visible(
+              this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+            ).find(card =>
+              Boolean(card.dataset.hypName) &&
+              this.normalizedProposition(card.dataset.hypType ?? '') === expectedFinalConclusion,
+            )?.dataset.hypName ?? null
+          }).catch(() => null)
         : null
+      const leastCurriedConclusionName = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      ).filter(card => {
+        const candidateName = card.dataset.hypName
+        const candidateType = card.dataset.hypType ?? ''
+        return Boolean(candidateName)
+          && candidateName !== finalSourceName
+          && /(?:=|≠|≤|∨|∧|False)/u.test(candidateType)
+      }).sort((left, right) => {
+        const leftArrows = (left.dataset.hypType?.match(/→/gu) ?? []).length
+        const rightArrows = (right.dataset.hypType?.match(/→/gu) ?? []).length
+        const leftWasPresent = beforeFinalNames.has(left.dataset.hypName ?? '') ? 1 : 0
+        const rightWasPresent = beforeFinalNames.has(right.dataset.hypName ?? '') ? 1 : 0
+        return leftArrows - rightArrows || leftWasPresent - rightWasPresent
+      })[0]?.dataset.hypName ?? null
       const createdName = sourceWasLocalHypothesis
         ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !beforeFinalNames.has(candidate))
@@ -2058,7 +2109,10 @@ export class CompletePlaythroughDriver {
               .find(candidate =>
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
               ) ?? null).catch(() => null)
-      let resultName = semanticConclusionName ?? createdName ?? target.dataset.hypName
+      let resultName = semanticConclusionName
+        ?? leastCurriedConclusionName
+        ?? createdName
+        ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
       // ordinary proposition-on-implication drags while a visible premise
@@ -2434,6 +2488,21 @@ export class CompletePlaythroughDriver {
           }
         }
       }
+      if (target !== 'goal') {
+        const targetCard = this.hypExact(target)
+        if (
+          targetCard?.classList.contains('constructable') &&
+          !targetCard.classList.contains('transformable') &&
+          parsed.rules.every(rule => /^(?:one_eq_succ_zero|two_eq_succ_one)$/u.test(sourceName(rule.name)))
+        ) {
+          // A ≤ hypothesis deliberately opens witness construction instead
+          // of Transformation Mode. Numeral notation is definitionally equal,
+          // so the following theorem-card application can consume this premise
+          // without first rewriting `1`/`2`. Do not turn a requested rewrite
+          // into the unrelated player action that expands the ≤ hypothesis.
+          continue
+        }
+      }
       await this.openTransform(target)
       const preferredSide = this.preferredRewriteSide
       if (target === 'goal' && preferredSide) {
@@ -2467,6 +2536,10 @@ export class CompletePlaythroughDriver {
         if (button && !button.disabled) click(button)
         return null
       })
+      if (rawTarget !== 'goal') {
+        const currentName = this.hypExact(target)?.dataset.hypName ?? this.latestRelationName()
+        if (currentName) this.rememberAlias(rawTarget, currentName)
+      }
     }
   }
 
