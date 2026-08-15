@@ -432,7 +432,6 @@ async function drag(source: HTMLElement, target: HTMLElement) {
       return null
     }
     const candidateKey = [
-      candidate.id,
       candidate.dataset.testid,
       candidate.dataset.streamId,
       candidate.dataset.hypName,
