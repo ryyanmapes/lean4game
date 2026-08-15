@@ -4217,11 +4217,10 @@ export function VisualCanvas({
     )
     const rotation = action.rotation
     let command = action.command
-    // Rewriting the displayed sides of a comparison must keep the comparison
-    // proposition intact. The drag_rw comparison tactic follows the visual
-    // reduction into the existential definition of ≤, replacing `h : a ≤ b`
-    // with its witness equality. A normal Lean rewrite acts on the proposition
-    // itself and preserves a card that can still accept le_one/succ_le_succ.
+    // Rewrite a displayed comparison with ordinary `rw`. The custom drag_rw
+    // tactic operates on the elaborated relation tree and can descend through
+    // reducible `MyNat.le`; ordinary rw is exactly the canonical level proof
+    // and keeps the proposition available for le_one/succ_le_succ.
     if (
       focusedRelation &&
       focusedRelation !== '=' &&
@@ -4232,13 +4231,7 @@ export function VisualCanvas({
         ? ` at ${transformTarget.hypRef}`
         : ''
       const comparisonRewrite = `rw [${rewriteRule}]${targetSuffix}`
-      const restoreComparison = expectedGoal
-        ? `change ${expectedGoal.lhsStr} ${focusedRelation} ${expectedGoal.rhsStr}${targetSuffix}`
-        : null
-      const comparisonCommand = restoreComparison
-        ? `${comparisonRewrite}\n${restoreComparison}`
-        : comparisonRewrite
-      command = rotation ? `${rotation}\n${comparisonCommand}` : comparisonCommand
+      command = rotation ? `${rotation}\n${comparisonRewrite}` : comparisonRewrite
     }
     // A reverse theorem whose source is a lone pattern variable (notably
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
