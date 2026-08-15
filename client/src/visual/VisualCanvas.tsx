@@ -2757,6 +2757,16 @@ export function VisualCanvas({
       )
     }
 
+    // A card-on-card action only derives or rewrites a hypothesis. It cannot
+    // itself discharge the displayed goal. Some multi-branch RPC responses
+    // carry a stale top-level `completed` bit even though reconciliation has
+    // retained the live focused stream; propagating that bit paints the goal
+    // green and makes the following player action impossible. Goal-targeted
+    // interactions carry solvedGoalId and retain the normal completion path.
+    if (!options?.solvedGoalId && nextCanvas.streams.length > 0 && nextCanvas.completed) {
+      nextCanvas = { ...nextCanvas, completed: false }
+    }
+
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
     setProofSteps(prev => [...prev, {
@@ -3046,24 +3056,22 @@ export function VisualCanvas({
         : initial ? initial.top + initial.height / 2 + delta.y : null
     if (pointerX != null && pointerY != null) {
       const hitSelector = '[data-testid="hyp-card"], [data-testid="goal-card"], [data-testid="theorem-copy-card"]'
-      const stackedCard = document.elementsFromPoint(pointerX, pointerY)
+      const stackedCards = document.elementsFromPoint(pointerX, pointerY)
         .map(element => element.closest<HTMLElement>(
           hitSelector,
         ))
-        .find(element => element?.id && element.id !== activeId)
-      const currentStreamCard = Array.from(document.querySelectorAll<HTMLElement>(hitSelector))
-        .filter(element => element.id && element.id !== activeId)
-        .sort((left, right) => {
-          const leftCurrent = left.dataset.streamId === activeStreamId ? 1 : 0
-          const rightCurrent = right.dataset.streamId === activeStreamId ? 1 : 0
-          return rightCurrent - leftCurrent
-        })
-        .find(element => {
-          const rect = element.getBoundingClientRect()
-          return pointerX >= rect.left && pointerX <= rect.right &&
-            pointerY >= rect.top && pointerY <= rect.bottom
-        })
-      const card = currentStreamCard ?? stackedCard
+        .filter((element): element is HTMLElement => Boolean(
+          element?.id && element.id !== activeId,
+        ))
+        .filter((element, index, all) => all.indexOf(element) === index)
+      // elementsFromPoint is already ordered from the actually painted
+      // topmost element down.  Do not replace that answer with the first DOM
+      // node whose bounding rectangle contains the pointer: the fixed mobile
+      // goal and a scrolled hypothesis can have overlapping rectangles while
+      // only the hypothesis is visibly under the player's finger.  The old
+      // rectangle scan turned an explicit theorem-on-hypothesis drop into
+      // drag_goal after branch/card reconciliation.
+      const card = stackedCards[0]
       if (card?.id) overId = card.id
     }
     setActiveDraggedTheorem(null)
@@ -4237,10 +4245,12 @@ export function VisualCanvas({
     }
     if (
       transformTarget?.kind === 'hyp' &&
-      nextStream === null &&
       focusedStream &&
       expectedGoal &&
-      (!leanCanvas.completed || !rewrittenHypothesisIsObviousContradiction(expectedGoal))
+      (
+        (nextStream === null && !leanCanvas.completed) ||
+        (leanCanvas.completed && !rewrittenHypothesisIsObviousContradiction(expectedGoal))
+      )
     ) {
       const syntheticStream = synthesizeHypRewriteContinuation(
         focusedStream,
