@@ -1951,6 +1951,23 @@ export class CompletePlaythroughDriver {
       }
       return
     }
+    if (match[2] && source.matches('[data-testid="hyp-card"]')) {
+      const direct = this.hypExact(name)
+      const sourceType = source.dataset.hypType ?? ''
+      const directType = direct?.dataset.hypType ?? ''
+      const isFunctionCard = (type: string) => type.includes('→') || /^\s*∀\b/u.test(type)
+      // In generalized induction branches Lean can reuse the requested names
+      // in the opposite order (`hd` for the rewritten equality and `h` for
+      // the induction function). The alias table correctly follows types in
+      // most branches, but a later introduction can overwrite that history.
+      // If the literal source name visibly denotes the function being
+      // applied while the resolved alias is atomic, follow the literal card;
+      // this is exactly the card a player selects for `apply hd at h`.
+      if (direct && isFunctionCard(directType) && !isFunctionCard(sourceType)) {
+        source = direct
+        this.rememberAlias(name, direct.dataset.hypName ?? name)
+      }
+    }
     const isExactCommand = command.startsWith('exact ')
     if (isExactCommand && !match[2] && explicitArgs.length === 0) {
       const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
