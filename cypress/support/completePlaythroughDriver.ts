@@ -767,6 +767,17 @@ function resolveRemountedDragTarget(
     (!identity.hypType || candidate.dataset.hypType === identity.hypType) &&
     (!identity.theoremName || candidate.dataset.theoremName === identity.theoremName),
   )
+  // A preceding player action can finish its React commit during the first
+  // travel frames of the next drag. Rewrites retain the hypothesis name but
+  // replace its proposition and sometimes its stream/card id. Follow that
+  // visible named card and re-measure it, just as the player's pointer remains
+  // over the same card, instead of requiring the stale pre-commit type text.
+  const stableIdentityCandidates = visible(ownerDocument.querySelectorAll<HTMLElement>(
+    `[data-testid="${cssEscape(identity.testId)}"]`,
+  )).filter(candidate =>
+    (!identity.hypName || candidate.dataset.hypName === identity.hypName) &&
+    (!identity.theoremName || candidate.dataset.theoremName === identity.theoremName),
+  )
   let currentStreamId: string | undefined
   try {
     const view = ownerDocument.defaultView as DriverWindow | null
@@ -782,6 +793,9 @@ function resolveRemountedDragTarget(
   const resolved = candidates.find(candidate => candidate.dataset.streamId === currentStreamId)
     ?? candidates.find(candidate => candidate.dataset.streamId === identity.streamId)
     ?? candidates[0]
+    ?? stableIdentityCandidates.find(candidate => candidate.dataset.streamId === currentStreamId)
+    ?? stableIdentityCandidates.find(candidate => candidate.dataset.streamId === identity.streamId)
+    ?? stableIdentityCandidates[0]
     ?? (exact?.isConnected && semanticMatch(exact) ? exact : null)
     ?? (fallback.isConnected && semanticMatch(fallback) ? fallback : null)
   if (!resolved) {

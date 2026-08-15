@@ -65,6 +65,16 @@ export { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 
 import './visual.css'
 
+type TransformViewPresentation = Pick<React.ComponentProps<typeof TransformationView>,
+  | 'relation'
+  | 'goalLhsStr'
+  | 'goalRhsStr'
+  | 'goalLhsNode'
+  | 'goalRhsNode'
+  | 'equalityHyps'
+  | 'theoremEqualityHyps'
+>
+
 // ── Play log ──────────────────────────────────────────────────────────────────
 
 interface PlayLogEntry {
@@ -2099,6 +2109,7 @@ export function VisualCanvas({
   }, [propositionTheorems])
 
   const [transformTarget, setTransformTarget] = useState<TransformTarget | null>(null)
+  const lastTransformPropsRef = useRef<TransformViewPresentation | null>(null)
   const [constructionTarget, setConstructionTarget] = useState<ConstructionTarget | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
@@ -4721,7 +4732,7 @@ export function VisualCanvas({
     ? canvasState.streams.find(s => s.id === transformTarget.streamId)
     : null
 
-  const transformProps = (() => {
+  const computedTransformProps: TransformViewPresentation | null = (() => {
     if (!transformingStream) return null
 
     let relation: TransformRelation
@@ -4826,6 +4837,19 @@ export function VisualCanvas({
       theoremEqualityHyps,
     }
   })()
+
+  // Lean can publish the rewritten stream before the local reconciliation has
+  // transferred transformation mode to its successor id. Keep rendering the
+  // fully measured previous presentation during that short hand-off, then swap
+  // directly to the new one. Unmounting the overlay here made the theorem dock
+  // flash out for a frame after otherwise successful rewrites.
+  if (!transformTarget) {
+    lastTransformPropsRef.current = null
+  } else if (computedTransformProps) {
+    lastTransformPropsRef.current = computedTransformProps
+  }
+  const transformProps = computedTransformProps
+    ?? (transformTarget ? lastTransformPropsRef.current : null)
 
   // ── Build ConstructionView props ─────────────────────────────────────────────
 

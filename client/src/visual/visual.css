@@ -3259,6 +3259,7 @@
     box-shadow: 0 0 22px rgba(234, 179, 8, 0.4), 0 0 42px rgba(234, 179, 8, 0.18);
   }
 
+  .visual-page.phone-portrait .statement-card.goal.solved,
   .visual-page.phone-portrait .statement-card.goal.solved:hover {
     border-color: var(--visual-success);
     box-shadow: 0 0 30px var(--visual-success-glow), 0 0 60px var(--visual-success-glow);

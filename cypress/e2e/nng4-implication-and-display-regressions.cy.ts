@@ -417,7 +417,7 @@ describe('NNG4 implication and definition display regressions', () => {
     openAndExpect(
       'Implication',
       10,
-      'The `symm` tactic can be used to swap the sides of any equality.',
+      'The symm tactic can be used to swap the sides of any equality.',
     )
     openAndExpect(
       'LessOrEqual',
@@ -557,8 +557,13 @@ describe('NNG4 implication and definition display regressions', () => {
           style.getPropertyValue('--bevel-border-color').trim(),
           'the same purple target color drives every straight and cut-corner edge',
         ).to.equal(style.getPropertyValue('--visual-drop-target-border').trim())
+        const colorProbe = $card[0]!.ownerDocument.createElement('span')
+        colorProbe.style.color = style.getPropertyValue('--visual-drop-target-border').trim()
+        $card[0]!.ownerDocument.body.appendChild(colorProbe)
+        const resolvedTargetColor = getComputedStyle(colorProbe).color
+        colorProbe.remove()
         expect(getComputedStyle($card[0]!, '::after').backgroundColor)
-          .to.equal(style.getPropertyValue('--visual-drop-target-border').trim())
+          .to.equal(resolvedTargetColor)
       })
     cy.get('[data-testid="goal-card"]')
       .should('not.have.class', 'potential-drop-target')
