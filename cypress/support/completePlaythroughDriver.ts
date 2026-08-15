@@ -20,7 +20,9 @@ interface StreamSnapshot {
   hypTypes: Record<string, string>
   goalPlayTactic: string | null
   goalOptionTactics: string[]
+  currentStreamIsLive: boolean
   currentStreamIsCompleted: boolean
+  streamInteractionsEnabled: boolean
 }
 
 interface ReadOnlyVisualHarness {
@@ -1655,6 +1657,33 @@ export class CompletePlaythroughDriver {
       selectedStreamBefore,
       `${command} goal choice`,
     )
+    const choiceState = await waitFor(
+      `${command} goal choice to settle on an interactive branch`,
+      () => {
+        const audit = harness(this.win).getProofAudit()
+        if (audit.processing) return null
+        if (audit.completed) return { completed: true as const }
+        try {
+          const snapshot = harness(this.win).getCurrentStreamSnapshot()
+          return snapshot.currentStreamIsLive
+            && !snapshot.currentStreamIsCompleted
+            && snapshot.streamInteractionsEnabled
+            && currentGoal(this.win)
+            ? { completed: false as const }
+            : null
+        } catch {
+          // Goal-choice reconciliation briefly clears the selected stream even
+          // though the proof log is already idle. A player cannot act during
+          // that frame, so do not replay a deferred rewrite into it either.
+          return null
+        }
+      },
+      INTERACTION_TIMEOUT,
+    )
+    if (choiceState.completed) {
+      this.pendingGoalRewrites.length = 0
+      return
+    }
     for (const pending of this.pendingGoalRewrites.splice(0)) await this.rewrite(pending)
   }
 
@@ -2215,8 +2244,7 @@ export class CompletePlaythroughDriver {
           // such as distinct `ha` and `hb` still use their remembered types.
           if (
             previousResult &&
-            previousResult !== source &&
-            matchesTheoremPremise(source, previousResult, [])
+            previousResult !== source
           ) return previousResult
           if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
