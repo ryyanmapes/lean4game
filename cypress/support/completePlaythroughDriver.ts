@@ -2123,9 +2123,11 @@ export class CompletePlaythroughDriver {
       )
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-    const visibleNamesBeforeFinal = new Set(visible(
+    const visibleTypesBeforeFinal = new Map(visible(
       this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-    ).flatMap(card => card.dataset.hypName ? [card.dataset.hypName] : []))
+    ).flatMap(card => card.dataset.hypName
+      ? [[card.dataset.hypName, card.dataset.hypType ?? ''] as const]
+      : []))
     const finalSourceName = source.dataset.hypName
     const finalSourceType = source.dataset.hypType
       ?? source.querySelector<HTMLElement>('.proposition')?.textContent
@@ -2184,17 +2186,21 @@ export class CompletePlaythroughDriver {
           .sort(([, leftType], [, rightType]) =>
             (leftType.match(/→/gu) ?? []).length - (rightType.match(/→/gu) ?? []).length
           )[0]?.[0] ?? null).catch(() => null)
-      const visibleCreatedConclusionName = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      ).filter(card => {
-        const candidateName = card.dataset.hypName
-        return Boolean(candidateName)
-          && candidateName !== finalSourceName
-          && !visibleNamesBeforeFinal.has(candidateName!)
-      }).sort((left, right) =>
-        (left.dataset.hypType?.match(/→/gu) ?? []).length
-          - (right.dataset.hypType?.match(/→/gu) ?? []).length
-      )[0]?.dataset.hypName ?? null
+      const visibleCreatedConclusionName = await waitFor(
+        `${command} visible new or changed conclusion card`,
+        () => visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        ).filter(card => {
+          const candidateName = card.dataset.hypName
+          if (!candidateName) return false
+          const previousType = visibleTypesBeforeFinal.get(candidateName)
+          return previousType === undefined || previousType !== (card.dataset.hypType ?? '')
+        }).sort((left, right) =>
+          (left.dataset.hypType?.match(/→/gu) ?? []).length
+            - (right.dataset.hypType?.match(/→/gu) ?? []).length
+        )[0]?.dataset.hypName ?? null,
+        3_000,
+      ).catch(() => null)
       const changedTargetName = finalTargetName
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] != null
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] !== finalTargetType
@@ -2612,7 +2618,11 @@ export class CompletePlaythroughDriver {
       if (target !== 'goal') {
         const targetCard = this.hypExact(target)
         if (
-          targetCard?.classList.contains('constructable') &&
+          targetCard &&
+          (
+            targetCard.classList.contains('constructable') ||
+            (targetCard.dataset.hypType ?? '').includes('≤')
+          ) &&
           parsed.rules.every(rule => /^(?:one_eq_succ_zero|two_eq_succ_one)$/u.test(sourceName(rule.name)))
         ) {
           // Rewriting a numeral inside a ≤ hypothesis can expose its
