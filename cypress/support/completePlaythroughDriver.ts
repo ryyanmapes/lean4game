@@ -2375,12 +2375,23 @@ export class CompletePlaythroughDriver {
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalSourceName] !== finalSourceType
           ? finalSourceName
           : null
+      const generatedConclusionName = /^\s*have\s+([^\s:]+)\s*:=/mu.exec(
+        playLog(this.win).at(-1)?.leanTactic ?? '',
+      )?.[1]
+      const mountedGeneratedConclusionName = generatedConclusionName
+        && (
+          harness(this.win).getCurrentStreamSnapshot().hypTypes[generatedConclusionName] != null
+          || this.hypExact(generatedConclusionName)
+        )
+          ? generatedConclusionName
+          : null
       // A tray application can leave older, definitionally related cards on
       // the canvas (for example `b ≠ 0` below a newly derived `1 ≤ b`). The
       // newest atomic card is the result the player follows. Semantic matching
       // is only a fallback for in-place updates; giving it priority can bind
       // the classic name back to an unchanged premise from the previous step.
-      let resultName = createdName
+      let resultName = mountedGeneratedConclusionName
+        ?? createdName
         ?? visibleCreatedConclusionName
         ?? semanticConclusionName
         ?? changedSourceName
