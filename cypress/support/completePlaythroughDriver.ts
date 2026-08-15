@@ -1503,6 +1503,17 @@ export class CompletePlaythroughDriver {
     }
   }
 
+  /** Derived theorem results retain their teal theorem-copy presentation until
+   * reconciliation, but they are still ordinary player-visible proposition
+   * cards and valid application targets. */
+  private propositionCardExact(name: string) {
+    const hypothesis = this.hypExact(name)
+    if (hypothesis) return hypothesis
+    const theoremSelector =
+      `[data-testid="theorem-copy-card"][data-theorem-name$="${cssEscape(name)}"]`
+    return visible(this.win.document.querySelectorAll<HTMLElement>(theoremSelector)).at(-1) ?? null
+  }
+
   private refreshCard(card: HTMLElement) {
     const hypName = card.dataset.hypName
     if (!hypName) return card
@@ -2223,8 +2234,13 @@ export class CompletePlaythroughDriver {
           // the specialized theorem premise, exactly as a player choosing the
           // highlighted card does.
           const candidateCards = visible(
-            this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+            this.win.document.querySelectorAll<HTMLElement>(
+              '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+            ),
           ).filter(candidate => candidate !== source)
+          const candidateProposition = (candidate: HTMLElement) => candidate.dataset.hypType
+            ?? candidate.querySelector<HTMLElement>('.proposition')?.textContent
+            ?? ''
           // Exact surface equality is stronger than the generalized matcher
           // and must be considered independently. A derived card can retain
           // stale forall-footer metadata which makes the pattern matcher
@@ -2257,14 +2273,14 @@ export class CompletePlaythroughDriver {
             : null
           const surfaceExactCards = visibleFirstPremise
             ? candidateCards.filter(candidate =>
-                this.normalizedProposition(candidate.dataset.hypType ?? '') === visibleFirstPremise,
+                this.normalizedProposition(candidateProposition(candidate)) === visibleFirstPremise,
               )
             : []
           const compactRenderedSource = this.normalizedProposition(
             renderedSourceProposition ?? source.textContent ?? '',
           )
           const renderedPremiseCards = candidateCards.filter(candidate => {
-            const candidateType = this.normalizedProposition(candidate.dataset.hypType ?? '')
+            const candidateType = this.normalizedProposition(candidateProposition(candidate))
             return candidateType.length > 0 && compactRenderedSource.includes(`${candidateType}→`)
           })
           const rememberedTargetType = this.aliasTypes.get(match[2])
@@ -2274,7 +2290,7 @@ export class CompletePlaythroughDriver {
               )
             : null
           const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
-            ? this.hypExact(this.previousApplyAtResultName)
+            ? this.propositionCardExact(this.previousApplyAtResultName)
             : null
           // Repeated `apply ... at h` steps form a visible derivation chain:
           // the player follows the newest card produced beside h, while the
@@ -2416,7 +2432,7 @@ export class CompletePlaythroughDriver {
       const mountedGeneratedConclusionName = generatedConclusionName
         && (
           harness(this.win).getCurrentStreamSnapshot().hypTypes[generatedConclusionName] != null
-          || this.hypExact(generatedConclusionName)
+          || this.propositionCardExact(generatedConclusionName)
         )
           ? generatedConclusionName
           : null
