@@ -628,27 +628,48 @@ async function finishPointerDrag(
     clientX: releaseX,
     clientY: releaseY,
   }))
-  await sleep(25)
-  // The app's own auto-scroller can move the card during that settling
-  // frame. Sample once more at the actual release instant so a long mobile
-  // drag lands on the same visible portion a player's finger is over.
-  const settledTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, liveTarget)
-  const settledOwnExpressionPart = settledTarget.matches('.tr-expression-node')
-    ? Array.from(settledTarget.children).find(child =>
-        child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
-    : undefined
-  const settledPoint = pointerPointWithin(settledOwnExpressionPart ?? settledTarget)
-  if (settledPoint) {
-    releaseX = settledPoint.x
-    releaseY = settledPoint.y
+  // A phone's real drag auto-scroller can keep moving the column for several
+  // animation frames after the pointer enters a card. Follow the semantic
+  // target while it moves instead of sampling its position only once.
+  let settlingTarget = liveTarget
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    settlingTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, settlingTarget)
+    const settlingOwnExpressionPart = settlingTarget.matches('.tr-expression-node')
+      ? Array.from(settlingTarget.children).find(child =>
+          child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
+      : undefined
+    const settlingPoint = pointerPointWithin(settlingOwnExpressionPart ?? settlingTarget)
+    if (settlingPoint) {
+      releaseX = settlingPoint.x
+      releaseY = settlingPoint.y
+    }
     moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
       ...pointer,
       buttons: 1,
       clientX: releaseX,
       clientY: releaseY,
     }))
-    await sleep(12)
+    await sleep(30)
   }
+  // Recompute and release in the same event turn. Waiting after this final
+  // move gives the auto-scroller one more chance to put an adjacent card
+  // under an otherwise correct pointer coordinate.
+  settlingTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, settlingTarget)
+  const finalOwnExpressionPart = settlingTarget.matches('.tr-expression-node')
+    ? Array.from(settlingTarget.children).find(child =>
+        child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
+    : undefined
+  const finalPoint = pointerPointWithin(finalOwnExpressionPart ?? settlingTarget)
+  if (finalPoint) {
+    releaseX = finalPoint.x
+    releaseY = finalPoint.y
+  }
+  moveTarget.dispatchEvent(new PointerEventCtor('pointermove', {
+    ...pointer,
+    buttons: 1,
+    clientX: releaseX,
+    clientY: releaseY,
+  }))
   moveTarget.dispatchEvent(new PointerEventCtor('pointerup', {
     ...pointer,
     buttons: 0,
