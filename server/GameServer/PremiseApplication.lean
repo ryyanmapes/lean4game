@@ -114,9 +114,13 @@ private def mkBinderApplicationAtIndex?
   let (args, _, _) ← forallMetaTelescopeReducing fnType
   mkBinderApplicationFromAssignedArgs? fnExpr fnType args selectedIdx argExpr
 
-/-- Match theorem premises against the displayed hypothesis shape before allowing
-    definitional equality to finish the type check. This keeps Visual Lean from
-    applying a theorem through hidden reductions the player has not made yet. -/
+/-- Match theorem premises against a displayed hypothesis.
+
+    Prefer the surface-shape matcher because it gives stable assignments for the
+    theorem's still-implicit data binders. When the printed shapes differ, fall
+    back to Lean's definitional equality: applying `A → B` to an `A` is ordinary
+    function application even when one occurrence is printed as `1` and the other
+    as `succ 0` (or `x + 1` and `succ x`). -/
 private partial def visibleExprMatches (pattern actual : Expr) : MetaM Bool := do
   let pattern ← instantiateMVars pattern
   let actual ← instantiateMVars actual
@@ -237,13 +241,13 @@ private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
       if compatible then return true
       setMCtx checkpoint
       return false
-    if !(← visibleExprMatches domain argType) then
-      setMCtx checkpoint
-      return false
-    if !(← isDefEq domain argType) then
-      setMCtx checkpoint
-      return false
-    return true
+    if ← visibleExprMatches domain argType then
+      if ← isDefEq domain argType then return true
+    setMCtx checkpoint
+    -- Surface matching intentionally does not unfold arithmetic or numeral
+    -- notation. Such unfolding is nevertheless part of Lean's type equality,
+    -- so it must not prevent a proposition from being used as a premise.
+    return ← isDefEq domain argType
   catch _ =>
     setMCtx checkpoint
     return false

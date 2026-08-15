@@ -1187,13 +1187,13 @@ example (x y : Nat) (h : x * y = 1) : True := by
 
 example (x : Nat) : x + 1 = 4 → True := by
   intro h
-  fail_if_success drag_to succInjLocal h
-  trivial
+  drag_to succInjLocal h
+  exact thm_succInjLocal
 
 example (x : Nat) : x + 1 = 4 → True := by
   intro h
-  fail_if_success drag_apply succInjLocal h
-  trivial
+  drag_apply succInjLocal h
+  exact thm_succInjLocal
 
 example (x : Nat) (h : Nat.succ x = Nat.succ 3) : x = 3 := by
   drag_to succInjLocal h

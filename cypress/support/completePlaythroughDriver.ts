@@ -981,48 +981,55 @@ function matchesTheoremPremise(
   const proposition = theorem.dataset.hypType
     ?? theorem.querySelector<HTMLElement>('.proposition')?.textContent
     ?? ''
-  const arrow = proposition.indexOf('→')
   const targetType = hypothesis.dataset.hypType
-  if (arrow < 0 || !targetType) return false
-  try {
-    const premise = parse(proposition.slice(0, arrow).trim().replace(/≠/gu, '='))
-    const bindings = matchAndCapture(
-      parse(targetType.replace(/≠/gu, '=')),
-      premise,
-    )
-    if (!bindings) return false
-    // A local hypothesis is a proposition in the current Lean context: any
-    // variables remaining in its implication are fixed local constants, not
-    // inference wildcards. Derived cards can retain both a stale forall
-    // footer and a stale `constructable` class, so neither is authoritative.
-    // Only theorem templates/copies use their footer binders as wildcards.
-    const binders = theorem.dataset.hypName
-      ? []
-      : forallBinderNames(theorem)
-    // Variables that are no longer forall-bound are branch-local constants,
-    // not pattern wildcards. After specializing `mul_le_mul_right 1 b a`, its
-    // premise `1 ≤ b` must not highlight or accept an unrelated `1 ≤ a * b`.
-    // Keeping these names rigid also makes the player test exercise the same
-    // proposition choice that is visibly available in the game.
-    const rigidVariablesMatch = expressionVariableNames(premise)
-      .filter(variable => !binders.includes(variable))
-      .every(variable => {
-        const actual = bindings[variable]
-        return !actual || printExpression(actual) === variable
-      })
-    if (!rigidVariablesMatch) return false
-    return binders.every((binder, index) => {
-      const actual = bindings[binder]
-      // A premise often determines only some of a theorem's forall binders.
-      // Check every binder it does determine and leave the rest for later
-      // premise drags, just as Lean/player function application does.
-      if (!actual) return true
-      const argument = explicitArgs[index]
-      return argument ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : true
-    })
-  } catch {
-    return false
+  if (!targetType) return false
+  // A generalized local theorem can have several proposition binders, and a
+  // player may drag any matching premise onto it. Splitting only at the first
+  // arrow made `hd : ∀ c, a ≠ 0 → a*d = a*c → d = c` appear to accept only
+  // `a ≠ 0`, so the replay driver fell back to a stale equality card.
+  const body = proposition.replace(/^\s*∀\s*(?:\([^)]*\)\s*)*,?\s*/u, '')
+  const premises: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index]
+    if (char === '(' || char === '[' || char === '{') depth += 1
+    else if (char === ')' || char === ']' || char === '}') depth -= 1
+    else if (char === '→' && depth === 0) {
+      premises.push(body.slice(start, index).trim())
+      start = index + 1
+    }
   }
+  if (premises.length === 0) return false
+  const binders = forallBinderNames(theorem)
+  return premises.some(premiseText => {
+    try {
+      const premise = parse(premiseText.replace(/≠/gu, '='))
+      const bindings = matchAndCapture(
+        parse(targetType.replace(/≠/gu, '=')),
+        premise,
+      )
+      if (!bindings) return false
+      // Variables outside an actual forall footer are branch-local constants,
+      // not pattern wildcards. After specializing `mul_le_mul_right 1 b a`,
+      // its premise `1 ≤ b` must not accept an unrelated `1 ≤ a * b`.
+      const rigidVariablesMatch = expressionVariableNames(premise)
+        .filter(variable => !binders.includes(variable))
+        .every(variable => {
+          const actual = bindings[variable]
+          return !actual || printExpression(actual) === variable
+        })
+      if (!rigidVariablesMatch) return false
+      return binders.every((binder, index) => {
+        const actual = bindings[binder]
+        if (!actual) return true
+        const argument = explicitArgs[index]
+        return argument ? matchesExplicitArgument(actual, parseExplicitArgument(argument)) : true
+      })
+    } catch {
+      return false
+    }
+  })
 }
 
 function parseRewrite(command: string) {
@@ -2099,9 +2106,18 @@ export class CompletePlaythroughDriver {
           ).reverse().find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
           if (matchingVisibleHypothesis) return matchingVisibleHypothesis
           // The lightweight display matcher does not unfold numeral notation
-          // (`1` versus `succ 0`). If the branch-local named card survived,
-          // let Lean perform that authoritative definitional-equality check.
-          if (named) return named
+          // (`1` versus `succ 0`). Permit only that narrow fallback; returning
+          // any named card here made generalized induction applications use a
+          // stale pre-cancellation equality even though the newly generated
+          // equality was visibly present below it.
+          const sourceType = source.dataset.hypType ?? ''
+          const namedType = named?.dataset.hypType ?? ''
+          if (
+            named &&
+            sourceType.includes('≤') &&
+            namedType.includes('≤') &&
+            /\b[0-9]+\b/u.test(namedType)
+          ) return named
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
           if (!reconciledName) return null
