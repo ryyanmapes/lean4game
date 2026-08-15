@@ -254,7 +254,7 @@ describe('NNG4 implication and definition display regressions', () => {
       // performRewriteOnSide opens h's transformation overlay through the
       // same double-click and theorem-card drag a player uses.
       observeTransformStability(win)
-      await player.performRewriteOnSide('rw [add_comm n] at h', 'left')
+      await player.performRewriteOnSide('rw [add_comm n] at h', 'left', true)
       await new Promise(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)))
     })
     cy.window().should(win => {
@@ -274,7 +274,10 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.perform('rw [add_succ, add_succ, add_zero] at h')
       await player.perform('repeat apply succ_inj at h')
     })
-    cy.get('.visual-canvas [data-testid="hyp-card"]', { timeout: LOAD_TIMEOUT }).then($cards => {
+    cy.get(
+      '.visual-canvas [data-testid="hyp-card"], .visual-canvas [data-testid="theorem-copy-card"]',
+      { timeout: LOAD_TIMEOUT },
+    ).then($cards => {
       const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
       expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
       const rectangles = cards.map(card => card.getBoundingClientRect())
@@ -315,7 +318,10 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.perform('rw [add_succ] at h')
       await player.perform('symm at h')
       await player.perform('apply zero_ne_succ at h')
-      falseBranchId = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().streamId
+      falseBranchId = win.document
+        .querySelector<SVGGElement>('[data-testid="proof-stream-leaf"][data-current="true"]')
+        ?.dataset.streamId ?? ''
+      expect(falseBranchId, 'the selected live branch has a proof-graph stream id').not.to.equal('')
       await player.perform('cases h')
     })
 
