@@ -607,7 +607,11 @@ async function finishPointerDrag(
         child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
     : undefined
   const liveDropRect = liveOwnExpressionPart?.getBoundingClientRect() ?? liveTarget.getBoundingClientRect()
-  const unobscuredPoint = pointerPointWithin(liveTarget)
+  // For a nested expression, a point anywhere inside the parent is not
+  // specific enough: its geometric centre is commonly occupied by a child.
+  // Keep aiming at the parent's own operator/content through the release
+  // frames so dnd-kit's deepest collision is the expression the player chose.
+  const unobscuredPoint = pointerPointWithin(liveOwnExpressionPart ?? liveTarget)
   let releaseX = unobscuredPoint?.x ?? liveDropRect.left + liveDropRect.width / 2
   let releaseY = unobscuredPoint?.y ?? liveDropRect.top + liveDropRect.height / 2
   // Let dnd-kit's final collision measurement settle on the release target.
@@ -626,7 +630,11 @@ async function finishPointerDrag(
   // frame. Sample once more at the actual release instant so a long mobile
   // drag lands on the same visible portion a player's finger is over.
   const settledTarget = resolveRemountedDragTarget(ownerDocument, targetIdentity, liveTarget)
-  const settledPoint = pointerPointWithin(settledTarget)
+  const settledOwnExpressionPart = settledTarget.matches('.tr-expression-node')
+    ? Array.from(settledTarget.children).find(child =>
+        child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined
+    : undefined
+  const settledPoint = pointerPointWithin(settledOwnExpressionPart ?? settledTarget)
   if (settledPoint) {
     releaseX = settledPoint.x
     releaseY = settledPoint.y
@@ -2367,9 +2375,14 @@ export class CompletePlaythroughDriver {
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalSourceName] !== finalSourceType
           ? finalSourceName
           : null
-      let resultName = semanticConclusionName
+      // A tray application can leave older, definitionally related cards on
+      // the canvas (for example `b ≠ 0` below a newly derived `1 ≤ b`). The
+      // newest atomic card is the result the player follows. Semantic matching
+      // is only a fallback for in-place updates; giving it priority can bind
+      // the classic name back to an unchanged premise from the previous step.
+      let resultName = createdName
         ?? visibleCreatedConclusionName
-        ?? createdName
+        ?? semanticConclusionName
         ?? changedSourceName
         ?? changedTargetName
         ?? target.dataset.hypName
