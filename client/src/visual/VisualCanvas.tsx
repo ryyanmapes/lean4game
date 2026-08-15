@@ -2117,6 +2117,11 @@ export function VisualCanvas({
   const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
+
+  function dismissTransformationView() {
+    lastTransformPropsRef.current = null
+    setTransformTarget(null)
+  }
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
   // The proof tree is kept in a stable player-facing order, while `rotate_left`
   // permanently changes Lean's outstanding-goal order. Keep both: using the
@@ -3046,17 +3051,17 @@ export function VisualCanvas({
             })
           } else {
             setActiveStreamId(nextActiveId)
-            setTransformTarget(null)
+            dismissTransformationView()
           }
         }
         setTransformationVersion(v => Math.max(0, v - 1))
       } else {
         setActiveStreamId(nextActiveId)
-        setTransformTarget(null)
+        dismissTransformationView()
       }
     } else {
       setActiveStreamId(nextActiveId)
-      setTransformTarget(null)
+      dismissTransformationView()
     }
 
     return true
@@ -4027,12 +4032,12 @@ export function VisualCanvas({
 
     if (!pendingSync) {
       setSolvedGoalId(null)
-      setTransformTarget(null)
+      dismissTransformationView()
       return
     }
 
     if (pendingSync.finalCompletion) {
-      setTransformTarget(null)
+      dismissTransformationView()
       setProofTree(pendingSync.nextTree)
       setActiveStreamId(pendingSync.nextActiveId)
       if (pendingSync.completionCanvas) {
@@ -4047,7 +4052,7 @@ export function VisualCanvas({
     setActiveStreamId(pendingSync.nextActiveId)
     setCanvasState(pendingSync.nextCanvas)
     setSolvedGoalId(null)
-    setTransformTarget(null)
+    dismissTransformationView()
   }
 
   function closeConstructionView() {
@@ -4697,7 +4702,7 @@ export function VisualCanvas({
         completionCanvas,
         transformTarget?.kind === 'goal' ? transformTarget.streamId : focusedStream?.id,
       )
-      setTransformTarget(null)
+      dismissTransformationView()
       return { success: true, completed: true }
     }
 
@@ -4718,11 +4723,11 @@ export function VisualCanvas({
             hypRef: interactionHypName(nextHyp) ?? transformTarget.hypRef,
           })
         } else {
-          setTransformTarget(null)
+          dismissTransformationView()
         }
       }
     } else {
-      setTransformTarget(null)
+      dismissTransformationView()
     }
     // Track accepted rewrites for undo availability without remounting the
     // transformation overlay (which caused a full-screen flash on mobile).
@@ -4848,13 +4853,11 @@ export function VisualCanvas({
   // fully measured previous presentation during that short hand-off, then swap
   // directly to the new one. Unmounting the overlay here made the theorem dock
   // flash out for a frame after otherwise successful rewrites.
-  if (!transformTarget) {
-    lastTransformPropsRef.current = null
-  } else if (computedTransformProps) {
+  if (computedTransformProps) {
     lastTransformPropsRef.current = computedTransformProps
   }
   const transformProps = computedTransformProps
-    ?? (transformTarget ? lastTransformPropsRef.current : null)
+    ?? lastTransformPropsRef.current
 
   // ── Build ConstructionView props ─────────────────────────────────────────────
 
@@ -5792,7 +5795,7 @@ export function VisualCanvas({
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
-    setTransformTarget(null)
+    dismissTransformationView()
     setActiveStreamId(streamId)
   }
 
