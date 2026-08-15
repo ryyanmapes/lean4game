@@ -1066,6 +1066,40 @@ function matchesTheoremPremise(
   })
 }
 
+function exactlyMatchesTheoremPremise(
+  theorem: HTMLElement,
+  hypothesis: HTMLElement,
+): boolean {
+  const proposition = theorem.dataset.hypType
+    ?? theorem.querySelector<HTMLElement>('.proposition')?.textContent
+    ?? ''
+  const targetType = hypothesis.dataset.hypType
+  if (!targetType) return false
+  const body = proposition.replace(/^\s*∀\s*(?:\([^)]*\)\s*)*,?\s*/u, '')
+  let depth = 0
+  let start = 0
+  const premises: string[] = []
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index]
+    if (char === '(' || char === '[' || char === '{') depth += 1
+    else if (char === ')' || char === ']' || char === '}') depth -= 1
+    else if (char === '→' && depth === 0) {
+      premises.push(body.slice(start, index).trim())
+      start = index + 1
+    }
+  }
+  if (premises.length === 0 && body.includes('≠')) premises.push(body.trim())
+  const normalize = (value: string) => {
+    const comparable = value.replace(/≠/gu, '=').trim()
+    try {
+      return printExpression(parse(comparable))
+    } catch {
+      return comparable.replace(/\s+/gu, '')
+    }
+  }
+  return premises.some(premise => normalize(premise) === normalize(targetType))
+}
+
 function parseRewrite(command: string) {
   const match = /^(repeat\s+)?(?:rw|nth_rewrite\s+(\d+))\s*\[([^\]]+)\](?:\s+at\s+(.+))?$/u.exec(command.trim())
   if (!match) throw new Error(`Unsupported rewrite command: ${command}`)
@@ -2136,6 +2170,9 @@ export class CompletePlaythroughDriver {
           const matchingCards = visible(
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
           ).filter(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
+          const exactMatchingCards = matchingCards.filter(candidate =>
+            exactlyMatchesTheoremPremise(source, candidate),
+          )
           const rememberedTargetType = this.aliasTypes.get(match[2])
           const rememberedTarget = rememberedTargetType
             ? matchingCards.find(candidate =>
@@ -2146,6 +2183,7 @@ export class CompletePlaythroughDriver {
           // the player follows the newest card produced beside h, while the
           // original premise remains on the canvas. Initial one-off targets
           // such as distinct `ha` and `hb` still use their remembered types.
+          if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
           if (rememberedTarget) return rememberedTarget
           if (named && matchingCards.includes(named)) return named

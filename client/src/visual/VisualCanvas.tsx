@@ -699,7 +699,24 @@ function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): Parsed
 }
 
 function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTransformTarget | null {
-  const parsed = parseTransformTarget((card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim())
+  // `typeBody` is normally just the surface proposition with leading forall
+  // binders removed.  For reducible propositions such as NNG's `MyNat.le`,
+  // however, an RPC snapshot can carry its unfolded witness equality there
+  // while `type` still contains the proposition the player sees (`a ≤ b`).
+  // Prefer that surface comparison so a double-click opens Transformation
+  // Mode instead of falling through to the single-click existential splitter.
+  const candidates = [
+    TaggedText_stripTags(card.hyp.type).trim(),
+    card.hyp.typeBody?.trim(),
+  ].filter((candidate): candidate is string => Boolean(candidate))
+  const parsedCandidates = candidates.flatMap(candidate => {
+    const direct = parseTransformTarget(candidate)
+    const formatted = parseTransformTarget(formatFormulaText(candidate))
+    return [direct, formatted].filter((value): value is ParsedTransformTarget => value !== null)
+  })
+  const parsed = parsedCandidates.find(candidate => candidate.relation !== '=')
+    ?? parsedCandidates[0]
+    ?? null
   if (!parsed) return null
   return allowComparisons || parsed.relation === '=' ? parsed : null
 }
