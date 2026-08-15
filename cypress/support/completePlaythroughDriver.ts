@@ -2299,21 +2299,47 @@ export class CompletePlaythroughDriver {
         : inferredArguments ?? []
       for (const argument of specializationArguments) {
         const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+        const visibleTypesBeforeArgument = new Map(visible(
+          this.win.document.querySelectorAll<HTMLElement>(
+            '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+          ),
+        ).flatMap(card => propositionCardName(card)
+          ? [[propositionCardName(card), cardProposition(card)] as const]
+          : []))
+        const sourceNameBeforeArgument = propositionCardName(source)
         doubleClick(source)
         await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
         await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
-        const createdName = await waitFor(`${command} theorem card for ${argument}`, () => {
+        source = await waitFor(`${command} theorem card for ${argument}`, () => {
           try {
-            return Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-              .find(candidate => !namesBeforeArgument.has(candidate)) ?? null
+            const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+              .find(candidate => !namesBeforeArgument.has(candidate))
+            if (createdName) {
+              const created = this.propositionCardExact(createdName)
+              if (created) return created
+            }
           } catch {
             // Construction can reconcile the proof graph and its selected
             // stream in separate React commits. The player cannot act in the
             // intervening frame, so wait for the specialized card to return.
-            return null
           }
+          const changed = visible(this.win.document.querySelectorAll<HTMLElement>(
+            '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+          )).find(card => {
+            const candidateName = propositionCardName(card)
+            if (!candidateName) return false
+            const previousType = visibleTypesBeforeArgument.get(candidateName)
+            return previousType === undefined || previousType !== cardProposition(card)
+          })
+          if (changed) return changed
+          const refreshedSource = sourceNameBeforeArgument
+            ? this.propositionCardExact(sourceNameBeforeArgument)
+            : null
+          return refreshedSource
+            && cardProposition(refreshedSource) !== visibleTypesBeforeArgument.get(sourceNameBeforeArgument)
+              ? refreshedSource
+              : null
         })
-        source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
       }
     }
     // Specializing forall binders can expose an implication whose premise is
@@ -3144,7 +3170,23 @@ export class CompletePlaythroughDriver {
 
   private async construct(expr: ConstructionExpr) {
     if (expr.kind === 'atom') {
-      const value = this.resolveName(expr.value)
+      let value = this.resolveName(expr.value)
+      if (!/^\d+$/u.test(value) && !this.hyp(value)) {
+        const claimedNames = new Set(this.aliases.values())
+        const candidates = Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .filter(([name, type]) =>
+            /^(?:ℕ|Nat|MyNat)$/u.test(type.trim()) && !claimedNames.has(name),
+          )
+          .map(([name]) => name)
+        // A cases successor branch can paint its collision-safe variable name
+        // before the historical `cases ... with d` alias is reconciled. When
+        // exactly one unclaimed natural-number card exists, it is the brick a
+        // player sees for that introduced binder.
+        if (candidates.length === 1) {
+          value = candidates[0]!
+          this.rememberAlias(expr.value, value)
+        }
+      }
       await this.clickConstructionBrick(/^\d+$/u.test(value) ? `num_${value}` : `var_${value}`)
       return
     }
