@@ -14,6 +14,8 @@ import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
 import { compareTheoremNames } from './theoremOrdering'
 
+let transformationViewInstanceCounter = 0
+
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
   label: string    // hypothesis name (e.g. "h") or theorem displayName
@@ -223,6 +225,7 @@ export function TransformationView({
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
   isPhonePortrait = false, emphasizeItems, visualInfos = [],
 }: Props) {
+  const instanceIdRef = useRef(++transformationViewInstanceCounter)
   const initialLhs = useCallback(() => {
     if (goalLhsNode) return deepCloneWithNewIds(goalLhsNode)
     try { return parse(goalLhsStr) } catch { return { type: 'variable' as const, name: goalLhsStr, id: 'lhs-root' } }
@@ -899,6 +902,7 @@ export function TransformationView({
   return (
     <div
       className={`visual-page tr-overlay tr-transformation-overlay${isPhonePortrait ? ' phone-portrait' : ''}`}
+      data-transform-instance={instanceIdRef.current}
       style={{
         ...(style ?? {}),
         '--tr-rule-dock-height': `${ruleDockHeight}px`,

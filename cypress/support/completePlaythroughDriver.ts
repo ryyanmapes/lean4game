@@ -409,7 +409,40 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
-  source = resolveRemountedDragTarget(source.ownerDocument, sourceIdentity, source)
+  // A successful theorem application can first publish its derived card and
+  // then reconcile that optimistic card with the authoritative stream. Do
+  // not begin the next gesture in the one-frame identity handoff. A player
+  // naturally sees and grabs the settled replacement, while an immediate
+  // synthetic pointer-down could retain a node React removes mid-gesture.
+  let stableSource: HTMLElement | null = null
+  let stableSourceKey = ''
+  let stableSince = 0
+  source = await waitFor('a stable mounted player drag source', () => {
+    let candidate: HTMLElement
+    try {
+      candidate = resolveRemountedDragTarget(source.ownerDocument, sourceIdentity, stableSource ?? source)
+    } catch {
+      stableSource = null
+      stableSourceKey = ''
+      stableSince = 0
+      return null
+    }
+    const candidateKey = [
+      candidate.id,
+      candidate.dataset.testid,
+      candidate.dataset.streamId,
+      candidate.dataset.hypName,
+      candidate.dataset.hypType,
+      candidate.dataset.theoremName,
+    ].join('|')
+    if (candidate !== stableSource || candidateKey !== stableSourceKey) {
+      stableSource = candidate
+      stableSourceKey = candidateKey
+      stableSince = Date.now()
+      return null
+    }
+    return Date.now() - stableSince >= 150 ? candidate : null
+  }, 5_000)
   target = resolveRemountedDragTarget(source.ownerDocument, targetIdentity, target)
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
@@ -1342,6 +1375,14 @@ export class CompletePlaythroughDriver {
       ?? null
   }
 
+  private visibleWorkspacePropositionOfType(type: string) {
+    const expected = this.normalizedProposition(type)
+    return visible(this.win.document.querySelectorAll<HTMLElement>(
+      '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+    )).filter(card => this.normalizedProposition(cardProposition(card)) === expected)
+      .at(-1) ?? null
+  }
+
   /** Combine two visible proposition cards using the same pointer drag as a
    * player. This deliberately addresses cards by their displayed types, not
    * by Lean names, so focused tests can exercise generic A / (A → B)
@@ -1654,6 +1695,16 @@ export class CompletePlaythroughDriver {
   }
 
   private refreshCard(card: HTMLElement) {
+    const theoremName = card.dataset.theoremName
+    if (theoremName) {
+      const testId = card.dataset.testid
+      const selector = [
+        testId ? `[data-testid="${cssEscape(testId)}"]` : '',
+        `[data-theorem-name="${cssEscape(theoremName)}"]`,
+      ].filter(Boolean).join('')
+      const current = visible(this.win.document.querySelectorAll<HTMLElement>(selector)).at(-1)
+      if (current) return current
+    }
     const hypName = card.dataset.hypName
     if (!hypName) return card
     const exact = this.hypExact(hypName)
@@ -2337,6 +2388,7 @@ export class CompletePlaythroughDriver {
           ? [[propositionCardName(card), cardProposition(card)] as const]
           : []))
         const sourceNameBeforeArgument = propositionCardName(source)
+        source = this.refreshCard(source)
         doubleClick(source)
         await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
         await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
@@ -2539,7 +2591,7 @@ export class CompletePlaythroughDriver {
       const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
       source = await waitFor(
         `${command} visible proof of the current goal`,
-        () => this.visibleHypothesisOfType(goalType),
+        () => this.visibleWorkspacePropositionOfType(goalType),
       )
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))

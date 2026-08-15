@@ -24,6 +24,7 @@ interface VisualHarness {
     goalType: string
     hypTypes: Record<string, string>
   }
+  getTransformStatus(): unknown
   getLastTransformRewriteDebug(): unknown
 }
 
@@ -32,6 +33,7 @@ type HarnessWindow = Cypress.AUTWindow & {
   __visualTransientDisabledButtons?: string[]
   __visualUnmeasuredDockWasVisible?: boolean
   __visualDockFlashObserved?: boolean
+  __visualDockFlashDetails?: Array<Record<string, unknown>>
   __visualStabilityObserver?: MutationObserver
 }
 type PlayerGesture = string | { rewrite: string; side: 'left' | 'right' }
@@ -66,15 +68,41 @@ function observeTransformStability(win: Cypress.AUTWindow) {
   observedWindow.__visualTransientDisabledButtons = []
   observedWindow.__visualUnmeasuredDockWasVisible = false
   observedWindow.__visualDockFlashObserved = false
+  observedWindow.__visualDockFlashDetails = []
   observedWindow.__visualStabilityObserver?.disconnect()
   let dockWasReady = false
 
-  const inspectDock = () => {
+  const inspectDock = (mutations: MutationRecord[] = []) => {
     const docks = win.document.querySelectorAll<HTMLElement>('.tr-transformation-overlay .tr-rule-dock')
-    if (dockWasReady && docks.length === 0) observedWindow.__visualDockFlashObserved = true
+    const recordFlash = (kind: string) => {
+      observedWindow.__visualDockFlashObserved = true
+      observedWindow.__visualDockFlashDetails?.push({
+        kind,
+        overlays: Array.from(win.document.querySelectorAll<HTMLElement>('.tr-transformation-overlay')).map(overlay => ({
+          instance: overlay.dataset.transformInstance,
+          connected: overlay.isConnected,
+        })),
+        docks: Array.from(docks).map(dock => ({
+          ready: dock.dataset.layoutReady,
+          visibility: getComputedStyle(dock).visibility,
+          connected: dock.isConnected,
+        })),
+        mutations: mutations.slice(0, 6).map(mutation => ({
+          type: mutation.type,
+          attributeName: mutation.attributeName,
+          target: mutation.target instanceof win.Element
+            ? `${mutation.target.tagName}.${mutation.target.className}`
+            : mutation.target.nodeName,
+          added: mutation.addedNodes.length,
+          removed: mutation.removedNodes.length,
+        })),
+        transformStatus: observedWindow.__visualTestHarness?.getTransformStatus(),
+      })
+    }
+    if (dockWasReady && docks.length === 0) recordFlash('removed')
     for (const dock of docks) {
       const visible = getComputedStyle(dock).visibility !== 'hidden'
-      if (dockWasReady && !visible) observedWindow.__visualDockFlashObserved = true
+      if (dockWasReady && !visible) recordFlash('hidden')
       if (getComputedStyle(dock).visibility !== 'hidden' && dock.dataset.layoutReady !== 'true') {
         observedWindow.__visualUnmeasuredDockWasVisible = true
       }
@@ -82,7 +110,7 @@ function observeTransformStability(win: Cypress.AUTWindow) {
     }
   }
   const observer = new win.MutationObserver(mutations => {
-    inspectDock()
+    inspectDock(mutations)
     for (const mutation of mutations) {
       if (mutation.type !== 'attributes' || mutation.attributeName !== 'disabled') continue
       const button = mutation.target
@@ -722,7 +750,9 @@ describe('NNG4 implication and definition display regressions', () => {
       ).to.deep.equal([])
       expect(
         (win as HarnessWindow).__visualDockFlashObserved,
-        'the ready rewrite dock remains mounted and visible',
+        `the ready rewrite dock remains mounted and visible; details=${JSON.stringify(
+          (win as HarnessWindow).__visualDockFlashDetails,
+        )}`,
       ).to.equal(false)
     })
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
