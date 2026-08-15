@@ -248,6 +248,8 @@ export function TransformationView({
   const [ruleDockHeight, setRuleDockHeight] = useState(0)
   const [measuredLayoutKey, setMeasuredLayoutKey] = useState('')
   const [measuredDockLayoutKey, setMeasuredDockLayoutKey] = useState('')
+  const hasPresentedReadyDockRef = useRef(false)
+  const presentedDockTabRef = useRef(selectedTab)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const exprWrapperRef = useRef<HTMLDivElement>(null)
@@ -411,6 +413,15 @@ export function TransformationView({
   const pageItems = tabRules.slice(pageRange.start, pageRange.end)
   const dockLayoutKey = `${ruleDockLayoutKey}:${clampedPage}:${pageRange.start}:${pageRange.end}`
   const layoutReady = hasMeasurements && measuredDockLayoutKey === dockLayoutKey && ruleDockHeight > 0
+  if (presentedDockTabRef.current !== selectedTab) {
+    presentedDockTabRef.current = selectedTab
+    hasPresentedReadyDockRef.current = false
+  }
+  if (layoutReady) hasPresentedReadyDockRef.current = true
+  // Rewrites can replace stream/card ids while preserving the visible rule
+  // list. Keep the already measured dock painted during that same-tab handoff;
+  // a genuinely different tab still waits for its own measurements above.
+  const dockPresentationReady = layoutReady || hasPresentedReadyDockRef.current
 
   useLayoutEffect(() => {
     if (!hasMeasurements) return
@@ -992,9 +1003,9 @@ export function TransformationView({
         <div
           className="tr-rule-dock"
           ref={ruleDockRef}
-          data-layout-ready={layoutReady ? 'true' : 'false'}
-          aria-busy={!layoutReady}
-          style={{ visibility: layoutReady ? 'visible' : 'hidden' }}
+          data-layout-ready={dockPresentationReady ? 'true' : 'false'}
+          aria-busy={!dockPresentationReady}
+          style={{ visibility: dockPresentationReady ? 'visible' : 'hidden' }}
           onContextMenu={e => { e.preventDefault(); if (!isProcessing) onIsReverseChange(!isReverse) }}
         >
           {/* Cards row */}
