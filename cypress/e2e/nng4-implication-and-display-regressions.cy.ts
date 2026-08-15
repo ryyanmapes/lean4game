@@ -729,7 +729,7 @@ describe('NNG4 implication and definition display regressions', () => {
       const player = new CompletePlaythroughDriver(win)
       await player.perform('use 0')
       observeTransformStability(win)
-      await player.performRewriteOnSide('rw [\u2190 add_zero]', 'left')
+      await player.performRewriteOnSide('rw [\u2190 add_zero]', 'left', true)
     })
 
     cy.window().should(win => {
@@ -755,11 +755,8 @@ describe('NNG4 implication and definition display regressions', () => {
         )}`,
       ).to.equal(false)
     })
-    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
-      .should('be.visible')
-      .and('not.have.class', 'solved')
-      .and('have.attr', 'data-goal-text')
-      .and('match', /x\s*\+\s*0\s*=\s*x\s*\+\s*0/u)
+    cy.get('.tr-transformation-overlay .tr-expr-wrapper').should('contain.text', 'x').and('contain.text', '0')
+    cy.get('.tr-transformation-overlay .tr-static-label').should('contain.text', '=').and('contain.text', 'x + 0')
 
     cy.window().should(win => {
       const coreLines = (win as HarnessWindow).__visualTestHarness?.getProofAudit().coreLines ?? []
@@ -770,6 +767,11 @@ describe('NNG4 implication and definition display regressions', () => {
     })
 
     cy.get('.tr-transformation-overlay .tr-back-btn').click()
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('not.have.class', 'solved')
+      .and('have.attr', 'data-goal-text')
+      .and('match', /x\s*\+\s*0\s*=\s*x\s*\+\s*0/u)
     performPlayerGestures(['rfl'])
 
     cy.get('.proof-sidebar-tab').click()

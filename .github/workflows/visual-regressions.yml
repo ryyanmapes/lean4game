@@ -144,7 +144,12 @@ jobs:
         env:
           CYPRESS_READY_PATHS: /,/data/g/local/NNG4/game.json
           CYPRESS_LEAN4GAME_MOUNT: /
-          CYPRESS_VISUAL_TIMEOUT: '120000'
+          # Some reference commands such as `repeat apply succ_inj at h` map
+          # to several deliberate player drags, each followed by a Lean WASM
+          # response and React stream reconciliation. Keep the enclosing
+          # Cypress callback above that complete gesture sequence; the driver
+          # retains its shorter per-interaction diagnostics.
+          CYPRESS_VISUAL_TIMEOUT: '600000'
           CYPRESS_VISUAL_WORLD: ${{ matrix.world }}
           CYPRESS_VISUAL_LEVEL: ${{ matrix.level }}
           CYPRESS_VISUAL_SHARD_INDEX: ${{ matrix.shard_index }}

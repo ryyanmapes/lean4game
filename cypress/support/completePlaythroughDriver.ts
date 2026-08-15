@@ -1427,9 +1427,9 @@ export class CompletePlaythroughDriver {
 
   /** Perform a rewrite after selecting the same side a player would with the
    * transformation view's arrow button. */
-  async performRewriteOnSide(command: string, side: 'left' | 'right') {
+  async performRewriteOnSide(command: string, side: 'left' | 'right', keepOpen = false) {
     this.preferredRewriteSide = side
-    this.keepTransformationOpen = true
+    this.keepTransformationOpen = keepOpen
     try {
       await this.perform(command)
     } finally {
