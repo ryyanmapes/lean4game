@@ -1044,6 +1044,25 @@ function propositionCardName(card: HTMLElement) {
   return card.dataset.hypName ?? card.dataset.theoremName ?? ''
 }
 
+function definitionalPremiseText(proposition: string) {
+  const normalized = proposition.trim().replace(/≠/gu, '=')
+  let depth = 0
+  const arrows: number[] = []
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index]
+    if (char === '(' || char === '[' || char === '{') depth += 1
+    else if (char === ')' || char === ']' || char === '}') depth -= 1
+    else if (char === '→' && depth === 0) arrows.push(index)
+  }
+  if (arrows.length === 1) {
+    const arrow = arrows[0]!
+    const left = normalized.slice(0, arrow).trim()
+    const right = normalized.slice(arrow + 1).trim()
+    if (right === 'False' && left.includes('=')) return left
+  }
+  return normalized
+}
+
 function inferredForallPremiseMatch(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
@@ -1070,8 +1089,8 @@ function inferredForallPremiseMatch(
   for (const [premiseIndex, premiseText] of premises.entries()) {
     try {
       const bindings = matchAndCapture(
-        parse(targetType.replace(/≠/gu, '=')),
-        parse(premiseText.replace(/≠/gu, '=')),
+        parse(definitionalPremiseText(targetType)),
+        parse(definitionalPremiseText(premiseText)),
       )
       if (!bindings) continue
       const arguments = binders.map(binder => bindings[binder])
@@ -1138,9 +1157,9 @@ function matchesTheoremPremise(
   )
   return premises.some(premiseText => {
     try {
-      const premise = parse(premiseText.replace(/≠/gu, '='))
+      const premise = parse(definitionalPremiseText(premiseText))
       const bindings = matchAndCapture(
-        parse(targetType.replace(/≠/gu, '=')),
+        parse(definitionalPremiseText(targetType)),
         premise,
       )
       if (!bindings) return false
@@ -3228,8 +3247,9 @@ export class CompletePlaythroughDriver {
         // Variables palette the player sees and exclude names already bound
         // by the reference proof; in the successor branch of `cases a with
         // d`, this identifies the collision-safe `n` brick.
-        const paletteCandidates = (await this.constructionBrickIds('Variables', 'var_'))
+        const paletteVariables = (await this.constructionBrickIds('Variables', 'var_'))
           .map(id => id.slice('var_'.length))
+        const paletteCandidates = paletteVariables
           .filter(name => !claimedNames.has(name))
         // A cases successor branch can paint its collision-safe variable name
         // before the historical `cases ... with d` alias is reconciled. When
@@ -3239,6 +3259,8 @@ export class CompletePlaythroughDriver {
           ? pendingCandidates[0]
           : paletteCandidates.length === 1
             ? paletteCandidates[0]
+          : paletteVariables.length === 1
+            ? paletteVariables[0]
           : unclaimedCandidates.length === 1
             ? unclaimedCandidates[0]
             : null
@@ -3252,6 +3274,7 @@ export class CompletePlaythroughDriver {
           requested: expr.value,
           resolved: value,
           pendingCandidates,
+          paletteVariables,
           paletteCandidates,
           unclaimedCandidates,
           visibleHypotheses: snapshot.hypTypes,
