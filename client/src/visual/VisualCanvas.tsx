@@ -2382,6 +2382,20 @@ export function VisualCanvas({
   useEffect(() => {
     const navigableIds = collectActiveStreamIds(proofTree)
     const liveIds = collectLiveStreamIds(proofTree)
+    const orphanedCanvasStreams = canvasState.completed
+      ? []
+      : canvasState.streams.filter(stream => !findLeafForStream(proofTree, stream.id))
+    // A reconciliation response can replace the current canvas stream before
+    // the proof tree learns its new ID. When exactly one logical branch and
+    // one live canvas stream are unmatched, they are the same branch. Repair
+    // that invariant immediately so the UI never renders "Stream 0 of N" or
+    // disables a perfectly live player interaction.
+    if (liveIds.length === 1 && orphanedCanvasStreams.length === 1) {
+      const repairedStream = orphanedCanvasStreams[0]!
+      setProofTree(replaceLeafStream(proofTree, liveIds[0]!, repairedStream))
+      if (activeStreamId !== repairedStream.id) setActiveStreamId(repairedStream.id)
+      return
+    }
     if (navigableIds.length === 0) {
       if (activeStreamId !== null) setActiveStreamId(null)
       return
@@ -4633,19 +4647,26 @@ export function VisualCanvas({
       ? transformTarget.streamId
       : null
   const selectedStreamId = pinnedStreamId ?? activeStreamId
-  const defaultStreamId = liveStreamIds.find(streamId =>
-    canvasState.streams.some(stream => stream.id === streamId) || streamSnapshots[streamId] !== undefined
-  ) ?? activeStreamIds[0] ?? null
-  const currentStream = (selectedStreamId
-    ? canvasState.streams.find(stream => stream.id === selectedStreamId)
-      ?? streamSnapshots[selectedStreamId]
-      ?? null
-    : null)
-    ?? (defaultStreamId
-      ? canvasState.streams.find(stream => stream.id === defaultStreamId)
-        ?? streamSnapshots[defaultStreamId]
-        ?? null
-      : canvasState.streams[0] ?? null)
+  const selectedLeaf = selectedStreamId ? findLeafForStream(proofTree, selectedStreamId) : null
+  const defaultLiveCanvasId = liveStreamIds.find(streamId =>
+    canvasState.streams.some(stream => stream.id === streamId)
+  ) ?? null
+  const defaultSnapshotId = liveStreamIds.find(streamId => streamSnapshots[streamId] !== undefined)
+    ?? activeStreamIds[0]
+    ?? null
+  const selectedCanvasStream = selectedStreamId
+    ? canvasState.streams.find(stream => stream.id === selectedStreamId) ?? null
+    : null
+  const selectedCompletedSnapshot = selectedStreamId && selectedLeaf?.completed
+    ? streamSnapshots[selectedStreamId] ?? null
+    : null
+  const currentStream = selectedCanvasStream
+    ?? selectedCompletedSnapshot
+    ?? (defaultLiveCanvasId
+      ? canvasState.streams.find(stream => stream.id === defaultLiveCanvasId) ?? null
+      : null)
+    ?? canvasState.streams[0]
+    ?? (defaultSnapshotId ? streamSnapshots[defaultSnapshotId] ?? null : null)
   const currentLeaf = currentStream ? findLeafForStream(proofTree, currentStream.id) : null
   const currentStreamIsLive = currentStream
     ? canvasState.streams.some(stream => stream.id === currentStream.id)

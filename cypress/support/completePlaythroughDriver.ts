@@ -991,13 +991,14 @@ function matchesTheoremPremise(
       premise,
     )
     if (!bindings) return false
-    // Specialized workspace cards may retain the original theorem's footer
-    // for presentation even after Construction Mode has consumed every
-    // binder. Only a card that is still constructable has active wildcard
-    // binders; otherwise names in its live proposition are local constants.
-    const binders = theorem.classList.contains('constructable')
-      ? forallBinderNames(theorem)
-      : []
+    // A local hypothesis is a proposition in the current Lean context: any
+    // variables remaining in its implication are fixed local constants, not
+    // inference wildcards. Derived cards can retain both a stale forall
+    // footer and a stale `constructable` class, so neither is authoritative.
+    // Only theorem templates/copies use their footer binders as wildcards.
+    const binders = theorem.matches('[data-testid="hyp-card"]')
+      ? []
+      : forallBinderNames(theorem)
     // Variables that are no longer forall-bound are branch-local constants,
     // not pattern wildcards. After specializing `mul_le_mul_right 1 b a`, its
     // premise `1 ≤ b` must not highlight or accept an unrelated `1 ≤ a * b`.
@@ -1424,7 +1425,15 @@ export class CompletePlaythroughDriver {
   }
 
   private latestRelationName() {
-    const snapshot = harness(this.win).getCurrentStreamSnapshot()
+    let snapshot: StreamSnapshot
+    try {
+      snapshot = harness(this.win).getCurrentStreamSnapshot()
+    } catch (error) {
+      throw new Error(`No interactive relation card is available: ${JSON.stringify({
+        audit: harness(this.win).getProofAudit(),
+        lastTransform: harness(this.win).getLastTransformRewriteDebug(),
+      })}`, { cause: error })
+    }
     return Object.entries(snapshot.hypTypes).reverse()
       .find(([, type]) => /(?:=|≠|≤)/u.test(type))?.[0] ?? null
   }
