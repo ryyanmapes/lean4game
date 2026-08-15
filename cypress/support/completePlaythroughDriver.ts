@@ -2283,9 +2283,17 @@ export class CompletePlaythroughDriver {
         doubleClick(source)
         await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
         await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
-        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          .find(candidate => !namesBeforeArgument.has(candidate))
-        if (!createdName) throw new Error(`${command} did not create a theorem card for ${argument}`)
+        const createdName = await waitFor(`${command} theorem card for ${argument}`, () => {
+          try {
+            return Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+              .find(candidate => !namesBeforeArgument.has(candidate)) ?? null
+          } catch {
+            // Construction can reconcile the proof graph and its selected
+            // stream in separate React commits. The player cannot act in the
+            // intervening frame, so wait for the specialized card to return.
+            return null
+          }
+        })
         source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName))
       }
     }
