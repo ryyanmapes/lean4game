@@ -2167,11 +2167,20 @@ export class CompletePlaythroughDriver {
           // next one (`1 ≤ b`). Follow the unique proposition that matches
           // the specialized theorem premise, exactly as a player choosing the
           // highlighted card does.
-          const matchingCards = visible(
+          const candidateCards = visible(
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-          ).filter(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
-          const exactMatchingCards = matchingCards.filter(candidate =>
+          ).filter(candidate => candidate !== source)
+          // Exact surface equality is stronger than the generalized matcher
+          // and must be considered independently. A derived card can retain
+          // stale forall-footer metadata which makes the pattern matcher
+          // reject the literal premise (`1 ≤ b`) while accepting a broader
+          // accidental instantiation (`1 ≤ a * b`). A player sees and chooses
+          // the exact highlighted proposition.
+          const exactMatchingCards = candidateCards.filter(candidate =>
             exactlyMatchesTheoremPremise(source, candidate),
+          )
+          const matchingCards = candidateCards.filter(candidate =>
+            matchesTheoremPremise(source, candidate, []),
           )
           const rememberedTargetType = this.aliasTypes.get(match[2])
           const rememberedTarget = rememberedTargetType

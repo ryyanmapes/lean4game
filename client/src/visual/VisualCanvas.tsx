@@ -4184,7 +4184,16 @@ export function VisualCanvas({
           })()
         : parseTransformTarget(TaggedText_stripTags(focusedStream.goal.type).trim())
       : null
-    const focusedRelation = parsedFocusedTarget?.relation ?? displayedFocusedTarget?.relation
+    // TransformationView computes expectedGoal from the relation actually
+    // rendered and edited by the player.  Keep that as the authority here:
+    // reducible comparisons such as MyNat.le can expose their existential
+    // witness equality in a later RPC field even though the open overlay is
+    // still (correctly) transforming `≤`. Reclassifying it as `=` at submit
+    // time emits drag_rw_hyp_* against the predicate internals and Lean
+    // rejects a perfectly valid visible rewrite.
+    const focusedRelation = expectedGoal?.relation
+      ?? parsedFocusedTarget?.relation
+      ?? displayedFocusedTarget?.relation
     const selectedRoot = parsedFocusedTarget
       ? (workingSide === 'left' ? parsedFocusedTarget.lhs : parsedFocusedTarget.rhs)
       : null
