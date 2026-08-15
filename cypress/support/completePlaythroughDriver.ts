@@ -1004,6 +1004,10 @@ function cardProposition(card: HTMLElement) {
     ?? ''
 }
 
+function propositionCardName(card: HTMLElement) {
+  return card.dataset.hypName ?? card.dataset.theoremName ?? ''
+}
+
 function matchesTheoremPremise(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
@@ -2028,7 +2032,9 @@ export class CompletePlaythroughDriver {
       // right type over a stale historical alias.
       source = this.visibleHypothesisOfType(goalType) ?? source
     }
-    const sourceWasLocalHypothesis = source.matches('[data-testid="hyp-card"]')
+    const sourceWasLocalHypothesis = source.matches(
+      '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+    )
     if (!match[2]) {
       // Follow Lean's application order one argument at a time. Forall term
       // arguments use Construction Mode; once those binders are gone, proof
@@ -2224,6 +2230,7 @@ export class CompletePlaythroughDriver {
         ? this.hypExact(this.implicitGoalRewriteTarget)
         : null
     if (match[2]) await this.exposeDeferredInitialBinders(match[2])
+    const targetResolutionStartedAt = Date.now()
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => {
           // Keep following the concrete card produced by the preceding
@@ -2300,12 +2307,9 @@ export class CompletePlaythroughDriver {
           // A fully specialized visible premise is the strongest signal. In
           // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
           // even while an older `b ≠ 0` card retains the classic name `h`.
-          if (renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
-          if (surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
-          if (
-            previousResult &&
-            previousResult !== source
-          ) return previousResult
+          if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
+          if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
+          if (previousResult && previousResult !== source) return previousResult
           if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
           if (rememberedTarget) return rememberedTarget
@@ -2316,7 +2320,14 @@ export class CompletePlaythroughDriver {
           // definitional equality (notably numeral notation). Only after
           // exhausting visibly matching generated cards should the original
           // branch-local name be offered to the authoritative backend.
-          if (named) return named
+          if (named) {
+            // A repeated `... at h` chain can render the old alias one React
+            // commit before its newly derived successor. Give the visible
+            // matching card a short opportunity to mount instead of eagerly
+            // dragging onto a stale, incompatible proposition.
+            if (continuesApplyAtChain && Date.now() - targetResolutionStartedAt < 750) return null
+            return named
+          }
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
           if (!reconciledName) return null
@@ -2339,9 +2350,11 @@ export class CompletePlaythroughDriver {
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const visibleTypesBeforeFinal = new Map(visible(
-      this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-    ).flatMap(card => card.dataset.hypName
-      ? [[card.dataset.hypName, card.dataset.hypType ?? ''] as const]
+      this.win.document.querySelectorAll<HTMLElement>(
+        '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+      ),
+    ).flatMap(card => propositionCardName(card)
+      ? [[propositionCardName(card), cardProposition(card)] as const]
       : []))
     const finalSourceName = source.dataset.hypName
     const finalSourceType = source.dataset.hypType
@@ -2405,16 +2418,18 @@ export class CompletePlaythroughDriver {
       const visibleCreatedConclusionName = await waitFor(
         `${command} visible new or changed conclusion card`,
         () => visible(
-          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+          this.win.document.querySelectorAll<HTMLElement>(
+            '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+          ),
         ).filter(card => {
-          const candidateName = card.dataset.hypName
+          const candidateName = propositionCardName(card)
           if (!candidateName) return false
           const previousType = visibleTypesBeforeFinal.get(candidateName)
-          return previousType === undefined || previousType !== (card.dataset.hypType ?? '')
+          return previousType === undefined || previousType !== cardProposition(card)
         }).reverse().sort((left, right) =>
-          (left.dataset.hypType?.match(/→/gu) ?? []).length
-            - (right.dataset.hypType?.match(/→/gu) ?? []).length
-        )[0]?.dataset.hypName ?? null,
+          (cardProposition(left).match(/→/gu) ?? []).length
+            - (cardProposition(right).match(/→/gu) ?? []).length
+        ).map(propositionCardName)[0] ?? null,
         3_000,
       ).catch(() => null)
       const changedTargetName = finalTargetName
@@ -2431,20 +2446,21 @@ export class CompletePlaythroughDriver {
         playLog(this.win).at(-1)?.leanTactic ?? '',
       )?.[1]
       const mountedGeneratedConclusionName = generatedConclusionName
-        && (
-          harness(this.win).getCurrentStreamSnapshot().hypTypes[generatedConclusionName] != null
-          || this.propositionCardExact(generatedConclusionName)
-        )
-          ? generatedConclusionName
-          : null
+        ? await waitFor(
+            `${command} generated conclusion ${generatedConclusionName}`,
+            () => harness(this.win).getCurrentStreamSnapshot().hypTypes[generatedConclusionName] != null
+              || this.propositionCardExact(generatedConclusionName),
+            3_000,
+          ).then(() => generatedConclusionName).catch(() => null)
+        : null
       // A tray application can leave older, definitionally related cards on
       // the canvas (for example `b ≠ 0` below a newly derived `1 ≤ b`). The
       // newest atomic card is the result the player follows. Semantic matching
       // is only a fallback for in-place updates; giving it priority can bind
       // the classic name back to an unchanged premise from the previous step.
       let resultName = mountedGeneratedConclusionName
-        ?? createdName
         ?? visibleCreatedConclusionName
+        ?? createdName
         ?? semanticConclusionName
         ?? changedSourceName
         ?? changedTargetName
