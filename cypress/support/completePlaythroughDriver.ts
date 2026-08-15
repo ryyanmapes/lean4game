@@ -1359,14 +1359,22 @@ export class CompletePlaythroughDriver {
     const reconcilePendingBranchAliases = () => {
       if (this.pendingBranchAliases.length === 0) return
       const names = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+      const claimedNames = new Set(this.aliases.values())
       for (let index = this.pendingBranchAliases.length - 1; index >= 0; index -= 1) {
         const pending = this.pendingBranchAliases[index]
-        const createdName = names.find(name => !pending.before.has(name))
-          ?? (pending.reusedName && names.includes(pending.reusedName)
+        // The first branch's introduced card is already assigned to its own
+        // expected name. Do not consume a pending sibling alias with that same
+        // card merely because the first branch remains selected for another
+        // command; wait until the sibling contributes an unclaimed name.
+        const createdName = names.find(name => !pending.before.has(name) && !claimedNames.has(name))
+          ?? (pending.reusedName
+            && names.includes(pending.reusedName)
+            && !claimedNames.has(pending.reusedName)
             ? pending.reusedName
             : undefined)
         if (!createdName) continue
         this.rememberAlias(pending.expected, createdName)
+        claimedNames.add(createdName)
         this.pendingBranchAliases.splice(index, 1)
       }
     }
