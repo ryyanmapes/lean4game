@@ -2093,9 +2093,6 @@ export class CompletePlaythroughDriver {
           // `apply ... at h`. Resolving the classic name first can fall back
           // to the still-visible original `h`, which often has the same broad
           // theorem shape but the wrong instantiated variables.
-          const historicalAlias = this.aliases.get(match[2]!)
-          const aliased = historicalAlias ? this.hypExact(historicalAlias) : null
-          if (aliased && matchesTheoremPremise(source, aliased, [])) return aliased
           const named = this.hyp(match[2])
           // Browser reconciliation keeps earlier derived cards visible. A
           // classic name such as `h` therefore can still point at the first
