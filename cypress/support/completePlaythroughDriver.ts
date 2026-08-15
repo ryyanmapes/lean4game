@@ -1125,7 +1125,6 @@ export class CompletePlaythroughDriver {
   private readonly pendingPostConstructionGoalRewrites: string[] = []
   private deferredInitialBinderNames: string[] = []
   private previousApplyAtTarget: string | null = null
-  private previousApplyAtResultName: string | null = null
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -2143,10 +2142,6 @@ export class CompletePlaythroughDriver {
                 this.normalizedProposition(candidate.dataset.hypType ?? '') === rememberedTargetType,
               )
             : null
-          const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
-            ? this.hypExact(this.previousApplyAtResultName)
-            : null
-          if (previousResult && matchingCards.includes(previousResult)) return previousResult
           // Repeated `apply ... at h` steps form a visible derivation chain:
           // the player follows the newest card produced beside h, while the
           // original premise remains on the canvas. Initial one-off targets
@@ -2324,10 +2319,8 @@ export class CompletePlaythroughDriver {
         if (resultType?.trim() === 'False') this.implicitGoalRewriteTarget = null
       }
       this.previousApplyAtTarget = match[2]
-      this.previousApplyAtResultName = resultName ?? null
     } else {
       this.previousApplyAtTarget = null
-      this.previousApplyAtResultName = null
     }
   }
 
@@ -3012,7 +3005,6 @@ export class CompletePlaythroughDriver {
     const normalized = command.trim()
     if (!/^(?:apply|exact)\s+.+\s+at\s+\S+$/u.test(normalized)) {
       this.previousApplyAtTarget = null
-      this.previousApplyAtResultName = null
     }
     if (
       this.pendingPostConstructionGoalRewrites.length > 0
