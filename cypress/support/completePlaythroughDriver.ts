@@ -1910,8 +1910,8 @@ export class CompletePlaythroughDriver {
         // Prefer the card whose current proposition consumes the next
         // visible premise. Identity-based fallbacks can see an asynchronously
         // mounted specialization source before its derived conclusion.
-        const resultName = visibleCreatedName ?? visibleChangedName ?? createdName ??
-          visibleDerivedName ?? retainedName ?? changedName ?? reusedName
+        const resultName = visibleDerivedName ?? visibleCreatedName ?? visibleChangedName ??
+          createdName ?? retainedName ?? changedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
