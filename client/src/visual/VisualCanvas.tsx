@@ -1619,12 +1619,15 @@ function synthesizeHypRewriteContinuation(
   focusedStream: GoalStream,
   hypId: string,
   expectedHyp: ExpectedRewriteGoal,
+  preserveStreamIdentity = false,
 ): GoalStream {
   const nextHypType = `${expectedHyp.lhsStr} ${expectedHyp.relation} ${expectedHyp.rhsStr}`
   return {
     ...focusedStream,
-    id: uuidv4(),
-    goal: { ...focusedStream.goal, mvarId: undefined },
+    id: preserveStreamIdentity ? focusedStream.id : uuidv4(),
+    goal: preserveStreamIdentity
+      ? { ...focusedStream.goal }
+      : { ...focusedStream.goal, mvarId: undefined },
     hyps: focusedStream.hyps.map(card => card.id === hypId
       ? {
           ...card,
@@ -4310,10 +4313,41 @@ export function VisualCanvas({
     }
     if (
       transformTarget?.kind === 'hyp' &&
+      nextStream &&
+      expectedGoal &&
+      expectedGoal.relation !== '='
+    ) {
+      const returnedStreamId = nextStream.id
+      const returnedTarget = nextStream.hyps.find(card =>
+        interactionHypName(card) === transformTarget.hypRef ||
+        card.hyp.names[0] === transformTarget.hypName,
+      )
+      if (returnedTarget) {
+        const repairedStream = synthesizeHypRewriteContinuation(
+          nextStream,
+          returnedTarget.id,
+          expectedGoal,
+          true,
+        )
+        nextTree = replaceLeafStream(nextTree, returnedStreamId, repairedStream)
+        focusedStreams = focusedStreams.map(stream =>
+          stream.id === returnedStreamId ? repairedStream : stream
+        )
+        nextCanvas = {
+          ...nextCanvas,
+          completed: false,
+          streams: nextCanvas.streams.map(stream =>
+            stream.id === returnedStreamId ? repairedStream : stream
+          ),
+        }
+        nextStream = repairedStream
+      }
+    }
+    if (
+      transformTarget?.kind === 'hyp' &&
       focusedStream &&
       expectedGoal &&
       (
-        expectedGoal.relation !== '=' ||
         (nextStream === null && !leanCanvas.completed) ||
         (leanCanvas.completed && !rewrittenHypothesisIsObviousContradiction(expectedGoal))
       )
