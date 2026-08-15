@@ -4203,7 +4203,13 @@ export function VisualCanvas({
         ? ` at ${transformTarget.hypRef}`
         : ''
       const comparisonRewrite = `rw [${rewriteRule}]${targetSuffix}`
-      command = rotation ? `${rotation}\n${comparisonRewrite}` : comparisonRewrite
+      const restoreComparison = expectedGoal
+        ? `change ${expectedGoal.lhsStr} ${focusedRelation} ${expectedGoal.rhsStr}${targetSuffix}`
+        : null
+      const comparisonCommand = restoreComparison
+        ? `${comparisonRewrite}\n${restoreComparison}`
+        : comparisonRewrite
+      command = rotation ? `${rotation}\n${comparisonCommand}` : comparisonCommand
     }
     // A reverse theorem whose source is a lone pattern variable (notably
     // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
@@ -4558,7 +4564,14 @@ export function VisualCanvas({
     let goalRhsNode: ReturnType<typeof exprTreeToNode> | undefined
 
     if (transformTarget?.kind === 'goal') {
-      if (transformingStream.equalityTree) {
+      const parsedGoal = parsedGoalTarget(transformingStream, comparisonTransformEnabled)
+      if (parsedGoal && parsedGoal.relation !== '=') {
+        relation = parsedGoal.relation
+        goalLhsStr = parsedGoal.lhsStr
+        goalRhsStr = parsedGoal.rhsStr
+        goalLhsNode = parsedGoal.lhs
+        goalRhsNode = parsedGoal.rhs
+      } else if (transformingStream.equalityTree) {
         relation = '='
         const lhs = exprTreeToNode(transformingStream.equalityTree.lhs)
         const rhs = exprTreeToNode(transformingStream.equalityTree.rhs)
@@ -4567,7 +4580,6 @@ export function VisualCanvas({
         goalLhsStr = printExpression(lhs)
         goalRhsStr = printExpression(rhs)
       } else {
-        const parsedGoal = parsedGoalTarget(transformingStream, comparisonTransformEnabled)
         if (!parsedGoal) return null
         relation = parsedGoal.relation
         goalLhsStr = parsedGoal.lhsStr
@@ -4578,7 +4590,14 @@ export function VisualCanvas({
     } else {
       const targetCard = transformingStream.hyps.find(card => card.id === transformTarget?.hypId)
       if (!targetCard) return null
-      if (targetCard.hyp.equalityTree) {
+      const parsedHyp = parsedHypTarget(targetCard, comparisonTransformEnabled)
+      if (parsedHyp && parsedHyp.relation !== '=') {
+        relation = parsedHyp.relation
+        goalLhsStr = parsedHyp.lhsStr
+        goalRhsStr = parsedHyp.rhsStr
+        goalLhsNode = parsedHyp.lhs
+        goalRhsNode = parsedHyp.rhs
+      } else if (targetCard.hyp.equalityTree) {
         relation = '='
         const lhs = exprTreeToNode(targetCard.hyp.equalityTree.lhs)
         const rhs = exprTreeToNode(targetCard.hyp.equalityTree.rhs)
@@ -4587,7 +4606,6 @@ export function VisualCanvas({
         goalLhsStr = printExpression(lhs)
         goalRhsStr = printExpression(rhs)
       } else {
-        const parsedHyp = parsedHypTarget(targetCard, comparisonTransformEnabled)
         if (!parsedHyp) return null
         relation = parsedHyp.relation
         goalLhsStr = parsedHyp.lhsStr

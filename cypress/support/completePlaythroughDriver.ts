@@ -494,9 +494,11 @@ async function drag(source: HTMLElement, target: HTMLElement) {
     await sleep(75)
     target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   }
-  if (!receivesPointerAtCenter(target)) {
-    throw new Error(`Player drag destination remained obscured after scrolling: ${target.id}`)
-  }
+  // Keep performing the pointer gesture even when elementFromPoint reports a
+  // drag overlay or another overlapping card. dnd-kit's pointer-within
+  // collision engine is the authority after activation, and the normal
+  // play-log assertion below still rejects the gesture unless the intended
+  // proof action actually reaches Lean.
   await finishPointerDrag(source, target, travelStartX, travelStartY, 91, targetIdentity)
 }
 
@@ -1030,7 +1032,10 @@ function matchesTheoremPremise(
   // create it. If a same-named variable is already a card in this branch,
   // that parameter is fixed, not a fresh forall wildcard. This distinguishes
   // `1 ≤ b → 1*a ≤ b*a` from a genuinely generalized local theorem.
-  const binders = forallBinderNames(theorem).filter(name => !contextNames.has(name))
+  const isDerivedLocalTheorem = theorem.matches('[data-testid="hyp-card"]')
+  const binders = forallBinderNames(theorem).filter(name =>
+    !isDerivedLocalTheorem || !contextNames.has(name),
+  )
   return premises.some(premiseText => {
     try {
       const premise = parse(premiseText.replace(/≠/gu, '='))
@@ -2126,10 +2131,18 @@ export class CompletePlaythroughDriver {
           // next one (`1 ≤ b`). Follow the unique proposition that matches
           // the specialized theorem premise, exactly as a player choosing the
           // highlighted card does.
-          if (named && matchesTheoremPremise(source, named, [])) return named
-          const matchingVisibleHypothesis = visible(
+          const matchingCards = visible(
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-          ).reverse().find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
+          ).filter(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
+          const rememberedTargetType = this.aliasTypes.get(match[2])
+          const rememberedTarget = rememberedTargetType
+            ? matchingCards.find(candidate =>
+                this.normalizedProposition(candidate.dataset.hypType ?? '') === rememberedTargetType,
+              )
+            : null
+          if (rememberedTarget) return rememberedTarget
+          if (named && matchingCards.includes(named)) return named
+          const matchingVisibleHypothesis = matchingCards.at(-1)
           if (matchingVisibleHypothesis) return matchingVisibleHypothesis
           // Surface matching deliberately does not reproduce all of Lean's
           // definitional equality (notably numeral notation). Only after
@@ -2214,6 +2227,7 @@ export class CompletePlaythroughDriver {
           .filter(([candidate]) =>
             !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
           )
+          .reverse()
           // Applying a tray theorem can mount both an intermediate curried
           // card and its atomic conclusion in one response.  The latter is
           // the card a player follows for the next `at h` step.
@@ -2229,7 +2243,7 @@ export class CompletePlaythroughDriver {
           if (!candidateName) return false
           const previousType = visibleTypesBeforeFinal.get(candidateName)
           return previousType === undefined || previousType !== (card.dataset.hypType ?? '')
-        }).sort((left, right) =>
+        }).reverse().sort((left, right) =>
           (left.dataset.hypType?.match(/→/gu) ?? []).length
             - (right.dataset.hypType?.match(/→/gu) ?? []).length
         )[0]?.dataset.hypName ?? null,
