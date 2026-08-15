@@ -2237,6 +2237,28 @@ export class CompletePlaythroughDriver {
           const matchingCards = candidateCards.filter(candidate =>
             matchesTheoremPremise(source, candidate, []),
           )
+          const sourceProposition = source.dataset.hypType
+            ?? source.querySelector<HTMLElement>('.proposition')?.textContent
+            ?? ''
+          let sourceDepth = 0
+          let firstArrow = -1
+          for (let index = 0; index < sourceProposition.length; index += 1) {
+            const char = sourceProposition[index]
+            if (char === '(' || char === '[' || char === '{') sourceDepth += 1
+            else if (char === ')' || char === ']' || char === '}') sourceDepth -= 1
+            else if (char === '→' && sourceDepth === 0) {
+              firstArrow = index
+              break
+            }
+          }
+          const visibleFirstPremise = firstArrow >= 0
+            ? this.normalizedProposition(sourceProposition.slice(0, firstArrow))
+            : null
+          const surfaceExactCards = visibleFirstPremise
+            ? candidateCards.filter(candidate =>
+                this.normalizedProposition(candidate.dataset.hypType ?? '') === visibleFirstPremise,
+              )
+            : []
           const rememberedTargetType = this.aliasTypes.get(match[2])
           const rememberedTarget = rememberedTargetType
             ? matchingCards.find(candidate =>
@@ -2250,6 +2272,10 @@ export class CompletePlaythroughDriver {
           // the player follows the newest card produced beside h, while the
           // original premise remains on the canvas. Initial one-off targets
           // such as distinct `ha` and `hb` still use their remembered types.
+          // A fully specialized visible premise is the strongest signal. In
+          // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
+          // even while an older `b ≠ 0` card retains the classic name `h`.
+          if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
           if (
             previousResult &&
             previousResult !== source
