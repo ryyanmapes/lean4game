@@ -4380,6 +4380,14 @@ export function VisualCanvas({
       }
       nextStream = clickableStream
     }
+    // A reconciled successor stream is authoritative evidence that the proof
+    // is still live. Focused RPC responses can report `completed` after a
+    // hypothesis rewrite even while returning that successor (notably after
+    // switching away from already-completed cases/induction siblings). Never
+    // freeze the whole level while the player still has a rendered goal.
+    if (nextStream !== null && nextCanvas.completed) {
+      nextCanvas = { ...nextCanvas, completed: false }
+    }
     const shouldDeferGoalCompletionUntilClose =
       transformTarget?.kind === 'goal' && nextStream === null
 

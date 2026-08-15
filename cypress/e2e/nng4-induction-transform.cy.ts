@@ -272,7 +272,9 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     visualHarness().then(harness => {
       const snapshot = harness.getCurrentStreamSnapshot()
       const debug = harness.getLastTransformRewriteDebug()
+      const audit = harness.getProofAudit()
       expect(snapshot.goalType, 'the selected branch receives add_succ').to.match(/succ\s*\(?\s*0\s*\+\s*d/u)
+      expect(audit.completed, 'a live rewritten successor branch does not complete the whole proof').to.equal(false)
       expect(debug?.focusedGoalType, 'the submitted rewrite targets the selected successor goal')
         .to.match(/0\s*\+\s*succ/u)
       expect(debug?.nextGoalType, 'Lean returns the rewritten successor goal')

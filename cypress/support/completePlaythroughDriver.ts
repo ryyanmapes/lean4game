@@ -1348,9 +1348,14 @@ export class CompletePlaythroughDriver {
       if (rememberedType) {
         const reconciled = Object.entries(snapshot.hypTypes)
           .find(([, type]) => this.normalizedProposition(type) === rememberedType)?.[0]
-        if (reconciled) {
-          this.aliases.set(name, reconciled)
-          return reconciled
+        const visibleReconciled = reconciled ?? visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        ).find(card =>
+          this.normalizedProposition(card.dataset.hypType ?? '') === rememberedType,
+        )?.dataset.hypName
+        if (visibleReconciled) {
+          this.aliases.set(name, visibleReconciled)
+          return visibleReconciled
         }
       }
       if (resolvedType) return resolved
@@ -1364,6 +1369,7 @@ export class CompletePlaythroughDriver {
     this.aliases.set(expected, actual)
     try {
       const type = harness(this.win).getCurrentStreamSnapshot().hypTypes[actual]
+        ?? this.hypExact(actual)?.dataset.hypType
       if (type) this.aliasTypes.set(expected, this.normalizedProposition(type))
     } catch {
       // The name remains useful even if the proof stream is between renders.
@@ -1610,7 +1616,6 @@ export class CompletePlaythroughDriver {
     const target = await waitFor(`hypothesis ${match[1]}`, () => {
       const named = this.hyp(match[1])
       if (named) return named
-      if (!this.aliases.has(match[1])) return null
       // Applying a tray theorem creates a generated `thm_*` proposition.
       // A preceding branch split can remap that generated Lean name even
       // though the same card remains visibly available to the player. When
