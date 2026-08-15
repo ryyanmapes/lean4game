@@ -1304,7 +1304,18 @@ export class CompletePlaythroughDriver {
     try {
       const snapshot = harness(this.win).getCurrentStreamSnapshot()
       const rememberedType = this.aliasTypes.get(name)
+      const directType = snapshot.hypTypes[name]
       const resolvedType = snapshot.hypTypes[resolved]
+      // Prefer the literal name requested by the reference proof whenever it
+      // exists in this branch with the expected proposition. Several binders
+      // share the same type (most commonly `a b c : ℕ`), so reconciling a
+      // historical alias by type alone can turn `cases c` into `cases a` after
+      // switching branches. Collision-renamed cards still fall through to the
+      // remembered alias/type lookup below.
+      if (directType && (!rememberedType || this.normalizedProposition(directType) === rememberedType)) {
+        if (resolved !== name) this.aliases.set(name, name)
+        return name
+      }
       // Short Lean names are reused independently across cases/induction
       // branches. A historical alias is live only when its proposition still
       // agrees with the card in the currently selected branch.
@@ -2171,13 +2182,19 @@ export class CompletePlaythroughDriver {
       })
     } catch (error) {
       const element = target === 'goal' ? currentGoal(this.win) : this.hypExact(target)
+      let snapshot: StreamSnapshot | string
+      try {
+        snapshot = harness(this.win).getCurrentStreamSnapshot()
+      } catch (snapshotError) {
+        snapshot = snapshotError instanceof Error ? snapshotError.message : String(snapshotError)
+      }
       throw new Error(`Timed out opening transformation target ${target}: ${JSON.stringify({
         found: Boolean(element),
         className: element?.className,
         hypName: element?.dataset.hypName,
         hypType: element?.dataset.hypType,
         goalText: element?.dataset.goalText,
-        snapshot: harness(this.win).getCurrentStreamSnapshot(),
+        snapshot,
       })}`, { cause: error })
     }
   }

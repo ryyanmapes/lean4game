@@ -2554,7 +2554,9 @@ export function VisualCanvas({
       ?? (canvasState.streams.find(stream => stream.hyps.some(card => card.id === sourceCardId))?.id ?? null)
       ?? activeStreamId
     const focusedStream = focusedStreamId
-      ? canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null
+      ? (currentStream?.id === focusedStreamId
+          ? currentStream
+          : canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null)
       : null
     if (!focusedStream) return false
     pendingMobileInsertionRef.current = options?.mobileInsertAfter
@@ -3130,8 +3132,11 @@ export function VisualCanvas({
       return { stream, card: withLiveType(card) }
     }
     const sourceTheoremCopy = getTheoremCopyById(activeId)
-    const sourceStream = interactionStreams.find(s => s.hyps.some(h => h.id === activeId))
-    const sourceCard = sourceStream?.hyps.find(h => h.id === activeId)
+    // Resolve the source through the same visible-card path as the drop
+    // target. Branch reconciliation can recycle generated ids while a hidden
+    // predecessor card is still mounted; an id-only lookup then sends the old
+    // theorem name even though the player grabbed the newly displayed card.
+    const { stream: sourceStream, card: sourceCard } = resolveHypDropTarget(activeId)
     const goalIds = new Set(interactionStreams.map(s => s.id))
     const draggedRect = active.rect.current.initial
     const draggedWidth = draggedRect?.width ?? DEFAULT_WIDTH
