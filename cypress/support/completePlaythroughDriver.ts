@@ -2046,15 +2046,19 @@ export class CompletePlaythroughDriver {
   }
 
   private async transformRule(name: string, allowReconciledFallback = true): Promise<HTMLElement> {
-    const overlay = await waitFor('transformation view', () =>
+    let overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
+    const currentOverlay = () => {
+      overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay') ?? overlay
+      return overlay
+    }
     const waitForMeasuredDock = () => waitFor('measured rewrite menu', () => {
-      const dock = overlay.querySelector<HTMLElement>('.tr-rule-dock[data-layout-ready="true"]')
+      const dock = currentOverlay().querySelector<HTMLElement>('.tr-rule-dock[data-layout-ready="true"]')
       return dock && getComputedStyle(dock).visibility !== 'hidden' ? dock : null
     })
     let hypothesisFallback: HTMLElement | null = null
     for (const tabName of ['Everything', 'Hypotheses', '+', '*', '^', '\u2264', '012', 'Peano']) {
-      const findTab = () => Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
+      const findTab = () => Array.from(currentOverlay().querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
         .find(button => button.textContent?.trim() === tabName)
       const tab = findTab()
       if (tab && !tab.classList.contains('active')) {
@@ -2065,23 +2069,23 @@ export class CompletePlaythroughDriver {
         })
       }
       await waitForMeasuredDock()
-      await rewindPages(overlay, 'Previous rule')
+      await rewindPages(currentOverlay(), 'Previous rule')
       for (let page = 0; page < 100; page += 1) {
         await waitForMeasuredDock()
         const resolvedName = this.resolveName(name)
-        const rule = visible(overlay.querySelectorAll<HTMLElement>(
+        const rule = visible(currentOverlay().querySelectorAll<HTMLElement>(
           `[data-rule-label="${cssEscape(resolvedName)}"], [data-rule-label="${cssEscape(name)}"]`,
         ))[0]
         if (rule) return rule
         if (tabName === 'Hypotheses') {
           hypothesisFallback = visible(
-            overlay.querySelectorAll<HTMLElement>('[data-rule-label]'),
+            currentOverlay().querySelectorAll<HTMLElement>('[data-rule-label]'),
           ).at(-1) ?? hypothesisFallback
         }
-        const next = overlay.querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
+        const next = currentOverlay().querySelector<HTMLButtonElement>('button[aria-label="Next rule"]')
         if (!next || next.disabled) break
         await clickPaginationAndWait(
-          overlay,
+          currentOverlay(),
           next,
           `${tabName} rewrite pagination to change`,
         )
