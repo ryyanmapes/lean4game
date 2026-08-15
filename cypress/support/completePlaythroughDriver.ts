@@ -2237,8 +2237,9 @@ export class CompletePlaythroughDriver {
           const matchingCards = candidateCards.filter(candidate =>
             matchesTheoremPremise(source, candidate, []),
           )
-          const sourceProposition = source.dataset.hypType
-            ?? source.querySelector<HTMLElement>('.proposition')?.textContent
+          const renderedSourceProposition = source.querySelector<HTMLElement>('.proposition')?.textContent
+          const sourceProposition = renderedSourceProposition
+            ?? source.dataset.hypType
             ?? ''
           let sourceDepth = 0
           let firstArrow = -1
@@ -2259,6 +2260,13 @@ export class CompletePlaythroughDriver {
                 this.normalizedProposition(candidate.dataset.hypType ?? '') === visibleFirstPremise,
               )
             : []
+          const compactRenderedSource = this.normalizedProposition(
+            renderedSourceProposition ?? source.textContent ?? '',
+          )
+          const renderedPremiseCards = candidateCards.filter(candidate => {
+            const candidateType = this.normalizedProposition(candidate.dataset.hypType ?? '')
+            return candidateType.length > 0 && compactRenderedSource.includes(`${candidateType}→`)
+          })
           const rememberedTargetType = this.aliasTypes.get(match[2])
           const rememberedTarget = rememberedTargetType
             ? matchingCards.find(candidate =>
@@ -2275,6 +2283,7 @@ export class CompletePlaythroughDriver {
           // A fully specialized visible premise is the strongest signal. In
           // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
           // even while an older `b ≠ 0` card retains the classic name `h`.
+          if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
           if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
           if (
             previousResult &&
