@@ -956,7 +956,19 @@ function forallBinderNames(card: HTMLElement): string[] {
   // made a partially applied commutativity rule such as `mul_comm a (_ * b)`
   // look like `mul_comm a _`, so the player driver could choose an entirely
   // different visible occurrence. Preserve every name in each binder group.
-  return Array.from(footer.matchAll(/[({]\s*([^:(){}]+?)\s*:\s*[^(){}]+[)}]/gu))
+  const footerNames = Array.from(footer.matchAll(/[({]\s*([^:(){}]+?)\s*:\s*[^(){}]+[)}]/gu))
+    .flatMap(match => match[1].trim().split(/\s+/u))
+    .filter(Boolean)
+  if (footerNames.length > 0) return footerNames
+
+  // Local generalized hypotheses expose their quantifier in the proposition
+  // itself but do not always render a separate footer. Keep the same grouped
+  // binder semantics so structural application can infer those parameters.
+  const proposition = card.dataset.hypType
+    ?? card.querySelector<HTMLElement>('.proposition')?.textContent
+    ?? ''
+  const prefix = /^\s*∀\s*((?:\([^)]*\)\s*)+)/u.exec(proposition)?.[1] ?? ''
+  return Array.from(prefix.matchAll(/\(\s*([^:()]+?)\s*:\s*[^()]+\)/gu))
     .flatMap(match => match[1].trim().split(/\s+/u))
     .filter(Boolean)
 }
@@ -2267,7 +2279,6 @@ export class CompletePlaythroughDriver {
         : null
       const inferredArguments = explicitArgs.length === 0
         && previousResult
-        && matchesTheoremPremise(source, previousResult, [])
           ? inferredForallArgumentsForPremise(source, previousResult)
           : null
       // A classic `apply f at h` can infer outer forall parameters from a
