@@ -1860,7 +1860,7 @@ export class CompletePlaythroughDriver {
             ? sourceNameBeforeArgument
             : null
         const nextArgument = explicitArgs[argumentIndex + 1]
-        const visibleDerivedName = createdName ?? retainedName ?? changedName ?? await waitFor(
+        const visibleDerivedName = await waitFor(
           `${command} visible conclusion after ${argument}`,
           () => {
             const nextPremise = nextArgument ? this.hyp(nextArgument) : null
@@ -1886,7 +1886,10 @@ export class CompletePlaythroughDriver {
           && snapshotAfterArgument.hypTypes[sourceNameBeforeArgument] != null
             ? sourceNameBeforeArgument
             : null
-        const resultName = createdName ?? retainedName ?? changedName ?? visibleDerivedName ?? reusedName
+        // Prefer the card whose current proposition consumes the next
+        // visible premise. Identity-based fallbacks can see an asynchronously
+        // mounted specialization source before its derived conclusion.
+        const resultName = createdName ?? visibleDerivedName ?? retainedName ?? changedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }

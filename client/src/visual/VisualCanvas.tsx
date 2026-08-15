@@ -684,6 +684,13 @@ function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTr
 
 function formulaTextIsReflexiveEquality(rawGoal: string): boolean {
   const formattedGoal = formatFormulaText(rawGoal.trim())
+  const normalizeZeroNotation = (formula: string) => normalizeFormulaText(formula)
+    .replace(/\b(?:(?:MyNat|Nat)\.)?zero\b/gu, '0')
+  // Check the exact text rendered in the goal card first. This is the most
+  // reliable source after a branch switch, and directly covers constructor
+  // spelling such as `zero = 0` before parser pretty-printing can intervene.
+  const renderedSides = splitEqualityText(normalizeZeroNotation(formattedGoal))
+  if (renderedSides && formulasMatchLiterally(renderedSides[0], renderedSides[1])) return true
   const parsedGoal = parseGoalEquality(rawGoal.trim()) ?? parseGoalEquality(formattedGoal)
   const equalitySides = parsedGoal
     ? [parsedGoal.lhsStr, parsedGoal.rhsStr] as const
@@ -693,8 +700,6 @@ function formulaTextIsReflexiveEquality(rawGoal: string): boolean {
   // The browser pretty-printer can preserve the constructor spelling on one
   // side while rendering numeral notation on the other (`zero = 0`).  Those
   // are the same kernel term, so the player's click must be recorded as rfl.
-  const normalizeZeroNotation = (formula: string) => normalizeFormulaText(formula)
-    .replace(/\b(?:(?:MyNat|Nat)\.)?zero\b/gu, '0')
   if (formulasMatchLiterally(
     normalizeZeroNotation(equalitySides[0]),
     normalizeZeroNotation(equalitySides[1]),
