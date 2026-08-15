@@ -2112,10 +2112,24 @@ export class CompletePlaythroughDriver {
         .find(button => button.textContent?.trim() === tabName)
       const tab = findTab()
       if (tab && !tab.classList.contains('active')) {
-        click(tab)
+        let lastClickAt = 0
         await waitFor(`${tabName} rewrite category to become active`, () => {
           const current = findTab()
-          return current?.classList.contains('active') ? true : null
+          if (current?.classList.contains('active')) return true
+          const currentView = currentOverlay()
+          if (
+            current &&
+            current.getAttribute('aria-disabled') !== 'true' &&
+            !currentView.querySelector('.tr-processing') &&
+            Date.now() - lastClickAt >= 250
+          ) {
+            // A rewrite response can remount the tabs or briefly leave the
+            // menu non-interactive. Re-resolve and retry the same player
+            // click instead of waiting on the detached first button.
+            click(current)
+            lastClickAt = Date.now()
+          }
+          return null
         })
       }
       await waitForMeasuredDock()
