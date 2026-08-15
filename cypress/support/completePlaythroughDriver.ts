@@ -1000,6 +1000,9 @@ function matchesTheoremPremise(
       start = index + 1
     }
   }
+  // `A ≠ B` is displayed without an arrow, but it is definitionally
+  // `A = B → False`; its visible equality is therefore a legitimate premise.
+  if (premises.length === 0 && body.includes('≠')) premises.push(body.trim())
   if (premises.length === 0) return false
   const binders = forallBinderNames(theorem)
   return premises.some(premiseText => {
@@ -2094,7 +2097,6 @@ export class CompletePlaythroughDriver {
           const aliased = historicalAlias ? this.hypExact(historicalAlias) : null
           if (aliased && matchesTheoremPremise(source, aliased, [])) return aliased
           const named = this.hyp(match[2])
-          if (named && matchesTheoremPremise(source, named, [])) return named
           // Browser reconciliation keeps earlier derived cards visible. A
           // classic name such as `h` therefore can still point at the first
           // link in a chain (`b ≠ 0`) after the player has visibly derived the
@@ -2105,19 +2107,11 @@ export class CompletePlaythroughDriver {
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
           ).reverse().find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
           if (matchingVisibleHypothesis) return matchingVisibleHypothesis
-          // The lightweight display matcher does not unfold numeral notation
-          // (`1` versus `succ 0`). Permit only that narrow fallback; returning
-          // any named card here made generalized induction applications use a
-          // stale pre-cancellation equality even though the newly generated
-          // equality was visibly present below it.
-          const sourceType = source.dataset.hypType ?? ''
-          const namedType = named?.dataset.hypType ?? ''
-          if (
-            named &&
-            sourceType.includes('≤') &&
-            namedType.includes('≤') &&
-            /\b[0-9]+\b/u.test(namedType)
-          ) return named
+          // Surface matching deliberately does not reproduce all of Lean's
+          // definitional equality (notably numeral notation). Only after
+          // exhausting visibly matching generated cards should the original
+          // branch-local name be offered to the authoritative backend.
+          if (named) return named
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
           if (!reconciledName) return null
