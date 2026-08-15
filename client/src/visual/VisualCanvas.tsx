@@ -4313,6 +4313,7 @@ export function VisualCanvas({
       focusedStream &&
       expectedGoal &&
       (
+        expectedGoal.relation !== '=' ||
         (nextStream === null && !leanCanvas.completed) ||
         (leanCanvas.completed && !rewrittenHypothesisIsObviousContradiction(expectedGoal))
       )

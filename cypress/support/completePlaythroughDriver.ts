@@ -1124,6 +1124,8 @@ export class CompletePlaythroughDriver {
   private readonly pendingGoalRewrites: string[] = []
   private readonly pendingPostConstructionGoalRewrites: string[] = []
   private deferredInitialBinderNames: string[] = []
+  private previousApplyAtTarget: string | null = null
+  private previousApplyAtResultName: string | null = null
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -1898,6 +1900,7 @@ export class CompletePlaythroughDriver {
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])
     const explicitArgs = application.slice(1)
+    const continuesApplyAtChain = Boolean(match[2] && this.previousApplyAtTarget === match[2])
     let source: HTMLElement
     try {
       source = await this.sourceCard(name)
@@ -2140,6 +2143,15 @@ export class CompletePlaythroughDriver {
                 this.normalizedProposition(candidate.dataset.hypType ?? '') === rememberedTargetType,
               )
             : null
+          const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
+            ? this.hypExact(this.previousApplyAtResultName)
+            : null
+          if (previousResult && matchingCards.includes(previousResult)) return previousResult
+          // Repeated `apply ... at h` steps form a visible derivation chain:
+          // the player follows the newest card produced beside h, while the
+          // original premise remains on the canvas. Initial one-off targets
+          // such as distinct `ha` and `hb` still use their remembered types.
+          if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
           if (rememberedTarget) return rememberedTarget
           if (named && matchingCards.includes(named)) return named
           const matchingVisibleHypothesis = matchingCards.at(-1)
@@ -2311,6 +2323,11 @@ export class CompletePlaythroughDriver {
         const resultType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName]
         if (resultType?.trim() === 'False') this.implicitGoalRewriteTarget = null
       }
+      this.previousApplyAtTarget = match[2]
+      this.previousApplyAtResultName = resultName ?? null
+    } else {
+      this.previousApplyAtTarget = null
+      this.previousApplyAtResultName = null
     }
   }
 
@@ -2993,6 +3010,10 @@ export class CompletePlaythroughDriver {
     if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
     const normalized = command.trim()
+    if (!/^(?:apply|exact)\s+.+\s+at\s+\S+$/u.test(normalized)) {
+      this.previousApplyAtTarget = null
+      this.previousApplyAtResultName = null
+    }
     if (
       this.pendingPostConstructionGoalRewrites.length > 0
       && !/^(?:(?:repeat\s+)?rw\s|nth_rewrite\s|use\s)/u.test(normalized)
