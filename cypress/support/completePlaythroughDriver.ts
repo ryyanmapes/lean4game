@@ -2068,7 +2068,7 @@ export class CompletePlaythroughDriver {
           // highlighted card does.
           const matchingVisibleHypothesis = visible(
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-          ).find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
+          ).reverse().find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
           if (matchingVisibleHypothesis) return matchingVisibleHypothesis
           // The lightweight display matcher does not unfold numeral notation
           // (`1` versus `succ 0`). If the branch-local named card survived,

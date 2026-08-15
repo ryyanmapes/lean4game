@@ -2797,7 +2797,11 @@ export function VisualCanvas({
     onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
-    if ((leanCanvas.completed || nextCanvas.completed) && options?.solvedGoalId) {
+    // `result.completed` describes the focused Lean script response.  With
+    // client-managed cases/induction streams it can be true after only the
+    // selected branch was discharged.  Reconciliation is the authority for
+    // proof-wide completion because it has retained all sibling leaves.
+    if (nextCanvas.completed && options?.solvedGoalId) {
       if (options?.placementHint) clearPositionOverride(options.placementHint.hypId)
       const completionCanvas = options?.placementHint
         ? placeHypNearAnchor(nextCanvas, options.placementHint)
@@ -4062,7 +4066,9 @@ export function VisualCanvas({
       nextCanvas = updatePlacedHypPosition(nextCanvas, placementHint, placementHint.droppedPosition)
     }
 
-    if (leanCanvas.completed && !missingForallContinuation) {
+    // Do not freeze the whole level when specialization only discharged the
+    // focused branch; nextCanvas includes the reconciled sibling branches.
+    if (nextCanvas.completed && !missingForallContinuation) {
       const completionCanvas = placementHint
         ? updatePlacedHypPosition(canvasState, placementHint, placementHint.droppedPosition)
         : canvasState
@@ -4298,6 +4304,7 @@ export function VisualCanvas({
         .find((streamId): streamId is string => Boolean(streamId && findLeafForStream(proofTree, streamId)))
         ?? (focusedBranchLabel
           ? liveTreeStreamIds.find(streamId =>
+              findLeafForStream(proofTree, streamId)?.label === focusedBranchLabel ||
               streamSnapshots[streamId]?.goal.userName === focusedBranchLabel
             )
           : undefined)
@@ -4406,7 +4413,7 @@ export function VisualCanvas({
       // preserve the post-rewrite goal text in the frozen completed view instead of
       // falling back to the pre-rewrite canvas.
       const completionCanvas: CanvasState | undefined =
-        leanCanvas.completed && focusedStream && expectedGoal
+        nextCanvas.completed && focusedStream && expectedGoal
           ? {
               ...canvasState,
               completed: true,
@@ -4429,17 +4436,17 @@ export function VisualCanvas({
         nextActiveId,
         nextCanvas,
         completionCanvas,
-        solvedGoalId: leanCanvas.completed ? transformTarget.streamId : null,
-        finalCompletion: leanCanvas.completed,
+        solvedGoalId: transformTarget.streamId,
+        finalCompletion: nextCanvas.completed,
       })
-      return { success: true, completed: leanCanvas.completed }
+      return { success: true, completed: nextCanvas.completed }
     }
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
 
     if (
-      leanCanvas.completed &&
+      nextCanvas.completed &&
       !preservedAutoCompletedReflexiveGoal &&
       !preservedAutoCompletedHypothesisGoal
     ) {

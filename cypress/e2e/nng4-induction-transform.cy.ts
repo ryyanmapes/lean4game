@@ -225,6 +225,12 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     })
 
     visualHarness().then(harness => harness.clickGoal())
+    visualHarness().then(harness => harness.getProofAudit()).then(audit => {
+      expect(
+        audit.completed,
+        'completing one induction branch must not mark the level complete while its sibling is live',
+      ).to.equal(false)
+    })
     // Auto branch switching is a player preference. Follow the visible goal
     // and navigate only when the live successor was not selected already.
     selectVisibleBranch(/0\s*\+\s*succ/u, 'next')
