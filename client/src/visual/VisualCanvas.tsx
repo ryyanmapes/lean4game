@@ -4271,12 +4271,14 @@ export function VisualCanvas({
         expectedGoal,
       )
       preservedAutoCompletedHypothesisGoal = leanCanvas.completed
-      // Reconciliation can already have replaced the focused leaf with a
-      // returned (but spuriously completed) stream. Replace that current leaf
-      // rather than searching only for the pre-interaction id; otherwise the
-      // canvas contains the continuation while the proof graph still marks a
-      // different leaf complete (rendered as "Stream 0 of N").
-      nextTree = replaceLeafStream(nextTree, nextStream?.id ?? focusedStream.id, syntheticStream)
+      // Rewriting a hypothesis cannot split or discharge the branch that the
+      // player is looking at. Build this repaired continuation from the
+      // pre-rewrite tree, whose focused leaf identity is authoritative.
+      // Reconciliation may already have replaced or completed that leaf from
+      // an RPC snapshot which reports only the other outstanding goals; using
+      // that intermediate tree leaves the canvas live but the proof graph at
+      // "Stream 0 of N".
+      nextTree = replaceLeafStream(proofTree, focusedStream.id, syntheticStream)
       nextActiveId = syntheticStream.id
       focusedStreams = [syntheticStream]
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)

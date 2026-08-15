@@ -1,6 +1,7 @@
 import {
   matchAndCapture,
   parse,
+  printExpression,
   substituteVariables,
 } from '../../client/src/visual/expr-engine'
 import type { ExpressionNode } from '../../client/src/visual/expr-types'
@@ -982,12 +983,25 @@ function matchesTheoremPremise(
   const targetType = hypothesis.dataset.hypType
   if (arrow < 0 || !targetType) return false
   try {
+    const premise = parse(proposition.slice(0, arrow).trim().replace(/≠/gu, '='))
     const bindings = matchAndCapture(
       parse(targetType.replace(/≠/gu, '=')),
-      parse(proposition.slice(0, arrow).trim().replace(/≠/gu, '=')),
+      premise,
     )
     if (!bindings) return false
     const binders = forallBinderNames(theorem)
+    // Variables that are no longer forall-bound are branch-local constants,
+    // not pattern wildcards. After specializing `mul_le_mul_right 1 b a`, its
+    // premise `1 ≤ b` must not highlight or accept an unrelated `1 ≤ a * b`.
+    // Keeping these names rigid also makes the player test exercise the same
+    // proposition choice that is visibly available in the game.
+    const rigidVariablesMatch = expressionVariableNames(premise)
+      .filter(variable => !binders.includes(variable))
+      .every(variable => {
+        const actual = bindings[variable]
+        return !actual || printExpression(actual) === variable
+      })
+    if (!rigidVariablesMatch) return false
     return binders.every((binder, index) => {
       const actual = bindings[binder]
       // A premise often determines only some of a theorem's forall binders.
@@ -2066,6 +2080,10 @@ export class CompletePlaythroughDriver {
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const finalSourceName = source.dataset.hypName
     const finalSourceType = source.dataset.hypType ?? ''
+    const finalTargetName = target.dataset.hypName
+    const finalTargetType = finalTargetName
+      ? harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] ?? target.dataset.hypType ?? ''
+      : ''
     const finalArrow = finalSourceType.indexOf('→')
     const expectedFinalConclusion = finalArrow >= 0
       ? this.normalizedProposition(finalSourceType.slice(finalArrow + 1))
@@ -2128,8 +2146,14 @@ export class CompletePlaythroughDriver {
               .find(candidate =>
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
               ) ?? null).catch(() => null)
+      const changedTargetName = finalTargetName
+        && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] != null
+        && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] !== finalTargetType
+          ? finalTargetName
+          : null
       let resultName = semanticConclusionName
         ?? createdName
+        ?? changedTargetName
         ?? leastCurriedConclusionName
         ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
