@@ -1407,7 +1407,14 @@ export class CompletePlaythroughDriver {
       }
       return null
     }, 15_000)
-    if (route.kind === 'already-selected') return
+    if (route.kind === 'already-selected') {
+      // React can select the successor between reading the completed stream
+      // and resolving a navigation control. That is the same branch arrival
+      // as the explicit route below, so bind names introduced only on this
+      // branch before replaying its first command.
+      reconcilePendingBranchAliases()
+      return
+    }
 
     const findRoute = () => {
       if (route.kind === 'leaf') {
