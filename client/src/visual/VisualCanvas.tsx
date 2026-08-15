@@ -682,12 +682,12 @@ function parsedHypTarget(card: HypCardType, allowComparisons: boolean): ParsedTr
   return allowComparisons || parsed.relation === '=' ? parsed : null
 }
 
-function goalIsReflexiveEquality(stream: GoalStream): boolean {
-  const rawGoal = TaggedText_stripTags(stream.goal.type).trim()
-  const parsedGoal = parsedGoalEquality(stream)
+function formulaTextIsReflexiveEquality(rawGoal: string): boolean {
+  const formattedGoal = formatFormulaText(rawGoal.trim())
+  const parsedGoal = parseGoalEquality(rawGoal.trim()) ?? parseGoalEquality(formattedGoal)
   const equalitySides = parsedGoal
     ? [parsedGoal.lhsStr, parsedGoal.rhsStr] as const
-    : splitEqualityText(formatFormulaText(rawGoal))
+    : splitEqualityText(formattedGoal)
   if (!equalitySides) return false
   if (formulasMatchLiterally(equalitySides[0], equalitySides[1])) return true
   // The browser pretty-printer can preserve the constructor spelling on one
@@ -700,6 +700,10 @@ function goalIsReflexiveEquality(stream: GoalStream): boolean {
     normalizeZeroNotation(equalitySides[1]),
   )) return true
   return false
+}
+
+function goalIsReflexiveEquality(stream: GoalStream): boolean {
+  return formulaTextIsReflexiveEquality(TaggedText_stripTags(stream.goal.type))
 }
 
 function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
@@ -3614,7 +3618,7 @@ export function VisualCanvas({
     closeReductionTooltip(anchorId)
   }
 
-  function handleGoalClick(streamId: string, clickAction?: ClickAction, displayedStream?: GoalStream) {
+  function handleGoalClick(streamId: string, clickAction?: ClickAction, displayedGoalText?: string) {
     if (isProcessing || canvasState.completed || !hasClickAction(clickAction)) return
     closeReductionTooltip()
     if (clickAction.options.length > 0) {
@@ -3637,7 +3641,7 @@ export function VisualCanvas({
       clickAction.playTactic,
       clickAction.tooltip,
       clickAction.tooltip?.trim().toLowerCase() === 'click to complete' ||
-        Boolean(displayedStream && goalIsReflexiveEquality(displayedStream)),
+        Boolean(displayedGoalText && formulaTextIsReflexiveEquality(displayedGoalText)),
     )
     const commandOverride = coreCommand === clickAction.playTactic
       ? undefined
@@ -5679,6 +5683,7 @@ export function VisualCanvas({
     if (!displayStream) return null
     const stream = displayStream
     const liveGoalStream = currentStream && currentStream.id === stream.id ? currentStream : stream
+    const renderedGoalText = formatFormulaText(TaggedText_stripTags(stream.goal.type))
     const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
     const isClickable = hasClickAction(clickAction)
     const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
@@ -5707,7 +5712,7 @@ export function VisualCanvas({
         atomicContextNames={streamHypNames(liveGoalStream)}
         reductionForms={stream.reductionForms}
         onClick={streamInteractionsEnabled && isClickable
-          ? () => handleGoalClick(liveGoalStream.id, clickAction, stream)
+          ? () => handleGoalClick(liveGoalStream.id, clickAction, renderedGoalText)
           : undefined}
         onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
       />

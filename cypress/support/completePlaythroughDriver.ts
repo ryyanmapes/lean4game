@@ -1839,9 +1839,16 @@ export class CompletePlaythroughDriver {
         }
         const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
         const createdName = Object.keys(snapshotAfterArgument.hypTypes)
-          .find(candidate => !namesBeforeArgument.has(candidate))
+          // A specialization card can reach the DOM one audit snapshot late.
+          // Do not mistake that still-curried source for the conclusion just
+          // derived by applying the visible proof premise.
+          .find(candidate =>
+            !namesBeforeArgument.has(candidate) && candidate !== sourceNameBeforeArgument,
+          )
         const changedName = Object.entries(snapshotAfterArgument.hypTypes)
-          .find(([candidate, type]) => typesBeforeArgument[candidate] !== type)?.[0]
+          .find(([candidate, type]) =>
+            namesBeforeArgument.has(candidate) && typesBeforeArgument[candidate] !== type,
+          )?.[0]
         // A workspace theorem application may update the existing card in
         // place instead of allocating another hypothesis name. That is a
         // normal player-visible result (and is what chained applications of
@@ -1951,6 +1958,7 @@ export class CompletePlaythroughDriver {
         })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+    const finalSourceName = source.dataset.hypName
     await this.dragAndWait(source, target, `${command} player drag`)
     if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
       const derivedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
@@ -1974,7 +1982,9 @@ export class CompletePlaythroughDriver {
           .find(candidate => !beforeFinalNames.has(candidate))
         : await waitFor(`${command} derived conclusion card`, () =>
             Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-              .find(candidate => !beforeFinalNames.has(candidate)) ?? null)
+              .find(candidate =>
+                !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
+              ) ?? null)
       let resultName = createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
