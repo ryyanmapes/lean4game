@@ -1044,10 +1044,10 @@ function propositionCardName(card: HTMLElement) {
   return card.dataset.hypName ?? card.dataset.theoremName ?? ''
 }
 
-function inferredForallArgumentsForPremise(
+function inferredForallPremiseMatch(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
-): string[] | null {
+): { arguments: string[]; premiseIndex: number } | null {
   const binders = forallBinderNames(theorem)
   const targetType = cardProposition(hypothesis)
   if (binders.length === 0 || !targetType) return null
@@ -1067,7 +1067,7 @@ function inferredForallArgumentsForPremise(
     }
   }
 
-  for (const premiseText of premises) {
+  for (const [premiseIndex, premiseText] of premises.entries()) {
     try {
       const bindings = matchAndCapture(
         parse(targetType.replace(/≠/gu, '=')),
@@ -1080,7 +1080,7 @@ function inferredForallArgumentsForPremise(
       // branch-local variable; leaving those binders for an explicit player
       // construction is safer and faithful to what is rendered.
       if (arguments.every((argument): argument is ExpressionNode => Boolean(argument))) {
-        return arguments.map(printExpression)
+        return { arguments: arguments.map(printExpression), premiseIndex }
       }
     } catch {
       // Try the next visible premise. Parser failure is not evidence that a
@@ -2437,12 +2437,15 @@ export class CompletePlaythroughDriver {
           const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
             ? this.propositionCardExact(this.previousApplyAtResultName)
             : null
+          const previousResultPremiseMatch = previousResult
+            ? inferredForallPremiseMatch(source, previousResult)
+            : null
           const previousResultStructurallyMatches = previousResult
             && previousResult !== source
             && (
               exactlyMatchesTheoremPremise(source, previousResult)
               || matchesTheoremPremise(source, previousResult, [])
-              || inferredForallArgumentsForPremise(source, previousResult) !== null
+              || previousResultPremiseMatch !== null
             )
           // Repeated `apply ... at h` steps form a visible derivation chain:
           // the player follows the newest card produced beside h, while the
@@ -2451,9 +2454,16 @@ export class CompletePlaythroughDriver {
           // A fully specialized visible premise is the strongest signal. In
           // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
           // even while an older `b ≠ 0` card retains the classic name `h`.
-          if (previousResultStructurallyMatches) return previousResult
+          // A later premise can infer a forall binder and is intentionally
+          // selectable before the theorem's still-visible first premise.
+          // For the first premise, prefer the exact newly derived card below;
+          // the remembered result can still be an older broad instantiation.
+          if (previousResultStructurallyMatches && (previousResultPremiseMatch?.premiseIndex ?? 0) > 0) {
+            return previousResult
+          }
           if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
           if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
+          if (previousResultStructurallyMatches) return previousResult
           if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
           if (rememberedTarget) return rememberedTarget
