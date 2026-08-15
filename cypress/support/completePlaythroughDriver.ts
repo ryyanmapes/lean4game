@@ -817,6 +817,17 @@ function resolveRemountedDragTarget(
     (!identity.hypName || candidate.dataset.hypName === identity.hypName) &&
     (!identity.theoremName || candidate.dataset.theoremName === identity.theoremName),
   )
+  // Derived proposition cards can be published optimistically under one Lean
+  // name and then reconciled under another while preserving the proposition
+  // the player is holding.  Treat that displayed proposition as a semantic
+  // identity fallback.  Requiring the transient generated name made rapid
+  // multi-argument applications (notably `mul_left_cancel ... ha h`) race the
+  // reconciliation commit even though the same visible source remained.
+  const propositionIdentityCandidates = identity.hypType
+    ? visible(ownerDocument.querySelectorAll<HTMLElement>(
+        `[data-testid="${cssEscape(identity.testId)}"][data-hyp-type="${cssEscape(identity.hypType)}"]`,
+      ))
+    : []
   let currentStreamId: string | undefined
   try {
     const view = ownerDocument.defaultView as DriverWindow | null
@@ -835,6 +846,9 @@ function resolveRemountedDragTarget(
     ?? stableIdentityCandidates.find(candidate => candidate.dataset.streamId === currentStreamId)
     ?? stableIdentityCandidates.find(candidate => candidate.dataset.streamId === identity.streamId)
     ?? stableIdentityCandidates[0]
+    ?? propositionIdentityCandidates.find(candidate => candidate.dataset.streamId === currentStreamId)
+    ?? propositionIdentityCandidates.find(candidate => candidate.dataset.streamId === identity.streamId)
+    ?? propositionIdentityCandidates.at(-1)
     ?? (exact?.isConnected && semanticMatch(exact) ? exact : null)
     ?? (fallback.isConnected && semanticMatch(fallback) ? fallback : null)
   if (!resolved) {
