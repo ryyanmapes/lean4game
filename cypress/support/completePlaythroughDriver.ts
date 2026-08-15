@@ -2368,7 +2368,44 @@ export class CompletePlaythroughDriver {
     const expectedFinalConclusion = finalArrow >= 0
       ? this.normalizedProposition(finalSourceType.slice(finalArrow + 1))
       : null
-    await this.dragAndWait(source, target, `${command} player drag`)
+    try {
+      await this.dragAndWait(source, target, `${command} player drag`)
+    } catch (error) {
+      const visiblePropositions = visible(
+        this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        ),
+      ).map(card => ({
+        testId: card.dataset.testid,
+        name: propositionCardName(card),
+        proposition: cardProposition(card),
+      }))
+      const resolvedNamedTarget = match[2] ? this.hyp(match[2]) : null
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; applicationSelection=${JSON.stringify({
+        command,
+        continuesApplyAtChain,
+        previousApplyAtTarget: this.previousApplyAtTarget,
+        previousApplyAtResultName: this.previousApplyAtResultName,
+        source: {
+          testId: source.dataset.testid,
+          name: propositionCardName(source),
+          proposition: cardProposition(source),
+        },
+        target: {
+          testId: target.dataset.testid,
+          name: propositionCardName(target),
+          proposition: cardProposition(target),
+        },
+        resolvedNamedTarget: resolvedNamedTarget
+          ? {
+              testId: resolvedNamedTarget.dataset.testid,
+              name: propositionCardName(resolvedNamedTarget),
+              proposition: cardProposition(resolvedNamedTarget),
+            }
+          : null,
+        visiblePropositions,
+      })}`, { cause: error })
+    }
     if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
       const derivedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
         .find(candidate => !beforeFinalNames.has(candidate))
