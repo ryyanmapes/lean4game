@@ -3144,10 +3144,21 @@ export function VisualCanvas({
       // raw release-point hit test sees the fixed goal. Preserve that more
       // specific card-on-card target; in every other case the painted topmost
       // card remains authoritative.
+      const dndIsProposition = dndCard?.dataset.testid === 'hyp-card'
+        || dndCard?.dataset.testid === 'theorem-copy-card'
+      const paintedIsProposition = paintedCard?.dataset.testid === 'hyp-card'
+        || paintedCard?.dataset.testid === 'theorem-copy-card'
       const card = paintedCard?.dataset.testid === 'goal-card'
         && dndCard?.dataset.testid === 'hyp-card'
           ? dndCard
-          : paintedCard
+          // A scrolling phone stack can put an adjacent proposition under the
+          // stationary release coordinate after dnd-kit has already measured
+          // the card the player entered. Both are genuinely painted cards, so
+          // the generic hit-test override cannot distinguish that motion from
+          // an intentional retarget. The latest pointer-within collision can.
+          : dndIsProposition && paintedIsProposition
+            ? dndCard
+            : paintedCard
       if (card?.id) overId = card.id
     }
     setActiveDraggedTheorem(null)
