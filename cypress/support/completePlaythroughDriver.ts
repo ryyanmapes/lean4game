@@ -996,7 +996,7 @@ function matchesTheoremPremise(
     // inference wildcards. Derived cards can retain both a stale forall
     // footer and a stale `constructable` class, so neither is authoritative.
     // Only theorem templates/copies use their footer binders as wildcards.
-    const binders = theorem.matches('[data-testid="hyp-card"]')
+    const binders = theorem.dataset.hypName
       ? []
       : forallBinderNames(theorem)
     // Variables that are no longer forall-bound are branch-local constants,
@@ -2618,7 +2618,16 @@ export class CompletePlaythroughDriver {
         return null
       })
       if (rawTarget !== 'goal') {
-        const currentName = this.hypExact(target)?.dataset.hypName ?? this.latestRelationName()
+        const currentName = this.hypExact(target)?.dataset.hypName ?? await waitFor(
+          `${rawTarget} rewritten relation to remount`,
+          () => {
+            try {
+              return this.latestRelationName()
+            } catch {
+              return null
+            }
+          },
+        )
         if (currentName) this.rememberAlias(rawTarget, currentName)
       }
     }
