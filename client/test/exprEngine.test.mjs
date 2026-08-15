@@ -6,6 +6,7 @@ const {
   exprTreeToNode,
   findDisambiguatingRewritePath,
   findMatchingNodeIds,
+  compactForallBinders,
   formatFormulaText,
   matchAndCapture,
   matchesPattern,
@@ -20,6 +21,21 @@ const OR = '\u2228'
 const IMPLIES = '\u2192'
 const INT_EQ = '\u2261\u1d62'
 const FORMAL_DIFF = '\u2014\u2014'
+
+test('consecutive forall binders with the same type share one compact group', () => {
+  assert.equal(
+    compactForallBinders('∀ (x : ℕ), ∀ (y : ℕ), x + y = x → y = 0'),
+    '∀ (x y : ℕ), x + y = x → y = 0',
+  )
+  assert.equal(
+    formatFormulaText('∀ (x : ℕ) (y : ℕ) (P : Prop), P → x = y'),
+    '∀ (x y : ℕ) (P : Prop), P → x = y',
+  )
+  assert.equal(
+    formatFormulaText('∀ (x : ℕ), ∀ (P : Prop), ∀ (y : ℕ), P'),
+    '∀ (x : ℕ) (P : Prop) (y : ℕ), P',
+  )
+})
 
 test('keeps arithmetic associativity explicit within same-precedence chains', () => {
   assert.equal(formatFormulaText('A + B + C'), '(A + B) + C')

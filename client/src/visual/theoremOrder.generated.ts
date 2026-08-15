@@ -2,15 +2,15 @@
 // Edit all_transforms.txt and all_theorems.txt, not this file.
 
 export const TRANSFORM_THEOREM_ENTRIES = [
-  {"category":"+","name":"add_zero","statement":"(a : ℕ) : a + 0 = a"},
+  {"category":"+","name":"add_zero","statement":"(n : ℕ) : n + 0 = n"},
   {"category":"+","name":"zero_add","statement":"(n : ℕ) : 0 + n = n"},
-  {"category":"+","name":"add_succ","statement":"(a d : ℕ) : a + succ d = succ (a + d)"},
+  {"category":"+","name":"add_succ","statement":"(a b : ℕ) : a + succ b = succ (a + b)"},
   {"category":"+","name":"succ_add","statement":"(a b : ℕ) : succ a + b = succ (a + b)"},
   {"category":"+","name":"succ_eq_add_one","statement":"(n : ℕ) : succ n = n + 1"},
   {"category":"+","name":"add_comm","statement":"(a b : ℕ) : a + b = b + a"},
   {"category":"+","name":"add_assoc","statement":"(a b c : ℕ) : a + b + c = a + (b + c)"},
   {"category":"+","name":"add_right_comm","statement":"(a b c : ℕ) : a + b + c = a + c + b"},
-  {"category":"*","name":"mul_zero","statement":"(a : ℕ) : a * 0 = 0"},
+  {"category":"*","name":"mul_zero","statement":"(m : ℕ) : m * 0 = 0"},
   {"category":"*","name":"zero_mul","statement":"(m : ℕ) : 0 * m = 0"},
   {"category":"*","name":"mul_one","statement":"(m : ℕ) : m * 1 = m"},
   {"category":"*","name":"one_mul","statement":"(m : ℕ) : 1 * m = m"},

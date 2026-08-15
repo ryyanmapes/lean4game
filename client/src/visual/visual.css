@@ -505,15 +505,26 @@
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background:
-    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 2rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 2rem) 1px no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 2rem) no-repeat,
-    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 2rem) no-repeat,
-    linear-gradient(135deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1.414px), transparent calc(50% + 1.414px)) top left / 1rem 1rem no-repeat,
-    linear-gradient(45deg, transparent calc(50% - 1.414px), var(--bevel-border-color) calc(50% - 1.414px), var(--bevel-border-color) 50%, transparent 50%) top right / 1rem 1rem no-repeat,
-    linear-gradient(45deg, transparent 50%, var(--bevel-border-color) 50%, var(--bevel-border-color) calc(50% + 1.414px), transparent calc(50% + 1.414px)) bottom left / 1rem 1rem no-repeat,
-    linear-gradient(135deg, transparent calc(50% - 1.414px), var(--bevel-border-color) calc(50% - 1.414px), var(--bevel-border-color) 50%, transparent 50%) bottom right / 1rem 1rem no-repeat;
+  padding: 1px;
+  background: var(--bevel-border-color);
+  clip-path: polygon(
+    1rem 0,
+    calc(100% - 1rem) 0,
+    100% 1rem,
+    100% calc(100% - 1rem),
+    calc(100% - 1rem) 100%,
+    1rem 100%,
+    0 calc(100% - 1rem),
+    0 1rem
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,
@@ -742,6 +753,30 @@
 
 .visual-page .visual-info-math {
   font-size: 1em;
+}
+
+.visual-page .visual-info-callout code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.94em;
+}
+
+.visual-page .visual-info-reveal-button {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--visual-accent, #a78bfa);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.visual-page .visual-info-reveal-button:hover,
+.visual-page .visual-info-reveal-button:focus-visible {
+  color: #c4b5fd;
 }
 
 .visual-page .combining-info {
@@ -1380,6 +1415,9 @@
 .visual-page .statement-card.goal.solved {
   border-color: var(--visual-success);
   box-shadow: 0 0 30px var(--visual-success-glow), 0 0 60px var(--visual-success-glow);
+}
+
+.visual-page .statement-card.goal.solved.just-solved {
   animation: goal-solved-pulse 0.6s ease-out;
 }
 
@@ -2188,6 +2226,18 @@
 .visual-page .potential-drop-target {
   box-shadow: 0 0 0 2px var(--visual-drop-target-border), 0 0 14px var(--visual-drop-target-glow);
   border-color: var(--visual-drop-target-border);
+}
+
+/* The rectangular box-shadow ring is clipped awkwardly at an octagon's cut
+   corners. Its border is already drawn by the uniform masked overlay above;
+   use a shape-aware drop shadow for the remaining glow. */
+.visual-page .statement-card.variable-card.potential-drop-target,
+.visual-page .statement-card.variable-only-tactic.potential-drop-target,
+.visual-page .statement-card.variable-card.drop-target-active,
+.visual-page .statement-card.variable-only-tactic.drop-target-active {
+  border-color: transparent !important;
+  box-shadow: 0 8px 32px 0 var(--visual-shadow-strong) !important;
+  filter: drop-shadow(0 0 7px var(--visual-drop-target-glow));
 }
 
 .visual-page .drop-target-active {

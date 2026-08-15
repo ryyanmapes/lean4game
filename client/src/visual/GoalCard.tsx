@@ -22,6 +22,7 @@ interface GoalCardProps {
   isClickable?: boolean
   clickTooltip?: string
   isSolved?: boolean
+  animateSolved?: boolean
   visualInfos?: VisualGoalInfo[]
   showDropTarget?: boolean
   isPotentialTarget?: boolean
@@ -42,6 +43,7 @@ export function GoalCard({
   isConstructable,
   isClickable,
   isSolved,
+  animateSolved = false,
   visualInfos = [],
   showDropTarget = false,
   isPotentialTarget = false,
@@ -92,6 +94,7 @@ export function GoalCard({
     isPotentialTarget ? 'potential-drop-target' : '',
     isOver && showDropTarget ? 'drop-target-active' : '',
     isSolved ? 'solved' : '',
+    isSolved && animateSolved ? 'just-solved' : '',
   ].filter(Boolean).join(' ')
 
   React.useEffect(() => {

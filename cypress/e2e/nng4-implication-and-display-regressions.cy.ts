@@ -31,6 +31,7 @@ type HarnessWindow = Cypress.AUTWindow & {
   __visualTestHarness?: VisualHarness
   __visualTransientDisabledButtons?: string[]
   __visualUnmeasuredDockWasVisible?: boolean
+  __visualDockFlashObserved?: boolean
   __visualStabilityObserver?: MutationObserver
 }
 type PlayerGesture = string | { rewrite: string; side: 'left' | 'right' }
@@ -64,13 +65,20 @@ function observeTransformStability(win: Cypress.AUTWindow) {
   const observedWindow = win as HarnessWindow
   observedWindow.__visualTransientDisabledButtons = []
   observedWindow.__visualUnmeasuredDockWasVisible = false
+  observedWindow.__visualDockFlashObserved = false
   observedWindow.__visualStabilityObserver?.disconnect()
+  let dockWasReady = false
 
   const inspectDock = () => {
-    for (const dock of win.document.querySelectorAll<HTMLElement>('.tr-transformation-overlay .tr-rule-dock')) {
+    const docks = win.document.querySelectorAll<HTMLElement>('.tr-transformation-overlay .tr-rule-dock')
+    if (dockWasReady && docks.length === 0) observedWindow.__visualDockFlashObserved = true
+    for (const dock of docks) {
+      const visible = getComputedStyle(dock).visibility !== 'hidden'
+      if (dockWasReady && !visible) observedWindow.__visualDockFlashObserved = true
       if (getComputedStyle(dock).visibility !== 'hidden' && dock.dataset.layoutReady !== 'true') {
         observedWindow.__visualUnmeasuredDockWasVisible = true
       }
+      if (visible && dock.dataset.layoutReady === 'true') dockWasReady = true
     }
   }
   const observer = new win.MutationObserver(mutations => {
@@ -149,6 +157,22 @@ describe('NNG4 implication and definition display regressions', () => {
     performPlayerGestures(['symm', 'exact zero_ne_one'])
   })
 
+  it('keeps boundary navigation labels visible on disabled level buttons', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/1/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.visual-header-prev-btn')
+      .should('be.disabled')
+      .and('contain.text', 'Previous level')
+      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.lessThan(0.6))
+
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.visual-header-next-btn')
+      .should('be.disabled')
+      .and('contain.text', 'Next level')
+      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.lessThan(0.6))
+  })
+
   it('keeps post-intro-world forall binders in the clickable goal and removes revert', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/7/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
@@ -162,6 +186,121 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="hyp-card"][data-hyp-name="x"]', { timeout: LOAD_TIMEOUT })
       .should('be.visible')
       .and('have.class', 'variable-card')
+  })
+
+  it('keeps dependent Implication hypotheses inside their initial quantified goal', () => {
+    // Authored level 8 is displayed as Implication 7.
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/8/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('have.attr', 'data-goal-text')
+      .then(text => {
+        expect(text).to.match(/^∀\s*\(x y\s*:\s*ℕ\)/u)
+        expect(text).to.match(/x\s*=\s*y\s*→\s*x\s*≠\s*y\s*→\s*False/u)
+      })
+    cy.get('[data-testid="hyp-card"][data-hyp-name="h1"]').should('not.exist')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="h2"]').should('not.exist')
+  })
+
+  it('compacts consecutive same-type forall binders on goals and theorem cards', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/8/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('have.attr', 'data-goal-text')
+      .and('match', /^âˆ€\s*\(x y\s*:\s*â„•\)/u)
+
+    visualHarness().then(harness => harness.copyTheoremToCanvas('MyNat.succ_inj'))
+    cy.get('[data-testid="theorem-copy-card"][data-theorem-name="MyNat.succ_inj"] .statement-forall-footer')
+      .should('be.visible')
+      .invoke('text')
+      .should(text => {
+        expect(text.replace(/\s+/gu, ''), 'one compact forall group').to.equal('âˆ€(ab:â„•)')
+      })
+  })
+
+  it('keeps the measured theorem dock mounted through an Advanced Addition commutativity rewrite', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvAddition/level/2/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b', 'n'], 'intro h')
+      await player.perform('intro h')
+      // performRewriteOnSide opens h's transformation overlay through the
+      // same double-click and theorem-card drag a player uses.
+      observeTransformStability(win)
+      await player.performRewriteOnSide('rw [add_comm n] at h', 'left')
+      await new Promise(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)))
+    })
+    cy.window().should(win => {
+      expect((win as HarnessWindow).__visualDockFlashObserved, 'ready dock never disappears or becomes hidden')
+        .to.equal(false)
+      expect((win as HarnessWindow).__visualUnmeasuredDockWasVisible, 'unmeasured dock is never displayed')
+        .to.equal(false)
+    })
+  })
+
+  it('places newly generated long Implication hypotheses into non-overlapping grid slots', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.perform('intro h')
+      await player.perform('rw [add_succ, add_succ, add_zero] at h')
+      await player.perform('repeat apply succ_inj at h')
+    })
+    cy.get('.visual-canvas [data-testid="hyp-card"]', { timeout: LOAD_TIMEOUT }).then($cards => {
+      const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
+      expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
+      const rectangles = cards.map(card => card.getBoundingClientRect())
+      for (let left = 0; left < rectangles.length; left += 1) {
+        for (let right = left + 1; right < rectangles.length; right += 1) {
+          const a = rectangles[left]!
+          const b = rectangles[right]!
+          const overlapWidth = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
+          const overlapHeight = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
+          expect(overlapWidth * overlapHeight, `cards ${left + 1} and ${right + 1} do not overlap`).to.equal(0)
+        }
+      }
+    })
+  })
+
+  it('keeps a branch selected when cases on False closes it and auto-switching is off', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvAddition/level/5/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b'], 'cases b with d')
+      await player.perform('cases b with d')
+    })
+
+    let baseStreamId = ''
+    cy.window().then(win => {
+      baseStreamId = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().streamId
+    })
+    cy.get('[data-testid="stream-nav-next"]:not(:disabled)', { timeout: LOAD_TIMEOUT }).click()
+
+    let falseBranchId = ''
+    cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+      const snapshot = (win as HarnessWindow).__visualTestHarness?.getCurrentStreamSnapshot()
+      expect(snapshot?.streamId, 'player selected the still-live successor branch').not.to.equal(baseStreamId)
+    }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.perform('intro h')
+      await player.perform('rw [add_succ] at h')
+      await player.perform('symm at h')
+      await player.perform('apply zero_ne_succ at h')
+      falseBranchId = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().streamId
+      await player.perform('cases h')
+    })
+
+    cy.window().should(win => {
+      const harness = (win as HarnessWindow).__visualTestHarness!
+      expect(harness.getCurrentStreamSnapshot().streamId, 'completed False branch remains selected')
+        .to.equal(falseBranchId)
+      expect(harness.getProofAudit().completed, 'the untouched zero branch is still incomplete').to.equal(false)
+    })
+    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
+      .should('have.attr', 'data-completed', 'true')
+    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${baseStreamId}"]`)
+      .should('have.attr', 'data-completed', 'false')
   })
 
   it('applies zero-ne-succ from a hypothesis and restores its workspace copy on undo', () => {
@@ -191,6 +330,8 @@ describe('NNG4 implication and definition display regressions', () => {
         '[data-testid="hyp-card"][data-hyp-type="False"]',
       )
       expect(falseCard, 'the reverse drag direction also derives False').to.exist
+      // The current goal is itself False, so exact is the direct match. The
+      // retired shortcut was only False-to-an-arbitrary-goal.
       await player.perform(`exact ${falseCard!.dataset.hypName}`)
     })
 
@@ -274,6 +415,11 @@ describe('NNG4 implication and definition display regressions', () => {
       'Try solving this level both by dragging h1 onto h2, and dragging h2 onto the goal.',
     )
     openAndExpect(
+      'Implication',
+      10,
+      'The `symm` tactic can be used to swap the sides of any equality.',
+    )
+    openAndExpect(
       'LessOrEqual',
       4,
       'Click there-exists hypotheses to name a variable fulfilling the condition.',
@@ -307,31 +453,36 @@ describe('NNG4 implication and definition display regressions', () => {
     openAndExpect(
       'LessOrEqual',
       10,
-      'Note that showing a contradiction is a valid way to complete any proof!',
+      'Hint:',
     )
-    cy.contains('.goal-info.below', 'Drag the tactic `exfalso` to ANY goal to set it to `False`.')
+    cy.contains('.goal-info.below', "Don't forget about the cases tactic!").should('not.exist')
+    cy.get('.goal-info.below .visual-info-reveal-button')
       .should('be.visible')
+      .and('have.attr', 'aria-expanded', 'false')
+      .then($button => {
+        expect(getComputedStyle($button[0]!).color, 'the reveal affordance is purple')
+          .to.match(/rgb\((?:139, 92, 246|167, 139, 250|99, 102, 241)\)/u)
+      })
+      .click()
+      .should('have.attr', 'aria-expanded', 'true')
+    cy.contains('.goal-info.below', "Don't forget about the cases tactic!").should('be.visible')
+    cy.get('.goal-info.below code').should('have.text', 'cases')
     cy.contains('.tr-tab-btn', 'Tactics', { timeout: LOAD_TIMEOUT }).click()
-    cy.get('[data-tactic-name="exfalso"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-  })
+    cy.get('[data-tactic-name="exfalso"]').should('not.exist')
 
-  it('changes an arbitrary goal to False through an explicit exfalso gesture', () => {
-    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
-    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
-      .should('be.visible')
-      .and('not.have.attr', 'data-goal-text', 'False')
-
-    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
-      const player = new CompletePlaythroughDriver(win)
-      await player.applyTacticToGoal('exfalso')
+    openAndExpect(
+      'AdvAddition',
+      5,
+      'The cases tactic allows you to split a variable into every form it could take.',
+    )
+    cy.get('.goal-info.below').within(() => {
+      cy.get('code').then($codes => {
+        expect([...$codes].map(code => code.textContent)).to.deep.equal(['cases', 'False', 'cases', 'False'])
+      })
+      cy.get('em').then($emphasis => {
+        expect([...$emphasis].map(node => node.textContent)).to.deep.equal(['no', 'any'])
+      })
     })
-
-    cy.get('[data-testid="goal-card"]')
-      .should('have.attr', 'data-goal-text', 'False')
-      .and('not.have.class', 'solved')
-    cy.get('.proof-sidebar-tab').click()
-    cy.get('.proof-sidebar-step-text').last().should('have.text', 'exfalso')
-    cy.get('.proof-sidebar-step.unknown').should('not.exist')
   })
 
   it('keeps the less-or-equal construction lesson above the theorem tray', () => {
@@ -357,7 +508,7 @@ describe('NNG4 implication and definition display regressions', () => {
       const card = $card[0]!
       const cardStyle = getComputedStyle(card)
       const bevelStyle = getComputedStyle(card, '::after')
-      const bevel = bevelStyle.backgroundImage
+      const bevelColor = bevelStyle.backgroundColor
       const dangerBorder = cardStyle.getPropertyValue('--visual-danger-border').trim()
       const normalizeColor = (value: string) => value
         .replace(/\s+/gu, '')
@@ -366,20 +517,17 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(cardStyle.borderTopWidth, 'native border retains one-pixel layout').to.equal('1px')
       expect(cardStyle.borderTopColor, 'native border does not double the straight edges')
         .to.equal('rgba(0, 0, 0, 0)')
-      expect(normalizeColor(bevel), 'all octagon edges use the tactic border color')
+      expect(normalizeColor(bevelColor), 'all octagon edges use the tactic border color')
         .to.contain(normalizeColor(dangerBorder))
       expect(cardStyle.clipPath, 'octagon uses the larger 16-pixel corner taper').to.contain('16px')
-      expect(
-        bevel,
-        '45-degree bands use sqrt(2) CSS pixels so their perpendicular stroke is one pixel',
-      ).to.contain('1.414px')
-      expect(bevel, 'old half-pixel fading corner stroke is absent').not.to.contain('0.5px')
+      expect(bevelStyle.paddingTop, 'masked edge has the same one-pixel width on every segment').to.equal('1px')
+      expect(bevelStyle.webkitMaskComposite, 'the center is cut out of the border overlay').to.match(/xor|exclude/u)
     })
 
     cy.get('[data-tactic-name="induction"]').then($card => {
-      const neutral = getComputedStyle($card[0]!, '::after').backgroundImage
+      const neutral = getComputedStyle($card[0]!, '::after').backgroundColor
       $card[0]!.classList.add('visual-emphasize')
-      const highlighted = getComputedStyle($card[0]!, '::after').backgroundImage
+      const highlighted = getComputedStyle($card[0]!, '::after').backgroundColor
       expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutral)
       expect(highlighted, 'highlighted edge includes the emphasis purple').to.contain('167, 139, 250')
       $card[0]!.classList.remove('visual-emphasize')
@@ -409,8 +557,8 @@ describe('NNG4 implication and definition display regressions', () => {
           style.getPropertyValue('--bevel-border-color').trim(),
           'the same purple target color drives every straight and cut-corner edge',
         ).to.equal(style.getPropertyValue('--visual-drop-target-border').trim())
-        expect(getComputedStyle($card[0]!, '::after').backgroundImage)
-          .to.contain('linear-gradient')
+        expect(getComputedStyle($card[0]!, '::after').backgroundColor)
+          .to.equal(style.getPropertyValue('--visual-drop-target-border').trim())
       })
     cy.get('[data-testid="goal-card"]')
       .should('not.have.class', 'potential-drop-target')
@@ -564,12 +712,24 @@ describe('NNG4 implication and definition display regressions', () => {
         (win as HarnessWindow).__visualTransientDisabledButtons,
         'processing does not visually disable otherwise-available buttons',
       ).to.deep.equal([])
+      expect(
+        (win as HarnessWindow).__visualDockFlashObserved,
+        'the ready rewrite dock remains mounted and visible',
+      ).to.equal(false)
     })
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
       .should('be.visible')
       .and('not.have.class', 'solved')
       .and('have.attr', 'data-goal-text')
       .and('match', /x\s*\+\s*0\s*=\s*x\s*\+\s*0/u)
+
+    cy.window().should(win => {
+      const coreLines = (win as HarnessWindow).__visualTestHarness?.getProofAudit().coreLines ?? []
+      expect(coreLines.some(line => line.startsWith('rw_nth ')), 'scoped rewrite uses compact rw_nth')
+        .to.equal(true)
+      expect(coreLines.some(line => line.trim() === 'conv =>'), 'Core pane has no multiline conv block')
+        .to.equal(false)
+    })
 
     performPlayerGestures(['rfl'])
 

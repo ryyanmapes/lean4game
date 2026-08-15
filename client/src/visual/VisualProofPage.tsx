@@ -25,7 +25,7 @@ import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import './visual.css'
 
-const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'tauto', 'exfalso'])
+const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'tauto'])
 // No retries: each retry opens a new WebSocket, which causes the relay to kill
 // the still-elaborating exclusive Lean process and restart from scratch.
 const INITIAL_PROOF_MAX_ATTEMPTS = 1
@@ -108,7 +108,12 @@ function levelSucceedsIntro(worldId: string, levelId: number, edges: string[][])
   return reachable.has(worldId)
 }
 
-function moveInitialVariablesIntoGoal(canvas: CanvasState): {
+function mentionsLeanLocal(text: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  return new RegExp(`(^|[^\\p{L}\\p{N}_'])${escaped}(?=$|[^\\p{L}\\p{N}_'])`, 'u').test(text)
+}
+
+export function moveInitialVariablesIntoGoal(canvas: CanvasState): {
   canvas: CanvasState
   prelude: string
 } {
@@ -117,17 +122,41 @@ function moveInitialVariablesIntoGoal(canvas: CanvasState): {
     const variables = stream.hyps.filter(card => !card.hyp.isAssumption && !card.isTheorem)
     if (variables.length === 0) return stream
 
-    const variableIds = new Set(variables.map(card => card.id))
-    const binders = variables.flatMap(card => {
+    const movedNames = new Set(variables.flatMap(card => card.hyp.names.filter(Boolean)))
+    const movedIds = new Set(variables.map(card => card.id))
+
+    // Lean's `revert x` also reverts every local declaration whose type
+    // depends on x. Mirror that dependency closure in the synthetic first
+    // canvas; otherwise cards such as `h : x = y` briefly appear outside a
+    // goal where x and y are still quantified and therefore do not exist.
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const card of stream.hyps) {
+        if (movedIds.has(card.id) || card.isTheorem) continue
+        const type = TaggedText_stripTags(card.hyp.type).trim()
+        if (![...movedNames].some(name => mentionsLeanLocal(type, name))) continue
+        movedIds.add(card.id)
+        card.hyp.names.filter(Boolean).forEach(name => movedNames.add(name))
+        changed = true
+      }
+    }
+
+    const movedCards = stream.hyps.filter(card => movedIds.has(card.id))
+    const binders = movedCards.flatMap(card => {
       const type = TaggedText_stripTags(card.hyp.type).trim()
-      return card.hyp.names.filter(Boolean).map(name => {
-        variableNames.push(card.hyp.playName ?? name)
-        return `(${name} : ${type})`
-      })
+      const names = card.hyp.names.filter(Boolean)
+      if (!card.hyp.isAssumption) {
+        names.forEach(name => variableNames.push(card.hyp.playName ?? name))
+        return names.map(name => ({ kind: 'forall' as const, text: `(${name} : ${type})` }))
+      }
+      return [{ kind: 'assumption' as const, text: type }]
     })
     const originalGoal = TaggedText_stripTags(stream.goal.type).trim()
     const quantifiedGoal = binders.reduceRight(
-      (body, binder) => `∀ ${binder}, ${body}`,
+      (body, binder) => binder.kind === 'forall'
+        ? `∀ ${binder.text}, ${body}`
+        : `${binder.text} → ${body}`,
       originalGoal,
     )
 
@@ -143,7 +172,7 @@ function moveInitialVariablesIntoGoal(canvas: CanvasState): {
           options: [],
         },
       },
-      hyps: stream.hyps.filter(card => !variableIds.has(card.id)),
+      hyps: stream.hyps.filter(card => !movedIds.has(card.id)),
       equalityTree: undefined,
       existsInfo: undefined,
       reductionForms: [],

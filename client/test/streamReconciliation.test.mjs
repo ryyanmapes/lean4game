@@ -1336,6 +1336,7 @@ test('cases on False completes only the focused branch without synthesizing case
   assert.deepEqual(collectLiveStreamIds(result.nextTree), [siblingStream.id])
   assert.deepEqual(result.nextCanvas.streams.map(candidate => candidate.id), [siblingStream.id])
   assert.equal(result.nextCanvas.completed, false)
+  assert.equal(result.nextActiveId, focusedStream.id)
 })
 
 test('symm at a hypothesis stays on the selected branch when the browser reports only its sibling', () => {

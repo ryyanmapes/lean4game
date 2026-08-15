@@ -3,15 +3,15 @@
 # Reorder whole lines. Each category tab uses its subset of this global list,
 # preserving the order below.
 
-+ | add_zero | (a : ℕ) : a + 0 = a
++ | add_zero | (n : ℕ) : n + 0 = n
 + | zero_add | (n : ℕ) : 0 + n = n
-+ | add_succ | (a d : ℕ) : a + succ d = succ (a + d)
++ | add_succ | (a b : ℕ) : a + succ b = succ (a + b)
 + | succ_add | (a b : ℕ) : succ a + b = succ (a + b)
 + | succ_eq_add_one | (n : ℕ) : succ n = n + 1
 + | add_comm | (a b : ℕ) : a + b = b + a
 + | add_assoc | (a b c : ℕ) : a + b + c = a + (b + c)
 + | add_right_comm | (a b c : ℕ) : a + b + c = a + c + b
-* | mul_zero | (a : ℕ) : a * 0 = 0
+* | mul_zero | (m : ℕ) : m * 0 = 0
 * | zero_mul | (m : ℕ) : 0 * m = 0
 * | mul_one | (m : ℕ) : m * 1 = m
 * | one_mul | (m : ℕ) : 1 * m = m

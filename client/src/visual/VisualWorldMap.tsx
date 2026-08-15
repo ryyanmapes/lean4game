@@ -151,7 +151,9 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
 }) {
   const gameId = React.useContext(GameIdContext)
   const navigate = useNavigate()
-  const levelLabel = plainLevelTitle(title ?? `Level ${displayLevel}`, true)
+  // Keep title modifier emojis, but do not expand them into parenthetical
+  // explanations inside the compact map tooltip.
+  const levelLabel = plainLevelTitle(title ?? `Level ${displayLevel}`)
   const { tooltip, triggerProps } = useMapLevelTooltip(levelLabel)
   const N = Math.max(worldSize, NMIN)
   const beta = 2 * Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
@@ -483,14 +485,11 @@ function VisualMapAppBar({
         <VisualMapMenuButton />
       </div>
       <div className={`visual-map-dropdown${navOpen ? ' open' : ''}`}>
-        <button onClick={() => { setPopup(PopupType.info); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Game Info')}
-        </button>
         <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Download')}
+          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Export')}
         </button>
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Upload')}
+          <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Import')}
         </button>
         <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Reset')}

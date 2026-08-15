@@ -64,7 +64,7 @@ export function LevelIcon({ world, level, position, completed, unlocked, worldSi
   let R = 1.1 * r / Math.sin(beta/2)
 
   const gameId = React.useContext(GameIdContext)
-  const levelLabel = plainLevelTitle(title ?? `Level ${level}`, true)
+  const levelLabel = plainLevelTitle(title ?? `Level ${level}`)
   const { tooltip, triggerProps } = useMapLevelTooltip(levelLabel)
 
   /** In the spiral, the angle `β` should decrease to avoid big gaps between levels.

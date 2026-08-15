@@ -227,6 +227,99 @@ function positionsDiffer(left: { x: number; y: number }, right: { x: number; y: 
   return Math.abs(left.x - right.x) > 0.5 || Math.abs(left.y - right.y) > 0.5
 }
 
+interface PlacementRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+function estimatedHypSize(card: HypCardType): { width: number; height: number } {
+  const text = `${card.hyp.names.join(' ')} ${TaggedText_stripTags(card.hyp.type)}`
+  return {
+    width: Math.max(200, Math.min(560, 120 + text.length * 7.2)),
+    height: card.hyp.forallFooter ? 92 : 66,
+  }
+}
+
+function rectanglesOverlap(left: PlacementRect, right: PlacementRect, gap = 16): boolean {
+  return left.left < right.right + gap && left.right + gap > right.left &&
+    left.top < right.bottom + gap && left.bottom + gap > right.top
+}
+
+/** Place only genuinely new Lean declarations into the first free desktop
+ * grid slot. Previously every new card started at (96,96), so collision
+ * repulsion scattered a chain of long hypotheses unpredictably. */
+function placeFreshHypotheses(
+  cards: HypCardType[],
+  preservedIds: ReadonlySet<string>,
+): HypCardType[] {
+  if (typeof window === 'undefined' || isPhonePortraitViewport()) return cards
+
+  const canvas = document.querySelector<HTMLElement>('.visual-canvas')
+  const canvasRect = canvas?.getBoundingClientRect()
+  const width = canvasRect?.width ?? window.innerWidth
+  const height = canvasRect?.height ?? Math.max(520, window.innerHeight - 120)
+  const occupied: PlacementRect[] = []
+
+  const cardRect = (card: HypCardType): PlacementRect => {
+    const elementRect = document.getElementById(card.id)?.getBoundingClientRect()
+    const size = elementRect
+      ? { width: elementRect.width, height: elementRect.height }
+      : estimatedHypSize(card)
+    return {
+      left: card.position.x,
+      top: card.position.y,
+      right: card.position.x + size.width,
+      bottom: card.position.y + size.height,
+    }
+  }
+
+  for (const card of cards) {
+    if (preservedIds.has(card.id)) occupied.push(cardRect(card))
+  }
+
+  const goalWrapper = document.querySelector<HTMLElement>('.goal-card-with-info')
+  const goalRect = goalWrapper?.getBoundingClientRect()
+  if (goalRect && canvasRect) {
+    occupied.push({
+      left: goalRect.left - canvasRect.left,
+      top: goalRect.top - canvasRect.top,
+      right: goalRect.right - canvasRect.left,
+      bottom: goalRect.bottom - canvasRect.top,
+    })
+  }
+
+  const startX = 24
+  const startY = 72
+  const columnStep = 320
+  const rowStep = 96
+  return cards.map(card => {
+    if (preservedIds.has(card.id)) return card
+    const size = estimatedHypSize(card)
+    let chosen: PlacementRect | null = null
+
+    for (let y = startY; y <= Math.max(startY, height - size.height - 24) && !chosen; y += rowStep) {
+      for (let x = startX; x <= Math.max(startX, width - size.width - 24); x += columnStep) {
+        const candidate = { left: x, top: y, right: x + size.width, bottom: y + size.height }
+        if (!occupied.some(rect => rectanglesOverlap(candidate, rect))) {
+          chosen = candidate
+          break
+        }
+      }
+    }
+
+    chosen ??= {
+      left: startX,
+      top: occupied.reduce((bottom, rect) => Math.max(bottom, rect.bottom + 16), startY),
+      right: startX + size.width,
+      bottom: occupied.reduce((bottom, rect) => Math.max(bottom, rect.bottom + 16), startY) + size.height,
+    }
+    occupied.push(chosen)
+    return { ...card, position: { x: chosen.left, y: chosen.top } }
+  })
+}
+
 /** Snap all non-userPlaced hypothesis cards to a clean 2-column grid below
  *  the goal stack on phone portrait. The proof-state-driven hyp ordering can
  *  shuffle cards (a new `intro` reuses an old slot, etc.); preserving saved
@@ -315,14 +408,16 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
 
   return {
     ...fresh,
-    streams: fresh.streams.map(stream => ({
-      ...stream,
-      hyps: stream.hyps.map(card => {
+    streams: fresh.streams.map(stream => {
+      const preservedIds = new Set<string>()
+      const mergedHyps = stream.hyps.map(card => {
         const saved = cardMap.get(card.id) ?? removedTheoremsByName.get(card.hyp.names[0] ?? '')
         if (!saved) return card
+        preservedIds.add(card.id)
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
-      }),
-    })),
+      })
+      return { ...stream, hyps: placeFreshHypotheses(mergedHyps, preservedIds) }
+    }),
   }
 }
 
@@ -790,7 +885,7 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
     return parsedHypEquality(card) !== null || typeText.includes('↔') || typeText.includes('≠')
   }
   // `tauto` operates on the goal; it does not have a meaningful `at h` form.
-  if (tactic.name === 'tauto' || tactic.name === 'exfalso') return false
+  if (tactic.name === 'tauto') return false
   return true
 }
 
@@ -4150,6 +4245,7 @@ export function VisualCanvas({
     workingSide: 'left' | 'right',
     path?: number[],
     expectedGoal?: ExpectedRewriteGoal,
+    occurrence?: number,
   ): Promise<RewriteOutcome> => {
     if (isProcessing) return { success: false, completed: false }
     const playTactic = interactionToPlayTactic({
@@ -4270,8 +4366,14 @@ export function VisualCanvas({
 
     const lastStep = result?.steps.at(-1)
     const annotationLeanTactic = lastStep?.annotation?.leanTactic ?? null
+    const scopedRule = explicitReverseArg
+      ? `← ${hypLabel} (${explicitReverseArg})`
+      : `${isReverse ? '← ' : ''}${hypLabel}`
+    const scopedCoreTactic = occurrence && (path !== undefined || explicitReverseArg)
+      ? `rw_nth ${occurrence} [${scopedRule}]${transformTarget?.kind === 'hyp' ? ` at ${transformTarget.hypRef}` : ''}`
+      : null
     const leanTactic = result
-      ? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream, lastStep)
+      ? scopedCoreTactic ?? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream, lastStep)
       : null
     appendPlayLog(logKey, {
       timestamp: Date.now(),
@@ -5492,7 +5594,7 @@ export function VisualCanvas({
     const rewriteRef = transformProps
       ? resolveRewriteHyp(transformProps.equalityHyps, transformProps.theoremEqualityHyps, theoremName)?.rewriteRef ?? theoremName
       : theoremName
-    const outcome = await handleRewrite(rewriteRef, isReverse, workingSide, path, expectedGoal)
+    const outcome = await handleRewrite(rewriteRef, isReverse, workingSide, path, expectedGoal, undefined)
     if (!outcome.success) {
       const detail = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
       throw new Error(
@@ -5966,6 +6068,7 @@ export function VisualCanvas({
         // that the proof currently shown was restored. Green belongs only to
         // an actually solved loaded proof (or solved branch).
         isSolved={canvasState.completed || solvedGoalId === stream.id || currentStreamIsCompleted}
+        animateSolved={solvedGoalId === stream.id}
         visualInfos={visibleVisualGoalInfos}
         infoPositions={infoPositions}
         showDropTarget={activeDraggedTactic ? isTacticTarget : activeDragId !== null}
@@ -6502,7 +6605,6 @@ export function VisualCanvas({
       {/* Transformation overlay — outside the canvas DndContext to avoid nesting */}
       {transformProps && (
         <TransformationView
-          key={`${transformTarget?.streamId ?? ''}-${transformTarget?.kind ?? ''}-${transformTarget?.kind === 'hyp' ? transformTarget.hypId : ''}`}
           style={visualPageStyle}
           relation={transformProps.relation}
           goalLhsStr={transformProps.goalLhsStr}

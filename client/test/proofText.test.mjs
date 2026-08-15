@@ -49,13 +49,13 @@ test('a path-scoped rewrite keeps the exact player-selected occurrence in Core L
 
 test('the proof sidebar keeps all Lean lines from one player gesture under one step number', () => {
   const steps = [{
-    command: 'exfalso\nexact h',
-    playTactic: 'drag_goal h',
-    leanTactic: 'exfalso\nexact h',
+    command: 'apply And.intro\nexact h',
+    playTactic: 'drag_to h goal',
+    leanTactic: 'apply And.intro\nexact h',
     rotation: null,
   }]
-  assert.deepEqual(displayedProofLines(steps, 'lean'), ['exfalso', 'exact h'])
-  assert.deepEqual(displayedProofSteps(steps, 'lean'), ['exfalso\nexact h'])
+  assert.deepEqual(displayedProofLines(steps, 'lean'), ['apply And.intro', 'exact h'])
+  assert.deepEqual(displayedProofSteps(steps, 'lean'), ['apply And.intro\nexact h'])
 })
 
 test('the interactive proof pane renders existential construction without a metavariable hole', () => {
@@ -76,11 +76,11 @@ test('the interactive proof pane renders existential construction without a meta
 const completeAdditionFour = [
   { command: 'induction c with d hd', playTactic: 'induction c with d hd', leanTactic: 'induction c with d hd' },
   { command: 'drag_rw_lhs [MyNat.add_zero]', playTactic: 'drag_rw_lhs [MyNat.add_zero]', leanTactic: null },
-  { command: 'drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: null },
+  { command: 'drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: 'rw_nth 1 [MyNat.add_zero]' },
   { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
   { command: 'drag_rw_lhs [MyNat.add_succ]', playTactic: 'drag_rw_lhs [MyNat.add_succ]', leanTactic: null },
-  { command: 'drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: null },
-  { command: 'drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: null },
+  { command: 'drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: 'rw_nth 1 [MyNat.add_succ]' },
+  { command: 'drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: 'rw_nth 1 [hd]' },
   { command: 'drag_rw_rhs [MyNat.add_succ]', playTactic: 'drag_rw_rhs [MyNat.add_succ]', leanTactic: null },
   { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
 ]
@@ -175,20 +175,11 @@ test('core proof text preserves path-scoped player rewrites without holes', asyn
   assert.deepEqual(displayed, [
     'induction c with d hd',
     'rw [add_zero]',
-    'conv =>',
-    '  rhs',
-    '  arg 2',
-    '  rw [add_zero]',
+    'rw_nth 1 [add_zero]',
     'rfl',
     'rw [add_succ]',
-    'conv =>',
-    '  rhs',
-    '  arg 2',
-    '  rw [add_succ]',
-    'conv =>',
-    '  lhs',
-    '  arg 1',
-    '  rw [hd]',
+    'rw_nth 1 [add_succ]',
+    'rw_nth 1 [hd]',
     'rw [add_succ]',
     'rfl',
   ])
@@ -204,4 +195,5 @@ test('core proof text preserves path-scoped player rewrites without holes', asyn
     'rfl',
   ])
   assert.equal(displayed.some(line => line.includes('?')), false)
+  assert.equal(displayed.some(line => line.trim() === 'conv =>'), false)
 })

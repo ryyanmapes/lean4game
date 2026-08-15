@@ -142,6 +142,9 @@ function assertCompletedProofRestores(solution: ReferenceSolution, completedAudi
     expect(stored?.session?.proofSteps, 'completed proof steps reached autosave').to.have.length.greaterThan(0)
     expect(stored?.session?.proofBody, 'completed proof body reached autosave').to.equal(completedAudit.proofBody)
   })
+  cy.get('[data-testid="goal-card"]')
+    .should('have.class', 'solved')
+    .and('have.class', 'just-solved')
 
   // Leave the route completely, then reopen it as a returning player. This
   // exercises persistence and Lean revalidation, not merely React state.
@@ -161,8 +164,10 @@ function assertCompletedProofRestores(solution: ReferenceSolution, completedAudi
   cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
     .should('be.visible')
     .and('have.class', 'solved')
+    .and('not.have.class', 'just-solved')
     .then($goal => {
       const style = getComputedStyle($goal[0]!)
+      expect(style.animationName, 'restored completion does not replay the solve animation').to.equal('none')
       expect(style.borderColor, 'restored completed goal has no yellow border').not.to.equal('rgb(234, 179, 8)')
       expect(style.boxShadow, 'restored completed goal has no yellow glow').not.to.contain('234, 179, 8')
     })

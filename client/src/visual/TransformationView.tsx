@@ -186,6 +186,7 @@ interface Props {
     workingSide: 'left' | 'right',
     path?: number[],
     expectedGoal?: ExpectedRewriteGoal,
+    occurrence?: number,
   ) => Promise<RewriteOutcome>
   /** Called for each undo step (removes one proof step from the proof script). */
   onUndo: () => Promise<boolean>
@@ -773,6 +774,22 @@ export function TransformationView({
       targetId,
       node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
     )
+    // rw_nth counts matches across the complete relation from left to right,
+    // not merely within the side currently enlarged in Transformation Mode.
+    // For a reverse variable theorem, count the concrete selected expression
+    // because the displayed core rule supplies that theorem argument.
+    const occurrenceMatcher = (node: ExpressionNode) =>
+      isThm && isReverse && from.type === 'variable'
+        ? expressionsEqual(node, targetNode)
+        : isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
+    const leftMatches = findMatchingNodeIds(lhs, occurrenceMatcher)
+    const sideMatches = workingSide === 'left'
+      ? leftMatches
+      : findMatchingNodeIds(rhs, occurrenceMatcher)
+    const targetIndex = sideMatches.indexOf(targetId)
+    const occurrence = targetIndex < 0
+      ? undefined
+      : (workingSide === 'right' ? leftMatches.length : 0) + targetIndex + 1
 
     // Send to Lean — it is the final arbiter. Keep the overlay mounted and
     // update only the rewritten expression after Lean accepts the action.
@@ -797,7 +814,14 @@ export function TransformationView({
             ? printExpression(targetNode)
             : undefined,
         }
-    const outcome = await onRewrite(rewriteReferenceForDrag(draggedId, hyp), isReverse, workingSide, path, expectedGoal)
+    const outcome = await onRewrite(
+      rewriteReferenceForDrag(draggedId, hyp),
+      isReverse,
+      workingSide,
+      path,
+      expectedGoal,
+      occurrence,
+    )
     setIsProcessing(false)
 
     if (!outcome.success) {

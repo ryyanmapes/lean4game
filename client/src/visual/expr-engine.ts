@@ -419,10 +419,117 @@ function normalizeNegatedFormalDifferences(text: string): string {
   return result
 }
 
+interface DisplayForallBinder {
+  opener: string
+  closer: string
+  names: string[]
+  type: string
+}
+
+function displayBinderAt(text: string, start: number): { binder: DisplayForallBinder; end: number } | null {
+  const opener = text[start]
+  const closer = opener === '(' ? ')' : opener === '{' ? '}' : opener === '[' ? ']' : null
+  if (!closer) return null
+
+  let depth = 0
+  for (let index = start; index < text.length; index++) {
+    const char = text[index]
+    if (char === opener) depth += 1
+    else if (char === closer) {
+      depth -= 1
+      if (depth !== 0) continue
+      const content = text.slice(start + 1, index).trim()
+      const colon = content.lastIndexOf(':')
+      if (colon < 0) return null
+      const names = content.slice(0, colon).trim().split(/\s+/u).filter(Boolean)
+      const type = content.slice(colon + 1).trim()
+      if (names.length === 0 || !type) return null
+      return { binder: { opener, closer, names, type }, end: index + 1 }
+    }
+  }
+  return null
+}
+
+/** Compact consecutive same-typed forall binders everywhere formulas are
+ * displayed. This handles both Lean's `∀ (x : T), ∀ (y : T), ...`
+ * goal form and the `∀ (x : T) (y : T)` theorem-card footer form. */
+export function compactForallBinders(text: string): string {
+  let output = ''
+  let cursor = 0
+
+  while (cursor < text.length) {
+    const forall = text.indexOf('∀', cursor)
+    if (forall < 0) return output + text.slice(cursor)
+    output += text.slice(cursor, forall)
+
+    let scan = forall + 1
+    while (/\s/u.test(text[scan] ?? '')) scan += 1
+    const binders: DisplayForallBinder[] = []
+    let trailingComma = false
+
+    while (scan < text.length) {
+      const parsed = displayBinderAt(text, scan)
+      if (!parsed) break
+      binders.push(parsed.binder)
+      scan = parsed.end
+      while (/\s/u.test(text[scan] ?? '')) scan += 1
+
+      if (text[scan] === ',') {
+        let afterComma = scan + 1
+        while (/\s/u.test(text[afterComma] ?? '')) afterComma += 1
+        if (text[afterComma] === '∀') {
+          scan = afterComma + 1
+          while (/\s/u.test(text[scan] ?? '')) scan += 1
+          continue
+        }
+        if (displayBinderAt(text, afterComma)) {
+          scan = afterComma
+          continue
+        }
+        trailingComma = true
+        scan = afterComma
+        break
+      }
+
+      if (text[scan] === '∀') {
+        scan += 1
+        while (/\s/u.test(text[scan] ?? '')) scan += 1
+        continue
+      }
+      if (displayBinderAt(text, scan)) continue
+      break
+    }
+
+    if (binders.length === 0) {
+      output += '∀'
+      cursor = forall + 1
+      continue
+    }
+
+    const grouped: DisplayForallBinder[] = []
+    for (const binder of binders) {
+      const previous = grouped.at(-1)
+      if (previous && previous.opener === binder.opener && previous.type === binder.type) {
+        previous.names.push(...binder.names)
+      } else {
+        grouped.push({ ...binder, names: [...binder.names] })
+      }
+    }
+    output += `∀ ${grouped.map(binder =>
+      `${binder.opener}${binder.names.join(' ')} : ${binder.type}${binder.closer}`
+    ).join(' ')}${trailingComma ? ', ' : ''}`
+    cursor = scan
+  }
+
+  return output
+}
+
 export function formatFormulaText(text: string): string {
   const normalizedDisplayNames = sanitizeLeanDisplayText(text)
   const normalizedZero = normalizedDisplayNames.replace(/\b(?:(?:MyNat\.|Nat\.)?zero)\b/g, '0')
-  const normalized = normalizeNegatedFormalDifferences(normalizedZero.replace(/\s+/g, ' ').trim())
+  const normalized = compactForallBinders(
+    normalizeNegatedFormalDifferences(normalizedZero.replace(/\s+/g, ' ').trim()),
+  )
   if (normalized.length === 0) return normalized
 
   try {

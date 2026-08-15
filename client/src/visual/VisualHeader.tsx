@@ -76,7 +76,7 @@ export function VisualHeader({
       <div className="visual-header-side right">
         {!hideNav && (
           <button className="visual-header-nav-btn visual-header-prev-btn" onClick={onPrev} disabled={!hasPrev} aria-label={hasPrev ? 'Previous level' : 'No previous level'}>
-            {hasPrev ? '← Previous level' : null}
+            ← Previous level
           </button>
         )}
         {!hideNav && (
@@ -86,7 +86,7 @@ export function VisualHeader({
             disabled={!hasNext}
             aria-label={hasNext ? 'Next level' : 'No next level'}
           >
-            {hasNext ? 'Next level →' : null}
+            Next level →
           </button>
         )}
       </div>

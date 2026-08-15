@@ -1884,10 +1884,9 @@ export class CompletePlaythroughDriver {
     if (casesNumber) {
       await this.dragTactic('cases', target)
     } else if (type.trim() === 'False') {
-      // `cases h` is its own explicit player interaction and is taught before
-      // exfalso: drag the already-unlocked cases tactic onto the False card.
-      // This does not reintroduce the forbidden False-card-to-arbitrary-goal
-      // shortcut.
+      // `cases h` is its own explicit player interaction: drag the
+      // already-unlocked cases tactic onto the False card. This does not
+      // reintroduce the forbidden False-card-to-arbitrary-goal shortcut.
       await this.dragTactic('cases', target)
       // dragTactic already waits for Lean to accept the play and for the proof
       // signature to change. A `cases` result with zero goals has no successor
