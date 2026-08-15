@@ -4310,12 +4310,13 @@ export function VisualCanvas({
       // an RPC snapshot which reports only the other outstanding goals; using
       // that intermediate tree leaves the canvas live but the proof graph at
       // "Stream 0 of N".
+      const treeStreamIds = collectActiveStreamIds(proofTree)
       const liveTreeStreamIds = collectLiveStreamIds(proofTree)
       const focusedBranchLabel = focusedStream.goal.userName ?? null
       const focusedTreeStreamId = [focusedStream.id, activeStreamId, nextStream?.id]
         .find((streamId): streamId is string => Boolean(streamId && findLeafForStream(proofTree, streamId)))
         ?? (focusedBranchLabel
-          ? liveTreeStreamIds.find(streamId =>
+          ? treeStreamIds.find(streamId =>
               findLeafForStream(proofTree, streamId)?.label === focusedBranchLabel ||
               streamSnapshots[streamId]?.goal.userName === focusedBranchLabel
             )
