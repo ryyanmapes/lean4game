@@ -1565,6 +1565,21 @@ function reflexiveGoalClickAction(expectedGoal: ExpectedRewriteGoal): ClickActio
     : undefined
 }
 
+/** `rw ... at h` may close a branch when it turns an equality into an
+ * immediate constructor contradiction. For every other displayed relation,
+ * a browser response that claims completion while sibling goals remain is a
+ * stale focused-goal trace and the rewritten hypothesis must stay live. */
+function rewrittenHypothesisIsObviousContradiction(expected: ExpectedRewriteGoal): boolean {
+  if (expected.relation !== '=') return false
+  const normalize = (value: string) => value.replace(/\s+/gu, '')
+  const lhs = normalize(expected.lhsStr)
+  const rhs = normalize(expected.rhsStr)
+  const isZeroSucc = (first: string, second: string) =>
+    first === '0' && /^(?:MyNat\.)?succ\(/u.test(second)
+  if (isZeroSucc(lhs, rhs) || isZeroSucc(rhs, lhs)) return true
+  return /^\d+$/u.test(lhs) && /^\d+$/u.test(rhs) && lhs !== rhs
+}
+
 function synthesizeAddedTheoremContinuation(
   focusedStream: GoalStream,
   hypName: string,
@@ -4190,6 +4205,7 @@ export function VisualCanvas({
         }
     let nextStream = focusedStreams[0] ?? null
     let preservedAutoCompletedReflexiveGoal = false
+    let preservedAutoCompletedHypothesisGoal = false
     // A side-scoped `conv` rewrite can expose its temporary expression focus
     // (for example `x + 0`) as the RPC step's focused goal even though the
     // actual proof goal is still the enclosing equality. Transformation mode
@@ -4222,15 +4238,16 @@ export function VisualCanvas({
     if (
       transformTarget?.kind === 'hyp' &&
       nextStream === null &&
-      !leanCanvas.completed &&
       focusedStream &&
-      expectedGoal
+      expectedGoal &&
+      (!leanCanvas.completed || !rewrittenHypothesisIsObviousContradiction(expectedGoal))
     ) {
       const syntheticStream = synthesizeHypRewriteContinuation(
         focusedStream,
         transformTarget.hypId,
         expectedGoal,
       )
+      preservedAutoCompletedHypothesisGoal = leanCanvas.completed
       nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
       nextActiveId = syntheticStream.id
       focusedStreams = [syntheticStream]
@@ -4366,7 +4383,11 @@ export function VisualCanvas({
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
 
-    if (leanCanvas.completed && !preservedAutoCompletedReflexiveGoal) {
+    if (
+      leanCanvas.completed &&
+      !preservedAutoCompletedReflexiveGoal &&
+      !preservedAutoCompletedHypothesisGoal
+    ) {
       const completionCanvas =
         transformTarget?.kind === 'goal' && focusedStream && expectedGoal
           ? {

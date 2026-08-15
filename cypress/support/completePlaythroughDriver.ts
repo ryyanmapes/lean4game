@@ -1355,7 +1355,7 @@ export class CompletePlaythroughDriver {
    * induction. Each generated branch owns a fresh copy, so retain the expected
    * declaration order and remap it from the cards created in this stream. */
   private async exposeDeferredInitialBinders(name: string) {
-    if (!this.deferredInitialBinderNames.includes(name) || this.hyp(name)) return
+    if (!this.deferredInitialBinderNames.includes(name) || this.hypExact(name)) return
     const introduced: string[] = []
     for (let attempt = 0; attempt < this.deferredInitialBinderNames.length; attempt += 1) {
       const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -1790,17 +1790,17 @@ export class CompletePlaythroughDriver {
   private async applyOrExact(command: string) {
     const applicationMatch = /^(?:apply|exact)\s+(.+)$/u.exec(command)
     if (!applicationMatch) throw new Error(`Unsupported theorem application: ${command}`)
-    // Parse a trailing `at h` as its own two top-level tokens. Keeping it out
-    // of a lazy optional regex prevents `at` and `h` from being mistaken for
-    // explicit theorem arguments and ultimately dragged onto the goal.
-    const applicationParts = splitTopLevelWhitespace(applicationMatch[1])
-    const atIndex = applicationParts.length >= 3 && applicationParts.at(-2) === 'at'
-      ? applicationParts.length - 2
-      : -1
+    // Parse a trailing `at h` directly from the end of the command. The
+    // theorem application itself can contain parenthesized arguments, but a
+    // target is always one final Lean identifier. Token-index parsing proved
+    // vulnerable to the generated command text and silently turned
+    // `apply f ... at h` into a theorem-on-goal drag.
+    const applicationBody = applicationMatch[1].trim()
+    const targetMatch = /\s+at\s+(\S+)\s*$/u.exec(applicationBody)
     const match: [string, string, string?] = [
       applicationMatch[0],
-      atIndex >= 0 ? applicationParts.slice(0, atIndex).join(' ') : applicationMatch[1],
-      atIndex >= 0 ? applicationParts.at(-1) : undefined,
+      targetMatch ? applicationBody.slice(0, targetMatch.index).trim() : applicationBody,
+      targetMatch?.[1],
     ]
     const application = splitTopLevelWhitespace(match[1])
     const name = sourceName(application[0] ?? match[1])
@@ -1838,6 +1838,7 @@ export class CompletePlaythroughDriver {
       // arguments are ordinary proposition-card drags. Treating every token
       // as a forall specialization left implications unapplied and then
       // dragged the generalized theorem onto the goal.
+      let remainingForallArguments = Math.min(explicitArgs.length, forallBinderNames(source).length)
       for (const [argumentIndex, argument] of explicitArgs.entries()) {
         source = this.refreshCard(source)
         const typesBeforeArgument = harness(this.win).getCurrentStreamSnapshot().hypTypes
@@ -1853,10 +1854,17 @@ export class CompletePlaythroughDriver {
         const expectedConclusionAfterArgument = sourceArrowBeforeArgument >= 0 && sourceTypeBeforeArgument
           ? this.normalizedProposition(sourceTypeBeforeArgument.slice(sourceArrowBeforeArgument + 1))
           : null
-        if (source.classList.contains('constructable')) {
+        // Construction Mode consumes the theorem's visible forall binders.
+        // Do not keep using a stale `constructable` class after those binders
+        // are gone: later explicit arguments such as `ha` and `h` are proofs
+        // and must be applied by proposition-card drags.
+        const specializesForall = remainingForallArguments > 0
+          || (source.classList.contains('constructable') && !this.hyp(argument))
+        if (specializesForall) {
           doubleClick(source)
           await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
           await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
+          if (remainingForallArguments > 0) remainingForallArguments -= 1
         } else {
           let matchingHypothesis = this.hyp(argument)
           if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, [])) {
@@ -2121,8 +2129,8 @@ export class CompletePlaythroughDriver {
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
               ) ?? null).catch(() => null)
       let resultName = semanticConclusionName
-        ?? leastCurriedConclusionName
         ?? createdName
+        ?? leastCurriedConclusionName
         ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
