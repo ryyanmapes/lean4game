@@ -4278,7 +4278,18 @@ export function VisualCanvas({
       // an RPC snapshot which reports only the other outstanding goals; using
       // that intermediate tree leaves the canvas live but the proof graph at
       // "Stream 0 of N".
-      nextTree = replaceLeafStream(proofTree, focusedStream.id, syntheticStream)
+      const liveTreeStreamIds = collectLiveStreamIds(proofTree)
+      const focusedBranchLabel = focusedStream.goal.userName ?? null
+      const focusedTreeStreamId = [focusedStream.id, activeStreamId, nextStream?.id]
+        .find((streamId): streamId is string => Boolean(streamId && findLeafForStream(proofTree, streamId)))
+        ?? (focusedBranchLabel
+          ? liveTreeStreamIds.find(streamId =>
+              streamSnapshots[streamId]?.goal.userName === focusedBranchLabel
+            )
+          : undefined)
+        ?? (liveTreeStreamIds.length === 1 ? liveTreeStreamIds[0] : undefined)
+        ?? focusedStream.id
+      nextTree = replaceLeafStream(proofTree, focusedTreeStreamId, syntheticStream)
       nextActiveId = syntheticStream.id
       focusedStreams = [syntheticStream]
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
@@ -4473,7 +4484,7 @@ export function VisualCanvas({
     setTransformationVersion(v => v + 1)
 
     return { success: true, completed: false }
-  }, [activeStreamId, canvasState, comparisonTransformEnabled, isProcessing, logKey, onInteraction, onProofStep, proofTree, transformTarget])
+  }, [activeStreamId, canvasState, comparisonTransformEnabled, isProcessing, logKey, onInteraction, onProofStep, proofTree, streamSnapshots, transformTarget])
 
   // ── Build TransformationView props ──────────────────────────────────────────
 

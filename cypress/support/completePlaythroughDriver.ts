@@ -26,6 +26,7 @@ interface StreamSnapshot {
 interface ReadOnlyVisualHarness {
   getProofAudit(): ProofAudit
   getCurrentStreamSnapshot(): StreamSnapshot
+  getLastTransformRewriteDebug(): Record<string, unknown> | null
   getLastDragDebug(): Record<string, unknown> | null
 }
 
@@ -168,6 +169,7 @@ async function waitForSelectedStreamChange(
         before: JSON.parse(previous),
         after: JSON.parse(selectedStreamSignature(win)),
         lastPlay: playLog(win).at(-1),
+        lastTransform: harness(win).getLastTransformRewriteDebug(),
         lastDrag: harness(win).getLastDragDebug(),
       })}`,
       { cause: error },
@@ -989,7 +991,13 @@ function matchesTheoremPremise(
       premise,
     )
     if (!bindings) return false
-    const binders = forallBinderNames(theorem)
+    // Specialized workspace cards may retain the original theorem's footer
+    // for presentation even after Construction Mode has consumed every
+    // binder. Only a card that is still constructable has active wildcard
+    // binders; otherwise names in its live proposition are local constants.
+    const binders = theorem.classList.contains('constructable')
+      ? forallBinderNames(theorem)
+      : []
     // Variables that are no longer forall-bound are branch-local constants,
     // not pattern wildcards. After specializing `mul_le_mul_right 1 b a`, its
     // premise `1 ≤ b` must not highlight or accept an unrelated `1 ≤ a * b`.
