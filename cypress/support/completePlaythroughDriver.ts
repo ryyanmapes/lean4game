@@ -401,6 +401,7 @@ function doubleClick(element: HTMLElement) {
 }
 
 async function drag(source: HTMLElement, target: HTMLElement) {
+  const sourceIdentity = captureDragTargetIdentity(source)
   const targetIdentity = captureDragTargetIdentity(target)
   // Start from the source while it is visible. On a long mobile card stack the
   // source and destination cannot always fit onscreen together; scrolling the
@@ -408,6 +409,7 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
+  source = resolveRemountedDragTarget(source.ownerDocument, sourceIdentity, source)
   target = resolveRemountedDragTarget(source.ownerDocument, targetIdentity, target)
   const start = source.getBoundingClientRect()
   const startX = start.left + start.width / 2
@@ -2286,6 +2288,12 @@ export class CompletePlaythroughDriver {
               const candidateName = card.dataset.hypName
               const candidateType = card.dataset.hypType ?? ''
               if (!candidateName || !candidateType) return false
+              const previousType = visibleTypesBeforeArgument.get(candidateName)
+              // The result of this drag must be the newly mounted card or a
+              // card whose proposition changed in place. An unchanged local
+              // premise can happen to match itself structurally and must not
+              // become the source of the next application.
+              if (previousType === candidateType) return false
               // Browser reconciliation may reuse both the theorem card name
               // and its optimistic displayed type. The semantic next premise
               // (or final goal) is stronger evidence than identity churn.

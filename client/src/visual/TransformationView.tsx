@@ -249,7 +249,6 @@ export function TransformationView({
   const [measuredLayoutKey, setMeasuredLayoutKey] = useState('')
   const [measuredDockLayoutKey, setMeasuredDockLayoutKey] = useState('')
   const hasPresentedReadyDockRef = useRef(false)
-  const presentedDockTabRef = useRef(selectedTab)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const exprWrapperRef = useRef<HTMLDivElement>(null)
@@ -413,14 +412,11 @@ export function TransformationView({
   const pageItems = tabRules.slice(pageRange.start, pageRange.end)
   const dockLayoutKey = `${ruleDockLayoutKey}:${clampedPage}:${pageRange.start}:${pageRange.end}`
   const layoutReady = hasMeasurements && measuredDockLayoutKey === dockLayoutKey && ruleDockHeight > 0
-  if (presentedDockTabRef.current !== selectedTab) {
-    presentedDockTabRef.current = selectedTab
-    hasPresentedReadyDockRef.current = false
-  }
   if (layoutReady) hasPresentedReadyDockRef.current = true
-  // Rewrites can replace stream/card ids while preserving the visible rule
-  // list. Keep the already measured dock painted during that same-tab handoff;
-  // a genuinely different tab still waits for its own measurements above.
+  // Rewrites and player tab changes can replace the rule list while the next
+  // measurements are being committed. Once the dock has a measured height,
+  // keep that stable shell painted during the handoff; hiding it again for a
+  // single frame is the menu-bar flash players see after a rewrite.
   const dockPresentationReady = layoutReady || hasPresentedReadyDockRef.current
 
   useLayoutEffect(() => {

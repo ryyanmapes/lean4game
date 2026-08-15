@@ -3484,8 +3484,13 @@ export function VisualCanvas({
         }
         if (tacticTemplate.name === 'cases') {
           const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
+          const streamSplit = casesTacticSplits(targetCard)
           applyDroppedInteraction(playTactic, activeId, {
-            streamSplit: casesTacticSplits(targetCard),
+            streamSplit,
+            // Eliminating a False hypothesis closes this goal rather than
+            // producing child streams. Mark that exact goal as the one solved
+            // so a final branch gets the normal one-time completion animation.
+            solvedGoalId: streamSplit ? undefined : targetStream.id,
             targetStreamId: targetStream.id,
           })
           return

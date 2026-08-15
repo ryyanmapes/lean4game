@@ -205,14 +205,14 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/8/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
       .should('have.attr', 'data-goal-text')
-      .and('match', /^âˆ€\s*\(x y\s*:\s*â„•\)/u)
+      .and('match', /^\u2200\s*\(x y\s*:\s*\u2115\)/u)
 
     visualHarness().then(harness => harness.copyTheoremToCanvas('MyNat.succ_inj'))
     cy.get('[data-testid="theorem-copy-card"][data-theorem-name="MyNat.succ_inj"] .statement-forall-footer')
       .should('be.visible')
       .invoke('text')
       .should(text => {
-        expect(text.replace(/\s+/gu, ''), 'one compact forall group').to.equal('âˆ€(ab:â„•)')
+        expect(text.replace(/\s+/gu, ''), 'one compact forall group').to.equal('\u2200(ab:\u2115)')
       })
   })
 
@@ -293,10 +293,13 @@ describe('NNG4 implication and definition display regressions', () => {
 
     cy.window().should(win => {
       const harness = (win as HarnessWindow).__visualTestHarness!
-      expect(harness.getCurrentStreamSnapshot().streamId, 'completed False branch remains selected')
-        .to.equal(falseBranchId)
       expect(harness.getProofAudit().completed, 'the untouched zero branch is still incomplete').to.equal(false)
     })
+    // A completed selected branch is intentionally no longer interactive, so
+    // inspect the same proof-graph control the player sees instead of asking
+    // the harness for an interactive stream that must not exist.
+    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
+      .should('have.attr', 'data-current', 'true')
     cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
       .should('have.attr', 'data-completed', 'true')
     cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${baseStreamId}"]`)

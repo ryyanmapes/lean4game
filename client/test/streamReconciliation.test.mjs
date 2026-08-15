@@ -1341,11 +1341,11 @@ test('cases on False completes only the focused branch without synthesizing case
 
 test('symm at a hypothesis stays on the selected branch when the browser reports only its sibling', () => {
   const focusedStream = stream('stream-symm', 'a = 0', 'succ', [
-    hyp('hyp-a', 'a', 'â„•'),
+    hyp('hyp-a', 'a', '\u2115'),
     hyp('hyp-h', 'h', 'succ(a) = 0'),
   ])
   const siblingStream = stream('stream-zero', 'a = 0', 'zero', [
-    hyp('hyp-a', 'a', 'â„•'),
+    hyp('hyp-a', 'a', '\u2115'),
     hyp('hyp-h', 'h', 'a + 0 = 0'),
   ])
   const beforeTree = {

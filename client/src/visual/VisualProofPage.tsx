@@ -452,7 +452,7 @@ export function VisualProofPage() {
                   // The browser proof-state probe intentionally admits open
                   // case scopes so it can render partial proofs. For a small
                   // class of valid completed scripts (notably `symm` followed
-                  // by an exact proof of `â‰ `), that probe can still report a
+                  // by an exact proof of `\u2260`), that probe can still report a
                   // stale goal on a fresh worker. A non-null response means
                   // Lean successfully re-elaborated the complete saved script;
                   // preserve its internally consistent completed snapshot.
