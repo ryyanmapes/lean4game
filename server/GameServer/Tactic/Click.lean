@@ -37,9 +37,9 @@ syntax (name := click_goal) "click_goal" : tactic
   let goalWhnf ← withReducible (whnf goal)
   match ← clickGoalKind? goal with
   | some .completeByRfl =>
-      liftMetaTactic fun mvarId => withReducible do
-        mvarId.refl
-        pure []
+      -- Keep this equality-specific in the browser build. Cauli's generic
+      -- `MVarId.refl` can incorrectly choose `Iff.rfl` for numeral aliases.
+      evalTacticString "exact Eq.refl _"
   | some .introVar =>
       if let some (binderBase, hypBase) ← boundedComparisonIntroInfo? goal then
         let binderName ←

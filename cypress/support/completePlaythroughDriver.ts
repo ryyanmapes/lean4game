@@ -1837,6 +1837,19 @@ export class CompletePlaythroughDriver {
           await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
         } else {
           const matchingHypothesis = this.hyp(argument)
+          if (matchingHypothesis && !matchesTheoremPremise(source, matchingHypothesis, [])) {
+            // Reconciliation can preserve the old curried card while mounting
+            // its derived result under a fresh Lean name. Follow the visible
+            // card that actually accepts the named proof argument, just as a
+            // player follows the highlighted theorem after each application.
+            const semanticSource = visible(
+              this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+            ).find(candidate =>
+              candidate !== matchingHypothesis &&
+              matchesTheoremPremise(candidate, matchingHypothesis, []),
+            )
+            if (semanticSource) source = semanticSource
+          }
           if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, [])) {
             throw new Error(`${command} cannot apply visible proof argument ${argument}`)
           }
@@ -1910,8 +1923,8 @@ export class CompletePlaythroughDriver {
         // Prefer the card whose current proposition consumes the next
         // visible premise. Identity-based fallbacks can see an asynchronously
         // mounted specialization source before its derived conclusion.
-        const resultName = visibleDerivedName ?? visibleCreatedName ?? visibleChangedName ??
-          createdName ?? retainedName ?? changedName ?? reusedName
+        const resultName = visibleDerivedName ?? createdName ?? retainedName ?? changedName ??
+          visibleCreatedName ?? visibleChangedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
@@ -1983,11 +1996,6 @@ export class CompletePlaythroughDriver {
         })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-    const visibleTypesBeforeFinal = new Map(visible(
-      this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-    ).flatMap(card => card.dataset.hypName
-      ? [[card.dataset.hypName, card.dataset.hypType ?? ''] as const]
-      : []))
     const finalSourceName = source.dataset.hypName
     await this.dragAndWait(source, target, `${command} player drag`)
     if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
@@ -2007,24 +2015,14 @@ export class CompletePlaythroughDriver {
           lastPlay: playLog(this.win).at(-1),
         })}`)
       }
-      const visibleCardsAfterFinal = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      )
-      const visibleResultName = visibleCardsAfterFinal
-        .map(card => [card.dataset.hypName, card.dataset.hypType ?? ''] as const)
-        .find(([candidate, type]) => Boolean(candidate) &&
-          candidate !== finalSourceName && (
-            !visibleTypesBeforeFinal.has(candidate!) || visibleTypesBeforeFinal.get(candidate!) !== type
-          ),
-        )?.[0]
-      const createdName = visibleResultName ?? (sourceWasLocalHypothesis
+      const createdName = sourceWasLocalHypothesis
         ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !beforeFinalNames.has(candidate))
         : await waitFor(`${command} derived conclusion card`, () =>
             Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
               .find(candidate =>
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
-              ) ?? null))
+              ) ?? null).catch(() => null)
       let resultName = createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with

@@ -2555,7 +2555,15 @@ export function VisualCanvas({
     )
     const command = options?.commandOverride ?? (
       playTactic === 'click_goal' && goalIsReflexiveEquality(focusedStream)
-        ? 'rfl'
+        ? commandForGoalAction(
+            'click_goal',
+            focusedStream.id,
+            goalOrderForAction(
+              leanGoalOrderRef.current,
+              canvasState.streams.map(stream => stream.id),
+              focusedStream.id,
+            ),
+          ).command
         : inferredAction.command
     )
     const rotation = inferredAction.rotation
@@ -3651,7 +3659,10 @@ export function VisualCanvas({
     const commandOverride = coreCommand === clickAction.playTactic
       ? undefined
       : commandForGoalAction(
-          coreCommand,
+          // Execute the equality-specific visual tactic. The proof pane still
+          // records its ordinary Lean meaning as `rfl`, while the Cauli
+          // runtime avoids its generic `rfl`/`Iff.rfl` misclassification.
+          coreCommand === 'rfl' ? clickAction.playTactic : coreCommand,
           streamId,
           goalOrderForAction(
             leanGoalOrderRef.current,
