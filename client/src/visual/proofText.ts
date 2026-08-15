@@ -133,11 +133,31 @@ export function serializeProofCommands(commands: string[]): string {
 /** A readable ordinary Lean equivalent for visual-only commands. */
 export function coreTacticForVisualCommand(playTactic: string): string | null {
   const source = parseFocusedCommand(playTactic).tactic
-  const rewrite = /^drag_rw_(?:lhs|rhs)(?:_at)? \[(←\s*)?([^\]]+)\](?: \[[^\]]*\])?$/u.exec(source)
-  if (rewrite) return `rw [${rewrite[1] ?? ''}${rewrite[2]!.trim()}]`
+  const rewrite = /^drag_rw_(lhs|rhs)(_at)? \[(←\s*)?([^\]]+)\](?: \[([^\]]*)\])?$/u.exec(source)
+  if (rewrite) {
+    const theorem = `${rewrite[3] ?? ''}${rewrite[4]!.trim()}`
+    if (!rewrite[2]) return `rw [${theorem}]`
+    const path = (rewrite[5] ?? '').split(',').map(step => step.trim()).filter(Boolean)
+    return [
+      'conv =>',
+      `  ${rewrite[1]}`,
+      ...path.map(step => `  arg ${step}`),
+      `  rw [${theorem}]`,
+    ].join('\n')
+  }
 
-  const hypRewrite = /^drag_rw_hyp_(?:lhs|rhs)(?:_at)?\s+(\S+)\s+\[(←\s*)?([^\]]+)\](?: \[[^\]]*\])?$/u.exec(source)
-  if (hypRewrite) return `rw [${hypRewrite[2] ?? ''}${hypRewrite[3]!.trim()}] at ${hypRewrite[1]}`
+  const hypRewrite = /^drag_rw_hyp_(lhs|rhs)(_at)?\s+(\S+)\s+\[(←\s*)?([^\]]+)\](?: \[([^\]]*)\])?$/u.exec(source)
+  if (hypRewrite) {
+    const theorem = `${hypRewrite[4] ?? ''}${hypRewrite[5]!.trim()}`
+    if (!hypRewrite[2]) return `rw [${theorem}] at ${hypRewrite[3]}`
+    const path = (hypRewrite[6] ?? '').split(',').map(step => step.trim()).filter(Boolean)
+    return [
+      `conv at ${hypRewrite[3]} =>`,
+      `  ${hypRewrite[1]}`,
+      ...path.map(step => `  arg ${step}`),
+      `  rw [${theorem}]`,
+    ].join('\n')
+  }
 
   return null
 }

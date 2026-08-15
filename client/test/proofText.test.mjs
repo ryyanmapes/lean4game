@@ -5,6 +5,7 @@ import test from 'node:test'
 const {
   buildStructuredProof,
   commandForGoalAction,
+  coreTacticForVisualCommand,
   goalOrderForAction,
   coreCommandForGoalClick,
   displayedProofLines,
@@ -32,6 +33,17 @@ test('a selected reverse variable rewrite gets an explicit side and theorem argu
   assert.equal(
     explicitReverseRewriteCommand('MyNat.zero_add', 'n', 'right', undefined, 'h'),
     'conv at h =>\n  rhs\n  rw [← MyNat.zero_add (n)]',
+  )
+})
+
+test('a path-scoped rewrite keeps the exact player-selected occurrence in Core Lean', () => {
+  assert.equal(
+    coreTacticForVisualCommand('drag_rw_lhs_at [MyNat.two_eq_succ_one] [1]'),
+    'conv =>\n  lhs\n  arg 1\n  rw [MyNat.two_eq_succ_one]',
+  )
+  assert.equal(
+    coreTacticForVisualCommand('drag_rw_hyp_rhs_at h [← MyNat.add_zero] [2,1]'),
+    'conv at h =>\n  rhs\n  arg 2\n  arg 1\n  rw [← MyNat.add_zero]',
   )
 })
 
@@ -158,9 +170,29 @@ test('interactive proof log contains one case-free line per player action', () =
   ])
 })
 
-test('core proof text contains the same atomic tactics as the authored NNG4 solution', async () => {
+test('core proof text preserves path-scoped player rewrites without holes', async () => {
   const displayed = displayedProofLines(completeAdditionFour, 'lean')
   assert.deepEqual(displayed, [
+    'induction c with d hd',
+    'rw [add_zero]',
+    'conv =>',
+    '  rhs',
+    '  arg 2',
+    '  rw [add_zero]',
+    'rfl',
+    'rw [add_succ]',
+    'conv =>',
+    '  rhs',
+    '  arg 2',
+    '  rw [add_succ]',
+    'conv =>',
+    '  lhs',
+    '  arg 1',
+    '  rw [hd]',
+    'rw [add_succ]',
+    'rfl',
+  ])
+  assert.deepEqual(await authoredAtomicTactics(), [
     'induction c with d hd',
     'rw [add_zero]',
     'rw [add_zero]',
@@ -171,10 +203,5 @@ test('core proof text contains the same atomic tactics as the authored NNG4 solu
     'rw [add_succ]',
     'rfl',
   ])
-
-  assert.deepEqual(
-    displayed,
-    await authoredAtomicTactics(),
-  )
   assert.equal(displayed.some(line => line.includes('?')), false)
 })

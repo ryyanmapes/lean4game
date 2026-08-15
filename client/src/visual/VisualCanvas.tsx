@@ -48,10 +48,12 @@ import {
   commandForGoalAction,
   goalOrderForAction,
   coreCommandForGoalClick,
+  coreTacticForVisualCommand,
   displayedProofLines,
   displayedProofSteps,
   explicitReverseRewriteCommand,
   isVisualOnlyPlayTactic,
+  parseFocusedCommand,
   serializeProofCommands,
   shortenQualifiedNames,
   stripCasePrefixes,
@@ -1380,6 +1382,13 @@ function resolveLeanTactic(
 ): string | null {
   const inferredLeanTactic = inferLeanTacticFromVisualInteraction(playTactic, stream, resultStep)
   const annotationLeaf = stripCasePrefixes(annotationLeanTactic)
+  const visualRewrite = parseFocusedCommand(playTactic).tactic.includes('_at ')
+    ? coreTacticForVisualCommand(playTactic)
+    : null
+  // The selected expression path is part of the player's action. Some RPC
+  // annotations collapse a path-scoped drag to plain `rw`, which can replay
+  // against an earlier occurrence and produce an invalid exported proof.
+  if (visualRewrite) return visualRewrite
   // A placeholder annotation describes the visual command but is not valid
   // Lean. Prefer the generic structural inference (for example A applied to
   // A → B) instead of ever rendering `? (drag_to h1 h2)` as Core Lean.

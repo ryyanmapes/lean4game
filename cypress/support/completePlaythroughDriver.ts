@@ -1623,7 +1623,7 @@ export class CompletePlaythroughDriver {
       // `cases` is meaningful instead of guessing another relation card.
       const caseable = visible(
         this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      ).filter(card => /^(?:∃|ℕ|Nat|False)|(?:∨|∧)/u.test((card.dataset.hypType ?? '').trim()))
+      ).filter(card => /^(?:∃|False)|(?:∨|∧)/u.test((card.dataset.hypType ?? '').trim()))
       if (caseable.length !== 1) return null
       const generatedName = caseable[0]?.dataset.hypName
       if (generatedName) this.rememberAlias(match[1], generatedName)
@@ -2079,6 +2079,13 @@ export class CompletePlaythroughDriver {
     if (match[2]) await this.exposeDeferredInitialBinders(match[2])
     const target = match[2]
       ? await waitFor(`hypothesis ${match[2]}`, () => {
+          // Keep following the concrete card produced by the preceding
+          // `apply ... at h`. Resolving the classic name first can fall back
+          // to the still-visible original `h`, which often has the same broad
+          // theorem shape but the wrong instantiated variables.
+          const historicalAlias = this.aliases.get(match[2]!)
+          const aliased = historicalAlias ? this.hypExact(historicalAlias) : null
+          if (aliased && matchesTheoremPremise(source, aliased, [])) return aliased
           const named = this.hyp(match[2])
           if (named && matchesTheoremPremise(source, named, [])) return named
           // Browser reconciliation keeps earlier derived cards visible. A
@@ -2193,9 +2200,15 @@ export class CompletePlaythroughDriver {
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] !== finalTargetType
           ? finalTargetName
           : null
+      const changedSourceName = finalSourceName
+        && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalSourceName] != null
+        && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalSourceName] !== finalSourceType
+          ? finalSourceName
+          : null
       let resultName = semanticConclusionName
         ?? visibleCreatedConclusionName
         ?? createdName
+        ?? changedSourceName
         ?? changedTargetName
         ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
@@ -2600,14 +2613,14 @@ export class CompletePlaythroughDriver {
         const targetCard = this.hypExact(target)
         if (
           targetCard?.classList.contains('constructable') &&
-          !targetCard.classList.contains('transformable') &&
           parsed.rules.every(rule => /^(?:one_eq_succ_zero|two_eq_succ_one)$/u.test(sourceName(rule.name)))
         ) {
-          // A ≤ hypothesis deliberately opens witness construction instead
-          // of Transformation Mode. Numeral notation is definitionally equal,
-          // so the following theorem-card application can consume this premise
-          // without first rewriting `1`/`2`. Do not turn a requested rewrite
-          // into the unrelated player action that expands the ≤ hypothesis.
+          // Rewriting a numeral inside a ≤ hypothesis can expose its
+          // definitional witness equality in Transformation Mode. That is not
+          // the player-equivalent of the classic `rw`: the next proposition
+          // theorem still consumes the original ≤ card because `1`/`2`
+          // are definitionally `succ 0`/`succ (succ 0)`. Leave the constructable
+          // card intact even when it also advertises a simplified transform.
           continue
         }
       }
