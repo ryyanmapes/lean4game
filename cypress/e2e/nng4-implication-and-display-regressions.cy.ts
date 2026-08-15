@@ -769,6 +769,7 @@ describe('NNG4 implication and definition display regressions', () => {
         .to.equal(false)
     })
 
+    cy.get('.tr-transformation-overlay .tr-back-btn').click()
     performPlayerGestures(['rfl'])
 
     cy.get('.proof-sidebar-tab').click()

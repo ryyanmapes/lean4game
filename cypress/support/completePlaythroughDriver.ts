@@ -229,7 +229,11 @@ async function waitForPlayAttempt(
   retry?: () => void,
 ) {
   const interactionDeadline = Date.now() + INTERACTION_TIMEOUT
-  const responseDeadline = Date.now() + ACTION_TIMEOUT
+  // Once the gesture reaches Lean, still fail within Cypress's enclosing
+  // command timeout so the driver can report the selected source/target and
+  // last drag dispatch. An indefinitely pending RPC previously surfaced only
+  // as an opaque `cy.then()` timeout in long all-level playthroughs.
+  const responseDeadline = Date.now() + Math.min(ACTION_TIMEOUT, 60_000)
   let actionStarted = false
   while (Date.now() < (actionStarted ? responseDeadline : interactionDeadline)) {
     const entries = playLog(win)
@@ -435,8 +439,8 @@ async function drag(source: HTMLElement, target: HTMLElement) {
       candidate.dataset.hypType,
       candidate.dataset.theoremName,
     ].join('|')
-    if (candidate !== stableSource || candidateKey !== stableSourceKey) {
-      stableSource = candidate
+    stableSource = candidate
+    if (candidateKey !== stableSourceKey) {
       stableSourceKey = candidateKey
       stableSince = Date.now()
       return null
@@ -1326,6 +1330,7 @@ export class CompletePlaythroughDriver {
   private deferredInitialBinderNames: string[] = []
   private previousApplyAtTarget: string | null = null
   private previousApplyAtResultName: string | null = null
+  private keepTransformationOpen = false
   private readonly applicationSelectionHistory: Array<Record<string, unknown>> = []
 
   constructor(private readonly win: DriverWindow) {}
@@ -1424,11 +1429,26 @@ export class CompletePlaythroughDriver {
    * transformation view's arrow button. */
   async performRewriteOnSide(command: string, side: 'left' | 'right') {
     this.preferredRewriteSide = side
+    this.keepTransformationOpen = true
     try {
       await this.perform(command)
     } finally {
       this.preferredRewriteSide = null
+      this.keepTransformationOpen = false
     }
+  }
+
+  private async openConstructionFromCard(source: HTMLElement, description: string) {
+    let lastAttemptAt = 0
+    return await waitFor(`${description} construction view`, () => {
+      const overlay = this.win.document.querySelector<HTMLElement>('.tr-construction-overlay')
+      if (overlay) return overlay
+      if (Date.now() - lastAttemptAt < 250) return null
+      source = this.refreshCard(source)
+      doubleClick(source)
+      lastAttemptAt = Date.now()
+      return null
+    }, 5_000)
   }
 
   private async navigateFromCompletedBranch() {
@@ -2247,8 +2267,7 @@ export class CompletePlaythroughDriver {
         const specializesForall = remainingForallArguments > 0
           || (source.classList.contains('constructable') && !this.hyp(argument))
         if (specializesForall) {
-          doubleClick(source)
-          await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+          await this.openConstructionFromCard(source, command)
           await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
           if (remainingForallArguments > 0) remainingForallArguments -= 1
         } else {
@@ -2389,8 +2408,7 @@ export class CompletePlaythroughDriver {
           : []))
         const sourceNameBeforeArgument = propositionCardName(source)
         source = this.refreshCard(source)
-        doubleClick(source)
-        await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+        await this.openConstructionFromCard(source, command)
         await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
         source = await waitFor(`${command} theorem card for ${argument}`, () => {
           try {
@@ -3215,13 +3233,15 @@ export class CompletePlaythroughDriver {
           await this.applyRewriteRule(rule, parsed.occurrence)
         }
       }
-      await waitFor('transformation view to close', () => {
-        const overlay = this.win.document.querySelector('.tr-transformation-overlay')
-        if (!overlay) return true
-        const button = overlay.querySelector<HTMLButtonElement>('.tr-back-btn')
-        if (button && !button.disabled) click(button)
-        return null
-      })
+      if (!this.keepTransformationOpen) {
+        await waitFor('transformation view to close', () => {
+          const overlay = this.win.document.querySelector('.tr-transformation-overlay')
+          if (!overlay) return true
+          const button = overlay.querySelector<HTMLButtonElement>('.tr-back-btn')
+          if (button && !button.disabled) click(button)
+          return null
+        })
+      }
       if (rawTarget !== 'goal') {
         const currentName = this.hypExact(target)?.dataset.hypName ?? await waitFor(
           `${rawTarget} rewritten relation to remount`,
@@ -3400,8 +3420,7 @@ export class CompletePlaythroughDriver {
     let createdName: string | null = null
     for (const argument of arguments_) {
       const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-      doubleClick(source)
-      await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
+      await this.openConstructionFromCard(source, command)
       await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
       const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
       createdName = afterNames.find(name => !beforeNames.has(name)) ?? null
