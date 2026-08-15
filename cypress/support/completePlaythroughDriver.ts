@@ -998,6 +998,12 @@ function matchesPartiallyAppliedRule(
   }
 }
 
+function cardProposition(card: HTMLElement) {
+  return card.dataset.hypType
+    ?? card.querySelector<HTMLElement>('.proposition')?.textContent
+    ?? ''
+}
+
 function matchesTheoremPremise(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
@@ -1007,10 +1013,8 @@ function matchesTheoremPremise(
   // on the card. Its rendered `.proposition` can still include the original
   // forall presentation (or a definitionally-reduced second line), which
   // makes a visible implication fail to match its visible premise.
-  const proposition = theorem.dataset.hypType
-    ?? theorem.querySelector<HTMLElement>('.proposition')?.textContent
-    ?? ''
-  const targetType = hypothesis.dataset.hypType
+  const proposition = cardProposition(theorem)
+  const targetType = cardProposition(hypothesis)
   if (!targetType) return false
   // A generalized local theorem can have several proposition binders, and a
   // player may drag any matching premise onto it. Splitting only at the first
@@ -1080,10 +1084,8 @@ function exactlyMatchesTheoremPremise(
   theorem: HTMLElement,
   hypothesis: HTMLElement,
 ): boolean {
-  const proposition = theorem.dataset.hypType
-    ?? theorem.querySelector<HTMLElement>('.proposition')?.textContent
-    ?? ''
-  const targetType = hypothesis.dataset.hypType
+  const proposition = cardProposition(theorem)
+  const targetType = cardProposition(hypothesis)
   if (!targetType) return false
   const body = proposition.replace(/^\s*∀\s*(?:\([^)]*\)\s*)*,?\s*/u, '')
   let depth = 0
@@ -2194,7 +2196,9 @@ export class CompletePlaythroughDriver {
     for (let premise = 0; !match[2] && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const matchingHypothesis = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        ),
       ).find(hypothesis => hypothesis !== source && matchesTheoremPremise(source, hypothesis, []))
       if (!matchingHypothesis) break
       const sourceName = source.dataset.hypName
@@ -2238,9 +2242,6 @@ export class CompletePlaythroughDriver {
               '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
             ),
           ).filter(candidate => candidate !== source)
-          const candidateProposition = (candidate: HTMLElement) => candidate.dataset.hypType
-            ?? candidate.querySelector<HTMLElement>('.proposition')?.textContent
-            ?? ''
           // Exact surface equality is stronger than the generalized matcher
           // and must be considered independently. A derived card can retain
           // stale forall-footer metadata which makes the pattern matcher
@@ -2273,20 +2274,20 @@ export class CompletePlaythroughDriver {
             : null
           const surfaceExactCards = visibleFirstPremise
             ? candidateCards.filter(candidate =>
-                this.normalizedProposition(candidateProposition(candidate)) === visibleFirstPremise,
+                this.normalizedProposition(cardProposition(candidate)) === visibleFirstPremise,
               )
             : []
           const compactRenderedSource = this.normalizedProposition(
             renderedSourceProposition ?? source.textContent ?? '',
           )
           const renderedPremiseCards = candidateCards.filter(candidate => {
-            const candidateType = this.normalizedProposition(candidateProposition(candidate))
+            const candidateType = this.normalizedProposition(cardProposition(candidate))
             return candidateType.length > 0 && compactRenderedSource.includes(`${candidateType}→`)
           })
           const rememberedTargetType = this.aliasTypes.get(match[2])
           const rememberedTarget = rememberedTargetType
             ? matchingCards.find(candidate =>
-                this.normalizedProposition(candidate.dataset.hypType ?? '') === rememberedTargetType,
+                this.normalizedProposition(cardProposition(candidate)) === rememberedTargetType,
               )
             : null
           const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
@@ -2299,8 +2300,8 @@ export class CompletePlaythroughDriver {
           // A fully specialized visible premise is the strongest signal. In
           // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
           // even while an older `b ≠ 0` card retains the classic name `h`.
-          if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
-          if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
+          if (renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
+          if (surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
           if (
             previousResult &&
             previousResult !== source
@@ -2458,9 +2459,13 @@ export class CompletePlaythroughDriver {
       // derived atomic result must not be fed the same hypothesis again just
       // because Lean exposes a definitionally reduced arrow type for `≠`.
       for (let premise = 0; sourceWasLocalHypothesis && resultName && premise < 8; premise += 1) {
-        let resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
-        const authoritativeType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName] ?? ''
-        if (authoritativeType.includes('→') && !(resultCard.dataset.hypType ?? '').includes('→')) {
+        let resultCard = await waitFor(
+          `derived theorem ${resultName}`,
+          () => this.propositionCardExact(resultName!),
+        )
+        const authoritativeType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName]
+          ?? cardProposition(resultCard)
+        if (authoritativeType.includes('→') && !cardProposition(resultCard).includes('→')) {
           // React can retain the pre-application proposition on the reused
           // card for one commit after the proof audit already exposes the
           // curried result. Wait for the card a player sees to catch up before
@@ -2468,8 +2473,8 @@ export class CompletePlaythroughDriver {
           resultCard = await waitFor(
             `derived theorem ${resultName} implication display`,
             () => {
-              const refreshed = this.hypExact(resultName!)
-              return refreshed?.dataset.hypType?.includes('→') ? refreshed : null
+              const refreshed = this.propositionCardExact(resultName!)
+              return refreshed && cardProposition(refreshed).includes('→') ? refreshed : null
             },
             3_000,
           )
@@ -2478,10 +2483,12 @@ export class CompletePlaythroughDriver {
         // an atomic proposition such as `b ≠ 0`. Only the authoritative main
         // hypothesis type determines whether another premise application is
         // valid; the grey reduction is explanatory, not another function.
-        const displayedProposition = resultCard.dataset.hypType ?? ''
+        const displayedProposition = cardProposition(resultCard)
         if (!displayedProposition.includes('→')) break
         const matchingHypothesis = visible(
-          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+          this.win.document.querySelectorAll<HTMLElement>(
+            '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+          ),
         ).find(hypothesis => hypothesis !== resultCard && matchesTheoremPremise(resultCard, hypothesis, []))
         if (!matchingHypothesis) break
         const namesBeforeApplication = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
