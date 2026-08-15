@@ -1200,6 +1200,7 @@ export class CompletePlaythroughDriver {
   private deferredInitialBinderNames: string[] = []
   private previousApplyAtTarget: string | null = null
   private previousApplyAtResultName: string | null = null
+  private readonly applicationSelectionHistory: Array<Record<string, unknown>> = []
 
   constructor(private readonly win: DriverWindow) {}
 
@@ -2392,6 +2393,22 @@ export class CompletePlaythroughDriver {
     const expectedFinalConclusion = finalArrow >= 0
       ? this.normalizedProposition(finalSourceType.slice(finalArrow + 1))
       : null
+    const applicationSelectionRecord: Record<string, unknown> = {
+      command,
+      continuesApplyAtChain,
+      previousApplyAtTarget: this.previousApplyAtTarget,
+      previousApplyAtResultName: this.previousApplyAtResultName,
+      source: {
+        name: propositionCardName(source),
+        proposition: cardProposition(source),
+      },
+      target: {
+        name: propositionCardName(target),
+        proposition: cardProposition(target),
+      },
+    }
+    this.applicationSelectionHistory.push(applicationSelectionRecord)
+    if (this.applicationSelectionHistory.length > 8) this.applicationSelectionHistory.shift()
     try {
       await this.dragAndWait(source, target, `${command} player drag`)
     } catch (error) {
@@ -2574,6 +2591,10 @@ export class CompletePlaythroughDriver {
           .find(candidate => !namesBeforeApplication.has(candidate)) ?? resultName
       }
       if (resultName) {
+        applicationSelectionRecord.resultName = resultName
+        applicationSelectionRecord.resultProposition = this.propositionCardExact(resultName)
+          ? cardProposition(this.propositionCardExact(resultName)!)
+          : harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName] ?? null
         this.rememberAlias(match[2], resultName)
         this.previousApplyAtResultName = resultName
         const resultType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName]
@@ -2828,7 +2849,8 @@ export class CompletePlaythroughDriver {
     throw new Error(
       `Rewrite ${rule.name} could not be dragged to a matching expression ` +
       `(audit=${JSON.stringify(harness(this.win).getProofAudit())}; ` +
-      `lastPlay=${JSON.stringify(playLog(this.win).at(-1))})`,
+      `lastPlay=${JSON.stringify(playLog(this.win).at(-1))}; ` +
+      `applicationSelections=${JSON.stringify(this.applicationSelectionHistory)})`,
     )
   }
 
