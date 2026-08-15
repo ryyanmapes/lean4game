@@ -1185,12 +1185,12 @@ example (x y : Nat) (h : x * y = 1) : True := by
   have _hx : x * y ≠ 0 := thm_oneNeZeroRewriteLocal
   trivial
 
-example (x : Nat) : x + 1 = 4 → True := by
+example (x : Nat) : x + 1 = 4 → x = 3 := by
   intro h
   drag_to succInjLocal h
   exact thm_succInjLocal
 
-example (x : Nat) : x + 1 = 4 → True := by
+example (x : Nat) : x + 1 = 4 → x = 3 := by
   intro h
   drag_apply succInjLocal h
   exact thm_succInjLocal
