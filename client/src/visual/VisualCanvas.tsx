@@ -2676,7 +2676,11 @@ export function VisualCanvas({
 
     const lastStep = result?.steps.at(-1)
     const leanTactic = options?.leanTacticOverride ?? (handledByConfirmedGoalCompletion
-      ? 'rfl'
+      // The visual contract keeps a reflexive goal visible until the player
+      // clicks it, even when Lean's preceding `rw` already discharged the
+      // underlying goal. Preserve that deliberate click as a valid Core Lean
+      // step in both cases: `all_goals` is a no-op if there are no goals left.
+      ? 'all_goals rfl'
       : result
       ? resolveLeanTactic(lastStep?.annotation?.leanTactic, command, playTactic, focusedStream, lastStep)
       : null)
