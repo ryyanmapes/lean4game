@@ -906,13 +906,16 @@ syntax (name := click_goal) "click_goal" : tactic
       evalTactic (← `(tactic| constructor))
   | _ =>
       match goalWhnf with
-      | .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr =>
-          if ← withReducible (isDefEq lhsExpr rhsExpr) then
-            -- Cauli's browser build can select `Iff.rfl` when `MVarId.refl`
-            -- is used after this reducible fallback, even though the target is
-            -- an equality.  Supply the equality constructor explicitly.
+      | .app (.app (.app (.const ``Eq _) _) _) _ =>
+          -- Do not duplicate elaboration's definitional-equality check here.
+          -- In a cases branch, constructor notation and numeral notation can
+          -- initially compare unequal while `Eq.refl` still elaborates and
+          -- closes the displayed equality (for example `zero = 0`). Trying
+          -- the equality constructor is both stricter than generic `rfl`
+          -- (which Cauli can misclassify as `Iff.rfl`) and authoritative.
+          try
             evalTacticString "exact Eq.refl _"
-          else
+          catch _ =>
             throwError "click_goal: goal is an equality but not solvable by `rfl`.\n\
               goal : {goal}"
       | .forallE _ domain _ _ =>

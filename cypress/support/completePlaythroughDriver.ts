@@ -1836,7 +1836,25 @@ export class CompletePlaythroughDriver {
           await waitFor('construction view', () => this.win.document.querySelector('.tr-construction-overlay'))
           await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
         } else {
-          const matchingHypothesis = this.hyp(argument)
+          let matchingHypothesis = this.hyp(argument)
+          if (!matchingHypothesis || !matchesTheoremPremise(source, matchingHypothesis, [])) {
+            // A rewrite or branch reconciliation may replace the card that a
+            // classic proof name used to denote. Resolve the proof argument
+            // from the premise of the theorem the player is visibly holding,
+            // then update the alias. Looking for another theorem that accepts
+            // the stale card reverses this relationship and can select an old
+            // curried theorem from the workspace.
+            const semanticHypothesis = visible(
+              this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+            ).find(candidate =>
+              candidate !== source && matchesTheoremPremise(source, candidate, []),
+            )
+            if (semanticHypothesis) {
+              matchingHypothesis = semanticHypothesis
+              const semanticName = semanticHypothesis.dataset.hypName
+              if (semanticName) this.rememberAlias(argument, semanticName)
+            }
+          }
           if (matchingHypothesis && !matchesTheoremPremise(source, matchingHypothesis, [])) {
             // Reconciliation can preserve the old curried card while mounting
             // its derived result under a fresh Lean name. Follow the visible
@@ -1997,6 +2015,11 @@ export class CompletePlaythroughDriver {
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const finalSourceName = source.dataset.hypName
+    const finalSourceType = source.dataset.hypType ?? ''
+    const finalArrow = finalSourceType.indexOf('→')
+    const expectedFinalConclusion = finalArrow >= 0
+      ? this.normalizedProposition(finalSourceType.slice(finalArrow + 1))
+      : null
     await this.dragAndWait(source, target, `${command} player drag`)
     if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
       const derivedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
@@ -2015,6 +2038,18 @@ export class CompletePlaythroughDriver {
           lastPlay: playLog(this.win).at(-1),
         })}`)
       }
+      // Prefer the proposition produced by the application over identity
+      // churn. The browser can mount an intermediate specialized theorem and
+      // the atomic conclusion in the same update; choosing merely the first
+      // new name binds the classic alias to the stale `A → B` card.
+      const semanticConclusionName = expectedFinalConclusion
+        ? await waitFor(`${command} semantic conclusion card`, () => visible(
+            this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+          ).find(card =>
+            Boolean(card.dataset.hypName) &&
+            this.normalizedProposition(card.dataset.hypType ?? '') === expectedFinalConclusion,
+          )?.dataset.hypName ?? null).catch(() => null)
+        : null
       const createdName = sourceWasLocalHypothesis
         ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !beforeFinalNames.has(candidate))
@@ -2023,7 +2058,7 @@ export class CompletePlaythroughDriver {
               .find(candidate =>
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
               ) ?? null).catch(() => null)
-      let resultName = createdName ?? target.dataset.hypName
+      let resultName = semanticConclusionName ?? createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
       // ordinary proposition-on-implication drags while a visible premise
