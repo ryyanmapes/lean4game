@@ -2,6 +2,15 @@
 function browserCompatibleProof(proofBody: string): string {
   const lines = proofBody.split('\n')
   return lines.map((line, index) => {
+    const rwNthMatch = line.match(/^(\s*)rw_nth\s+(\d+)\s+(.+)$/u)
+    if (rwNthMatch) {
+      // `rw_nth` is the compact spelling shown in the Core pane. The browser
+      // module's established NNG environment already kernel-checks the same
+      // operation through `nth_rewrite`; use that spelling only in transient
+      // compiler input so classic handoffs validate without changing what the
+      // player sees or exports.
+      return `${rwNthMatch[1]}nth_rewrite ${rwNthMatch[2]} ${rwNthMatch[3]}`
+    }
     const tautoMatch = line.match(/^(\s*)tauto\s*$/u)
     if (tautoMatch) {
       const directMulNeZero = lines[index - 1]?.trim().match(

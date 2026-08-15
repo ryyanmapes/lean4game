@@ -3,6 +3,15 @@ import test from 'node:test'
 
 const { instrumentBrowserProof } = await import('../../tmp-browser-proof-tests/browserProof.js')
 
+test('checks displayed rw_nth steps through the established NNG nth_rewrite tactic', () => {
+  assert.equal(
+    instrumentBrowserProof(`rw_nth 2 [MyNat.two_eq_succ_one]
+  rw_nth 1 [MyNat.add_zero] at h`),
+    `nth_rewrite 2 [MyNat.two_eq_succ_one]
+  nth_rewrite 1 [MyNat.add_zero] at h`,
+  )
+})
+
 test('uses Lean propositional simplification for the browser tauto action', () => {
   assert.equal(instrumentBrowserProof('tauto'), 'first | contradiction | simp_all')
 })
