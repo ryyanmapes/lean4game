@@ -2142,7 +2142,22 @@ export class CompletePlaythroughDriver {
       // derived atomic result must not be fed the same hypothesis again just
       // because Lean exposes a definitionally reduced arrow type for `≠`.
       for (let premise = 0; sourceWasLocalHypothesis && resultName && premise < 8; premise += 1) {
-        const resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
+        let resultCard = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName!))
+        const authoritativeType = harness(this.win).getCurrentStreamSnapshot().hypTypes[resultName] ?? ''
+        if (authoritativeType.includes('→') && !(resultCard.dataset.hypType ?? '').includes('→')) {
+          // React can retain the pre-application proposition on the reused
+          // card for one commit after the proof audit already exposes the
+          // curried result. Wait for the card a player sees to catch up before
+          // deciding that there are no premises left to drag.
+          resultCard = await waitFor(
+            `derived theorem ${resultName} implication display`,
+            () => {
+              const refreshed = this.hypExact(resultName!)
+              return refreshed?.dataset.hypType?.includes('→') ? refreshed : null
+            },
+            3_000,
+          )
+        }
         // The card can also show a definitionally reduced implication below
         // an atomic proposition such as `b ≠ 0`. Only the authoritative main
         // hypothesis type determines whether another premise application is

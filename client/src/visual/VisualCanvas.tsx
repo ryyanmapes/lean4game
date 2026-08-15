@@ -3071,7 +3071,20 @@ export function VisualCanvas({
       // only the hypothesis is visibly under the player's finger.  The old
       // rectangle scan turned an explicit theorem-on-hypothesis drop into
       // drag_goal after branch/card reconciliation.
-      const card = stackedCards[0]
+      const dndCard = overId
+        ? document.getElementById(overId) as HTMLElement | null
+        : null
+      const paintedCard = stackedCards[0]
+      // On the phone layout the fixed goal can be painted over a hypothesis
+      // while the card column is auto-scrolling. dnd-kit's droppable
+      // collision still identifies the hypothesis the player entered, but a
+      // raw release-point hit test sees the fixed goal. Preserve that more
+      // specific card-on-card target; in every other case the painted topmost
+      // card remains authoritative.
+      const card = paintedCard?.dataset.testid === 'goal-card'
+        && dndCard?.dataset.testid === 'hyp-card'
+          ? dndCard
+          : paintedCard
       if (card?.id) overId = card.id
     }
     setActiveDraggedTheorem(null)
@@ -4258,7 +4271,12 @@ export function VisualCanvas({
         expectedGoal,
       )
       preservedAutoCompletedHypothesisGoal = leanCanvas.completed
-      nextTree = replaceLeafStream(nextTree, focusedStream.id, syntheticStream)
+      // Reconciliation can already have replaced the focused leaf with a
+      // returned (but spuriously completed) stream. Replace that current leaf
+      // rather than searching only for the pre-interaction id; otherwise the
+      // canvas contains the continuation while the proof graph still marks a
+      // different leaf complete (rendered as "Stream 0 of N").
+      nextTree = replaceLeafStream(nextTree, nextStream?.id ?? focusedStream.id, syntheticStream)
       nextActiveId = syntheticStream.id
       focusedStreams = [syntheticStream]
       nextCanvas = replaceFocusedStreamInCanvas(canvasState, nextCanvas, focusedStream.id, syntheticStream)
