@@ -73,11 +73,13 @@ syntax (name := click_goal) "click_goal" : tactic
   | _ =>
       match goalWhnf with
       | .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr =>
-          unless ← withReducible (isDefEq lhsExpr rhsExpr) do
+          if ← withReducible (isDefEq lhsExpr rhsExpr) then
+            liftMetaTactic fun mvarId => withReducible do
+              mvarId.refl
+              pure []
+          else
             throwError "click_goal: goal is an equality but not solvable by `rfl`.\n\
               goal : {goal}"
-          throwError "click_goal: current goal is not directly clickable.\n\
-            goal : {goal}"
       | .forallE _ domain _ _ =>
           if ← isProp domain then
             throwError "click_goal: proposition implication could not be introduced.\n\

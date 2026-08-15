@@ -907,11 +907,13 @@ syntax (name := click_goal) "click_goal" : tactic
   | _ =>
       match goalWhnf with
       | .app (.app (.app (.const ``Eq _) _) lhsExpr) rhsExpr =>
-          unless ← withReducible (isDefEq lhsExpr rhsExpr) do
+          if ← withReducible (isDefEq lhsExpr rhsExpr) then
+            liftMetaTactic fun mvarId => withReducible do
+              mvarId.refl
+              pure []
+          else
             throwError "click_goal: goal is an equality but not solvable by `rfl`.\n\
               goal : {goal}"
-          throwError "click_goal: current goal is not directly clickable.\n\
-            goal : {goal}"
       | .forallE _ domain _ _ =>
           if ← isProp domain then
             throwError "click_goal: proposition implication could not be introduced.\n\
@@ -1058,6 +1060,9 @@ example (y : Nat) (h : (y + 0) + 2 = y + 2) : y + 2 = y + 2 := by
 example (n : Nat) : n = n := by
   click_goal
 
+example : Nat.zero = 0 := by
+  click_goal
+
 example (P : Prop) : P → P := by
   click_goal
   exact h
@@ -1092,9 +1097,9 @@ example (P Q : Prop) (h : Q) : P ∨ Q := by
   click_goal_right
   exact h
 
-example : 0 + 0 = 0 := by
+example (n : Nat) : 0 + n = n := by
   fail_if_success click_goal
-  drag_rw_lhs [Nat.add_zero]
+  drag_rw_lhs [Nat.zero_add]
   click_goal
 
 example (x : Nat) : x = x + 0 := by

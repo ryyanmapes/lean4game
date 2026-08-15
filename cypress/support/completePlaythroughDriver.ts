@@ -1824,6 +1824,11 @@ export class CompletePlaythroughDriver {
         source = this.refreshCard(source)
         const typesBeforeArgument = harness(this.win).getCurrentStreamSnapshot().hypTypes
         const namesBeforeArgument = new Set(Object.keys(typesBeforeArgument))
+        const visibleTypesBeforeArgument = new Map(visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        ).flatMap(card => card.dataset.hypName
+          ? [[card.dataset.hypName, card.dataset.hypType ?? ''] as const]
+          : []))
         const sourceNameBeforeArgument = source.dataset.hypName
         const sourceTypeBeforeArgument = source.dataset.hypType
         if (source.classList.contains('constructable')) {
@@ -1838,6 +1843,22 @@ export class CompletePlaythroughDriver {
           await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
         }
         const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
+        const visibleCardsAfterArgument = visible(
+          this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        )
+        const visibleCreatedName = visibleCardsAfterArgument
+          .map(card => card.dataset.hypName)
+          .find((candidate): candidate is string => Boolean(candidate) &&
+            candidate !== sourceNameBeforeArgument &&
+            !visibleTypesBeforeArgument.has(candidate!),
+          )
+        const visibleChangedName = visibleCardsAfterArgument
+          .map(card => [card.dataset.hypName, card.dataset.hypType ?? ''] as const)
+          .find(([candidate, type]) => Boolean(candidate) &&
+            candidate !== sourceNameBeforeArgument &&
+            visibleTypesBeforeArgument.has(candidate!) &&
+            visibleTypesBeforeArgument.get(candidate!) !== type,
+          )?.[0]
         const createdName = Object.keys(snapshotAfterArgument.hypTypes)
           // A specialization card can reach the DOM one audit snapshot late.
           // Do not mistake that still-curried source for the conclusion just
@@ -1889,7 +1910,8 @@ export class CompletePlaythroughDriver {
         // Prefer the card whose current proposition consumes the next
         // visible premise. Identity-based fallbacks can see an asynchronously
         // mounted specialization source before its derived conclusion.
-        const resultName = createdName ?? visibleDerivedName ?? retainedName ?? changedName ?? reusedName
+        const resultName = visibleCreatedName ?? visibleChangedName ?? createdName ??
+          visibleDerivedName ?? retainedName ?? changedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
@@ -1961,6 +1983,11 @@ export class CompletePlaythroughDriver {
         })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+    const visibleTypesBeforeFinal = new Map(visible(
+      this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+    ).flatMap(card => card.dataset.hypName
+      ? [[card.dataset.hypName, card.dataset.hypType ?? ''] as const]
+      : []))
     const finalSourceName = source.dataset.hypName
     await this.dragAndWait(source, target, `${command} player drag`)
     if (contradictionTarget && !harness(this.win).getProofAudit().completed) {
@@ -1980,14 +2007,24 @@ export class CompletePlaythroughDriver {
           lastPlay: playLog(this.win).at(-1),
         })}`)
       }
-      const createdName = sourceWasLocalHypothesis
+      const visibleCardsAfterFinal = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      )
+      const visibleResultName = visibleCardsAfterFinal
+        .map(card => [card.dataset.hypName, card.dataset.hypType ?? ''] as const)
+        .find(([candidate, type]) => Boolean(candidate) &&
+          candidate !== finalSourceName && (
+            !visibleTypesBeforeFinal.has(candidate!) || visibleTypesBeforeFinal.get(candidate!) !== type
+          ),
+        )?.[0]
+      const createdName = visibleResultName ?? (sourceWasLocalHypothesis
         ? Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .find(candidate => !beforeFinalNames.has(candidate))
         : await waitFor(`${command} derived conclusion card`, () =>
             Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
               .find(candidate =>
                 !beforeFinalNames.has(candidate) && candidate !== finalSourceName,
-              ) ?? null)
+              ) ?? null))
       let resultName = createdName ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
