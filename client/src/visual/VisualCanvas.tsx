@@ -3036,14 +3036,36 @@ export function VisualCanvas({
       stream: GoalStream | undefined
       card: HypCardType | undefined
     } => {
+      // Mobile/branch reconciliation can briefly retain a hidden card with
+      // the same generated id as the visible target. Read semantic metadata
+      // from the visible card in the selected stream before trusting an id;
+      // generated ids can be recycled by a remounted list.
+      const elements = id
+        ? Array.from(document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'))
+          .filter(element => element.id === id)
+        : []
+      const element = elements.find(candidate =>
+        candidate.dataset.streamId === currentStream?.id &&
+        candidate.getBoundingClientRect().width > 0 &&
+        candidate.getBoundingClientRect().height > 0,
+      ) ?? elements.find(candidate => {
+        const rect = candidate.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      }) ?? elements[0]
+      const liveHypType = element?.dataset.hypType
+      const withLiveType = (card: HypCardType | undefined): HypCardType | undefined =>
+        card && liveHypType
+          ? { ...card, hyp: { ...card.hyp, typeBody: liveHypType } }
+          : card
       const directStream = interactionStreams.find(stream => stream.hyps.some(card => card.id === id))
       const directCard = directStream?.hyps.find(card => card.id === id)
-      if (directStream && directCard) return { stream: directStream, card: directCard }
+      if (directStream && directCard && (
+        !element?.dataset.hypName || directCard.hyp.names[0] === element.dataset.hypName
+      )) return { stream: directStream, card: withLiveType(directCard) }
 
       // A just-selected branch may render its newer card instance one React
       // commit before canvasState receives that instance. Recover the target
       // from the semantic data on the card actually under the pointer.
-      const element = id ? document.getElementById(id) : null
       const streamId = element?.dataset.streamId
       const hypName = element?.dataset.hypName
       const hypType = element?.dataset.hypType
@@ -3056,7 +3078,7 @@ export function VisualCanvas({
           candidate.hyp.typeBody ?? TaggedText_stripTags(candidate.hyp.type),
         ) === hypType),
       )
-      return { stream, card }
+      return { stream, card: withLiveType(card) }
     }
     const sourceTheoremCopy = getTheoremCopyById(activeId)
     const sourceStream = interactionStreams.find(s => s.hyps.some(h => h.id === activeId))
@@ -3592,7 +3614,7 @@ export function VisualCanvas({
     closeReductionTooltip(anchorId)
   }
 
-  function handleGoalClick(streamId: string, clickAction?: ClickAction) {
+  function handleGoalClick(streamId: string, clickAction?: ClickAction, displayedStream?: GoalStream) {
     if (isProcessing || canvasState.completed || !hasClickAction(clickAction)) return
     closeReductionTooltip()
     if (clickAction.options.length > 0) {
@@ -3614,7 +3636,8 @@ export function VisualCanvas({
     const coreCommand = coreCommandForGoalClick(
       clickAction.playTactic,
       clickAction.tooltip,
-      clickAction.tooltip?.trim().toLowerCase() === 'click to complete',
+      clickAction.tooltip?.trim().toLowerCase() === 'click to complete' ||
+        Boolean(displayedStream && goalIsReflexiveEquality(displayedStream)),
     )
     const commandOverride = coreCommand === clickAction.playTactic
       ? undefined
@@ -5683,7 +5706,9 @@ export function VisualCanvas({
         isPotentialTarget={isTacticTarget}
         atomicContextNames={streamHypNames(liveGoalStream)}
         reductionForms={stream.reductionForms}
-        onClick={streamInteractionsEnabled && isClickable ? () => handleGoalClick(liveGoalStream.id, clickAction) : undefined}
+        onClick={streamInteractionsEnabled && isClickable
+          ? () => handleGoalClick(liveGoalStream.id, clickAction, stream)
+          : undefined}
         onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
       />
     )

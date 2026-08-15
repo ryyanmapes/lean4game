@@ -458,7 +458,7 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // list. Resolve the destination by its stable card id again; otherwise its
   // detached pre-scroll rectangle can point at the fixed goal even though the
   // replacement card is visibly lower in the theorem column.
-  target = (ownerDocument.getElementById(target.id) as HTMLElement | null) ?? target
+  target = resolveRemountedDragTarget(ownerDocument, targetIdentity, target)
   // Once dnd-kit's sensor is active, scroll the same canvas toward the target
   // just as a player does during a long drag. Verify the actual hit target
   // before releasing rather than trusting an overlay-obscured rectangle.
@@ -735,11 +735,20 @@ function resolveRemountedDragTarget(
   } catch {
     // The audit bridge can be between React commits while the card remounts.
   }
-  return candidates.find(candidate => candidate.dataset.streamId === currentStreamId)
+  const semanticMatch = (candidate: HTMLElement | null | undefined) => Boolean(candidate)
+    && (!identity.testId || candidate!.dataset.testid === identity.testId)
+    && (!identity.hypName || candidate!.dataset.hypName === identity.hypName)
+    && (!identity.hypType || candidate!.dataset.hypType === identity.hypType)
+    && (!identity.theoremName || candidate!.dataset.theoremName === identity.theoremName)
+  const resolved = candidates.find(candidate => candidate.dataset.streamId === currentStreamId)
     ?? candidates.find(candidate => candidate.dataset.streamId === identity.streamId)
     ?? candidates[0]
-    ?? (exact?.isConnected ? exact : null)
-    ?? fallback
+    ?? (exact?.isConnected && semanticMatch(exact) ? exact : null)
+    ?? (fallback.isConnected && semanticMatch(fallback) ? fallback : null)
+  if (!resolved) {
+    throw new Error(`Player drag target remounted without a semantic replacement: ${JSON.stringify(identity)}`)
+  }
+  return resolved
 }
 
 function isWithinViewport(element: HTMLElement) {
@@ -962,7 +971,13 @@ function matchesTheoremPremise(
   hypothesis: HTMLElement,
   explicitArgs: string[],
 ): boolean {
-  const proposition = theorem.querySelector<HTMLElement>('.proposition')?.textContent ?? ''
+  // A specialized workspace theorem's authoritative proposition is stored
+  // on the card. Its rendered `.proposition` can still include the original
+  // forall presentation (or a definitionally-reduced second line), which
+  // makes a visible implication fail to match its visible premise.
+  const proposition = theorem.dataset.hypType
+    ?? theorem.querySelector<HTMLElement>('.proposition')?.textContent
+    ?? ''
   const arrow = proposition.indexOf('→')
   const targetType = hypothesis.dataset.hypType
   if (arrow < 0 || !targetType) return false
