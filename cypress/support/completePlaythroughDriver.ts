@@ -2142,21 +2142,6 @@ export class CompletePlaythroughDriver {
             )?.dataset.hypName ?? null
           }).catch(() => null)
         : null
-      const leastCurriedConclusionName = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      ).filter(card => {
-        const candidateName = card.dataset.hypName
-        const candidateType = card.dataset.hypType ?? ''
-        return Boolean(candidateName)
-          && candidateName !== finalSourceName
-          && /(?:=|≠|≤|∨|∧|False)/u.test(candidateType)
-      }).sort((left, right) => {
-        const leftArrows = (left.dataset.hypType?.match(/→/gu) ?? []).length
-        const rightArrows = (right.dataset.hypType?.match(/→/gu) ?? []).length
-        const leftWasPresent = beforeFinalNames.has(left.dataset.hypName ?? '') ? 1 : 0
-        const rightWasPresent = beforeFinalNames.has(right.dataset.hypName ?? '') ? 1 : 0
-        return leftArrows - rightArrows || leftWasPresent - rightWasPresent
-      })[0]?.dataset.hypName ?? null
       const createdName = await waitFor(`${command} derived conclusion card`, () =>
         Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .filter(([candidate]) =>
@@ -2176,7 +2161,6 @@ export class CompletePlaythroughDriver {
       let resultName = semanticConclusionName
         ?? createdName
         ?? changedTargetName
-        ?? leastCurriedConclusionName
         ?? target.dataset.hypName
       // Applying a generalized induction hypothesis to an equality can leave
       // earlier premises (for example `ha : a ≠ 0`) unapplied. Continue with
@@ -2480,7 +2464,9 @@ export class CompletePlaythroughDriver {
       if (target === 'goal') {
         const goal = await waitFor('current goal', () => currentGoal(this.win))
         const snapshot = harness(this.win).getCurrentStreamSnapshot()
-        if (!goal.classList.contains('transformable') && snapshot.goalOptionTactics.length > 0) {
+        const goalRequiresChoice = snapshot.goalOptionTactics.length > 0
+          || snapshot.goalType.includes('∨')
+        if (!goal.classList.contains('transformable') && goalRequiresChoice) {
           // Lean can rewrite under an Or before choosing a branch, but the
           // player must first choose which disjunct to construct. Defer this
           // rewrite until that visible choice, then perform it on the selected
