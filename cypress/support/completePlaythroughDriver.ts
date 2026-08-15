@@ -1607,7 +1607,23 @@ export class CompletePlaythroughDriver {
     await this.exposeDeferredInitialBinders(match[1])
     const beforeSnapshot = harness(this.win).getCurrentStreamSnapshot()
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
-    const target = await waitFor(`hypothesis ${match[1]}`, () => this.hyp(match[1]))
+    const target = await waitFor(`hypothesis ${match[1]}`, () => {
+      const named = this.hyp(match[1])
+      if (named) return named
+      if (!this.aliases.has(match[1])) return null
+      // Applying a tray theorem creates a generated `thm_*` proposition.
+      // A preceding branch split can remap that generated Lean name even
+      // though the same card remains visibly available to the player. When
+      // the historical alias is gone, follow the unique proposition on which
+      // `cases` is meaningful instead of guessing another relation card.
+      const caseable = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      ).filter(card => /^(?:∃|ℕ|Nat|False)|(?:∨|∧)/u.test((card.dataset.hypType ?? '').trim()))
+      if (caseable.length !== 1) return null
+      const generatedName = caseable[0]?.dataset.hypName
+      if (generatedName) this.rememberAlias(match[1], generatedName)
+      return caseable[0] ?? null
+    })
     const eliminatedDisplayName = target.dataset.hypName
     const type = target.dataset.hypType ?? ''
     const casesNumber = /^(?:\u2115|Nat|MyNat)$/u.test(type.trim())
@@ -2095,6 +2111,9 @@ export class CompletePlaythroughDriver {
       )
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
+    const visibleNamesBeforeFinal = new Set(visible(
+      this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+    ).flatMap(card => card.dataset.hypName ? [card.dataset.hypName] : []))
     const finalSourceName = source.dataset.hypName
     const finalSourceType = source.dataset.hypType
       ?? source.querySelector<HTMLElement>('.proposition')?.textContent
@@ -2153,12 +2172,24 @@ export class CompletePlaythroughDriver {
           .sort(([, leftType], [, rightType]) =>
             (leftType.match(/→/gu) ?? []).length - (rightType.match(/→/gu) ?? []).length
           )[0]?.[0] ?? null).catch(() => null)
+      const visibleCreatedConclusionName = visible(
+        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+      ).filter(card => {
+        const candidateName = card.dataset.hypName
+        return Boolean(candidateName)
+          && candidateName !== finalSourceName
+          && !visibleNamesBeforeFinal.has(candidateName!)
+      }).sort((left, right) =>
+        (left.dataset.hypType?.match(/→/gu) ?? []).length
+          - (right.dataset.hypType?.match(/→/gu) ?? []).length
+      )[0]?.dataset.hypName ?? null
       const changedTargetName = finalTargetName
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] != null
         && harness(this.win).getCurrentStreamSnapshot().hypTypes[finalTargetName] !== finalTargetType
           ? finalTargetName
           : null
       let resultName = semanticConclusionName
+        ?? visibleCreatedConclusionName
         ?? createdName
         ?? changedTargetName
         ?? target.dataset.hypName
@@ -2599,7 +2630,18 @@ export class CompletePlaythroughDriver {
           repetitions += 1
         }
       } else {
-        for (const rule of parsed.rules) await this.applyRewriteRule(rule, parsed.occurrence)
+        for (const rule of parsed.rules) {
+          // A successful rewrite can remount the transformed proposition and
+          // close its overlay. Reopen that same player-visible target before
+          // dragging the next rule from a multi-rule `rw [...]` command.
+          if (!this.win.document.querySelector('.tr-transformation-overlay')) {
+            if (target !== 'goal' && !this.hypExact(target)) {
+              target = this.latestRelationName() ?? target
+            }
+            await this.openTransform(target)
+          }
+          await this.applyRewriteRule(rule, parsed.occurrence)
+        }
       }
       await waitFor('transformation view to close', () => {
         const overlay = this.win.document.querySelector('.tr-transformation-overlay')
