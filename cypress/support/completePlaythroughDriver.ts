@@ -768,11 +768,28 @@ function isWithinViewport(element: HTMLElement) {
 
 function pointerPointWithin(element: HTMLElement): { x: number; y: number } | null {
   const rect = element.getBoundingClientRect()
-  const fractions = [0.5, 0.7, 0.3, 0.85, 0.15]
+  // Mobile theorem stacks can leave only a thin edge of an older card
+  // exposed. That edge is still a real player drop target, so sample close
+  // to all four edges as well as the broad centre area.
+  const fractions = [0.5, 0.7, 0.3, 0.85, 0.15, 0.95, 0.05, 0.98, 0.02]
   for (const yFraction of fractions) {
     for (const xFraction of fractions) {
       const x = rect.left + rect.width * xFraction
       const y = rect.top + rect.height * yFraction
+      const hit = element.ownerDocument.elementFromPoint(x, y)
+      if (hit && (hit === element || element.contains(hit))) return { x, y }
+    }
+  }
+  const view = element.ownerDocument.defaultView
+  if (!view) return null
+  const left = Math.max(0, rect.left) + 1
+  const right = Math.min(view.innerWidth, rect.right) - 1
+  const top = Math.max(0, rect.top) + 1
+  const bottom = Math.min(view.innerHeight, rect.bottom) - 1
+  const xStep = Math.max(3, (right - left) / 20)
+  const yStep = Math.max(3, (bottom - top) / 12)
+  for (let y = top; y <= bottom; y += yStep) {
+    for (let x = left; x <= right; x += xStep) {
       const hit = element.ownerDocument.elementFromPoint(x, y)
       if (hit && (hit === element || element.contains(hit))) return { x, y }
     }
@@ -1004,7 +1021,16 @@ function matchesTheoremPremise(
   // `A = B → False`; its visible equality is therefore a legitimate premise.
   if (premises.length === 0 && body.includes('≠')) premises.push(body.trim())
   if (premises.length === 0) return false
-  const binders = forallBinderNames(theorem)
+  const contextNames = new Set(visible(
+    theorem.ownerDocument.querySelectorAll<HTMLElement>(
+      '[data-testid="hyp-card"].variable-card',
+    ),
+  ).flatMap(card => card.dataset.hypName ? [card.dataset.hypName] : []))
+  // A derived theorem may retain a display footer for the parameters used to
+  // create it. If a same-named variable is already a card in this branch,
+  // that parameter is fixed, not a fresh forall wildcard. This distinguishes
+  // `1 ≤ b → 1*a ≤ b*a` from a genuinely generalized local theorem.
+  const binders = forallBinderNames(theorem).filter(name => !contextNames.has(name))
   return premises.some(premiseText => {
     try {
       const premise = parse(premiseText.replace(/≠/gu, '='))
@@ -2100,6 +2126,7 @@ export class CompletePlaythroughDriver {
           // next one (`1 ≤ b`). Follow the unique proposition that matches
           // the specialized theorem premise, exactly as a player choosing the
           // highlighted card does.
+          if (named && matchesTheoremPremise(source, named, [])) return named
           const matchingVisibleHypothesis = visible(
             this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
           ).reverse().find(candidate => candidate !== source && matchesTheoremPremise(source, candidate, []))
@@ -2620,25 +2647,6 @@ export class CompletePlaythroughDriver {
             this.rememberAlias(rawTarget, currentRelationName)
             target = currentRelationName
           }
-        }
-      }
-      if (target !== 'goal') {
-        const targetCard = this.hypExact(target)
-        if (
-          targetCard &&
-          (
-            targetCard.classList.contains('constructable') ||
-            (targetCard.dataset.hypType ?? '').includes('≤')
-          ) &&
-          parsed.rules.every(rule => /^(?:one_eq_succ_zero|two_eq_succ_one)$/u.test(sourceName(rule.name)))
-        ) {
-          // Rewriting a numeral inside a ≤ hypothesis can expose its
-          // definitional witness equality in Transformation Mode. That is not
-          // the player-equivalent of the classic `rw`: the next proposition
-          // theorem still consumes the original ≤ card because `1`/`2`
-          // are definitionally `succ 0`/`succ (succ 0)`. Leave the constructable
-          // card intact even when it also advertises a simplified transform.
-          continue
         }
       }
       await this.openTransform(target)

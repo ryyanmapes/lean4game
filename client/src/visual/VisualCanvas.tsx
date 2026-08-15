@@ -4164,6 +4164,7 @@ export function VisualCanvas({
           })()
         : parseTransformTarget(TaggedText_stripTags(focusedStream.goal.type).trim())
       : null
+    const focusedRelation = parsedFocusedTarget?.relation ?? displayedFocusedTarget?.relation
     const selectedRoot = parsedFocusedTarget
       ? (workingSide === 'left' ? parsedFocusedTarget.lhs : parsedFocusedTarget.rhs)
       : null
@@ -4193,8 +4194,8 @@ export function VisualCanvas({
     // with its witness equality. A normal Lean rewrite acts on the proposition
     // itself and preserves a card that can still accept le_one/succ_le_succ.
     if (
-      displayedFocusedTarget &&
-      displayedFocusedTarget.relation !== '=' &&
+      focusedRelation &&
+      focusedRelation !== '=' &&
       transformTarget
     ) {
       const rewriteRule = `${isReverse ? '← ' : ''}${hypLabel}`
