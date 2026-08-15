@@ -2282,21 +2282,11 @@ export class CompletePlaythroughDriver {
         source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
       }
     } else {
-      const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
-        ? this.propositionCardExact(this.previousApplyAtResultName)
-        : null
-      const inferredArguments = explicitArgs.length === 0
-        && previousResult
-          ? inferredForallArgumentsForPremise(source, previousResult)
-          : null
-      // A classic `apply f at h` can infer outer forall parameters from a
-      // later proposition premise. Reproduce that with the same Construction
-      // Mode gesture a player uses, then continue applying the visible proof
-      // premises below. For example, an equality `a*d = a*a2` determines
-      // `c := a2` in `∀ c, a ≠ 0 → a*d = a*c → d = c`.
-      const specializationArguments = explicitArgs.length > 0
-        ? explicitArgs
-        : inferredArguments ?? []
+      // Only explicit classic arguments require Construction Mode. For an
+      // implicit forall parameter, a player drags the generalized theorem
+      // directly onto the matching later premise and lets Lean infer it.
+      // Structural inference below is used solely to identify that card.
+      const specializationArguments = explicitArgs
       for (const argument of specializationArguments) {
         const namesBeforeArgument = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
         const visibleTypesBeforeArgument = new Map(visible(
@@ -2447,6 +2437,13 @@ export class CompletePlaythroughDriver {
           const previousResult = continuesApplyAtChain && this.previousApplyAtResultName
             ? this.propositionCardExact(this.previousApplyAtResultName)
             : null
+          const previousResultStructurallyMatches = previousResult
+            && previousResult !== source
+            && (
+              exactlyMatchesTheoremPremise(source, previousResult)
+              || matchesTheoremPremise(source, previousResult, [])
+              || inferredForallArgumentsForPremise(source, previousResult) !== null
+            )
           // Repeated `apply ... at h` steps form a visible derivation chain:
           // the player follows the newest card produced beside h, while the
           // original premise remains on the canvas. Initial one-off targets
@@ -2454,9 +2451,9 @@ export class CompletePlaythroughDriver {
           // A fully specialized visible premise is the strongest signal. In
           // particular, `1 ≤ b → ...` must select the literal `1 ≤ b` card,
           // even while an older `b ≠ 0` card retains the classic name `h`.
+          if (previousResultStructurallyMatches) return previousResult
           if (continuesApplyAtChain && renderedPremiseCards.length > 0) return renderedPremiseCards.at(-1)!
           if (continuesApplyAtChain && surfaceExactCards.length > 0) return surfaceExactCards.at(-1)!
-          if (previousResult && previousResult !== source) return previousResult
           if (continuesApplyAtChain && exactMatchingCards.length > 0) return exactMatchingCards.at(-1)!
           if (continuesApplyAtChain && matchingCards.length > 0) return matchingCards.at(-1)!
           if (rememberedTarget) return rememberedTarget
@@ -3171,7 +3168,12 @@ export class CompletePlaythroughDriver {
   private async construct(expr: ConstructionExpr) {
     if (expr.kind === 'atom') {
       let value = this.resolveName(expr.value)
-      if (!/^\d+$/u.test(value) && !this.hyp(value)) {
+      const brickId = /^\d+$/u.test(value) ? `num_${value}` : `var_${value}`
+      try {
+        await this.clickConstructionBrick(brickId)
+        return
+      } catch (error) {
+        if (/^\d+$/u.test(value)) throw error
         const claimedNames = new Set(this.aliases.values())
         const candidates = Object.entries(harness(this.win).getCurrentStreamSnapshot().hypTypes)
           .filter(([name, type]) =>
@@ -3185,10 +3187,11 @@ export class CompletePlaythroughDriver {
         if (candidates.length === 1) {
           value = candidates[0]!
           this.rememberAlias(expr.value, value)
+          await this.clickConstructionBrick(`var_${value}`)
+          return
         }
+        throw error
       }
-      await this.clickConstructionBrick(/^\d+$/u.test(value) ? `num_${value}` : `var_${value}`)
-      return
     }
     await this.clickConstructionBrick(expr.op === '+' ? 'fn_add' : 'fn_mul')
     await this.construct(expr.left)
