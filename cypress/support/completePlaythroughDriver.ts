@@ -413,38 +413,19 @@ async function drag(source: HTMLElement, target: HTMLElement) {
   // gesture begin at a stale coordinate.
   if (!isWithinViewport(source)) source.scrollIntoView({ block: 'center', inline: 'center' })
   await sleep(POLL_MS)
-  // A successful theorem application can first publish its derived card and
-  // then reconcile that optimistic card with the authoritative stream. Do
-  // not begin the next gesture in the one-frame identity handoff. A player
-  // naturally sees and grabs the settled replacement, while an immediate
-  // synthetic pointer-down could retain a node React removes mid-gesture.
-  let stableSource: HTMLElement | null = null
-  let stableSourceKey = ''
-  let stableSince = 0
-  source = await waitFor('a stable mounted player drag source', () => {
-    let candidate: HTMLElement
+  // A successful theorem application can publish an optimistic card and then
+  // reconcile its generated Lean name while leaving the displayed proposition
+  // usable. A player pauses briefly and grabs whichever semantic replacement
+  // is currently rendered; they do not wait for internal names to stop
+  // changing. Resolve after that pause, and let the proof-change assertion
+  // reject the gesture if React really does detach it during pointer travel.
+  await sleep(150)
+  source = await waitFor('a mounted player drag source', () => {
     try {
-      candidate = resolveRemountedDragTarget(source.ownerDocument, sourceIdentity, stableSource ?? source)
+      return resolveRemountedDragTarget(source.ownerDocument, sourceIdentity, source)
     } catch {
-      stableSource = null
-      stableSourceKey = ''
-      stableSince = 0
       return null
     }
-    const candidateKey = [
-      candidate.dataset.testid,
-      candidate.dataset.streamId,
-      candidate.dataset.hypName,
-      candidate.dataset.hypType,
-      candidate.dataset.theoremName,
-    ].join('|')
-    stableSource = candidate
-    if (candidateKey !== stableSourceKey) {
-      stableSourceKey = candidateKey
-      stableSince = Date.now()
-      return null
-    }
-    return Date.now() - stableSince >= 150 ? candidate : null
   }, 5_000)
   target = resolveRemountedDragTarget(source.ownerDocument, targetIdentity, target)
   const start = source.getBoundingClientRect()
