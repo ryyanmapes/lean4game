@@ -16,6 +16,8 @@ interface LevelProgressState {
   code: string,
   selections: Selection[],
   completed: boolean,
+  /** The player opened this level, independently of solving it. */
+  entered?: boolean,
   help: number[], // A set of rows where hidden hints have been displayed
 }
 interface WorldProgressState {
@@ -103,6 +105,11 @@ export const progressSlice = createSlice({
     levelCompleted(state: ProgressState, action: PayloadAction<{game: string, world: string, level: number}>) {
       addLevelProgress(state, action)
       state.games[action.payload.game.toLowerCase()].data[action.payload.world][action.payload.level].completed = true
+    },
+    /** Remember that the player opened a level without treating it as solved. */
+    levelEntered(state: ProgressState, action: PayloadAction<{game: string, world: string, level: number}>) {
+      addLevelProgress(state, action)
+      state.games[action.payload.game.toLowerCase()].data[action.payload.world][action.payload.level].entered = true
     },
     /** Set the list of rows where help is displayed */
     helpEdited(state: ProgressState, action: PayloadAction<{game: string, world: string, level: number, help: number[]}>) {
@@ -216,6 +223,11 @@ export function selectCompleted(game: string, world: string, level: number) {
   }
 }
 
+/** Return whether the player has opened this level at least once. */
+export function selectEntered(game: string, world: string, level: number) {
+  return (state) => Boolean(selectLevel(game?.toLowerCase(), world, level)(state).entered)
+}
+
 /** return progress for the current game if it exists */
 export function selectProgress(game: string) {
   return (state) => {
@@ -255,6 +267,6 @@ export function selectTypewriterMode(game: string) {
 }
 
 /** Export actions to modify the progress */
-export const { changedSelection, codeEdited, levelCompleted, deleteProgress,
+export const { changedSelection, codeEdited, levelCompleted, levelEntered, deleteProgress,
   deleteLevelProgress, deleteWorldProgress, loadProgress, helpEdited, changedInventory, changedReadIntro,
   changedDifficulty, changeTypewriterMode, changeUnlockLevels} = progressSlice.actions

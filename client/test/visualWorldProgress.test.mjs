@@ -53,18 +53,29 @@ test('parallel bottom worlds are both frontier nodes after completed ancestors a
   assert.deepEqual(result.highlightedLevels, { Multiplication: 1, Implication: 1 })
 })
 
-test('completion-neutral levels remain incomplete visually but do not gate the world', () => {
-  const result = computeVisualProgressFrontier({
+test('completion-neutral levels become map-complete after entry without becoming solved', () => {
+  const input = {
     worldIds: ['Power'],
     edges: [],
     worldSizes: { Power: 3 },
     skippedLevels: {},
     completionNeutralLevels: { Power: [3] },
     isCompleted: (_world, level) => level < 3,
+  }
+
+  const beforeEntry = computeVisualProgressFrontier(input)
+  assert.equal(beforeEntry.actualCompletedLevels.Power[3], false)
+  assert.equal(beforeEntry.mapCompletedLevels.Power[3], false)
+  assert.equal(beforeEntry.completedLevels.Power[3], true)
+  assert.equal(beforeEntry.completedWorlds.Power, true)
+  assert.equal(beforeEntry.nextLevels.Power, null)
+
+  const afterEntry = computeVisualProgressFrontier({
+    ...input,
+    isEntered: (world, level) => world === 'Power' && level === 3,
   })
 
-  assert.equal(result.actualCompletedLevels.Power[3], false)
-  assert.equal(result.completedLevels.Power[3], true)
-  assert.equal(result.completedWorlds.Power, true)
-  assert.equal(result.nextLevels.Power, null)
+  assert.equal(afterEntry.actualCompletedLevels.Power[3], false)
+  assert.equal(afterEntry.mapCompletedLevels.Power[3], true)
+  assert.equal(afterEntry.completedLevels.Power[3], true)
 })

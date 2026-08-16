@@ -25,7 +25,7 @@ import cytoscape from 'cytoscape'
 import { GameIdContext } from '../app'
 import { PreferencesContext } from '../components/infoview/context'
 import { useGetGameInfoQuery } from '../state/api'
-import { selectCompleted, selectProgress } from '../state/progress'
+import { selectCompleted, selectEntered, selectProgress } from '../state/progress'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
 import { plainLevelTitle } from '../components/annotated_level_title'
@@ -182,6 +182,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   return (<>
     <g
       className="level visual-map-link"
+      data-map-completed={completed ? 'true' : 'false'}
       role="link"
       tabIndex={0}
       aria-label={`Open ${world} level ${displayLevel}: ${levelLabel}`}
@@ -640,12 +641,13 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       skippedLevels: skippedLevels ?? {},
       completionNeutralLevels: completionNeutralLevels ?? {},
       isCompleted: (worldId, level) => selectCompleted(gameId, worldId, level)(store.getState()),
+      isEntered: (worldId, level) => selectEntered(gameId, worldId, level)(store.getState()),
     })
 
     for (const worldId of worldIds) {
       completed[worldId] = progressFrontier.completedLevels[worldId]
       started[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) =>
-        i > 0 && !progressFrontier.actualCompletedLevels[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
+        i > 0 && !progressFrontier.mapCompletedLevels[worldId][i] && hasUnfinishedVisualAutosave(gameId, worldId, i),
       )
     }
 
@@ -726,7 +728,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             displayLevel={visualIndex}
             visualIndex={visualIndex}
             position={position}
-            completed={progressFrontier.actualCompletedLevels[worldId][i]}
+            completed={progressFrontier.mapCompletedLevels[worldId][i]}
             started={started[worldId][i]}
             unlocked={progressFrontier.highlightedLevels[worldId] === i ||
               ((completionNeutralLevels?.[worldId]?.includes(i) ?? false) && completed[worldId][i - 1])}

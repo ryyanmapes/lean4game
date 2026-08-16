@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
 import { WorldLevelIdContext } from '../components/infoview/context'
 import { useAppSelector, useAppDispatch } from '../hooks'
-import { selectCompleted, levelCompleted } from '../state/progress'
+import { selectCompleted, levelCompleted, levelEntered } from '../state/progress'
 import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
@@ -259,12 +259,16 @@ export function VisualProofPage() {
   const telemetryStartedAt = React.useMemo(() => Date.now(), [solvingId])
   const telemetrySequence = useRef(0)
   const navigate = useNavigate()
+  const dispatch = useAppDispatch()
   const proofPreludeRef = useRef('')
   useEffect(() => {
     // The map uses this to return the player to the world they just left,
     // especially on phone layouts where only part of the graph is visible.
     window.sessionStorage.setItem(`visual-map-focus:${gameId}`, worldId)
   }, [gameId, worldId])
+  useEffect(() => {
+    if (levelId > 0) dispatch(levelEntered({ game: gameId, world: worldId, level: levelId }))
+  }, [dispatch, gameId, levelId, worldId])
   const handleWorldMap = useCallback(() => {
     navigate(`/${gameId}/visual`)
   }, [navigate, gameId])
@@ -282,7 +286,6 @@ export function VisualProofPage() {
     target.hash = `#/${gameId}/world/${worldId}/level/${levelId}?visualHandoff=${encodeURIComponent(token)}`
     window.open(target.toString(), '_blank', 'noopener,noreferrer')
   }, [gameId, levelId, solvingId, worldId])
-  const dispatch = useAppDispatch()
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {
     if (levelId > 0) {

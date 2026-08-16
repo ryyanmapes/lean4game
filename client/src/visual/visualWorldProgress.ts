@@ -5,11 +5,14 @@ export interface VisualProgressInput {
   skippedLevels: Record<string, number[]>
   completionNeutralLevels?: Record<string, number[]>
   isCompleted: (world: string, level: number) => boolean
+  isEntered?: (world: string, level: number) => boolean
 }
 
 export interface VisualProgressFrontier {
   completedLevels: Record<string, boolean[]>
   actualCompletedLevels: Record<string, boolean[]>
+  /** Completion paint used by the map; neutral levels become done once opened. */
+  mapCompletedLevels: Record<string, boolean[]>
   completedWorlds: Record<string, boolean>
   nextLevels: Record<string, number | null>
   frontierWorlds: string[]
@@ -26,9 +29,11 @@ export function computeVisualProgressFrontier({
   skippedLevels,
   completionNeutralLevels = {},
   isCompleted,
+  isEntered = () => false,
 }: VisualProgressInput): VisualProgressFrontier {
   const completedLevels: Record<string, boolean[]> = {}
   const actualCompletedLevels: Record<string, boolean[]> = {}
+  const mapCompletedLevels: Record<string, boolean[]> = {}
   const completedWorlds: Record<string, boolean> = {}
   const nextLevels: Record<string, number | null> = {}
 
@@ -41,7 +46,11 @@ export function computeVisualProgressFrontier({
     const levels = Array.from({ length: (worldSizes[worldId] ?? 0) + 1 }, (_, level) =>
       level === 0 || skipped.has(level) || neutral.has(level) || actual[level],
     )
+    const mapLevels = actual.map((done, level) =>
+      done || (neutral.has(level) && isEntered(worldId, level)),
+    )
     actualCompletedLevels[worldId] = actual
+    mapCompletedLevels[worldId] = mapLevels
     completedLevels[worldId] = levels
 
     let nextLevel: number | null = null
@@ -78,6 +87,7 @@ export function computeVisualProgressFrontier({
   return {
     completedLevels,
     actualCompletedLevels,
+    mapCompletedLevels,
     completedWorlds,
     nextLevels,
     frontierWorlds,

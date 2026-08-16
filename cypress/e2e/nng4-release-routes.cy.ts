@@ -175,7 +175,11 @@ describe('local NNG4 release maps', () => {
   })
 
   it('shows Fermat as a playable optional level with an accessible title annotation', () => {
-    cy.visit('/lean4game/index.html#/g/local/NNG4/world/Power/level/10/visual')
+    cy.visit('/lean4game/index.html#/g/local/NNG4/world/Power/level/10/visual', {
+      onBeforeLoad(win) {
+        win.localStorage.removeItem('game_progress')
+      },
+    })
     cy.contains('.visual-info-callout', 'Good luck!', { timeout: 180_000 }).should('be.visible')
     cy.get('.visual-header-title .level-title-emoji', { timeout: 30_000 })
       .should('have.attr', 'aria-label', '❌: Does not count towards completion')
@@ -195,6 +199,17 @@ describe('local NNG4 release maps', () => {
     cy.contains('.level-title-annotation-text', 'Does not count towards completion')
       .should('have.css', 'visibility', 'visible')
       .and('have.css', 'opacity', '1')
+    cy.get('[data-testid="goal-card"]').should('not.have.class', 'solved')
+    cy.window().should(win => {
+      const progress = JSON.parse(win.localStorage.getItem('game_progress') ?? '{}')
+      const level = progress.games?.nng4?.data?.Power?.[10]
+      expect(level?.entered, 'opening the optional level is persisted').to.equal(true)
+      expect(level?.completed, 'opening the optional level does not solve it').to.equal(false)
+    })
+
+    cy.contains('button', 'Back to map').click()
+    cy.get('[role="link"][aria-label^="Open Power level 10:"]', { timeout: 30_000 })
+      .should('have.attr', 'data-map-completed', 'true')
   })
 
   it('redirects the removed embedded selector to the release root', () => {
