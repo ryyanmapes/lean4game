@@ -1957,19 +1957,30 @@ export class CompletePlaythroughDriver {
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
     const target = await waitFor(`hypothesis ${match[1]}`, () => {
       const named = this.hyp(match[1])
-      if (named) return named
+      const isCaseableType = (value: string) =>
+        /^(?:ℕ|Nat|MyNat|∃|False)|(?:∨|∧)/u.test(value.trim())
+      if (named && isCaseableType(named.dataset.hypType ?? '')) return named
       // Applying a tray theorem creates a generated `thm_*` proposition.
       // A preceding branch split can remap that generated Lean name even
       // though the same card remains visibly available to the player. When
       // the historical alias is gone, follow the unique proposition on which
       // `cases` is meaningful instead of guessing another relation card.
-      const caseable = visible(
+      const visibleCards = visible(
         this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
-      ).filter(card => /^(?:∃|False)|(?:∨|∧)/u.test((card.dataset.hypType ?? '').trim()))
-      if (caseable.length !== 1) return null
-      const generatedName = caseable[0]?.dataset.hypName
+      )
+      const falseCards = visibleCards.filter(card => (card.dataset.hypType ?? '').trim() === 'False')
+      const logicalCards = visibleCards.filter(card => /^(?:∃)|(?:∨|∧)/u.test(
+        (card.dataset.hypType ?? '').trim(),
+      ))
+      const semanticTarget = falseCards.length === 1
+        ? falseCards[0]
+        : logicalCards.length === 1
+          ? logicalCards[0]
+          : null
+      if (!semanticTarget) return named
+      const generatedName = semanticTarget.dataset.hypName
       if (generatedName) this.rememberAlias(match[1], generatedName)
-      return caseable[0] ?? null
+      return semanticTarget
     })
     const eliminatedDisplayName = target.dataset.hypName
     const type = target.dataset.hypType ?? ''
