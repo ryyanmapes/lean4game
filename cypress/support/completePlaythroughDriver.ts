@@ -2224,14 +2224,26 @@ export class CompletePlaythroughDriver {
 
   async undoLastPlayerStep() {
     const before = proofSignature(harness(this.win).getProofAudit())
-    const undo = await waitFor('combining-mode undo button', () =>
-      visible(this.win.document.querySelectorAll<HTMLButtonElement>(
-        '.tr-controls .active-undo[aria-label="Undo"], .tr-controls .active-undo[title="Undo"]',
-      ))[0])
-    click(undo)
+    await waitForPlayerIdle(this.win, 'undo to become available')
+    let lastClickAt = 0
     await waitFor('undo to restore the previous player state', () => {
       const audit = harness(this.win).getProofAudit()
-      return !audit.processing && proofSignature(audit) !== before ? audit : null
+      if (!audit.processing && proofSignature(audit) !== before) return audit
+      // Controls intentionally remain visible while an action is settling.
+      // If a click lands in the short interval where React still closes over
+      // `isProcessing`, it is ignored. Re-resolve and repeat the same player
+      // click only while no undo has started and the proof is unchanged.
+      const now = Date.now()
+      if (!audit.processing && now - lastClickAt >= 500) {
+        const undo = visible(this.win.document.querySelectorAll<HTMLButtonElement>(
+          '.tr-controls .active-undo[aria-label="Undo"], .tr-controls .active-undo[title="Undo"]',
+        )).find(button => button.getAttribute('aria-disabled') !== 'true')
+        if (undo) {
+          click(undo)
+          lastClickAt = now
+        }
+      }
+      return null
     }, INTERACTION_TIMEOUT)
   }
 
