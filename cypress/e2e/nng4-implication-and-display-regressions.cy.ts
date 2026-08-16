@@ -275,7 +275,7 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.perform('repeat apply succ_inj at h')
     })
     cy.get(
-      '.visual-canvas [data-testid="hyp-card"], .visual-canvas [data-testid="theorem-copy-card"]',
+      '[data-testid="combining-canvas"] [data-testid="hyp-card"], [data-testid="combining-canvas"] [data-testid="theorem-copy-card"]',
       { timeout: LOAD_TIMEOUT },
     ).then($cards => {
       const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
@@ -308,7 +308,6 @@ describe('NNG4 implication and definition display regressions', () => {
     })
     cy.get('[data-testid="stream-nav-next"]:not(:disabled)', { timeout: LOAD_TIMEOUT }).click()
 
-    let falseBranchId = ''
     cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
       const snapshot = (win as HarnessWindow).__visualTestHarness?.getCurrentStreamSnapshot()
       expect(snapshot?.streamId, 'player selected the still-live successor branch').not.to.equal(baseStreamId)
@@ -318,26 +317,32 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.perform('rw [add_succ] at h')
       await player.perform('symm at h')
       await player.perform('apply zero_ne_succ at h')
-      falseBranchId = win.document
-        .querySelector<SVGGElement>('[data-testid="proof-stream-leaf"][data-current="true"]')
-        ?.dataset.streamId ?? ''
-      expect(falseBranchId, 'the selected live branch has a proof-graph stream id').not.to.equal('')
-      await player.perform('cases h')
     })
+    cy.get('[data-testid="stream-nav-label"]', { timeout: LOAD_TIMEOUT })
+      .invoke('attr', 'data-current-stream-id')
+      .should('not.be.empty')
+      .then(falseBranchId => {
+        expect(falseBranchId, 'the selected live branch differs from the untouched branch')
+          .not.to.equal(baseStreamId)
+        cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+          const player = new CompletePlaythroughDriver(win)
+          await player.perform('cases h')
+        })
 
-    cy.window().should(win => {
-      const harness = (win as HarnessWindow).__visualTestHarness!
-      expect(harness.getProofAudit().completed, 'the untouched zero branch is still incomplete').to.equal(false)
-    })
-    // A completed selected branch is intentionally no longer interactive, so
-    // inspect the same proof-graph control the player sees instead of asking
-    // the harness for an interactive stream that must not exist.
-    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
-      .should('have.attr', 'data-current', 'true')
-    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
-      .should('have.attr', 'data-completed', 'true')
-    cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${baseStreamId}"]`)
-      .should('have.attr', 'data-completed', 'false')
+        cy.window().should(win => {
+          const harness = (win as HarnessWindow).__visualTestHarness!
+          expect(harness.getProofAudit().completed, 'the untouched zero branch is still incomplete').to.equal(false)
+        })
+        // A completed selected branch is intentionally no longer interactive,
+        // so inspect the proof graph and navigator that the player sees.
+        cy.get('[data-testid="stream-nav-label"]')
+          .should('have.attr', 'data-current-stream-id', falseBranchId)
+        cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${falseBranchId}"]`)
+          .should('have.attr', 'data-current', 'true')
+          .and('have.attr', 'data-completed', 'true')
+        cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${baseStreamId}"]`)
+          .should('have.attr', 'data-completed', 'false')
+      })
   })
 
   it('applies zero-ne-succ from a hypothesis and restores its workspace copy on undo', () => {
