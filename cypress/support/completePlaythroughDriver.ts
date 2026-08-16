@@ -1844,20 +1844,37 @@ export class CompletePlaythroughDriver {
     let missedGesture: unknown
     for (let attempt = 0; attempt < 2; attempt += 1) {
       await waitForPlayerIdle(this.win, `${description} to become available`)
-      source = resolveRemountedDragTarget(
-        this.win.document,
-        sourceIdentity,
-        this.refreshCard(source),
-      )
-      target = resolveRemountedDragTarget(
-        this.win.document,
-        targetIdentity,
-        this.refreshCard(target),
-      )
       const before = proofSignature(harness(this.win).getProofAudit())
       const selectedStreamBefore = selectedStreamSignature(this.win)
       const previousAttempts = playLog(this.win).length
       try {
+        // A derived card can disappear for one reconciliation commit after the
+        // preceding application and then remount under its authoritative Lean
+        // name.  A player waits for the visible card to settle before trying
+        // again, so follow the captured name/proposition until its semantic
+        // replacement is actually mounted instead of failing in that gap.
+        source = await waitFor(`${description} source card`, () => {
+          try {
+            return resolveRemountedDragTarget(
+              this.win.document,
+              sourceIdentity,
+              this.refreshCard(source),
+            )
+          } catch {
+            return null
+          }
+        }, Math.min(INTERACTION_TIMEOUT, 10_000))
+        target = await waitFor(`${description} target card`, () => {
+          try {
+            return resolveRemountedDragTarget(
+              this.win.document,
+              targetIdentity,
+              this.refreshCard(target),
+            )
+          } catch {
+            return null
+          }
+        }, Math.min(INTERACTION_TIMEOUT, 10_000))
         await drag(source, target)
         await waitForPlayAttempt(this.win, previousAttempts, description)
       } catch (error) {
