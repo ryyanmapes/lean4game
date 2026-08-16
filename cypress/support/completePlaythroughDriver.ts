@@ -1857,13 +1857,14 @@ export class CompletePlaythroughDriver {
       const before = proofSignature(harness(this.win).getProofAudit())
       const selectedStreamBefore = selectedStreamSignature(this.win)
       const previousAttempts = playLog(this.win).length
-      await drag(source, target)
       try {
+        await drag(source, target)
         await waitForPlayAttempt(this.win, previousAttempts, description)
       } catch (error) {
         // Pointer delivery can occasionally be dropped by a headless browser
-        // before dnd-kit records any play at all (most often WebKit/Electron
-        // after a dock remount). A player would simply repeat that gesture.
+        // before dnd-kit records any play at all, or a card can finish its
+        // remount before pointer-down (most often WebKit/Electron after a dock
+        // reconciliation). A player would simply repeat that gesture.
         // Retry only that exact no-attempt case: a Lean rejection or any
         // recorded interaction remains a real failure and is never replayed.
         const noAttemptWasRecorded = playLog(this.win).length === previousAttempts
@@ -2357,6 +2358,11 @@ export class CompletePlaythroughDriver {
             throw new Error(`${command} cannot apply visible proof argument ${argument}`)
           }
           await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
+          // Applying the last explicit premise can itself solve an `exact`
+          // command. A completed proof intentionally has no interactive
+          // current stream, so do not ask the harness for a conclusion card
+          // that the player no longer needs to drag anywhere.
+          if (!match[2] && harness(this.win).getProofAudit().completed) return
         }
         const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
         const visibleCardsAfterArgument = visible(
