@@ -1740,7 +1740,12 @@ export class CompletePlaythroughDriver {
     }
     const hypName = card.dataset.hypName
     if (!hypName) return card
-    const exact = this.hypExact(hypName)
+    // A specialized theorem can alternate between the ordinary hypothesis
+    // presentation and its teal theorem-copy presentation while React
+    // reconciles the latest Lean response. Both are the same proposition the
+    // player is following, so do not return a detached hypothesis merely
+    // because its replacement still has theorem styling.
+    const exact = this.propositionCardExact(hypName)
     if (exact) return exact
     const hypType = card.dataset.hypType
     if (!hypType) return card
@@ -1748,7 +1753,7 @@ export class CompletePlaythroughDriver {
     const snapshot = harness(this.win).getCurrentStreamSnapshot()
     const currentName = Object.entries(snapshot.hypTypes)
       .find(([, type]) => this.normalizedProposition(type) === normalizedType)?.[0]
-    return currentName ? this.hypExact(currentName) ?? card : card
+    return currentName ? this.propositionCardExact(currentName) ?? card : card
   }
 
   private latestRelationName() {
@@ -2402,7 +2407,10 @@ export class CompletePlaythroughDriver {
         const resultName = visibleDerivedName ?? createdName ?? retainedName ?? changedName ??
           visibleCreatedName ?? visibleChangedName ?? reusedName
         if (!resultName) throw new Error(`${command} did not derive its conclusion after ${argument}`)
-        source = await waitFor(`derived theorem ${resultName}`, () => this.hypExact(resultName))
+        source = await waitFor(
+          `derived theorem ${resultName}`,
+          () => this.propositionCardExact(resultName),
+        )
       }
     } else {
       // Only explicit classic arguments require Construction Mode. For an
