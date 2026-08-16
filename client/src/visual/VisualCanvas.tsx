@@ -247,7 +247,12 @@ interface PlacementRect {
 function estimatedHypSize(card: HypCardType): { width: number; height: number } {
   const text = `${card.hyp.names.join(' ')} ${TaggedText_stripTags(card.hyp.type)}`
   return {
-    width: Math.max(200, Math.min(560, 120 + text.length * 7.2)),
+    // The rendered proposition uses a serif maths face whose glyph metrics
+    // are appreciably wider on macOS/WebKit than Chromium on Linux. Keep the
+    // pre-render estimate conservative: the first-free-slot pass runs before
+    // the new card has a measurable DOM node, and an underestimate can put
+    // two long cards into adjacent columns with their borders overlapping.
+    width: Math.max(200, Math.min(600, 128 + text.length * 8.4)),
     height: card.hyp.forallFooter ? 92 : 66,
   }
 }

@@ -547,6 +547,28 @@
   --bevel-border-color: var(--visual-danger);
 }
 
+/* Resolve the masked edge color on the pseudo-element as well as through the
+   inherited custom property. Safari/WebKit and macOS Electron can repaint the
+   card class one frame before recomputing a pseudo-element's var() value,
+   leaving the clipped corners neutral while the straight target edge is
+   already purple. Direct state selectors keep every octagon segment atomic. */
+.visual-page .statement-card.variable-card.drop-target-active::after,
+.visual-page .statement-card.variable-only-tactic.drop-target-active::after,
+.visual-page .statement-card.variable-card.potential-drop-target::after,
+.visual-page .statement-card.variable-only-tactic.potential-drop-target::after {
+  background: var(--visual-drop-target-border);
+}
+
+.visual-page .statement-card.variable-card.visual-emphasize::after,
+.visual-page .statement-card.variable-only-tactic.visual-emphasize::after {
+  background: rgba(167, 139, 250, 0.9);
+}
+
+.visual-page .statement-card.variable-card.drag-fail::after,
+.visual-page .statement-card.variable-only-tactic.drag-fail::after {
+  background: var(--visual-danger);
+}
+
 .visual-page .statement-atomic-form {
   margin-top: 0.24rem;
   color: var(--visual-forall-footer);
