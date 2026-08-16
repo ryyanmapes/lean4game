@@ -772,6 +772,11 @@ interface DragTargetIdentity {
   hypName?: string
   hypType?: string
   theoremName?: string
+  proposition?: string
+}
+
+function normalizedCardProposition(value: string) {
+  return value.replace(/->/gu, 'â†’').replace(/\s+/gu, '')
 }
 
 function captureDragTargetIdentity(target: HTMLElement): DragTargetIdentity {
@@ -782,6 +787,7 @@ function captureDragTargetIdentity(target: HTMLElement): DragTargetIdentity {
     hypName: target.dataset.hypName,
     hypType: target.dataset.hypType,
     theoremName: target.dataset.theoremName,
+    proposition: normalizedCardProposition(cardProposition(target)),
   }
 }
 
@@ -822,10 +828,12 @@ function resolveRemountedDragTarget(
   // identity fallback.  Requiring the transient generated name made rapid
   // multi-argument applications (notably `mul_left_cancel ... ha h`) race the
   // reconciliation commit even though the same visible source remained.
-  const propositionIdentityCandidates = identity.hypType
+  const propositionIdentityCandidates = identity.proposition
     ? visible(ownerDocument.querySelectorAll<HTMLElement>(
-        `[data-testid="${cssEscape(identity.testId)}"][data-hyp-type="${cssEscape(identity.hypType)}"]`,
-      ))
+        '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+      )).filter(candidate =>
+        normalizedCardProposition(cardProposition(candidate)) === identity.proposition,
+      )
     : []
   let currentStreamId: string | undefined
   try {
