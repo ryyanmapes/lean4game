@@ -582,7 +582,9 @@ describe('NNG4 implication and definition display regressions', () => {
       const highlighted = getComputedStyle($card[0]!, '::after').backgroundColor
       expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutralEdge)
       expect(
-        style.getPropertyValue('--bevel-border-color').trim().replace(/\s+/gu, ''),
+        style.getPropertyValue('--bevel-border-color').trim()
+          .replace(/\s+/gu, '')
+          .replace(/([,(])\./gu, (_match, prefix: string) => `${prefix}0.`),
         'the highlighted straight and cut-corner edges share the emphasis color',
       ).to.equal('rgba(167,139,250,0.9)')
     }).then($card => {
