@@ -2218,6 +2218,12 @@ export class CompletePlaythroughDriver {
   }
 
   private async applyOrExact(command: string) {
+    // A rewrite can finish while React is replacing its overlay. If that
+    // overlay remounts after the normal close gesture, return through the
+    // visible Back control before looking for a combining-mode theorem card.
+    if (this.win.document.querySelector('.tr-transformation-overlay')) {
+      await this.closeTransformationView()
+    }
     const applicationMatch = /^(?:apply|exact)\s+(.+)$/u.exec(command)
     if (!applicationMatch) throw new Error(`Unsupported theorem application: ${command}`)
     // Parse a trailing `at h` directly from the end of the command. The
@@ -2934,6 +2940,34 @@ export class CompletePlaythroughDriver {
     }
   }
 
+  private async closeTransformationView() {
+    await waitForPlayerIdle(this.win, 'transformation view to become closable')
+    let absentSince: number | null = null
+    let lastClickAt = 0
+    await waitFor('transformation view to close and remain closed', () => {
+      const overlay = this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay')
+      if (overlay) {
+        absentSince = null
+        const button = overlay.querySelector<HTMLButtonElement>('.tr-back-btn')
+        if (
+          button
+          && !button.disabled
+          && button.getAttribute('aria-disabled') !== 'true'
+          && Date.now() - lastClickAt >= 250
+        ) {
+          click(button)
+          lastClickAt = Date.now()
+        }
+        return null
+      }
+      // A rewrite response can replace the overlay in a later React commit.
+      // Require the combining view to survive several frames before the next
+      // player gesture instead of accepting that transient gap as "closed".
+      absentSince ??= Date.now()
+      return Date.now() - absentSince >= 250 ? true : null
+    }, 10_000)
+  }
+
   private async transformRule(name: string, allowReconciledFallback = true): Promise<HTMLElement> {
     let overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
@@ -3281,13 +3315,7 @@ export class CompletePlaythroughDriver {
         }
       }
       if (!this.keepTransformationOpen) {
-        await waitFor('transformation view to close', () => {
-          const overlay = this.win.document.querySelector('.tr-transformation-overlay')
-          if (!overlay) return true
-          const button = overlay.querySelector<HTMLButtonElement>('.tr-back-btn')
-          if (button && !button.disabled) click(button)
-          return null
-        })
+        await this.closeTransformationView()
       }
       if (rawTarget !== 'goal') {
         const currentName = this.hypExact(target)?.dataset.hypName ?? await waitFor(
