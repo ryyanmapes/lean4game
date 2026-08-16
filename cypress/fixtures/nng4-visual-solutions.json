@@ -177,7 +177,7 @@
     {
       "world": "AdvAddition",
       "level": 5,
-      "title": "`add_right_eq_zero`",
+      "title": "`add_right_eq_zero` 🌶️",
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvAddition/L05add_right_eq_zero.lean",
@@ -703,7 +703,7 @@
     {
       "world": "LessOrEqual",
       "level": 6,
-      "title": "Antisymmetry",
+      "title": "Antisymmetry 🌶️",
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/LessOrEqual/L06le_antisymm.lean",
@@ -1329,7 +1329,7 @@
     {
       "world": "Tutorial",
       "level": 8,
-      "title": "`2 + 2 = 4`",
+      "title": "`2 + 2 = 4` 🌶️",
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/Tutorial/L08twoaddtwo.lean",
