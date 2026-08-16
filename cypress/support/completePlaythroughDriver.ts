@@ -2375,13 +2375,32 @@ export class CompletePlaythroughDriver {
             throw new Error(`${command} cannot apply visible proof argument ${argument}`)
           }
           await this.dragAndWait(source, matchingHypothesis, `${command} premise ${argument} application`)
-          // Applying the last explicit premise can itself solve an `exact`
-          // command. A completed proof intentionally has no interactive
-          // current stream, so do not ask the harness for a conclusion card
-          // that the player no longer needs to drag anywhere.
-          if (!match[2] && harness(this.win).getProofAudit().completed) return
+          // Applying the last explicit premise can itself solve the proof. A
+          // completed proof intentionally has no interactive current stream,
+          // so do not ask the harness for a conclusion card that the player no
+          // longer needs to drag anywhere.
+          if (harness(this.win).getProofAudit().completed) return
         }
-        const snapshotAfterArgument = harness(this.win).getCurrentStreamSnapshot()
+        // Completion and stream selection are published by adjacent React
+        // commits.  During that boundary there is deliberately no current
+        // interactive stream even though the accepted player drag is still
+        // settling. Wait for either the completed proof or the reconciled
+        // stream instead of interpreting the transient gap as a failed level.
+        const applicationResult = await waitFor(`${command} application result`, () => {
+          if (harness(this.win).getProofAudit().completed) {
+            return { completed: true as const }
+          }
+          try {
+            return {
+              completed: false as const,
+              snapshot: harness(this.win).getCurrentStreamSnapshot(),
+            }
+          } catch {
+            return null
+          }
+        })
+        if (applicationResult.completed) return
+        const snapshotAfterArgument = applicationResult.snapshot
         const visibleCardsAfterArgument = visible(
           this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
         )
