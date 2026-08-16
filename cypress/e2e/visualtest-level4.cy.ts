@@ -58,6 +58,10 @@ describe('VisualTest Level 4', () => {
       expect(labels).to.include('add_comm')
       expect(labels).to.include('mul_comm')
     })
+    cy.get('.tr-rule-card .tr-symbol').should($symbols => {
+      expect($symbols.text()).to.contain('⇒')
+      expect($symbols.text()).not.to.contain('→')
+    })
     cy.get('.tr-no-rules').should('not.exist')
   })
 

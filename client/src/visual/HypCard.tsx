@@ -8,6 +8,7 @@ import { colorizeFormula } from './colorizeFormula'
 import { hasIffNotation, renderFormulaWithIffArrow, type IffDirection } from './iffArrow'
 import { StatementCardLine } from './StatementCardLine'
 import { AtomicForm } from './AtomicForm'
+import { inferAtomicReductionForms } from './existsDisplay'
 
 interface HypCardProps {
   card: HypCardType
@@ -164,13 +165,17 @@ function HypCardContent({ card, iffDirection = 'forward', atomicContextNames = [
   const hypType = formatFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
   const forallFooter = card.hyp.forallFooter ? formatFormulaText(card.hyp.forallFooter) : undefined
   const isIff = hasIffNotation(hypType) || (forallFooter ? hasIffNotation(forallFooter) : false)
+  const reductionForms = [...(card.hyp.reductionForms ?? [])]
+  for (const form of inferAtomicReductionForms(hypType)) {
+    if (!reductionForms.includes(form)) reductionForms.push(form)
+  }
   return (
     <>
       <StatementCardLine
         name={card.hyp.names.join(', ')}
         proposition={isIff ? renderFormulaWithIffArrow(hypType, iffDirection) : colorizeFormula(hypType)}
       />
-      <AtomicForm displayText={hypType} reductionForms={card.hyp.reductionForms} contextNames={atomicContextNames} />
+      <AtomicForm displayText={hypType} reductionForms={reductionForms} contextNames={atomicContextNames} />
       {forallFooter && (
         <div className="statement-forall-footer">
           {hasIffNotation(forallFooter) && isIff

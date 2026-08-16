@@ -50,7 +50,7 @@ function getCasePath(command: string): string[] {
 
 /** Strip capitalized namespace prefixes from Lean identifiers (e.g. MyNat.zero_ne_succ → zero_ne_succ). */
 function shortenQualifiedNames(s: string): string {
-  return s.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/g, '$1')
+  return s.replace(/\bMyNat\.(\w+)\b/g, '$1')
 }
 
 function formatProofDisplayText(text: string): string {

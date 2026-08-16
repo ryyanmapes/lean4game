@@ -170,7 +170,11 @@ export function explicitReverseRewriteCommand(
   workingSide: 'left' | 'right',
   path: number[] | undefined,
   targetHypName?: string,
+  occurrence?: number,
 ): string {
+  if (occurrence !== undefined) {
+    return `rw_nth ${occurrence} [← ${theoremName} (${argument})]${targetHypName ? ` at ${targetHypName}` : ''}`
+  }
   const steps = [workingSide === 'left' ? 'lhs' : 'rhs']
   for (const position of path ?? []) steps.push(`arg ${position}`)
   return [
@@ -202,7 +206,10 @@ export function buildStructuredProof(steps: ProofTextStep[], mode: 'lean' | 'pla
 }
 
 export function shortenQualifiedNames(text: string): string {
-  return text.replace(/\b(?:[A-Z]\w*\.)+(\w+)\b/gu, '$1')
+  // NNG theorem names are presented without their game namespace, but Lean's
+  // structural constructors are not cosmetic namespaces: `And.intro`,
+  // `Exists.intro`, `Iff.mp`, etc. must remain intact in generated code.
+  return text.replace(/\bMyNat\.(\w+)\b/gu, '$1')
 }
 
 export function displayedProofLines(steps: ProofTextStep[], mode: 'lean' | 'play'): string[] {

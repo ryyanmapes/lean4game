@@ -33,7 +33,6 @@ test('removes obsolete revert guidance and adds the Implication symm lesson', ()
 test('adds the requested LessOrEqual lesson callouts only to NNG4', () => {
   const expected = new Map([
     [1, NNG4_VISUAL_LESSON_TEXT.useGoal],
-    [4, NNG4_VISUAL_LESSON_TEXT.leHyp],
     [7, NNG4_VISUAL_LESSON_TEXT.or],
     [8, NNG4_VISUAL_LESSON_TEXT.induction],
     [10, NNG4_VISUAL_LESSON_TEXT.leTenHint],
@@ -53,10 +52,18 @@ test('adds the cases lesson to Advanced Addition 5', () => {
   assert.match(infos.at(-1)?.text ?? '', /`False`/u)
 })
 
-test('the induction reminder disappears after induction and returns after undo', () => {
+test('the induction reminder only disappears for the general induction and returns after undo', () => {
   const [info] = goalInfosForLevel('g/local/NNG4', 'LessOrEqual', 8, [])
   assert.ok(info)
-  assert.equal(goalInfoVisibleAfterTactics(info, ['intro a']), true)
-  assert.equal(goalInfoVisibleAfterTactics(info, ['intro a', 'induction a']), false)
-  assert.equal(goalInfoVisibleAfterTactics(info, ['intro a']), true)
+  assert.equal(goalInfoVisibleAfterTactics(info, ['click_goal']), true)
+  assert.equal(
+    goalInfoVisibleAfterTactics(info, ['click_goal', 'click_goal', 'induction x with d hd']),
+    true,
+    'the warning remains after introducing y and getting the less-general hypothesis',
+  )
+  assert.equal(
+    goalInfoVisibleAfterTactics(info, ['click_goal', 'induction x with d hd generalizing y']),
+    false,
+  )
+  assert.equal(goalInfoVisibleAfterTactics(info, ['click_goal']), true)
 })

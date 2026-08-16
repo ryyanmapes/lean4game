@@ -673,6 +673,44 @@ function synthesizeDragToStream(
   const sourceIndex = focusedStream.hyps.findIndex(card => card.id === sourceCard.id)
   const targetIndex = focusedStream.hyps.findIndex(card => card.id === targetCard.id)
 
+  const specializeForall = (
+    quantifiedCard: HypCardType,
+    argumentCard: HypCardType,
+    quantifiedIndex: number,
+    argumentIndex: number,
+  ): GoalStream | null => {
+    const quantifiedMain = stripTaggedText(quantifiedCard.hyp.type).trim()
+    const quantifiedText = quantifiedCard.hyp.forallFooter
+      ? `${quantifiedCard.hyp.forallFooter}, ${quantifiedCard.hyp.typeBody ?? quantifiedMain}`
+      : quantifiedMain
+    const forall = splitLeadingForallTargetForRuntime(quantifiedText)
+    if (!forall) return null
+
+    const argumentType = normalizePropositionText(stripTaggedText(argumentCard.hyp.type).trim())
+    if (forall.domain && normalizePropositionText(forall.domain) !== argumentType) return null
+    const argumentName = rawHypName(argumentCard)
+    if (!argumentName) return null
+
+    const resultType = replaceIdentifier(forall.body, forall.varName, argumentName)
+    const rawName = nextFreshRawHypName(
+      focusedStream.hyps,
+      `${DERIVED_THEOREM_PREFIX}${theoremBaseForCard(quantifiedCard)}`,
+    )
+    const resultCard: HypCardType = {
+      ...buildNamedHyp(quantifiedCard, rawName, resultType, true),
+      id: uuidv4(),
+      position: synthesizedCardPosition(focusedStream.hyps.length),
+    }
+    const nextHyps = cloneHypCards(focusedStream.hyps)
+    nextHyps.splice(Math.max(quantifiedIndex, argumentIndex) + 1, 0, resultCard)
+    return { ...focusedStream, hyps: nextHyps }
+  }
+
+  const targetForall = specializeForall(targetCard, sourceCard, targetIndex, sourceIndex)
+  if (targetForall) return targetForall
+  const sourceForall = specializeForall(sourceCard, targetCard, sourceIndex, targetIndex)
+  if (sourceForall) return sourceForall
+
   const applyResult = (resultType: string, implicationCard: HypCardType): GoalStream => {
     const sourceIsTheorem = Boolean(sourceCard.isTheorem)
     const targetIsTheorem = Boolean(targetCard.isTheorem)
@@ -1163,6 +1201,7 @@ function synthesizeInductionStreams(
 function synthesizeCasesStreams(
   focusedStream: GoalStream,
   hypName: string,
+  predecessorName?: string,
 ): GoalStream[] {
   const targetCard = focusedStream.hyps.find(card => card.hyp.names[0] === hypName)
   if (!targetCard) return []
@@ -1191,7 +1230,7 @@ function synthesizeCasesStreams(
   }
 
   // Successor case: introduce a predecessor variable with the same name
-  const predName = nextFreshHypName(hypsWithoutTarget, hypName)
+  const predName = predecessorName ?? nextFreshHypName(hypsWithoutTarget, hypName)
   const predCard: HypCardType = {
     id: uuidv4(),
     hyp: {
@@ -1241,8 +1280,9 @@ function synthesizeSplitStreamsForInteraction(
   }
 
   if (playTactic?.startsWith('cases ')) {
-    const hypName = playTactic.slice('cases '.length).trim()
-    return synthesizeCasesStreams(focusedStream, hypName)
+    const match = /^cases\s+(\S+)(?:\s+with\s+(\S+))?/u.exec(playTactic.trim())
+    if (!match) return []
+    return synthesizeCasesStreams(focusedStream, match[1]!, match[2])
   }
 
   return synthesizeSplitStreams(focusedStream)
@@ -1584,6 +1624,19 @@ export function reconcileProofTreeAfterInteraction(
       nextActiveId,
       focusedStreams: [remaining[0]],
       nextCanvas: buildNextCanvas([remaining[0]]),
+    }
+  }
+
+  // Card-only interactions cannot prove the displayed goal. Some browser
+  // traces incorrectly return no focused goals for an otherwise successful
+  // forall specialization or hypothesis click; retain the live branch rather
+  // than painting it complete when no more specific continuation was found.
+  if (interactionRequiresFollowUp) {
+    return {
+      nextTree,
+      nextActiveId: focusedStream.id,
+      focusedStreams: [focusedStream],
+      nextCanvas: buildNextCanvas([focusedStream]),
     }
   }
 

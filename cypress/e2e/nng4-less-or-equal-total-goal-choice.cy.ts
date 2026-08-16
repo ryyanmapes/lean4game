@@ -4,7 +4,9 @@ const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
 
 interface VisualHarness {
+  dragHypToHyp(sourceName: string, targetName: string): Promise<void>
   getProofAudit(): {
+    completed: boolean
     processing: boolean
     coreLines: string[]
     interactiveLines: string[]
@@ -32,6 +34,43 @@ function openLastIncompleteBranch() {
 }
 
 describe('LessOrEqual level 8 goal choices', () => {
+  it('keeps the induction warning after y is introduced before inducting x', () => {
+    cy.viewport(1440, 900)
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/8/visual`)
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.contains('.goal-info', "Induct BEFORE 'y' is introduced").should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      const x = await player.introduceOneForall()
+      await player.introduceOneForall()
+      await player.inductVisibleVariable(x)
+    })
+
+    cy.contains('.goal-info', "Induct BEFORE 'y' is introduced").should('be.visible')
+  })
+
+  it('keeps the branch live after dragging a variable onto the forall induction hypothesis', () => {
+    cy.viewport(1440, 900)
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/8/visual`)
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      const x = await player.introduceOneForall()
+      await player.inductVisibleVariable(x)
+    })
+    openLastIncompleteBranch()
+    cy.get('[data-testid="hyp-card"][data-hyp-name="hd"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    visualHarness().then(harness => harness.dragHypToHyp('d', 'hd'))
+    visualHarness().then(harness => {
+      expect(harness.getProofAudit().completed, 'forall specialization does not solve the goal').to.equal(false)
+    })
+    cy.get('[data-testid="proof-stream-leaf"][data-current="true"]')
+      .should('have.attr', 'data-completed', 'false')
+  })
+
   it('lets the player choose the right side in the final induction branch', () => {
     cy.viewport(1440, 900)
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/8/visual`)

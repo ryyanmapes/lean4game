@@ -1154,6 +1154,64 @@ test('drag_to keeps a local theorem card green and overwrites it regardless of d
   assert.equal(hypTypeFor(streamB, 'hp'), 'P')
 })
 
+test('drag_to specializes a forall hypothesis without completing its goal', () => {
+  const focusedStream = stream('stream-forall-drag', 'Goal', 'main', [
+    hyp('hyp-x', 'x', 'ℕ'),
+    hyp('hyp-all', 'hall', '∀ (y : ℕ), y ≤ x ∨ x ≤ y'),
+  ])
+  const beforeTree = {
+    id: 'leaf-forall-drag',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [focusedStream], completed: false },
+    { streams: [], completed: true },
+    focusedStream,
+    'drag_to x hall',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.nextCanvas.completed, false)
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(result.focusedStreams[0].goal.type.text, 'Goal')
+  assert.ok(result.focusedStreams[0].hyps.some(card =>
+    card.isTheorem && card.hyp.type.text === 'x ≤ x ∨ x ≤ x'
+  ))
+})
+
+test('an unrecognized hypothesis click never marks the live goal complete', () => {
+  const focusedStream = stream('stream-click-follow-up', 'Goal', 'main', [
+    hyp('hyp-clicked', 'h', 'OpaqueProposition'),
+  ])
+  const beforeTree = {
+    id: 'leaf-click-follow-up',
+    streamId: focusedStream.id,
+    label: focusedStream.goal.userName,
+    completed: false,
+    children: [],
+  }
+
+  const result = reconcileProofTreeAfterInteraction(
+    beforeTree,
+    { streams: [focusedStream], completed: false },
+    { streams: [], completed: true },
+    focusedStream,
+    'click_prop h',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.nextCanvas.completed, false)
+  assert.equal(result.focusedStreams[0]?.id, focusedStream.id)
+  assert.equal(findLeafForStream(result.nextTree, focusedStream.id)?.completed, false)
+})
+
 test('local theorem premise drags always produce valid shadowing Lean', () => {
   const focusedStream = stream('stream-thm-proof', 'a = b', 'main', [
     hyp('hyp-theorem', 'thm_succ_inj', 'succ(a) = succ(b) → a = b', { isTheorem: true }),

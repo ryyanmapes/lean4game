@@ -21,6 +21,7 @@ import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaTe
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
+import { statementCanTargetGoal } from './goalApplication'
 import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication, buildRuntimeQuantifiedStatementDisplay } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
@@ -55,7 +56,6 @@ import {
   isVisualOnlyPlayTactic,
   parseFocusedCommand,
   serializeProofCommands,
-  shortenQualifiedNames,
   stripCasePrefixes,
 } from './proofText'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
@@ -609,6 +609,7 @@ interface TransformRewriteDebug {
 interface VisualCanvasTestHarness {
   runPlayerTactic: (command: string) => Promise<void>
   dragHypToGoal: (hypName: string) => Promise<void>
+  dragTheoremToGoal: (theoremName: string) => Promise<boolean>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
   copyTheoremToCanvas: (theoremName: string) => void
   moveHypTo: (hypName: string, x: number, y: number) => void
@@ -638,6 +639,12 @@ interface VisualCanvasTestHarness {
   }
   getLastTransformRewriteDebug: () => TransformRewriteDebug | null
   getLastDragDebug: () => Record<string, unknown> | null
+  validateGeneratedProofs: () => Promise<{
+    coreCompleted: boolean
+    interactiveCompleted: boolean
+    coreProofBody: string
+    interactiveProofBody: string
+  }>
   getProofAudit: () => {
     completed: boolean
     processing: boolean
@@ -801,6 +808,26 @@ function parsedHypEquality(card: HypCardType) {
   return parseEqualityHyp((card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)).trim(), hypName, card.id)
 }
 
+function hypCardFormula(card: HypCardType): string {
+  return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
+}
+
+/** Equality hypotheses may still be premises to an implication. What is no
+ * longer supported is using an equality to rewrite/substitute inside another
+ * hypothesis by dropping the two local cards together. */
+function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType): boolean {
+  if (!parsedHypEquality(first) && !parsedHypEquality(second)) return false
+
+  const firstType = hypCardFormula(first)
+  const secondType = hypCardFormula(second)
+  const firstImplication = splitImplicationText(firstType)
+  const secondImplication = splitImplicationText(secondType)
+  const isApplication =
+    Boolean(firstImplication && formulasMatch(firstImplication[0], secondType)) ||
+    Boolean(secondImplication && formulasMatch(secondImplication[0], firstType))
+  return !isApplication
+}
+
 function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): ParsedTransformTarget | null {
   const parsed = parseTransformTarget(TaggedText_stripTags(stream.goal.type).trim())
   if (!parsed) return null
@@ -903,6 +930,11 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   return true
 }
 
+function tacticShouldHighlightHyp(tactic: VisualTactic, card: HypCardType): boolean {
+  if (tactic.name !== 'cases') return tacticCanTargetHyp(tactic, card)
+  return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) === 'False'
+}
+
 function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean {
   if (tactic.name === 'induction' || tactic.name === 'cases') return false
   if (tactic.name === 'symm') {
@@ -910,6 +942,19 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
     return parsedGoalEquality(stream) !== null || goalText.includes('↔') || goalText.includes('≠')
   }
   return true
+}
+
+function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): boolean {
+  const goalText = TaggedText_stripTags(stream.goal.type)
+  return [theorem.proposition, ...(theorem.reductionForms ?? [])]
+    .some(statement => statementCanTargetGoal(statement, goalText, theorem.forallFooter))
+}
+
+function hypCanTargetGoal(card: HypCardType, stream: GoalStream): boolean {
+  const statement = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
+  const goalText = TaggedText_stripTags(stream.goal.type)
+  return [statement, ...(card.hyp.reductionForms ?? [])]
+    .some(candidate => statementCanTargetGoal(candidate, goalText, card.hyp.forallFooter))
 }
 
 function casesTacticSplits(card: HypCardType): boolean {
@@ -997,12 +1042,10 @@ function formulasMatchLiterally(left: string, right: string): boolean {
 }
 
 function worldAllowsComparisonTransform(worldId: string): boolean {
-  // Comparisons are first-class transform targets everywhere they appear.
-  // Restricting this to Continuity made a double-click on `h : a ≤ b` fall
-  // through to its single-click eliminator in NNG, destroying the proposition
-  // before an equality rewrite could be applied to it.
+  // Transformation Mode is equality-only. Comparisons retain their dedicated
+  // construction/elimination gestures instead of opening the rewrite view.
   void worldId
-  return true
+  return false
 }
 
 function backendWorkingSideForRelation(
@@ -1526,8 +1569,10 @@ function resolveLeanTactic(
   const shouldPreferStructuralSplit =
     playTactic.startsWith('click_prop ') && (inferredLeanTactic?.startsWith('rcases ') ?? false)
   if (hasUsableAnnotation && annotationLeanTactic && !shouldPreferNamedIntro && !shouldPreferStructuralSplit) return annotationLeanTactic
-  if (inferredLeanTactic) return shortenQualifiedNames(inferredLeanTactic)
-  if (!isVisualOnlyPlayTactic(playTactic)) return shortenQualifiedNames(command)
+  // Keep executable identifiers fully qualified in the stored Core proof.
+  // Cosmetic shortening belongs only in the rendered proof pane.
+  if (inferredLeanTactic) return inferredLeanTactic
+  if (!isVisualOnlyPlayTactic(playTactic)) return command
   return null
 }
 
@@ -1788,6 +1833,8 @@ interface VisualCanvasProps {
   /** Display index after Visual Lean-only skipped levels are removed. */
   displayLevelId?: number
   onInteraction: (proofBody: string) => Promise<ProofState | null>
+  /** Re-check an exact full classic proof body without adding the visual prelude. */
+  onValidateProof?: (proofBody: string) => Promise<ProofState | null>
   onNextLevel?: () => void
   onPreviousLevel?: () => void
   onWorldMap?: () => void
@@ -2061,7 +2108,7 @@ export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onOpenClassic, resumeState, onAutosave, proofPrelude = ''
+  onLevelCompleted, onProofStep, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching } = React.useContext(PreferencesContext)
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
@@ -2297,7 +2344,7 @@ export function VisualCanvas({
   useEffect(() => {
     if (canvasState.completed) {
       const playScript = buildStructuredProof(proofSteps, 'play')
-      const leanScript = [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n')
+      const leanScript = buildStructuredLeanProof(proofSteps)
       onLevelCompleted?.({ playScript, leanScript })
     }
   }, [canvasState.completed, proofPrelude])
@@ -2355,24 +2402,29 @@ export function VisualCanvas({
     if (!rect) {
       const phoneBounds: { minY?: number; maxY?: number } =
         isPhonePortrait ? phoneMiddleBounds(window.innerHeight) : {}
+      const desktopMaxY = Math.max(0, window.innerHeight - trayHeight)
       return {
         left: 0,
         top: 0,
         width: window.innerWidth,
         height: window.innerHeight,
         minY: isPhonePortrait ? phoneBounds.minY : undefined,
-        maxY: isPhonePortrait ? phoneBounds.maxY : undefined,
+        maxY: isPhonePortrait ? phoneBounds.maxY : desktopMaxY,
       }
     }
     const phoneBounds: { minY?: number; maxY?: number } =
       isPhonePortrait ? phoneMiddleBounds(rect.height) : {}
+    const trayTop = document.getElementById(THEOREM_TRAY_ID)?.getBoundingClientRect().top
+    const desktopMaxY = trayTop === undefined
+      ? rect.height
+      : Math.max(0, Math.min(rect.height, trayTop - rect.top))
     return {
       left: rect.left,
       top: rect.top,
       width: rect.width,
       height: rect.height,
       minY: isPhonePortrait ? phoneBounds.minY : undefined,
-      maxY: isPhonePortrait ? phoneBounds.maxY : undefined,
+      maxY: isPhonePortrait ? phoneBounds.maxY : desktopMaxY,
     }
   }
 
@@ -2989,7 +3041,7 @@ export function VisualCanvas({
   }
 
   async function undoLastStep(): Promise<boolean> {
-    if (proofSteps.length === 0 || isProcessing) return false
+    if (proofSteps.length === 0 || isProcessingRef.current) return false
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
@@ -3000,9 +3052,9 @@ export function VisualCanvas({
     const newScript = serializeProofCommands(newSteps.map(step => step.command))
     const result = await onInteraction(newScript)
 
-    updateProcessingState(false)
     if (result === null) {
       pendingMobileInsertionRef.current = null
+      updateProcessingState(false)
       return false
     }
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
@@ -3068,6 +3120,10 @@ export function VisualCanvas({
       dismissTransformationView()
     }
 
+    // Keep the imperative guard raised until every restored snapshot and mode
+    // update has been queued. Large expressions make this reconciliation gap
+    // visible enough for a second click to otherwise start from stale steps.
+    updateProcessingState(false)
     return true
   }
 
@@ -3492,7 +3548,13 @@ export function VisualCanvas({
           return
         }
         if (tacticTemplate.name === 'cases') {
-          const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetName })
+          const playTactic = interactionToPlayTactic({
+            type: 'drag_cases',
+            hypName: targetName,
+            predecessorName: targetCard.hyp.isAssumption
+              ? undefined
+              : nextFreshHypName(targetStream.hyps, 'd'),
+          })
           const streamSplit = casesTacticSplits(targetCard)
           applyDroppedInteraction(playTactic, activeId, {
             streamSplit,
@@ -3528,6 +3590,8 @@ export function VisualCanvas({
       const reverse = getIffDirection(activeId) === 'reverse'
       if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
+          const targetGoal = interactionStreams.find(stream => stream.id === overId)
+          if (!targetGoal || !theoremCanTargetGoal(theoremTemplate, targetGoal)) return
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyDroppedInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
@@ -3617,6 +3681,11 @@ export function VisualCanvas({
       const reverse = getIffDirection(activeId) === 'reverse'
 
       if (goalIds.has(overId as string)) {
+        const targetGoal = interactionStreams.find(stream => stream.id === overId)
+        const canTarget = sourceTheoremCopy
+          ? Boolean(targetGoal && theoremCanTargetGoal(sourceTheoremCopy.theorem, targetGoal))
+          : Boolean(sourceCard && targetGoal && hypCanTargetGoal(sourceCard, targetGoal))
+        if (!canTarget) return
         // Dropped on a goal card → drag_goal
         const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
         applyDroppedInteraction(playTactic, activeId, {
@@ -3630,6 +3699,12 @@ export function VisualCanvas({
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
         if (!targetName) return
+
+
+        // Equality rewrites belong in Transformation Mode. Keep ordinary
+        // premise/function application available, including when the premise
+        // itself happens to be an equality proposition.
+        if (sourceCard && targetCard && hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
 
         // When dropping a hyp onto a constructable theorem copy, use drag_apply
         // to partially apply the theorem to the hyp (pattern-matching its type
@@ -4242,9 +4317,13 @@ export function VisualCanvas({
       nextCanvas = updatePlacedHypPosition(nextCanvas, placementHint, placementHint.droppedPosition)
     }
 
+    if (target.kind === 'forall_spec' && nextCanvas.completed) {
+      nextCanvas = { ...nextCanvas, completed: false }
+    }
+
     // Do not freeze the whole level when specialization only discharged the
     // focused branch; nextCanvas includes the reconciled sibling branches.
-    if (nextCanvas.completed && !missingForallContinuation) {
+    if (target.kind !== 'forall_spec' && nextCanvas.completed && !missingForallContinuation) {
       const completionCanvas = placementHint
         ? updatePlacedHypPosition(canvasState, placementHint, placementHint.droppedPosition)
         : canvasState
@@ -4379,6 +4458,7 @@ export function VisualCanvas({
         ),
         path,
         transformTarget.kind === 'hyp' ? transformTarget.hypRef : undefined,
+        occurrence,
       )
       command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
     }
@@ -5474,6 +5554,7 @@ export function VisualCanvas({
   async function applyTestDragHypToGoal(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, hypName)
+    if (!hypCanTargetGoal(sourceCard, stream)) return
     const playTactic = interactionToPlayTactic({
       type: 'drag_goal',
       hypName: interactionHypName(sourceCard) ?? hypName,
@@ -5486,10 +5567,25 @@ export function VisualCanvas({
     })
   }
 
+  async function applyTestDragTheoremToGoal(theoremName: string): Promise<boolean> {
+    const stream = requireInteractiveCurrentStream()
+    const theorem = propositionTheorems.find(candidate => candidate.theoremName === theoremName)
+    if (!theorem) throw new Error(`Could not find proposition theorem "${theoremName}"`)
+    if (!theoremCanTargetGoal(theorem, stream)) return false
+    const latestApplyInteraction = applyInteractionRef.current
+    if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
+    return latestApplyInteraction(
+      interactionToPlayTactic({ type: 'drag_goal', hypName: theorem.theoremName }),
+      theorem.id,
+      { solvedGoalId: stream.id, targetStreamId: stream.id },
+    )
+  }
+
   async function applyTestDragHypToHyp(sourceName: string, targetName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, sourceName)
     const targetCard = requireHypCard(stream, targetName)
+    if (hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
     const playTactic = interactionToPlayTactic({
       type: 'drag_to',
       nameA: interactionHypName(sourceCard) ?? sourceName,
@@ -5531,7 +5627,13 @@ export function VisualCanvas({
     }
 
     if (tacticName === 'cases') {
-      const playTactic = interactionToPlayTactic({ type: 'drag_cases', hypName: targetPlayName })
+      const playTactic = interactionToPlayTactic({
+        type: 'drag_cases',
+        hypName: targetPlayName,
+        predecessorName: targetCard.hyp.isAssumption
+          ? undefined
+          : nextFreshHypName(stream.hyps, 'd'),
+      })
       await latestApplyInteraction(playTactic, `visual_tactic_${tacticName}`, {
         streamSplit: casesTacticSplits(targetCard),
         targetStreamId: stream.id,
@@ -5699,7 +5801,7 @@ export function VisualCanvas({
       // interaction guard so callers cannot mistake that gap for an idle UI.
       processing: isProcessingRef.current,
       proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
-      coreProofBody: [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'),
+      coreProofBody: buildStructuredLeanProof(proofSteps),
       coreLines,
       interactiveLines,
       visibleNames: streams.flatMap(stream =>
@@ -5709,6 +5811,22 @@ export function VisualCanvas({
         formatFormulaText(TaggedText_stripTags(stream.goal.type).trim()),
         ...stream.hyps.map(card => formatFormulaText(TaggedText_stripTags(card.hyp.type).trim())),
       ]),
+    }
+  }
+
+  async function validateGeneratedProofs() {
+    const validate = onValidateProof ?? onInteraction
+    const coreProofBody = buildStructuredLeanProof(proofSteps)
+    const interactiveProofBody = buildStructuredProof(proofSteps, 'play')
+    // The classic editor applies the shared initial-state prelude invisibly;
+    // reproduce that environment while validating only the code it displays.
+    const coreResult = await validate([proofPrelude, coreProofBody].filter(Boolean).join('\n'))
+    const interactiveResult = await validate([proofPrelude, interactiveProofBody].filter(Boolean).join('\n'))
+    return {
+      coreCompleted: coreResult?.completed === true,
+      interactiveCompleted: interactiveResult?.completed === true,
+      coreProofBody,
+      interactiveProofBody,
     }
   }
 
@@ -5768,6 +5886,7 @@ export function VisualCanvas({
     const harness: VisualCanvasTestHarness = {
       runPlayerTactic: applyTestPlayerTactic,
       dragHypToGoal: applyTestDragHypToGoal,
+      dragTheoremToGoal: applyTestDragTheoremToGoal,
       dragHypToHyp: applyTestDragHypToHyp,
       copyTheoremToCanvas: copyTestTheoremToCanvas,
       moveHypTo: moveTestHypTo,
@@ -5782,6 +5901,7 @@ export function VisualCanvas({
       getTransformStatus,
       getLastTransformRewriteDebug,
       getLastDragDebug: () => lastDragDebugRef.current,
+      validateGeneratedProofs,
       getProofAudit,
       getCurrentStreamSnapshot,
     }
@@ -5869,7 +5989,7 @@ export function VisualCanvas({
                 data-testid="proof-action-export-classic"
                 onClick={() => {
                   if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
-                  onOpenClassic([proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'))
+                  onOpenClassic(buildStructuredProof(proofSteps, sideViewMode))
                 }}
               >Export to classic mode</button>
             )}
@@ -5887,7 +6007,7 @@ export function VisualCanvas({
           const isUnknown = sideViewMode === 'lean' && line.trimStart().startsWith('? (')
           return (
             <div key={i} className={`proof-sidebar-step${isUnknown ? ' unknown' : ''}`}>
-              <span className="proof-sidebar-step-num">{i + 1}</span>
+              <span className="proof-sidebar-step-num" aria-hidden="true">{i + 1}</span>
               <span className="proof-sidebar-step-text">{line}</span>
             </div>
           )
@@ -5955,8 +6075,14 @@ export function VisualCanvas({
     const isClickable = hasClickAction(clickAction) || opensConstructionOnTap
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
     const isTacticTarget = activeDraggedTactic
-      ? tacticCanTargetHyp(activeDraggedTactic, card)
+      ? tacticShouldHighlightHyp(activeDraggedTactic, card)
       : false
+    const draggedHypCard = activeDragId
+      ? displayStream?.hyps.find(candidate => candidate.id === activeDragId)
+      : undefined
+    const blocksHypothesisSubstitution = Boolean(
+      draggedHypCard && hypothesisDropWouldSubstitute(draggedHypCard, card),
+    )
     return (
       <HypCard
         key={card.id}
@@ -5975,7 +6101,7 @@ export function VisualCanvas({
         constructOnSingleClick={streamInteractionsEnabled && opensConstructionOnTap}
         showDropTarget={activeDraggedTactic
           ? isTacticTarget
-          : activeDragId !== null && activeDragId !== card.id}
+          : activeDragId !== null && activeDragId !== card.id && !blocksHypothesisSubstitution}
         isPotentialTarget={isTacticTarget}
         mobileList={mobileList}
         onClickAction={streamInteractionsEnabled && isClickable && displayStream
@@ -6090,6 +6216,14 @@ export function VisualCanvas({
     const isTacticTarget = activeDraggedTactic
       ? tacticCanTargetGoal(activeDraggedTactic, liveGoalStream)
       : false
+    const draggedHypCard = activeDragId
+      ? displayStream?.hyps.find(card => card.id === activeDragId)
+      : undefined
+    const isStatementTarget = activeDraggedTheorem
+      ? theoremCanTargetGoal(activeDraggedTheorem, liveGoalStream)
+      : draggedHypCard
+        ? hypCanTargetGoal(draggedHypCard, liveGoalStream)
+        : false
     return (
       <GoalCard
         key={stream.id}
@@ -6107,8 +6241,8 @@ export function VisualCanvas({
         animateSolved={solvedGoalId === stream.id}
         visualInfos={visibleVisualGoalInfos}
         infoPositions={infoPositions}
-        showDropTarget={activeDraggedTactic ? isTacticTarget : activeDragId !== null}
-        isPotentialTarget={isTacticTarget}
+        showDropTarget={activeDraggedTactic ? isTacticTarget : isStatementTarget}
+        isPotentialTarget={isTacticTarget || isStatementTarget}
         atomicContextNames={streamHypNames(liveGoalStream)}
         reductionForms={stream.reductionForms}
         onClick={streamInteractionsEnabled && isClickable
@@ -6178,7 +6312,7 @@ export function VisualCanvas({
             onWorldMap={onWorldMap ?? (() => {})}
             getFeedbackProofState={() => ({
               proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
-              coreProofBody: [proofPrelude, buildStructuredLeanProof(proofSteps)].filter(Boolean).join('\n'),
+              coreProofBody: buildStructuredLeanProof(proofSteps),
               canvasState,
               activeStreamId,
             })}

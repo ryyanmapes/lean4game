@@ -36,6 +36,17 @@ test('a selected reverse variable rewrite gets an explicit side and theorem argu
   )
 })
 
+test('an occurrence-scoped reverse rewrite bypasses visual application paths', () => {
+  assert.equal(
+    explicitReverseRewriteCommand('add_zero', 'succ(succ(a))', 'left', [1, 1], undefined, 3),
+    'rw_nth 3 [← add_zero (succ(succ(a)))]',
+  )
+  assert.equal(
+    explicitReverseRewriteCommand('add_zero', 'succ(a)', 'right', [1], 'h', 2),
+    'rw_nth 2 [← add_zero (succ(a))] at h',
+  )
+})
+
 test('a path-scoped rewrite keeps the exact player-selected occurrence in Core Lean', () => {
   assert.equal(
     coreTacticForVisualCommand('drag_rw_lhs_at [MyNat.two_eq_succ_one] [1]'),

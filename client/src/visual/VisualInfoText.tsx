@@ -41,7 +41,10 @@ export function VisualInfoText({ text }: { text: string }) {
                     return next
                   })}
                 >Click to reveal</button>
-                {revealed && <span className="visual-info-reveal-answer">: {renderInline(reveal[1]!, `answer-${lineIndex}`)}</span>}
+                {revealed && <>
+                  <br />
+                  <span className="visual-info-reveal-answer">{renderInline(reveal[1]!, `answer-${lineIndex}`)}</span>
+                </>}
               </span>
             : renderInline(line, `line-${lineIndex}`)}
         </React.Fragment>

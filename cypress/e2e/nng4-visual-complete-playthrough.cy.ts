@@ -33,6 +33,12 @@ interface ProofAudit {
 
 interface VisualTestHarness {
   getProofAudit(): ProofAudit
+  validateGeneratedProofs(): Promise<{
+    coreCompleted: boolean
+    interactiveCompleted: boolean
+    coreProofBody: string
+    interactiveProofBody: string
+  }>
 }
 
 type VisualHarnessWindow = Cypress.AUTWindow & {
@@ -244,6 +250,21 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         expect(audit.completed, `${solution.world} ${solution.level} completes visually`).to.equal(true)
         expect(audit.coreLines, 'Core proof log is populated').not.to.deep.equal([])
         expect(audit.interactiveLines, 'Interactive proof log is populated').not.to.deep.equal([])
+        cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+          const generated = await (win as VisualHarnessWindow).__visualTestHarness!.validateGeneratedProofs()
+          expect(
+            generated.coreCompleted,
+            `${solution.world} ${solution.level} generated Core proof completes in classic Lean:\n${generated.coreProofBody}`,
+          ).to.equal(true)
+          expect(
+            generated.coreProofBody,
+            `${solution.world} ${solution.level} classic-visible Core proof has no hidden initial revert`,
+          ).not.to.match(/^revert\b/u)
+          expect(
+            generated.interactiveCompleted,
+            `${solution.world} ${solution.level} generated Interaction proof completes in classic Lean:\n${generated.interactiveProofBody}`,
+          ).to.equal(true)
+        })
         assertCompletedProofRestores(solution, audit)
         // Focused diagnostic runs must not turn their selected level into the
         // synthetic "last level" and exercise an unrelated classic export.

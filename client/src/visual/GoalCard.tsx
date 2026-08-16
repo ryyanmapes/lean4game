@@ -53,6 +53,7 @@ export function GoalCard({
 }: GoalCardProps) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !isInteractive })
   const clickTimeoutRef = React.useRef<number | null>(null)
+  const clickSequenceGoalRef = React.useRef<string | null>(null)
   const wrapperRef = React.useRef<HTMLDivElement | null>(null)
   const cardRef = React.useRef<HTMLDivElement | null>(null)
   const propositionRef = React.useRef<HTMLSpanElement | null>(null)
@@ -190,7 +191,11 @@ export function GoalCard({
       </div>
     ))
 
-  function handleClick() {
+  function handleClick(event: React.MouseEvent<HTMLDivElement>) {
+    // A native double-click sends two click events. Only the first may be a
+    // single-click action; otherwise an intro-able goal can introduce twice.
+    if (event.detail > 1) return
+    clickSequenceGoalRef.current = id
     if (!onClick) return
     if (onDoubleClick) {
       if (clickTimeoutRef.current !== null) {
@@ -206,6 +211,14 @@ export function GoalCard({
   }
 
   function handleDoubleClick() {
+    // The first click may have introduced a binder and replaced this card's
+    // goal before the browser emits dblclick. Never combine clicks that began
+    // on different goals into a transformation/construction gesture.
+    if (clickSequenceGoalRef.current !== id) {
+      clickSequenceGoalRef.current = null
+      return
+    }
+    clickSequenceGoalRef.current = null
     if (clickTimeoutRef.current !== null) {
       window.clearTimeout(clickTimeoutRef.current)
       clickTimeoutRef.current = null

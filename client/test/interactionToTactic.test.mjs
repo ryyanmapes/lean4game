@@ -21,3 +21,14 @@ test('induction supplies stable names for the successor and induction hypothesis
     'induction n with d hd',
   )
 })
+
+test('numeric cases supplies a stable predecessor name while False cases needs none', () => {
+  assert.equal(
+    interactionToPlayTactic({ type: 'drag_cases', hypName: 'b', predecessorName: 'd' }),
+    'cases b with d',
+  )
+  assert.equal(
+    interactionToPlayTactic({ type: 'drag_cases', hypName: 'h' }),
+    'cases h',
+  )
+})

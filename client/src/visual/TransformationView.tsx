@@ -263,6 +263,7 @@ export function TransformationView({
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
   const suppressRuleClickRef = useRef(false)
+  const undoInFlightRef = useRef(false)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
   const [phoneExprScale, setPhoneExprScale] = useState<number | null>(null)
   const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
@@ -880,10 +881,16 @@ export function TransformationView({
   }
 
   const handleUndo = async () => {
-    if (isProcessing) return
+    if (isProcessing || undoInFlightRef.current) return
+    undoInFlightRef.current = true
     setIsProcessing(true)
-    const success = await onUndo()
-    setIsProcessing(false)
+    let success = false
+    try {
+      success = await onUndo()
+    } finally {
+      undoInFlightRef.current = false
+      setIsProcessing(false)
+    }
     if (!success) return
     if (history.length > 0) {
       const prev = history[history.length - 1]
@@ -979,7 +986,7 @@ export function TransformationView({
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={!(canUndo ?? rewriteStepCount > 0)}
+              disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               aria-disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
               aria-label="Undo"

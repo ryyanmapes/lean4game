@@ -264,6 +264,7 @@ export class LocalWasmRpcClient {
   private worldId: string
   private levelId: number
   private initialDeclaration = ''
+  private proofPrelude = ''
 
   constructor(private readonly gameId: string, worldId: string, levelId: number) {
     this.worldId = worldId
@@ -274,12 +275,26 @@ export class LocalWasmRpcClient {
     return this.loadProofState(this.worldId, this.levelId)
   }
 
-  async loadProofState(worldId: string, levelId: number): Promise<ProofState> {
+  async loadProofState(
+    worldId: string,
+    levelId: number,
+    options?: { moveInitialBindersIntoGoal?: boolean },
+  ): Promise<ProofState> {
     if (this.closed) throw new Error('Local Lean worker closed')
     this.worldId = worldId
     this.levelId = levelId
     const level = await this.fetchInitialDeclaration(worldId, levelId)
     this.initialDeclaration = level.declaration
+    this.proofPrelude = ''
+    const initial = await this.checkProof('')
+    if (!options?.moveInitialBindersIntoGoal) return initial
+
+    const goals = initial.steps.at(-1)?.focusedGoals ?? initial.steps.at(-1)?.goals ?? []
+    const variableNames = goals.flatMap(({ goal }) => goal.hyps
+      .filter(hyp => !hyp.isAssumption)
+      .flatMap(hyp => hyp.names.map(name => hyp.playName ?? name))
+      .filter(name => name && name !== '[anonymous]'))
+    this.proofPrelude = variableNames.length > 0 ? `revert ${variableNames.join(' ')}` : ''
     return this.checkProof('')
   }
 
@@ -345,7 +360,8 @@ export class LocalWasmRpcClient {
     // The snapshot contains all NNG declarations behind one
     // stable facade. Every level must repeat this exact import header: the
     // persistent WASM compiler keys its cached environment by that header.
-    const declaration = `${this.initialDeclaration} := by\n${indentProof(instrumentBrowserProof(proofBody))}\n  all_goals browser_report_state\n  all_goals sorry`
+    const effectiveProof = [this.proofPrelude, proofBody].filter(Boolean).join('\n')
+    const declaration = `${this.initialDeclaration} := by\n${indentProof(instrumentBrowserProof(effectiveProof))}\n  all_goals browser_report_state\n  all_goals sorry`
     // Lean4Game's exported `descrFormat` contains the statement itself, but not
     // the namespace surrounding the authored level. Every NNG4 level is
     // declared in `MyNat`; restoring that context is what makes unqualified

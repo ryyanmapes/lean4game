@@ -893,10 +893,6 @@
   border-color: var(--visual-info-border);
 }
 
-.telemetry-consent-accept {
-  border-color: color-mix(in srgb, var(--visual-loading-ball-core) 70%, transparent);
-}
-
 @media (max-width: 720px) {
   .telemetry-consent-dialog {
     top: 48%;
@@ -2470,6 +2466,8 @@
   min-width: 1.1rem;
   padding-top: 0.1rem;
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .proof-sidebar-step-text {

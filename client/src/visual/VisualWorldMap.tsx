@@ -486,11 +486,11 @@ function VisualMapAppBar({
         <VisualMapMenuButton />
       </div>
       <div className={`visual-map-dropdown${navOpen ? ' open' : ''}`}>
-        <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Export')}
-        </button>
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Import')}
+        </button>
+        <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
+          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Export')}
         </button>
         <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Reset')}

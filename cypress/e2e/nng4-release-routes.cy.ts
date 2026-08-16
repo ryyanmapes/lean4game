@@ -131,6 +131,10 @@ describe('local NNG4 release maps', () => {
     cy.contains('.visual-map-dropdown button', 'Upload').should('not.exist')
     cy.contains('.visual-map-dropdown button', 'Export').should('be.visible')
     cy.contains('.visual-map-dropdown button', 'Import').should('be.visible')
+    cy.get('.visual-map-dropdown button').then($buttons => {
+      const labels = [...$buttons].map(button => button.textContent?.trim())
+      expect(labels.indexOf('Import'), 'Import precedes Export').to.be.lessThan(labels.indexOf('Export'))
+    })
     cy.contains('.visual-map-dropdown button', 'Auto branch switching')
       .should('have.attr', 'aria-pressed', 'false').click()
       .should('have.attr', 'aria-pressed', 'true')

@@ -23,6 +23,7 @@ import { getDataBaseUrl } from '../utils/url'
 import { useVisualRpcClient } from './VisualRpcProvider'
 import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
+import { levelStartsWithBindersInGoal } from './initialGoalState'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'tauto'])
@@ -86,26 +87,6 @@ function delay(ms: number) {
 
 function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
   return levelId - skippedLevels.filter(skipped => skipped > 0 && skipped < levelId).length
-}
-
-function levelSucceedsIntro(worldId: string, levelId: number, edges: string[][]): boolean {
-  if (worldId === 'Implication') return levelId > 6
-  const successors = new Map<string, string[]>()
-  for (const [source, target] of edges) {
-    if (!source || !target) continue
-    successors.set(source, [...(successors.get(source) ?? []), target])
-  }
-  const reachable = new Set<string>(['Implication'])
-  const queue = ['Implication']
-  while (queue.length > 0) {
-    const source = queue.shift()!
-    for (const target of successors.get(source) ?? []) {
-      if (reachable.has(target)) continue
-      reachable.add(target)
-      queue.push(target)
-    }
-  }
-  return reachable.has(worldId)
 }
 
 function mentionsLeanLocal(text: string, name: string): boolean {
@@ -430,7 +411,7 @@ export function VisualProofPage() {
           const gameData = await fetchJsonWithRetry<{
             worlds?: { edges?: string[][] }
           }>(`${getDataBaseUrl().replace(/\/$/, '')}/${gameId}/game.json`)
-          if (levelSucceedsIntro(worldId, levelId, gameData?.worlds?.edges ?? [])) {
+          if (levelStartsWithBindersInGoal(worldId, levelId, gameData?.worlds?.edges ?? [])) {
             const prepared = moveInitialVariablesIntoGoal(initialCanvas)
             proofPreludeRef.current = prepared.prelude
             initialCanvas = prepared.canvas
@@ -502,6 +483,11 @@ export function VisualProofPage() {
     return getClient(worldId, levelId).sendProofUpdate(
       [proofPreludeRef.current, proofBody].filter(Boolean).join('\n'),
     )
+  }, [getClient, levelId, worldId])
+
+  const handleProofValidation = useCallback(async (proofBody: string): Promise<ProofState | null> => {
+    if (!worldId || !levelId) return null
+    return getClient(worldId, levelId).sendProofUpdate(proofBody)
   }, [getClient, levelId, worldId])
 
   // Fetch the level JSON directly to get the lemma list (InventoryPanel is not mounted
@@ -739,6 +725,7 @@ export function VisualProofPage() {
       levelId={levelId}
       displayLevelId={displayLevelId}
       onInteraction={handleInteraction}
+      onValidateProof={handleProofValidation}
       onNextLevel={handleNextLevel}
       onPreviousLevel={hasPrev ? handlePreviousLevel : undefined}
       onWorldMap={handleWorldMap}

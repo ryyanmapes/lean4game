@@ -54,12 +54,12 @@ export function TelemetryConsent({ gate }: { gate: TelemetryConsentGate }) {
       <div className="telemetry-consent-buttons">
         <button
           type="button"
-          className="telemetry-consent-button telemetry-consent-refuse"
+          className="telemetry-consent-button"
           onClick={gate.refuse}
         >Refuse</button>
         <button
           type="button"
-          className="telemetry-consent-button telemetry-consent-accept"
+          className="telemetry-consent-button"
           onClick={gate.accept}
         >Accept</button>
       </div>

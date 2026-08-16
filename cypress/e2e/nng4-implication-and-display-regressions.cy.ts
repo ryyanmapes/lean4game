@@ -12,6 +12,8 @@ const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
 
 interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
+  dragHypToHyp(sourceName: string, targetName: string): Promise<void>
+  dragTheoremToGoal(theoremName: string): Promise<boolean>
   getProofAudit(): {
     completed: boolean
     processing: boolean
@@ -185,6 +187,20 @@ describe('NNG4 implication and definition display regressions', () => {
     performPlayerGestures(['symm', 'exact zero_ne_one'])
   })
 
+  it('rejects an incompatible theorem drop before generating goal syntax', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/10/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    visualHarness().then(harness => harness.dragTheoremToGoal('MyNat.zero_ne_one'))
+      .should('equal', false)
+    visualHarness().then(harness => {
+      const audit = harness.getProofAudit()
+      expect(audit.completed).to.equal(false)
+      expect(audit.coreLines, 'no invalid apply command is generated').to.deep.equal([])
+      expect(audit.interactiveLines).to.deep.equal([])
+    })
+  })
+
   it('keeps boundary navigation labels visible on disabled level buttons', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/1/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
@@ -199,6 +215,20 @@ describe('NNG4 implication and definition display regressions', () => {
       .should('be.disabled')
       .and('contain.text', 'Next level')
       .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.lessThan(0.6))
+  })
+
+  it('does not substitute by dragging one equality hypothesis onto another', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/1/visual`)
+    cy.get('[data-testid="hyp-card"][data-hyp-name="h1"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="h2"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    visualHarness().then(harness => harness.dragHypToHyp('h1', 'h2'))
+    visualHarness().then(harness => {
+      const audit = harness.getProofAudit()
+      expect(audit.coreLines, 'no equality rewrite was dispatched').to.deep.equal([])
+      expect(audit.interactiveLines, 'the interaction proof is unchanged').to.deep.equal([])
+      expect(audit.completed, 'the untouched level is not complete').to.equal(false)
+    })
   })
 
   it('keeps post-intro-world forall binders in the clickable goal and removes revert', () => {
@@ -281,6 +311,13 @@ describe('NNG4 implication and definition display regressions', () => {
       const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
       expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
       const rectangles = cards.map(card => card.getBoundingClientRect())
+      const trayTop = cards[0]!.ownerDocument.getElementById('theorem-tray')!.getBoundingClientRect().top
+      for (const card of cards.filter(candidate => candidate.dataset.testid === 'hyp-card')) {
+        expect(
+          card.getBoundingClientRect().bottom,
+          `${card.dataset.hypName ?? 'spawned hypothesis'} stays above the lower menu`,
+        ).to.be.at.most(trayTop - 1)
+      }
       for (let left = 0; left < rectangles.length; left += 1) {
         for (let right = left + 1; right < rectangles.length; right += 1) {
           const a = rectangles[left]!
@@ -317,6 +354,9 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
       const snapshot = (win as HarnessWindow).__visualTestHarness?.getCurrentStreamSnapshot()
       expect(snapshot?.streamId, 'player selected the still-live successor branch').not.to.equal(baseStreamId)
+      expect(snapshot?.hypTypes, 'cases names its fresh predecessor explicitly').to.have.property('d')
+      expect(Object.keys(snapshot?.hypTypes ?? {}), 'no collision-sanitized lookalike is introduced')
+        .not.to.include('a2')
     }).then({ timeout: LOAD_TIMEOUT }, async win => {
       const player = new CompletePlaythroughDriver(win)
       await player.perform('intro h')
@@ -349,6 +389,54 @@ describe('NNG4 implication and definition display regressions', () => {
         cy.get(`[data-testid="proof-stream-leaf"][data-stream-id="${baseStreamId}"]`)
           .should('have.attr', 'data-completed', 'false')
       })
+  })
+
+  it('does not highlight non-False hypotheses for cases', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvAddition/level/5/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b'], 'cases b with d')
+    })
+
+    cy.get('[data-tactic-name="cases"]').then($card => {
+      const rect = $card[0]!.getBoundingClientRect()
+      const pointer = { pointerId: 38, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }
+      cy.wrap($card).trigger('pointerdown', {
+        ...pointer,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        force: true,
+      })
+      cy.get('body').trigger('pointermove', {
+        ...pointer,
+        clientX: rect.left + rect.width / 2 + 12,
+        clientY: rect.top + rect.height / 2 + 12,
+        force: true,
+      })
+    })
+    cy.get('[data-testid="hyp-card"][data-hyp-name="a"]')
+      .should('not.have.class', 'potential-drop-target')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="b"]')
+      .should('not.have.class', 'potential-drop-target')
+    cy.get('body').trigger('pointerup', {
+      pointerId: 38,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      force: true,
+    })
+  })
+
+  it('reveals the Less-or-Equal hint on a new line', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
+    cy.get('.visual-info-reveal-button', { timeout: LOAD_TIMEOUT }).click()
+    cy.get('.visual-info-reveal').then($reveal => {
+      const button = $reveal.find('.visual-info-reveal-button')[0]!.getBoundingClientRect()
+      const answer = $reveal.find('.visual-info-reveal-answer')[0]!.getBoundingClientRect()
+      expect(answer.top, 'revealed hint begins below the reveal control').to.be.at.least(button.bottom)
+    })
   })
 
   it('applies zero-ne-succ from a hypothesis and restores its workspace copy on undo', () => {
@@ -384,6 +472,9 @@ describe('NNG4 implication and definition display regressions', () => {
     })
 
     cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar-step-num').first().should($number => {
+      expect(getComputedStyle($number[0]!).userSelect, 'proof line numbers are not selectable').to.equal('none')
+    })
     // Completing the proof leaves Core selected. A player has no reason to
     // click the already-active, partially obscured mode button just to inspect
     // the log; assert the visible state we actually depend on instead.
@@ -448,6 +539,24 @@ describe('NNG4 implication and definition display regressions', () => {
         expect(getComputedStyle($proposition[0]!).flexBasis, 'proposition starts after the label').to.equal('100%')
       })
 
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/4/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['x', 'y', 'z', 'hxy', 'hyz'], 'cases hxy with a ha')
+    })
+    cy.get('[data-testid="hyp-card"][data-hyp-name="hxy"] .statement-atomic-form')
+      .should('be.visible')
+      .and('contain.text', '∃')
+    cy.contains(
+      '.hyp-info',
+      'Click there-exists hypotheses to name a variable fulfilling the condition.',
+    ).should('be.visible')
+    cy.get('[data-testid="hyp-card"][data-hyp-name="hxy"]')
+      .should('not.have.class', 'transformable')
+      .dblclick()
+    cy.get('.tr-transformation-overlay').should('not.exist')
+
   })
 
   it('shows the requested level lesson labels and retires the induction reminder', () => {
@@ -466,11 +575,6 @@ describe('NNG4 implication and definition display regressions', () => {
       'Implication',
       10,
       'The symm tactic can be used to swap the sides of any equality.',
-    )
-    openAndExpect(
-      'LessOrEqual',
-      4,
-      'Click there-exists hypotheses to name a variable fulfilling the condition.',
     )
     openAndExpect(
       'LessOrEqual',
@@ -820,5 +924,88 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="proof-action-export-classic"]')
       .should('be.visible')
       .and('contain.text', 'Export to classic mode')
+    cy.window().then(win => {
+      cy.stub(win, 'open').as('openSelectedProofInClassic')
+    })
+    cy.contains('.proof-sidebar-mode-btn', 'Interactive').click()
+    cy.get('[data-testid="proof-action-export-classic"]').click()
+    cy.get('@openSelectedProofInClassic').should('have.been.calledOnce').then(openClassic => {
+      const [target] = (openClassic as unknown as { getCall(index: number): { args: unknown[] } })
+        .getCall(0).args
+      const handoffMatch = /[?&]visualHandoff=([^&]+)/u.exec(String(target))
+      expect(handoffMatch, 'classic export has a proof handoff token').not.to.equal(null)
+      cy.window().then(win => {
+        const handoff = JSON.parse(
+          win.localStorage.getItem(`visual-proof-handoff/${decodeURIComponent(handoffMatch![1])}`) ?? 'null',
+        )
+        const expectedInteractive = (win as HarnessWindow).__visualTestHarness
+          .getProofAudit().interactiveLines.join('\n')
+        expect(handoff?.proofBody, 'selected Interactive tactics are exported').to.equal(expectedInteractive)
+      })
+    })
+  })
+
+  it('adds zero to a selected succ nested inside a larger expression', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/2/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.performRewriteOnSide('rw [← add_zero (succ a)]', 'left', true)
+    })
+
+    cy.get('.tr-transformation-overlay .tr-expr-wrapper')
+      .should('contain.text', 'succ')
+      .and('contain.text', '+')
+      .and('contain.text', '0')
+    cy.window().should(win => {
+      const audit = (win as HarnessWindow).__visualTestHarness.getProofAudit()
+      expect(audit.processing, 'nested reverse rewrite has finished').to.equal(false)
+      expect(audit.completed, 'the nested rewrite does not solve the goal').to.equal(false)
+      expect(audit.coreLines).to.include('rw_nth 1 [← add_zero (succ(a))]')
+    })
+  })
+
+  it('keeps transformation state synchronized when undo is clicked twice during one request', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Tutorial/level/5/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.performRewriteOnSide('rw [add_zero]', 'left', true)
+      await player.performRewriteOnSide('rw [add_zero]', 'left', true)
+
+      const undo = win.document.querySelector<HTMLButtonElement>(
+        '.tr-transformation-overlay button[aria-label="Undo"]',
+      )
+      expect(undo, 'transformation undo button').to.exist
+      undo!.click()
+      undo!.click()
+    })
+
+    cy.window().should(win => {
+      const audit = (win as HarnessWindow).__visualTestHarness.getProofAudit()
+      expect(audit.processing, 'rapid undo request has settled').to.equal(false)
+      expect(audit.coreLines.filter(line => line.includes('add_zero'))).to.have.length(1)
+    })
+    cy.get('.tr-transformation-overlay .tr-expr-wrapper').should('contain.text', '+ 0')
+  })
+
+  it('does not carry the first intro click into a double-click on the replacement goal', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/7/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('have.class', 'clickable')
+      .dblclick()
+
+    cy.window().should(win => {
+      const harness = (win as HarnessWindow).__visualTestHarness
+      const audit = harness.getProofAudit()
+      const snapshot = harness.getCurrentStreamSnapshot()
+      expect(audit.processing, 'the one intro has settled').to.equal(false)
+      expect(audit.coreLines, 'the double-click performs exactly one intro').to.have.length(1)
+      expect(Object.keys(snapshot.hypTypes), 'only the first binder was introduced').to.deep.equal(['x'])
+    })
+    cy.get('.tr-transformation-overlay, .tr-construction-overlay').should('not.exist')
   })
 })

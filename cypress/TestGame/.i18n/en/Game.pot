@@ -1,7 +1,7 @@
 msgid ""
 msgstr "Project-Id-Version: Game v4.28.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-13\n"
+"POT-Creation-Date: 2026-08-10\n"
 "Last-Translator: \n"
 "Language-Team: none\n"
 "Language: en\n"
@@ -12,6 +12,7 @@ msgstr "Project-Id-Version: Game v4.28.0\n"
 msgid "Test World"
 msgstr ""
 
+#: GameServer.CompletionMessages
 #: GameServer.RpcHandlers
 msgid "level completed with warnings… 🎭"
 msgstr ""
@@ -25,6 +26,7 @@ msgstr ""
 msgid "Commutativity on §0"
 msgstr ""
 
+#: GameServer.CompletionMessages
 #: GameServer.RpcHandlers
 msgid "level completed! 🎉"
 msgstr ""

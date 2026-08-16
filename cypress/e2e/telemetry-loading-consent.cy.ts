@@ -56,8 +56,8 @@ describe('loading-screen telemetry consent', { testIsolation: true }, () => {
       .should('be.visible')
       .and('contain.text', "Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. Anonymous telemetry helps us improve the program for future users.")
       .within(() => {
-        cy.contains('button', 'Refuse').should('be.visible')
-        cy.contains('button', 'Accept').should('be.visible')
+        cy.contains('button', 'Refuse').should('be.visible').and('have.attr', 'class', 'telemetry-consent-button')
+        cy.contains('button', 'Accept').should('be.visible').and('have.attr', 'class', 'telemetry-consent-button')
       })
     cy.get('.telemetry-consent-dialog').then($dialog => {
       const dialog = $dialog[0]!.getBoundingClientRect()

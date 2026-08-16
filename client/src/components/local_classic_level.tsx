@@ -20,6 +20,7 @@ import { useLeanLoadingProgress } from '../visual/useLeanLoadingProgress'
 import { ClassicLoadingScreen } from './classic_loading_screen'
 import { createTelemetryId, sendTelemetry } from '../utils/telemetry'
 import { useTelemetryConsentGate } from './telemetry_consent'
+import { levelStartsWithBindersInGoal } from '../visual/initialGoalState'
 import { LevelAppBar } from './app_bar'
 import {
   DeletedChatContext,
@@ -297,7 +298,14 @@ export default function LocalClassicLevel() {
     setReady(false)
     setChecking(true)
     setError('')
-    client.loadProofState(worldId, levelId).then(next => {
+    if (!game.data) return () => { active = false }
+    client.loadProofState(worldId, levelId, {
+      moveInitialBindersIntoGoal: levelStartsWithBindersInGoal(
+        worldId,
+        levelId,
+        game.data.worlds?.edges ?? [],
+      ),
+    }).then(next => {
       if (!active) return
       setProof(next)
       setReady(true)
@@ -309,7 +317,7 @@ export default function LocalClassicLevel() {
       if (active) setChecking(false)
     })
     return () => { active = false }
-  }, [attemptId, client, gameId, handedOffProof, levelId, sendLevelStartTelemetry, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
+  }, [attemptId, client, game.data, gameId, handedOffProof, levelId, sendLevelStartTelemetry, telemetryStartedAt, visualHandoff?.sourceAttemptId, worldId])
 
   React.useEffect(() => {
     if (ready && telemetryConsent.consentState === 'accepted') {
