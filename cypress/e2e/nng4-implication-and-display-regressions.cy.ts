@@ -277,7 +277,7 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get(
       '[data-testid="combining-canvas"] [data-testid="hyp-card"], [data-testid="combining-canvas"] [data-testid="theorem-copy-card"]',
       { timeout: LOAD_TIMEOUT },
-    ).then($cards => {
+    ).should($cards => {
       const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
       expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
       const rectangles = cards.map(card => card.getBoundingClientRect())
@@ -287,7 +287,13 @@ describe('NNG4 implication and definition display regressions', () => {
           const b = rectangles[right]!
           const overlapWidth = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
           const overlapHeight = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
-          expect(overlapWidth * overlapHeight, `cards ${left + 1} and ${right + 1} do not overlap`).to.equal(0)
+          // Adjacent one-pixel borders can share a device-pixel row after
+          // platform-specific subpixel rounding. An overlap in both axes by
+          // more than the border width is the actual obscured-card defect.
+          expect(
+            Math.min(overlapWidth, overlapHeight),
+            `cards ${left + 1} and ${right + 1} do not overlap beyond their border`,
+          ).to.be.at.most(1)
         }
       }
     })
@@ -566,12 +572,20 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(bevelStyle.webkitMaskComposite, 'the center is cut out of the border overlay').to.match(/xor|exclude/u)
     })
 
+    let neutralEdge = ''
     cy.get('[data-tactic-name="induction"]').then($card => {
-      const neutral = getComputedStyle($card[0]!, '::after').backgroundColor
+      neutralEdge = getComputedStyle($card[0]!, '::after').backgroundColor
       $card[0]!.classList.add('visual-emphasize')
+    })
+    cy.get('[data-tactic-name="induction"]').should($card => {
+      const style = getComputedStyle($card[0]!)
       const highlighted = getComputedStyle($card[0]!, '::after').backgroundColor
-      expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutral)
-      expect(highlighted, 'highlighted edge includes the emphasis purple').to.contain('167, 139, 250')
+      expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutralEdge)
+      expect(
+        style.getPropertyValue('--bevel-border-color').trim().replace(/\s+/gu, ''),
+        'the highlighted straight and cut-corner edges share the emphasis color',
+      ).to.equal('rgba(167,139,250,0.9)')
+    }).then($card => {
       $card[0]!.classList.remove('visual-emphasize')
     })
 

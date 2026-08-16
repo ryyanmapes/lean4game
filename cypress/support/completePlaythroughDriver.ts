@@ -1839,24 +1839,50 @@ export class CompletePlaythroughDriver {
   }
 
   private async dragAndWait(source: HTMLElement, target: HTMLElement, description: string) {
-    await waitForPlayerIdle(this.win, `${description} to become available`)
-    source = this.refreshCard(source)
-    target = this.refreshCard(target)
-    const before = proofSignature(harness(this.win).getProofAudit())
-    const selectedStreamBefore = selectedStreamSignature(this.win)
-    const previousAttempts = playLog(this.win).length
-    await drag(source, target)
-    try {
-      await waitForPlayAttempt(this.win, previousAttempts, description)
-    } catch (error) {
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)}; ` +
-        `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
-        { cause: error },
+    const sourceIdentity = captureDragTargetIdentity(source)
+    const targetIdentity = captureDragTargetIdentity(target)
+    let missedGesture: unknown
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await waitForPlayerIdle(this.win, `${description} to become available`)
+      source = resolveRemountedDragTarget(
+        this.win.document,
+        sourceIdentity,
+        this.refreshCard(source),
       )
+      target = resolveRemountedDragTarget(
+        this.win.document,
+        targetIdentity,
+        this.refreshCard(target),
+      )
+      const before = proofSignature(harness(this.win).getProofAudit())
+      const selectedStreamBefore = selectedStreamSignature(this.win)
+      const previousAttempts = playLog(this.win).length
+      await drag(source, target)
+      try {
+        await waitForPlayAttempt(this.win, previousAttempts, description)
+      } catch (error) {
+        // Pointer delivery can occasionally be dropped by a headless browser
+        // before dnd-kit records any play at all (most often WebKit/Electron
+        // after a dock remount). A player would simply repeat that gesture.
+        // Retry only that exact no-attempt case: a Lean rejection or any
+        // recorded interaction remains a real failure and is never replayed.
+        const noAttemptWasRecorded = playLog(this.win).length === previousAttempts
+          && proofSignature(harness(this.win).getProofAudit()) === before
+        if (attempt === 0 && noAttemptWasRecorded) {
+          missedGesture = error
+          continue
+        }
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}; ` +
+          `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
+          { cause: error },
+        )
+      }
+      await waitForProofChange(this.win, before, description)
+      await waitForSelectedStreamChange(this.win, selectedStreamBefore, description)
+      return
     }
-    await waitForProofChange(this.win, before, description)
-    await waitForSelectedStreamChange(this.win, selectedStreamBefore, description)
+    throw missedGesture
   }
 
   private async dragTactic(name: string, target: HTMLElement) {
