@@ -202,7 +202,9 @@ describe('local NNG4 release maps', () => {
     cy.get('[data-testid="goal-card"]').should('not.have.class', 'solved')
     cy.window().should(win => {
       const progress = JSON.parse(win.localStorage.getItem('game_progress') ?? '{}')
-      const level = progress.games?.nng4?.data?.Power?.[10]
+      // Redux keys progress by the canonical game id from App
+      // (`g/${owner}/${repo}`), normalized to lower case by the reducer.
+      const level = progress.games?.['g/local/nng4']?.data?.Power?.[10]
       expect(level?.entered, 'opening the optional level is persisted').to.equal(true)
       expect(level?.completed, 'opening the optional level does not solve it').to.equal(false)
     })
