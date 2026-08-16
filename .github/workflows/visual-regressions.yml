@@ -91,6 +91,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The generic A / (A -> B) interaction regressions exercise the small
+      # sibling VisualTest game. Other focused jobs use NNG4 exclusively, so
+      # keep this checkout and build scoped to the one matrix entry that needs
+      # it instead of silently testing a missing /data route (404).
+      - name: Checkout VisualTest
+        if: matrix.id == 'implication-display'
+        run: git clone https://github.com/ryyanmapes/VisualTest ../VisualTest
+
       - name: Checkout NNG4
         run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
 
@@ -136,6 +144,18 @@ jobs:
         working-directory: ../NNG4
         run: |
           lake exe cache get
+          lake build
+          test -s .lake/gamedata/game.json
+
+      - name: Build VisualTest game
+        if: matrix.id == 'implication-display'
+        working-directory: ../VisualTest
+        run: |
+          # VisualTest checks in the browser facade, where MakeGame is a no-op.
+          # The native relay needs the full command to generate game.json.
+          node -e "const fs = require('fs'); const p = 'Game/Metadata.lean'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/^import GameServer\.Browser$/m, 'import GameServer'))"
+          grep -q '^import GameServer$' Game/Metadata.lean
+          lake update
           lake build
           test -s .lake/gamedata/game.json
 
