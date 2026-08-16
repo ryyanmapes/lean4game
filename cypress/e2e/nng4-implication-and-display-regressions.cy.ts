@@ -609,7 +609,7 @@ describe('NNG4 implication and definition display regressions', () => {
     })
     cy.get('[data-testid="hyp-card"][data-hyp-name="n"]')
       .should('have.class', 'potential-drop-target')
-      .then($card => {
+      .should($card => {
         const style = getComputedStyle($card[0]!)
         expect(
           style.getPropertyValue('--bevel-border-color').trim(),
