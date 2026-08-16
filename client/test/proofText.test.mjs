@@ -39,11 +39,11 @@ test('a selected reverse variable rewrite gets an explicit side and theorem argu
 test('an occurrence-scoped reverse rewrite bypasses visual application paths', () => {
   assert.equal(
     explicitReverseRewriteCommand('add_zero', 'succ(succ(a))', 'left', [1, 1], undefined, 3),
-    'rw_nth 3 [← add_zero (succ(succ(a)))]',
+    'nth_rewrite 3 [← add_zero (succ(succ(a)))]',
   )
   assert.equal(
     explicitReverseRewriteCommand('add_zero', 'succ(a)', 'right', [1], 'h', 2),
-    'rw_nth 2 [← add_zero (succ(a))] at h',
+    'nth_rewrite 2 [← add_zero (succ(a))] at h',
   )
 })
 
@@ -87,11 +87,11 @@ test('the interactive proof pane renders existential construction without a meta
 const completeAdditionFour = [
   { command: 'induction c with d hd', playTactic: 'induction c with d hd', leanTactic: 'induction c with d hd' },
   { command: 'drag_rw_lhs [MyNat.add_zero]', playTactic: 'drag_rw_lhs [MyNat.add_zero]', leanTactic: null },
-  { command: 'drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: 'rw_nth 1 [MyNat.add_zero]' },
+  { command: 'drag_rw_rhs_at [MyNat.add_zero] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_zero] [2]', leanTactic: 'nth_rewrite 1 [MyNat.add_zero]' },
   { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
   { command: 'drag_rw_lhs [MyNat.add_succ]', playTactic: 'drag_rw_lhs [MyNat.add_succ]', leanTactic: null },
-  { command: 'drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: 'rw_nth 1 [MyNat.add_succ]' },
-  { command: 'drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: 'rw_nth 1 [hd]' },
+  { command: 'drag_rw_rhs_at [MyNat.add_succ] [2]', playTactic: 'drag_rw_rhs_at [MyNat.add_succ] [2]', leanTactic: 'nth_rewrite 1 [MyNat.add_succ]' },
+  { command: 'drag_rw_lhs_at [hd] [1]', playTactic: 'drag_rw_lhs_at [hd] [1]', leanTactic: 'nth_rewrite 1 [hd]' },
   { command: 'drag_rw_rhs [MyNat.add_succ]', playTactic: 'drag_rw_rhs [MyNat.add_succ]', leanTactic: null },
   { command: 'click_goal', playTactic: 'click_goal', leanTactic: 'rfl' },
 ]
@@ -186,11 +186,11 @@ test('core proof text preserves path-scoped player rewrites without holes', asyn
   assert.deepEqual(displayed, [
     'induction c with d hd',
     'rw [add_zero]',
-    'rw_nth 1 [add_zero]',
+    'nth_rewrite 1 [add_zero]',
     'rfl',
     'rw [add_succ]',
-    'rw_nth 1 [add_succ]',
-    'rw_nth 1 [hd]',
+    'nth_rewrite 1 [add_succ]',
+    'nth_rewrite 1 [hd]',
     'rw [add_succ]',
     'rfl',
   ])

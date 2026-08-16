@@ -4475,7 +4475,7 @@ export function VisualCanvas({
       ? `← ${hypLabel} (${explicitReverseArg})`
       : `${isReverse ? '← ' : ''}${hypLabel}`
     const scopedCoreTactic = occurrence && (path !== undefined || explicitReverseArg)
-      ? `rw_nth ${occurrence} [${scopedRule}]${transformTarget?.kind === 'hyp' ? ` at ${transformTarget.hypRef}` : ''}`
+      ? `nth_rewrite ${occurrence} [${scopedRule}]${transformTarget?.kind === 'hyp' ? ` at ${transformTarget.hypRef}` : ''}`
       : null
     const leanTactic = result
       ? scopedCoreTactic ?? resolveLeanTactic(annotationLeanTactic, command, playTactic, focusedStream, lastStep)

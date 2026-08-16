@@ -4,11 +4,9 @@ function browserCompatibleProof(proofBody: string): string {
   return lines.map((line, index) => {
     const rwNthMatch = line.match(/^(\s*)rw_nth\s+(\d+)\s+(.+)$/u)
     if (rwNthMatch) {
-      // `rw_nth` is the compact spelling shown in the Core pane. The browser
-      // module's established NNG environment already kernel-checks the same
-      // operation through `nth_rewrite`; use that spelling only in transient
-      // compiler input so classic handoffs validate without changing what the
-      // player sees or exports.
+      // Older autosaves used the Visual-only `rw_nth` spelling. Normalize it
+      // to standard Lean so those proofs remain valid after Core exports moved
+      // to `nth_rewrite` directly.
       return `${rwNthMatch[1]}nth_rewrite ${rwNthMatch[2]} ${rwNthMatch[3]}`
     }
     const rflMatch = line.match(/^(\s*)rfl\s*$/u)

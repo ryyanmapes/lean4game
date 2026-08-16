@@ -173,7 +173,7 @@ export function explicitReverseRewriteCommand(
   occurrence?: number,
 ): string {
   if (occurrence !== undefined) {
-    return `rw_nth ${occurrence} [← ${theoremName} (${argument})]${targetHypName ? ` at ${targetHypName}` : ''}`
+    return `nth_rewrite ${occurrence} [← ${theoremName} (${argument})]${targetHypName ? ` at ${targetHypName}` : ''}`
   }
   const steps = [workingSide === 'left' ? 'lhs' : 'rhs']
   for (const position of path ?? []) steps.push(`arg ${position}`)
