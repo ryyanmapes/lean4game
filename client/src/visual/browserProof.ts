@@ -11,6 +11,14 @@ function browserCompatibleProof(proofBody: string): string {
       // player sees or exports.
       return `${rwNthMatch[1]}nth_rewrite ${rwNthMatch[2]} ${rwNthMatch[3]}`
     }
+    const rflMatch = line.match(/^(\s*)rfl\s*$/u)
+    if (rflMatch) {
+      // Visual mode deliberately keeps a reflexive card available for the
+      // player's final click even when the preceding rewrite has already
+      // closed Lean's underlying goal. Keep displaying that Core step as
+      // `rfl`, but make classic/browser replay accept both states.
+      return `${rflMatch[1]}all_goals rfl`
+    }
     const tautoMatch = line.match(/^(\s*)tauto\s*$/u)
     if (tautoMatch) {
       const directMulNeZero = lines[index - 1]?.trim().match(

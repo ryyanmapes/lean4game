@@ -75,8 +75,20 @@ rfl
 drag_rw_lhs [MyNat.add_succ]`
   assert.equal(
     instrumentBrowserProof(proof),
-    proof,
+    `induction n with d hd
+drag_rw_lhs [MyNat.add_zero]
+all_goals rfl
+drag_rw_lhs [MyNat.add_succ]`,
     'browser compilation must preserve the same four player-selected goals',
+  )
+})
+
+test('accepts an explicit visual rfl click after a rewrite already closed the Lean goal', () => {
+  assert.equal(
+    instrumentBrowserProof(`rw_nth 1 [MyNat.three_eq_succ_two]
+rfl`),
+    `nth_rewrite 1 [MyNat.three_eq_succ_two]
+all_goals rfl`,
   )
 })
 
