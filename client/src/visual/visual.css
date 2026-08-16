@@ -505,26 +505,17 @@
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  padding: 1px;
-  background: var(--bevel-border-color);
-  clip-path: polygon(
-    1rem 0,
-    calc(100% - 1rem) 0,
-    100% 1rem,
-    100% calc(100% - 1rem),
-    calc(100% - 1rem) 100%,
-    1rem 100%,
-    0 calc(100% - 1rem),
-    0 1rem
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
+  /* Eight independent strokes avoid mask-compositing differences between
+     Chromium, Safari and Firefox while retaining a fixed 16px taper. */
+  background:
+    linear-gradient(var(--bevel-border-color) 0 0) top center / calc(100% - 2rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) bottom center / calc(100% - 2rem) 1px no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) left center / 1px calc(100% - 2rem) no-repeat,
+    linear-gradient(var(--bevel-border-color) 0 0) right center / 1px calc(100% - 2rem) no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) calc(50% - 0.5px), var(--bevel-border-color) calc(50% + 0.5px), transparent calc(50% + 0.5px)) top left / 1rem 1rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) calc(50% - 0.5px), var(--bevel-border-color) calc(50% + 0.5px), transparent calc(50% + 0.5px)) top right / 1rem 1rem no-repeat,
+    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--bevel-border-color) calc(50% - 0.5px), var(--bevel-border-color) calc(50% + 0.5px), transparent calc(50% + 0.5px)) bottom left / 1rem 1rem no-repeat,
+    linear-gradient(135deg, transparent calc(50% - 0.5px), var(--bevel-border-color) calc(50% - 0.5px), var(--bevel-border-color) calc(50% + 0.5px), transparent calc(50% + 0.5px)) bottom right / 1rem 1rem no-repeat;
 }
 
 .visual-page .statement-card.variable-card.drop-target-active,
@@ -545,28 +536,6 @@
 .visual-page .statement-card.variable-card.drag-fail,
 .visual-page .statement-card.variable-only-tactic.drag-fail {
   --bevel-border-color: var(--visual-danger);
-}
-
-/* Resolve the masked edge color on the pseudo-element as well as through the
-   inherited custom property. Safari/WebKit and macOS Electron can repaint the
-   card class one frame before recomputing a pseudo-element's var() value,
-   leaving the clipped corners neutral while the straight target edge is
-   already purple. Direct state selectors keep every octagon segment atomic. */
-.visual-page .statement-card.variable-card.drop-target-active::after,
-.visual-page .statement-card.variable-only-tactic.drop-target-active::after,
-.visual-page .statement-card.variable-card.potential-drop-target::after,
-.visual-page .statement-card.variable-only-tactic.potential-drop-target::after {
-  background: var(--visual-drop-target-border);
-}
-
-.visual-page .statement-card.variable-card.visual-emphasize::after,
-.visual-page .statement-card.variable-only-tactic.visual-emphasize::after {
-  background: rgba(167, 139, 250, 0.9);
-}
-
-.visual-page .statement-card.variable-card.drag-fail::after,
-.visual-page .statement-card.variable-only-tactic.drag-fail::after {
-  background: var(--visual-danger);
 }
 
 .visual-page .statement-atomic-form {
@@ -2259,7 +2228,9 @@
 .visual-page .statement-card.variable-only-tactic.drop-target-active {
   border-color: transparent !important;
   box-shadow: 0 8px 32px 0 var(--visual-shadow-strong) !important;
-  filter: drop-shadow(0 0 7px var(--visual-drop-target-glow));
+  filter:
+    drop-shadow(0 0 3px var(--visual-drop-target-border))
+    drop-shadow(0 0 9px var(--visual-drop-target-glow));
 }
 
 .visual-page .drop-target-active {

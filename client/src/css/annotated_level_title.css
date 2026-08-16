@@ -25,6 +25,12 @@
   flex: 0 0 auto;
 }
 
+.level-title-visible-annotation {
+  flex: 0 0 auto;
+  padding-left: 0.08em;
+  white-space: nowrap;
+}
+
 .level-title-emoji {
   appearance: none;
   border: 0;

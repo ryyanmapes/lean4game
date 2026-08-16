@@ -550,13 +550,13 @@ describe('NNG4 implication and definition display regressions', () => {
     })
   })
 
-  it('renders the induction octagon edges with one color and one-pixel thickness', () => {
+  it('renders the induction octagon edges with one color, one-pixel thickness, and target glow', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Addition/level/1/visual`)
     cy.get('[data-tactic-name="induction"]', { timeout: LOAD_TIMEOUT }).then($card => {
       const card = $card[0]!
       const cardStyle = getComputedStyle(card)
       const bevelStyle = getComputedStyle(card, '::after')
-      const bevelColor = bevelStyle.backgroundColor
+      const bevelImage = bevelStyle.backgroundImage
       const dangerBorder = cardStyle.getPropertyValue('--visual-danger-border').trim()
       const normalizeColor = (value: string) => value
         .replace(/\s+/gu, '')
@@ -565,21 +565,22 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(cardStyle.borderTopWidth, 'native border retains one-pixel layout').to.equal('1px')
       expect(cardStyle.borderTopColor, 'native border does not double the straight edges')
         .to.equal('rgba(0, 0, 0, 0)')
-      expect(normalizeColor(bevelColor), 'all octagon edges use the tactic border color')
+      expect(normalizeColor(bevelImage), 'all octagon edges use the tactic border color')
         .to.contain(normalizeColor(dangerBorder))
       expect(cardStyle.clipPath, 'octagon uses the larger 16-pixel corner taper').to.contain('16px')
-      expect(bevelStyle.paddingTop, 'masked edge has the same one-pixel width on every segment').to.equal('1px')
-      expect(bevelStyle.webkitMaskComposite, 'the center is cut out of the border overlay').to.match(/xor|exclude/u)
+      expect(bevelImage.match(/linear-gradient/gu), 'eight independent strokes draw the octagon')
+        .to.have.length(8)
     })
+    cy.screenshot('review/tapered-variable-neutral', { capture: 'viewport' })
 
     let neutralEdge = ''
     cy.get('[data-tactic-name="induction"]').then($card => {
-      neutralEdge = getComputedStyle($card[0]!, '::after').backgroundColor
+      neutralEdge = getComputedStyle($card[0]!, '::after').backgroundImage
       $card[0]!.classList.add('visual-emphasize')
     })
     cy.get('[data-tactic-name="induction"]').should($card => {
       const style = getComputedStyle($card[0]!)
-      const highlighted = getComputedStyle($card[0]!, '::after').backgroundColor
+      const highlighted = getComputedStyle($card[0]!, '::after').backgroundImage
       expect(highlighted, 'corner and straight octagon edges adopt the highlight').not.to.equal(neutralEdge)
       expect(
         style.getPropertyValue('--bevel-border-color').trim()
@@ -620,9 +621,13 @@ describe('NNG4 implication and definition display regressions', () => {
         $card[0]!.ownerDocument.body.appendChild(colorProbe)
         const resolvedTargetColor = getComputedStyle(colorProbe).color
         colorProbe.remove()
-        expect(getComputedStyle($card[0]!, '::after').backgroundColor)
-          .to.equal(resolvedTargetColor)
+        const edgeImage = getComputedStyle($card[0]!, '::after').backgroundImage
+        expect(edgeImage, 'every target edge is painted with the resolved target color')
+          .to.contain(resolvedTargetColor)
+        expect(style.filter, 'the compatible variable target has a shape-aware glow')
+          .to.contain('drop-shadow')
       })
+    cy.screenshot('review/tapered-variable-compatible-target', { capture: 'viewport' })
     cy.get('[data-testid="goal-card"]')
       .should('not.have.class', 'potential-drop-target')
     cy.get('body').trigger('pointerup', {

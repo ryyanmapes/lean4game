@@ -122,7 +122,7 @@ describe('local NNG4 release maps', () => {
     cy.get('.visual-map-link.level[aria-label*="Fermat"]').focus()
     cy.get('.map-level-name-tooltip')
       .should('contain.text', "Fermat's Last Theorem")
-      .and('not.contain.text', 'Does not count towards completion')
+      .and('contain.text', 'Does not count towards completion')
       .and('not.contain.text', 'Difficult level')
       .and('not.contain.text', 'Skipped in Visual Lean')
     cy.get('.visual-map-menu-btn').click()
@@ -181,24 +181,16 @@ describe('local NNG4 release maps', () => {
       },
     })
     cy.contains('.visual-info-callout', 'Good luck!', { timeout: 180_000 }).should('be.visible')
-    cy.get('.visual-header-title .level-title-emoji', { timeout: 30_000 })
-      .should('have.attr', 'aria-label', '❌: Does not count towards completion')
-      .and('have.css', 'visibility', 'visible')
+    cy.contains(
+      '.visual-header-title .level-title-visible-annotation',
+      '❌ (Does not count towards completion)',
+      { timeout: 30_000 },
+    ).should('be.visible')
     cy.get('.visual-header-title').should($title => {
-      const emoji = $title.find('.level-title-emoji')[0]!.getBoundingClientRect()
+      const annotation = $title.find('.level-title-visible-annotation')[0]!.getBoundingClientRect()
       const bounds = $title[0]!.getBoundingClientRect()
-      expect(emoji.right, 'annotation remains inside the visible title region').to.be.at.most(bounds.right + 1)
+      expect(annotation.right, 'annotation remains inside the visible title region').to.be.at.most(bounds.right + 1)
     })
-    cy.get('.visual-header-title .level-title-emoji')
-      .focus()
-    cy.contains('.level-title-annotation-text', 'Does not count towards completion')
-      .should('have.css', 'visibility', 'visible')
-      .and('have.css', 'opacity', '1')
-    cy.get('.visual-header-title .level-title-emoji').blur().click()
-      .should('have.attr', 'aria-expanded', 'true')
-    cy.contains('.level-title-annotation-text', 'Does not count towards completion')
-      .should('have.css', 'visibility', 'visible')
-      .and('have.css', 'opacity', '1')
     cy.get('[data-testid="goal-card"]').should('not.have.class', 'solved')
     cy.window().should(win => {
       const progress = JSON.parse(win.localStorage.getItem('game_progress') ?? '{}')

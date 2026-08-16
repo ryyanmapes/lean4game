@@ -16,6 +16,9 @@ export function plainLevelTitle(title: string, expandAnnotations = false): strin
     for (const [emoji, explanation] of Object.entries(TITLE_ANNOTATIONS)) {
       plain = plain.replaceAll(emoji, `${emoji} (${explanation})`)
     }
+  } else {
+    const explanation = TITLE_ANNOTATIONS['❌']
+    plain = plain.replaceAll('❌', `❌ (${explanation})`)
   }
   return plain
 }
@@ -36,6 +39,11 @@ export function AnnotatedLevelTitle({ title }: { title: string }) {
         : <React.Fragment key={`text-${index}`}>{part}</React.Fragment>)}
     </span>
     {annotations.map(({ part, index, explanation }) => {
+      if (part === '❌') {
+        return <span className="level-title-visible-annotation" key={`${part}-${index}`}>
+          {part} ({explanation})
+        </span>
+      }
       const open = openAnnotation === index
       return <span className={`level-title-annotation${open ? ' open' : ''}`} key={`${part}-${index}`}>
           <button

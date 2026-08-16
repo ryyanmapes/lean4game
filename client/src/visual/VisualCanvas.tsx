@@ -247,11 +247,6 @@ interface PlacementRect {
 function estimatedHypSize(card: HypCardType): { width: number; height: number } {
   const text = `${card.hyp.names.join(' ')} ${TaggedText_stripTags(card.hyp.type)}`
   return {
-    // The rendered proposition uses a serif maths face whose glyph metrics
-    // are appreciably wider on macOS/WebKit than Chromium on Linux. Keep the
-    // pre-render estimate conservative: the first-free-slot pass runs before
-    // the new card has a measurable DOM node, and an underestimate can put
-    // two long cards into adjacent columns with their borders overlapping.
     width: Math.max(200, Math.min(600, 128 + text.length * 8.4)),
     height: card.hyp.forallFooter ? 92 : 66,
   }
@@ -262,20 +257,23 @@ function rectanglesOverlap(left: PlacementRect, right: PlacementRect, gap = 16):
     left.top < right.bottom + gap && left.bottom + gap > right.top
 }
 
-/** Place only genuinely new Lean declarations into the first free desktop
- * grid slot. Previously every new card started at (96,96), so collision
- * repulsion scattered a chain of long hypotheses unpredictably. */
-function placeFreshHypotheses(
+/** Keep the original leanToCanvas position for every fresh card unless an
+ * oversized card would overlap another card there. Only that oversized card
+ * is moved, to the first free slot in the original left-to-right, top-to-bottom
+ * grid. This preserves the established layout for ordinary propositions. */
+function avoidFreshOversizedCollisions(
   cards: HypCardType[],
   preservedIds: ReadonlySet<string>,
 ): HypCardType[] {
   if (typeof window === 'undefined' || isPhonePortraitViewport()) return cards
 
-  const canvas = document.querySelector<HTMLElement>('.visual-canvas')
+  const canvas = document.querySelector<HTMLElement>('.combining-canvas')
   const canvasRect = canvas?.getBoundingClientRect()
   const width = canvasRect?.width ?? window.innerWidth
-  const height = canvasRect?.height ?? Math.max(520, window.innerHeight - 120)
   const occupied: PlacementRect[] = []
+  const oversizedFreshIds = new Set(cards
+    .filter(card => !preservedIds.has(card.id) && estimatedHypSize(card).width > 264)
+    .map(card => card.id))
 
   const cardRect = (card: HypCardType): PlacementRect => {
     const elementRect = document.getElementById(card.id)?.getBoundingClientRect()
@@ -290,37 +288,38 @@ function placeFreshHypotheses(
     }
   }
 
+  // Ordinary fresh cards are obstacles at their unchanged leanToCanvas
+  // positions, just like cards carried over from the previous proof state.
   for (const card of cards) {
-    if (preservedIds.has(card.id)) occupied.push(cardRect(card))
+    if (!oversizedFreshIds.has(card.id)) occupied.push(cardRect(card))
   }
 
-  const goalWrapper = document.querySelector<HTMLElement>('.goal-card-with-info')
-  const goalRect = goalWrapper?.getBoundingClientRect()
-  if (goalRect && canvasRect) {
-    occupied.push({
-      left: goalRect.left - canvasRect.left,
-      top: goalRect.top - canvasRect.top,
-      right: goalRect.right - canvasRect.left,
-      bottom: goalRect.bottom - canvasRect.top,
-    })
-  }
-
-  const startX = 24
-  const startY = 72
-  const columnStep = 320
-  const rowStep = 96
+  const startX = 80
+  const startY = 130
+  const columnStep = 280
+  const rowStep = 110
+  const columns = 3
   return cards.map(card => {
-    if (preservedIds.has(card.id)) return card
+    if (!oversizedFreshIds.has(card.id)) return card
     const size = estimatedHypSize(card)
+    const original = cardRect(card)
+    if (!occupied.some(rect => rectanglesOverlap(original, rect))) {
+      occupied.push(original)
+      return card
+    }
+
     let chosen: PlacementRect | null = null
 
-    for (let y = startY; y <= Math.max(startY, height - size.height - 24) && !chosen; y += rowStep) {
-      for (let x = startX; x <= Math.max(startX, width - size.width - 24); x += columnStep) {
-        const candidate = { left: x, top: y, right: x + size.width, bottom: y + size.height }
-        if (!occupied.some(rect => rectanglesOverlap(candidate, rect))) {
-          chosen = candidate
-          break
-        }
+    // Scan a bounded number of rows in reading order. Testing all three
+    // original columns matters on wide canvases; candidates that cannot fit
+    // within the canvas are skipped rather than changing the grid itself.
+    for (let slot = 0; slot < Math.max(30, cards.length * 3) && !chosen; slot += 1) {
+      const x = startX + (slot % columns) * columnStep
+      const y = startY + Math.floor(slot / columns) * rowStep
+      if (x + size.width > width - 24) continue
+      const candidate = { left: x, top: y, right: x + size.width, bottom: y + size.height }
+      if (!occupied.some(rect => rectanglesOverlap(candidate, rect))) {
+        chosen = candidate
       }
     }
 
@@ -431,7 +430,7 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
         preservedIds.add(card.id)
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
       })
-      return { ...stream, hyps: placeFreshHypotheses(mergedHyps, preservedIds) }
+      return { ...stream, hyps: avoidFreshOversizedCollisions(mergedHyps, preservedIds) }
     }),
   }
 }
