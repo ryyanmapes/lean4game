@@ -955,15 +955,23 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
 
 function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): boolean {
   const goalText = TaggedText_stripTags(stream.goal.type)
+  const goalForms = [goalText, ...(stream.reductionForms ?? [])]
   return [theorem.proposition, ...(theorem.reductionForms ?? [])]
-    .some(statement => statementCanTargetGoal(statement, goalText, theorem.forallFooter))
+    .some(statement => goalForms.some(goalForm =>
+      normalizeFormulaText(statement) === normalizeFormulaText(goalForm)
+      || statementCanTargetGoal(statement, goalForm, theorem.forallFooter),
+    ))
 }
 
 function hypCanTargetGoal(card: HypCardType, stream: GoalStream): boolean {
   const statement = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
   const goalText = TaggedText_stripTags(stream.goal.type)
+  const goalForms = [goalText, ...(stream.reductionForms ?? [])]
   return [statement, ...(card.hyp.reductionForms ?? [])]
-    .some(candidate => statementCanTargetGoal(candidate, goalText, card.hyp.forallFooter))
+    .some(candidate => goalForms.some(goalForm =>
+      normalizeFormulaText(candidate) === normalizeFormulaText(goalForm)
+      || statementCanTargetGoal(candidate, goalForm, card.hyp.forallFooter),
+    ))
 }
 
 function casesTacticSplits(card: HypCardType): boolean {
@@ -4516,7 +4524,7 @@ export function VisualCanvas({
     const scopedRule = explicitReverseArg
       ? `← ${hypLabel} (${explicitReverseArg})`
       : `${isReverse ? '← ' : ''}${hypLabel}`
-    const scopedCoreTactic = occurrence && (path !== undefined || explicitReverseArg)
+    const scopedCoreTactic = occurrence
       ? `nth_rewrite ${occurrence} [${scopedRule}]${transformTarget?.kind === 'hyp' ? ` at ${transformTarget.hypRef}` : ''}`
       : null
     const leanTactic = result

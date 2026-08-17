@@ -2010,11 +2010,13 @@ export class CompletePlaythroughDriver {
       // the historical alias is gone, follow the unique proposition on which
       // `cases` is meaningful instead of guessing another relation card.
       const visibleCards = visible(
-        this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'),
+        this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        ),
       )
-      const falseCards = visibleCards.filter(card => (card.dataset.hypType ?? '').trim() === 'False')
+      const falseCards = visibleCards.filter(card => cardProposition(card).trim() === 'False')
       const logicalCards = visibleCards.filter(card => /^(?:∃)|(?:∨|∧)/u.test(
-        (card.dataset.hypType ?? '').trim(),
+        cardProposition(card).trim(),
       ))
       const semanticTarget = falseCards.length === 1
         ? falseCards[0]
@@ -2022,7 +2024,7 @@ export class CompletePlaythroughDriver {
           ? logicalCards[0]
           : null
       if (!semanticTarget) return named
-      const generatedName = semanticTarget.dataset.hypName
+      const generatedName = propositionCardName(semanticTarget)
       if (generatedName) this.rememberAlias(match[1], generatedName)
       return semanticTarget
     }
@@ -2570,6 +2572,74 @@ export class CompletePlaythroughDriver {
       const replacementName = createdName ?? sourceName
       if (!replacementName) throw new Error(`${command} did not identify its visible-premise conclusion`)
       source = await waitFor(`derived theorem ${replacementName}`, () => this.hyp(replacementName))
+    }
+    for (let premise = 0; match[2] && premise < 8; premise += 1) {
+      source = this.refreshCard(source)
+      const intendedTarget = this.hyp(match[2])
+      if (intendedTarget && matchesTheoremPremise(source, intendedTarget, [])) break
+      const visibleCards = visible(this.win.document.querySelectorAll<HTMLElement>(
+        '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+      ))
+      const intermediatePremise = visibleCards.find(candidate =>
+        candidate !== source
+        && candidate !== intendedTarget
+        && matchesTheoremPremise(source, candidate, []),
+      )
+      if (!intermediatePremise) break
+
+      const beforeTypes = new Map(visibleCards.flatMap(card => {
+        const cardName = propositionCardName(card)
+        return cardName ? [[cardName, cardProposition(card)] as const] : []
+      }))
+      await this.dragAndWait(
+        source,
+        intermediatePremise,
+        `${command} earlier visible premise application`,
+      )
+      const resultCard = await waitFor(`${command} intermediate theorem result`, () =>
+        visible(this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        )).find(card => {
+          const cardName = propositionCardName(card)
+          return Boolean(cardName)
+            && card !== intermediatePremise
+            && beforeTypes.get(cardName!) !== cardProposition(card)
+        }) ?? null)
+      source = resultCard
+    }
+    if (isExactCommand && !match[2]) {
+      const goal = currentGoal(this.win)
+      const goalProposition = goal ? cardProposition(goal) : ''
+      const sourceProposition = cardProposition(source)
+      const comparison = goalProposition.split('≤').map(part => this.normalizedProposition(part))
+      const equality = sourceProposition.split('=').map(part => this.normalizedProposition(part))
+      if (goal?.classList.contains('constructable') && comparison.length === 2 && equality.length === 2) {
+        const [lower, upper] = comparison
+        const otherEqualitySide = equality[0] === upper
+          ? equality[1]
+          : equality[1] === upper
+            ? equality[0]
+            : null
+        const witness = otherEqualitySide?.startsWith(`${lower}+`)
+          ? otherEqualitySide.slice(`${lower}+`.length)
+          : null
+        if (witness) {
+          // `exact h` can close a reducible ≤ goal after the source proof has
+          // already been exposed as its witness equality. Reproduce the visible
+          // proof: construct the same witness, then drag that equality to the
+          // resulting equality goal.
+          doubleClick(goal)
+          await waitFor('construction view', () =>
+            this.win.document.querySelector('.tr-construction-overlay'))
+          await this.submitConstruction(parseConstructionExpr(witness), `${command} witness`)
+          const constructedGoalType = harness(this.win).getCurrentStreamSnapshot().goalType
+          source = await waitFor(
+            `${command} equality after witness construction`,
+            () => this.visibleWorkspacePropositionOfType(constructedGoalType),
+            1_000,
+          ).catch(() => this.refreshCard(source))
+        }
+      }
     }
     const currentGoalType = harness(this.win).getCurrentStreamSnapshot().goalType.trim()
     const sourceAlreadyProvesGoal = Boolean(source.dataset.hypType)
@@ -3341,6 +3411,24 @@ export class CompletePlaythroughDriver {
             this.rememberAlias(rawTarget, currentRelationName)
             target = currentRelationName
           }
+        }
+      }
+      if (target !== 'goal') {
+        const targetCard = this.hypExact(target)
+        const targetType = targetCard?.dataset.hypType ?? ''
+        if (
+          targetCard
+          && targetType.includes('≤')
+          && parsed.targets.includes('goal')
+          && !targetCard.classList.contains('transformable')
+        ) {
+          // Comparison cards deliberately do not enter Transformation Mode.
+          // A classic solution can spell out numeral normalization before an
+          // application even though Lean's elaborator accepts the same
+          // theorem definitionally. Preserve the live ≤ card for that visible
+          // theorem application instead of single-clicking it into its
+          // existential witness/equality representation.
+          continue
         }
       }
       await this.openTransform(target)
