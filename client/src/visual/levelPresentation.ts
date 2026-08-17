@@ -9,7 +9,7 @@ const OR_TEXT =
   "Click an 'or' goal to specifify which side must be true. Be careful not to dead end " +
   'yourself by specifying the goal too early!'
 const INDUCTION_TEXT =
-  "Induct BEFORE 'y' is introduced to get a more general inductive hypothesis."
+  "Induct after only 'a' is introduced to get a more general inductive hypothesis."
 const CASES_TEXT =
   'The `cases` tactic allows you to split a variable into every form it could take. ' +
   'For instance, natural numbers can take two forms: either 0 or the successor of another natural number. ' +
@@ -91,9 +91,23 @@ export function goalInfosForLevel(
 export function goalInfoVisibleAfterTactics(info: VisualGoalInfo, playTactics: string[]): boolean {
   if (!info.hideAfterTactic) return true
   if (info.hideAfterTactic === LE_TOTAL_CORRECT_INDUCTION) {
-    return !playTactics.some(tactic =>
-      /^induction\b/iu.test(tactic.trim()) && /\bgeneralizing\s+y\b/iu.test(tactic),
-    )
+    let yWasIntroduced = false
+    let goalIntroductions = 0
+    for (const tactic of playTactics) {
+      const trimmed = tactic.trim()
+      // Forall introductions are recorded as the player's `click_goal`
+      // gesture. Keep named `intro y` support for imported/older autosaves.
+      if (trimmed === 'click_goal') {
+        goalIntroductions += 1
+        if (goalIntroductions >= 2) yWasIntroduced = true
+      }
+      if (/^intro\s+y\b/iu.test(trimmed)) yWasIntroduced = true
+      if (/^induction\b/iu.test(trimmed)) {
+        const explicitlyGeneralizesY = /\bgeneralizing\s+y\b/iu.test(trimmed)
+        if (!yWasIntroduced || explicitlyGeneralizesY) return false
+      }
+    }
+    return true
   }
   return !playTactics.some(tactic => tactic.trim().split(/\s+/u)[0] === info.hideAfterTactic)
 }

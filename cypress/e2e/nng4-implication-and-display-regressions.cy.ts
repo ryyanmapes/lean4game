@@ -399,6 +399,7 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.prepareInitialBinders(['a', 'b'], 'cases b with d')
     })
 
+    cy.contains('.tr-tab-btn', 'Tactics').click()
     cy.get('[data-tactic-name="cases"]').then($card => {
       const rect = $card[0]!.getBoundingClientRect()
       const pointer = { pointerId: 38, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }
@@ -545,14 +546,19 @@ describe('NNG4 implication and definition display regressions', () => {
       const player = new CompletePlaythroughDriver(win)
       await player.prepareInitialBinders(['x', 'y', 'z', 'hxy', 'hyz'], 'cases hxy with a ha')
     })
-    cy.get('[data-testid="hyp-card"][data-hyp-name="hxy"] .statement-atomic-form')
+    cy.get('[data-testid="hyp-card"]')
+      .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('≤') ?? false)
+      .first()
+      .find('.statement-atomic-form')
       .should('be.visible')
       .and('contain.text', '∃')
     cy.contains(
       '.hyp-info',
       'Click there-exists hypotheses to name a variable fulfilling the condition.',
     ).should('be.visible')
-    cy.get('[data-testid="hyp-card"][data-hyp-name="hxy"]')
+    cy.get('[data-testid="hyp-card"]')
+      .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('≤') ?? false)
+      .first()
       .should('not.have.class', 'transformable')
       .dblclick()
     cy.get('.tr-transformation-overlay').should('not.exist')
@@ -988,7 +994,10 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(audit.processing, 'rapid undo request has settled').to.equal(false)
       expect(audit.coreLines.filter(line => line.includes('add_zero'))).to.have.length(1)
     })
-    cy.get('.tr-transformation-overlay .tr-expr-wrapper').should('contain.text', '+ 0')
+    cy.get('.tr-transformation-overlay .tr-expr-wrapper').should($expression => {
+      expect($expression.text().replace(/\s+/gu, ''), 'one add-zero remains after the accepted undo')
+        .to.contain('+0')
+    })
   })
 
   it('does not carry the first intro click into a double-click on the replacement goal', () => {

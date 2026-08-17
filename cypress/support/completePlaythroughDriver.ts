@@ -2930,7 +2930,9 @@ export class CompletePlaythroughDriver {
           }, 3_000).catch(() => null)
         : null
       if (postDragApplication?.overlay) {
-        const inferredBinder = finalForallBinders.find(binder => this.hyp(binder))
+        const structurallyInferredArgument = inferredForallPremiseMatch(source, target)?.arguments[0]
+        const inferredBinder = structurallyInferredArgument
+          ?? finalForallBinders.find(binder => this.hyp(binder))
         if (!inferredBinder) {
           throw new Error(`${command} opened construction without an inferable forall binder`)
         }

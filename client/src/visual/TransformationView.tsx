@@ -780,11 +780,13 @@ export function TransformationView({
     // When this is the only matching target on the selected side, let Lean's
     // side-scoped rewrite find it without a structural path. Keep explicit paths
     // only when they are actually needed to distinguish multiple matches.
-    const path = findDisambiguatingRewritePath(
-      workingExpr,
-      targetId,
-      node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
-    )
+    const path = isThm && isReverse && from.type === 'variable'
+      ? undefined
+      : findDisambiguatingRewritePath(
+          workingExpr,
+          targetId,
+          node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
+        )
     // rw_nth counts matches across the complete relation from left to right,
     // not merely within the side currently enlarged in Transformation Mode.
     // For a reverse variable theorem, count the concrete selected expression
@@ -986,7 +988,7 @@ export function TransformationView({
           <div className="tr-controls">
             <button
               onClick={handleUndo}
-              disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
+              disabled={!(canUndo ?? rewriteStepCount > 0)}
               aria-disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
               aria-label="Undo"

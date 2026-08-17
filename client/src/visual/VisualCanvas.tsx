@@ -247,7 +247,10 @@ interface PlacementRect {
 function estimatedHypSize(card: HypCardType): { width: number; height: number } {
   const text = `${card.hyp.names.join(' ')} ${TaggedText_stripTags(card.hyp.type)}`
   return {
-    width: Math.max(200, Math.min(600, 128 + text.length * 8.4)),
+    // Include a small safety allowance for KaTeX glyph metrics and card
+    // padding; measured implication cards can be several pixels wider than a
+    // character-count estimate on Linux.
+    width: Math.max(200, Math.min(616, 144 + text.length * 8.4)),
     height: card.hyp.forallFooter ? 92 : 66,
   }
 }
@@ -401,21 +404,37 @@ function resolveCanvasStateCollisions(
  *  For any theorem card in `current` whose fvarId is absent from `fresh`,
  *  we index by display name so the replacement card inherits the position. */
 function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState {
-  const cardMap = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
+  const cardMap = new Map<string, {
+    position: { x: number; y: number }
+    userPlaced?: boolean
+    estimatedWidth: number
+  }>()
   for (const stream of current.streams) {
     for (const card of stream.hyps) {
-      cardMap.set(card.id, { position: card.position, userPlaced: card.userPlaced })
+      cardMap.set(card.id, {
+        position: card.position,
+        userPlaced: card.userPlaced,
+        estimatedWidth: estimatedHypSize(card).width,
+      })
     }
   }
 
   // Name-based fallback for theorem cards that lost their fvarId (replaced in-place by Lean).
   const freshFvarIds = new Set(fresh.streams.flatMap(s => s.hyps.map(c => c.id)))
-  const removedTheoremsByName = new Map<string, { position: { x: number; y: number }; userPlaced?: boolean }>()
+  const removedTheoremsByName = new Map<string, {
+    position: { x: number; y: number }
+    userPlaced?: boolean
+    estimatedWidth: number
+  }>()
   for (const stream of current.streams) {
     for (const card of stream.hyps) {
       if (card.isTheorem && !freshFvarIds.has(card.id)) {
         const name = card.hyp.names[0]
-        if (name) removedTheoremsByName.set(name, { position: card.position, userPlaced: card.userPlaced })
+        if (name) removedTheoremsByName.set(name, {
+          position: card.position,
+          userPlaced: card.userPlaced,
+          estimatedWidth: estimatedHypSize(card).width,
+        })
       }
     }
   }
@@ -427,7 +446,13 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
       const mergedHyps = stream.hyps.map(card => {
         const saved = cardMap.get(card.id) ?? removedTheoremsByName.get(card.hyp.names[0] ?? '')
         if (!saved) return card
-        preservedIds.add(card.id)
+        // A replacement theorem may retain its card identity while growing
+        // into a much longer implication. Let the oversized-card placement
+        // scan treat that changed footprint as fresh; unchanged short cards
+        // keep their exact historical positions.
+        if (estimatedHypSize(card).width <= Math.max(264, saved.estimatedWidth)) {
+          preservedIds.add(card.id)
+        }
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
       })
       return { ...stream, hyps: avoidFreshOversizedCollisions(mergedHyps, preservedIds) }
