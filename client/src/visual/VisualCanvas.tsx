@@ -1799,10 +1799,15 @@ function deriveTheoremApplication(
         const patternPremise = implication[0].replace(/≠/gu, '=')
         const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
         if (bindings) {
-          resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
           inferredValues = Object.fromEntries(
             Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
           )
+          // Preserve the inferred binder values even when the conclusion uses
+          // syntax (notably `∃`) that the small visual expression parser does
+          // not understand.  The fallback below can retain the displayed
+          // conclusion, while these named arguments still keep an explicit
+          // data binder from consuming the dragged proof argument.
+          resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
         }
       } catch {
         if (formulasMatch(implication[0], premiseType)) resultType = implication[1]

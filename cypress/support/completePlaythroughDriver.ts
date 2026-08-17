@@ -1447,7 +1447,7 @@ export class CompletePlaythroughDriver {
       if (overlay) return overlay
       if (Date.now() - lastAttemptAt < 250) return null
       source = this.refreshCard(source)
-      doubleClick(source)
+      click(source)
       lastAttemptAt = Date.now()
       return null
     }, 5_000)
@@ -2644,7 +2644,7 @@ export class CompletePlaythroughDriver {
           // already been exposed as its witness equality. Reproduce the visible
           // proof: construct the same witness, then drag that equality to the
           // resulting equality goal.
-          doubleClick(goal)
+          click(goal)
           await waitFor('construction view', () =>
             this.win.document.querySelector('.tr-construction-overlay'))
           await this.submitConstruction(parseConstructionExpr(witness), `${command} witness`)
@@ -3805,7 +3805,7 @@ export class CompletePlaythroughDriver {
     const match = /^use\s+(.+)$/u.exec(command)
     if (!match) throw new Error(`Unsupported use command: ${command}`)
     const goal = await waitFor('current goal', () => currentGoal(this.win))
-    doubleClick(goal)
+    click(goal)
     let lastRetry = Date.now()
     await waitFor('construction view', () => {
       const overlay = this.win.document.querySelector('.tr-construction-overlay')
@@ -3813,7 +3813,7 @@ export class CompletePlaythroughDriver {
       if (Date.now() - lastRetry >= 250) {
         lastRetry = Date.now()
         const current = currentGoal(this.win)
-        if (current) doubleClick(current)
+        if (current) click(current)
       }
       return null
     })
