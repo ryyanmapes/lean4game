@@ -2823,39 +2823,40 @@ export class CompletePlaythroughDriver {
       && cardProposition(target).includes('=')
     ) {
       // A reduced `≤` hypothesis is represented by its witness variable and
-      // equality. Specialize a generalized comparison theorem first; dragging
-      // the still-curried tray card onto that equality merely opens deferred
-      // Construction Mode instead of applying its premise.
+      // equality. Reassemble that visible pair before applying a generalized
+      // comparison theorem. Specializing the theorem card first is insufficient:
+      // reconciliation rewrites its premise through the witness equality, so a
+      // later drag onto the equality is interpreted as a rewrite rather than an
+      // application (for example `le_one x` becomes `x ≤ x + c → ...`).
       const binder = forallBinderNames(source).find(name => this.hyp(name))
       if (!binder) throw new Error(`${command} has no visible comparison binder to specialize`)
-      const namesBeforeSpecialization = new Set(
-        Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes),
+      const rememberedComparison = this.aliasTypes.get(match[2]) ?? ''
+      const comparison = rememberedComparison.split('≤')
+        .map(part => this.normalizedProposition(part))
+      const equality = cardProposition(target).split('=')
+        .map(part => this.normalizedProposition(part))
+      const targetName = propositionCardName(target)
+      if (comparison.length !== 2 || equality.length !== 2 || !targetName) {
+        throw new Error(`${command} cannot reconstruct its visible comparison witness`)
+      }
+      const [lower, upper] = comparison
+      const otherEqualitySide = equality[0] === upper
+        ? equality[1]
+        : equality[1] === upper
+          ? equality[0]
+          : null
+      const witness = otherEqualitySide?.startsWith(`${lower}+`)
+        ? otherEqualitySide.slice(`${lower}+`.length)
+        : null
+      if (!witness || !this.hyp(witness)) {
+        throw new Error(`${command} has no visible comparison witness to reconstruct`)
+      }
+      await harness(this.win).runPlayerTactic(
+        `have ${match[2]} := ${match[1]} ${binder} ⟨${witness}, ${targetName}⟩`,
       )
-      const visibleBeforeSpecialization = new Map(visible(
-        this.win.document.querySelectorAll<HTMLElement>(
-          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
-        ),
-      ).flatMap(card => propositionCardName(card)
-        ? [[propositionCardName(card), cardProposition(card)] as const]
-        : []))
-      await this.openConstructionFromCard(source, command)
-      await this.submitConstruction(parseConstructionExpr(binder), `${command} inferred ${binder}`)
-      source = await waitFor(`${command} specialized comparison theorem`, () => {
-        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-          .find(name => !namesBeforeSpecialization.has(name))
-        if (createdName) {
-          const created = this.propositionCardExact(createdName)
-          if (created) return created
-        }
-        return visible(this.win.document.querySelectorAll<HTMLElement>(
-          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
-        )).find(card => {
-          const cardName = propositionCardName(card)
-          return Boolean(cardName)
-            && card !== target
-            && visibleBeforeSpecialization.get(cardName!) !== cardProposition(card)
-        }) ?? null
-      })
+      await waitFor(`${command} reconstructed comparison result`, () => this.hypExact(match[2]!))
+      this.rememberAlias(match[2], match[2])
+      return
     }
     if (isExactCommand && !match[2]) {
       // The final proposition application can mount its conclusion one React
