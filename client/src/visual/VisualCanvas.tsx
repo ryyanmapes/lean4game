@@ -274,15 +274,19 @@ function avoidFreshOversizedCollisions(
   const canvasRect = canvas?.getBoundingClientRect()
   const width = canvasRect?.width ?? window.innerWidth
   const occupied: PlacementRect[] = []
+  const measuredSize = (card: HypCardType) => {
+    const rect = document.getElementById(card.id)?.getBoundingClientRect()
+    const estimated = estimatedHypSize(card)
+    return rect
+      ? { width: Math.max(estimated.width, rect.width), height: Math.max(estimated.height, rect.height) }
+      : estimated
+  }
   const oversizedFreshIds = new Set(cards
-    .filter(card => !preservedIds.has(card.id) && estimatedHypSize(card).width > 264)
+    .filter(card => !preservedIds.has(card.id) && measuredSize(card).width > 264)
     .map(card => card.id))
 
   const cardRect = (card: HypCardType): PlacementRect => {
-    const elementRect = document.getElementById(card.id)?.getBoundingClientRect()
-    const size = elementRect
-      ? { width: elementRect.width, height: elementRect.height }
-      : estimatedHypSize(card)
+    const size = measuredSize(card)
     return {
       left: card.position.x,
       top: card.position.y,
@@ -304,7 +308,7 @@ function avoidFreshOversizedCollisions(
   const columns = 3
   return cards.map(card => {
     if (!oversizedFreshIds.has(card.id)) return card
-    const size = estimatedHypSize(card)
+    const size = measuredSize(card)
     const original = cardRect(card)
     if (!occupied.some(rect => rectanglesOverlap(original, rect))) {
       occupied.push(original)

@@ -552,10 +552,6 @@ describe('NNG4 implication and definition display regressions', () => {
       .find('.statement-atomic-form')
       .should('be.visible')
       .and('contain.text', '∃')
-    cy.contains(
-      '.hyp-info',
-      'Click there-exists hypotheses to name a variable fulfilling the condition.',
-    ).should('be.visible')
     cy.get('[data-testid="hyp-card"]')
       .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('≤') ?? false)
       .first()

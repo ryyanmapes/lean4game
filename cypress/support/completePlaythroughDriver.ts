@@ -2821,6 +2821,8 @@ export class CompletePlaythroughDriver {
       && cardProposition(source).includes('≤')
       && !cardProposition(target).includes('≤')
       && cardProposition(target).includes('=')
+      && !cardProposition(target).includes('→')
+      && !cardProposition(target).includes('≠')
     ) {
       // A reduced `≤` hypothesis is represented by its witness variable and
       // equality. Reassemble that visible pair before applying a generalized
@@ -2830,24 +2832,15 @@ export class CompletePlaythroughDriver {
       // application (for example `le_one x` becomes `x ≤ x + c → ...`).
       const binder = forallBinderNames(source).find(name => this.hyp(name))
       if (!binder) throw new Error(`${command} has no visible comparison binder to specialize`)
-      const rememberedComparison = this.aliasTypes.get(match[2]) ?? ''
-      const comparison = rememberedComparison.split('≤')
-        .map(part => this.normalizedProposition(part))
       const equality = cardProposition(target).split('=')
         .map(part => this.normalizedProposition(part))
       const targetName = propositionCardName(target)
-      if (comparison.length !== 2 || equality.length !== 2 || !targetName) {
+      if (equality.length !== 2 || !targetName) {
         throw new Error(`${command} cannot reconstruct its visible comparison witness`)
       }
-      const [lower, upper] = comparison
-      const otherEqualitySide = equality[0] === upper
-        ? equality[1]
-        : equality[1] === upper
-          ? equality[0]
-          : null
-      const witness = otherEqualitySide?.startsWith(`${lower}+`)
-        ? otherEqualitySide.slice(`${lower}+`.length)
-        : null
+      const witnessPrefix = `${binder}+`
+      const witnessSide = equality.find(side => side.startsWith(witnessPrefix))
+      const witness = witnessSide?.slice(witnessPrefix.length)
       if (!witness || !this.hyp(witness)) {
         throw new Error(`${command} has no visible comparison witness to reconstruct`)
       }
@@ -2942,6 +2935,28 @@ export class CompletePlaythroughDriver {
         )
       }
     } catch (error) {
+      // A theorem tray card or the goal can remount during the final exact
+      // drag. Retry that same visible gesture once with both live elements;
+      // this does not bypass the UI and Lean still decides whether it works.
+      if (
+        isExactCommand
+        && !match[2]
+        && error instanceof Error
+        && error.message.includes(`${command} player drag`)
+        && !harness(this.win).getProofAudit().completed
+      ) {
+        try {
+          const liveSource = this.refreshCard(source)
+          const liveGoal = currentGoal(this.win)
+          if (liveSource && liveGoal) {
+            await this.dragAndWait(liveSource, liveGoal, `${command} refreshed player drag`)
+            return
+          }
+        } catch {
+          // Preserve the original diagnostic below; it contains the complete
+          // application selection and is more useful than the retry timeout.
+        }
+      }
       const visiblePropositions = visible(
         this.win.document.querySelectorAll<HTMLElement>(
           '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
@@ -4105,6 +4120,16 @@ export class CompletePlaythroughDriver {
           ? this.hypExact(this.implicitGoalRewriteTarget)!
         : await waitFor('current goal', () => currentGoal(this.win))
       await this.dragTactic('symm', target)
+      if (!targetName) {
+        await waitFor('symm goal card to reconcile', () => {
+          const goal = currentGoal(this.win)
+          if (!goal) return null
+          const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
+          return this.normalizedProposition(cardProposition(goal)) === this.normalizedProposition(goalType)
+            ? true
+            : null
+        })
+      }
       return
     }
     if (normalized === 'tauto') {

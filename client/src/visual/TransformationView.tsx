@@ -799,7 +799,13 @@ export function TransformationView({
     const sideMatches = workingSide === 'left'
       ? leftMatches
       : findMatchingNodeIds(rhs, occurrenceMatcher)
-    const targetIndex = sideMatches.indexOf(targetId)
+    let targetIndex = sideMatches.indexOf(targetId)
+    if (targetIndex < 0 && isThm && isReverse && from.type === 'variable') {
+      targetIndex = sideMatches.findIndex(id => {
+        const candidate = findNodeById(workingExpr, id)
+        return candidate ? expressionsEqual(candidate, targetNode) : false
+      })
+    }
     const occurrence = targetIndex < 0
       ? undefined
       : (workingSide === 'right' ? leftMatches.length : 0) + targetIndex + 1
