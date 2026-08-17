@@ -2018,11 +2018,14 @@ export class CompletePlaythroughDriver {
       const logicalCards = visibleCards.filter(card => /^(?:∃)|(?:∨|∧)/u.test(
         cardProposition(card).trim(),
       ))
+      const rememberedType = this.aliasTypes.get(match[1])
+      const rememberedLogicalCard = rememberedType
+        ? logicalCards.find(card => this.normalizedProposition(cardProposition(card)) === rememberedType)
+        : null
       const semanticTarget = falseCards.length === 1
         ? falseCards[0]
-        : logicalCards.length === 1
-          ? logicalCards[0]
-          : null
+        : rememberedLogicalCard
+          ?? logicalCards.at(-1)
       if (!semanticTarget) return named
       const generatedName = propositionCardName(semanticTarget)
       if (generatedName) this.rememberAlias(match[1], generatedName)
@@ -2576,14 +2579,14 @@ export class CompletePlaythroughDriver {
     for (let premise = 0; match[2] && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const intendedTarget = this.hyp(match[2])
-      if (intendedTarget && matchesTheoremPremise(source, intendedTarget, [])) break
+      if (intendedTarget && exactlyMatchesTheoremPremise(source, intendedTarget)) break
       const visibleCards = visible(this.win.document.querySelectorAll<HTMLElement>(
         '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
       ))
       const intermediatePremise = visibleCards.find(candidate =>
         candidate !== source
         && candidate !== intendedTarget
-        && matchesTheoremPremise(source, candidate, []),
+        && exactlyMatchesTheoremPremise(source, candidate),
       )
       if (!intermediatePremise) break
 
@@ -3330,7 +3333,7 @@ export class CompletePlaythroughDriver {
           this.pendingGoalRewrites.push(command.replace(/\s+at\s+.+$/u, ''))
           continue
         }
-        if (goal.classList.contains('constructable') && goal.classList.contains('transformable')) {
+        if (goal.classList.contains('constructable')) {
           // The current UI deliberately opens Construction Mode, rather than
           // Transformation Mode, for a proposition such as a bare ≤ goal. A
           // player can make the same proof by choosing the witness first and
@@ -3415,10 +3418,8 @@ export class CompletePlaythroughDriver {
       }
       if (target !== 'goal') {
         const targetCard = this.hypExact(target)
-        const targetType = targetCard?.dataset.hypType ?? ''
         if (
           targetCard
-          && targetType.includes('≤')
           && parsed.targets.includes('goal')
           && !targetCard.classList.contains('transformable')
         ) {

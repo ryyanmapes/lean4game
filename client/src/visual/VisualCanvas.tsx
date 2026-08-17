@@ -955,8 +955,8 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
 
 function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): boolean {
   const goalText = TaggedText_stripTags(stream.goal.type)
-  const goalForms = [goalText, ...(stream.reductionForms ?? [])]
-  return [theorem.proposition, ...(theorem.reductionForms ?? [])]
+  const goalForms = [goalText, formatFormulaText(goalText), ...(stream.reductionForms ?? [])]
+  return [theorem.label, theorem.proposition, ...(theorem.reductionForms ?? [])]
     .some(statement => goalForms.some(goalForm =>
       normalizeFormulaText(statement) === normalizeFormulaText(goalForm)
       || statementCanTargetGoal(statement, goalForm, theorem.forallFooter),
