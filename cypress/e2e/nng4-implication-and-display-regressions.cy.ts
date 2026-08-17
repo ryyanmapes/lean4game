@@ -580,7 +580,7 @@ describe('NNG4 implication and definition display regressions', () => {
       .should('have.class', 'transformable')
       .dblclick()
     cy.get('.tr-transformation-overlay').should('be.visible')
-    cy.get('.tr-close-btn').click()
+    cy.get('.tr-back-btn').click()
 
   })
 
@@ -921,7 +921,7 @@ describe('NNG4 implication and definition display regressions', () => {
 
     cy.window().should(win => {
       const coreLines = (win as HarnessWindow).__visualTestHarness?.getProofAudit().coreLines ?? []
-      expect(coreLines.some(line => line.startsWith('rw_nth ')), 'scoped rewrite uses compact rw_nth')
+      expect(coreLines.some(line => line.startsWith('nth_rewrite ')), 'scoped rewrite uses core nth_rewrite')
         .to.equal(true)
       expect(coreLines.some(line => line.trim() === 'conv =>'), 'Core pane has no multiline conv block')
         .to.equal(false)
@@ -987,7 +987,7 @@ describe('NNG4 implication and definition display regressions', () => {
       const audit = (win as HarnessWindow).__visualTestHarness.getProofAudit()
       expect(audit.processing, 'nested reverse rewrite has finished').to.equal(false)
       expect(audit.completed, 'the nested rewrite does not solve the goal').to.equal(false)
-      expect(audit.coreLines).to.include('rw_nth 1 [← add_zero (succ (a))]')
+      expect(audit.coreLines).to.include('nth_rewrite 1 [← add_zero (succ (a))]')
     })
   })
 

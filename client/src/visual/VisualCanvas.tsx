@@ -1764,6 +1764,16 @@ interface TheoremApplicationDerivation {
   hypType: string
 }
 
+/** Render an expression-tree value as Lean source. The ordinary visual
+ * printer intentionally uses textbook notation such as `succ(a)`, which is
+ * not valid when inserted into a named Lean argument. */
+function printLeanTerm(node: ExpressionNode): string {
+  if (node.type === 'variable') return node.name
+  if (node.type === 'constant') return node.value
+  if (node.type === 'app') return `${node.func} (${printLeanTerm(node.arg)})`
+  return `(${printLeanTerm(node.left)} ${node.op} ${printLeanTerm(node.right)})`
+}
+
 /** Build the visible `have` produced by applying any theorem-shaped card to a
  * matching premise card. This is shared by tray templates and placed theorem
  * copies, and is independent of which card the player drags first. */
@@ -1800,7 +1810,7 @@ function deriveTheoremApplication(
         const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
         if (bindings) {
           inferredValues = Object.fromEntries(
-            Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
+            Object.entries(bindings).map(([name, value]) => [name, printLeanTerm(value)]),
           )
           // Preserve the inferred binder values even when the conclusion uses
           // syntax (notably `∃`) that the small visual expression parser does
@@ -1854,10 +1864,10 @@ function deriveTheoremApplication(
           const inferredValues = Object.fromEntries(
             Object.entries(bindings)
               .filter(([name]) => name !== witnessPattern)
-              .map(([name, value]) => [name, printExpression(value)]),
+              .map(([name, value]) => [name, printLeanTerm(value)]),
           )
           const resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
-          const witnessProof = `⟨${printExpression(witness)}, ${premiseRef}⟩`
+          const witnessProof = `⟨${printLeanTerm(witness)}, ${premiseRef}⟩`
           const application = buildQuantifiedTheoremApplication(
             theorem.theoremName,
             theorem.forallFooter,
@@ -3208,7 +3218,14 @@ export function VisualCanvas({
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
-    const recordedPlayTactic = options?.playTacticOverride ?? playTactic
+    const backendDerivedTheoremReplay = (
+      playTactic.startsWith('drag_to ') || playTactic.startsWith('drag_apply ')
+    ) && leanTactic?.trim().startsWith('have ')
+      ? leanTactic
+      : null
+    const recordedPlayTactic = options?.playTacticOverride
+      ?? backendDerivedTheoremReplay
+      ?? playTactic
     setProofSteps(prev => [...prev, {
       command,
       playTactic: recordedPlayTactic,

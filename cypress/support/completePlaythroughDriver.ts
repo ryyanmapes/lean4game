@@ -3790,7 +3790,14 @@ export class CompletePlaythroughDriver {
 
   private async deriveTypedHave(command: string) {
     const match = /^have\s+(\S+)\s*:\s*(.+)\s+≠\s+0$/u.exec(command)
-    if (!match) throw new Error(`Unsupported typed have command: ${command}`)
+    if (!match) {
+      const typedApplication = /^have\s+(\S+)\s*:\s*.+?\s*:=\s*(.+)$/u.exec(command)
+      if (typedApplication) {
+        await this.specializeHave(`have ${typedApplication[1]} := ${typedApplication[2]}`)
+        return
+      }
+      throw new Error(`Unsupported typed have command: ${command}`)
+    }
     const expectedName = match[1]
     const expression = match[2].replace(/\s+/gu, '')
     const target = visible(this.win.document.querySelectorAll<HTMLElement>('[data-testid="hyp-card"]'))
