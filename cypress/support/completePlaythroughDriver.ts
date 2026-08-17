@@ -2026,9 +2026,11 @@ export class CompletePlaythroughDriver {
         ),
       )
       const falseCards = visibleCards.filter(card => cardProposition(card).trim() === 'False')
-      const logicalCards = visibleCards.filter(card => /^(?:∃|Exists\b|there exists\b)|(?:∨|∧)/iu.test(
-        cardProposition(card).trim(),
-      ))
+      const logicalCards = visibleCards.filter(card => {
+        const proposition = cardProposition(card).trim()
+        return /^(?:∃|Exists\b|there exists\b)/iu.test(proposition)
+          || (!proposition.includes('→') && /(?:∨|∧)/u.test(proposition))
+      })
       const rememberedType = this.aliasTypes.get(match[1])
       const rememberedLogicalCard = rememberedType
         ? logicalCards.find(card => this.normalizedProposition(cardProposition(card)) === rememberedType)
@@ -2813,6 +2815,48 @@ export class CompletePlaythroughDriver {
           return reconciled
         })
       : contradictionTarget ?? await waitFor('current goal', () => currentGoal(this.win))
+    if (
+      match[2]
+      && forallBinderNames(source).length > 0
+      && cardProposition(source).includes('≤')
+      && !cardProposition(target).includes('≤')
+      && cardProposition(target).includes('=')
+    ) {
+      // A reduced `≤` hypothesis is represented by its witness variable and
+      // equality. Specialize a generalized comparison theorem first; dragging
+      // the still-curried tray card onto that equality merely opens deferred
+      // Construction Mode instead of applying its premise.
+      const binder = forallBinderNames(source).find(name => this.hyp(name))
+      if (!binder) throw new Error(`${command} has no visible comparison binder to specialize`)
+      const namesBeforeSpecialization = new Set(
+        Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes),
+      )
+      const visibleBeforeSpecialization = new Map(visible(
+        this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        ),
+      ).flatMap(card => propositionCardName(card)
+        ? [[propositionCardName(card), cardProposition(card)] as const]
+        : []))
+      await this.openConstructionFromCard(source, command)
+      await this.submitConstruction(parseConstructionExpr(binder), `${command} inferred ${binder}`)
+      source = await waitFor(`${command} specialized comparison theorem`, () => {
+        const createdName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(name => !namesBeforeSpecialization.has(name))
+        if (createdName) {
+          const created = this.propositionCardExact(createdName)
+          if (created) return created
+        }
+        return visible(this.win.document.querySelectorAll<HTMLElement>(
+          '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+        )).find(card => {
+          const cardName = propositionCardName(card)
+          return Boolean(cardName)
+            && card !== target
+            && visibleBeforeSpecialization.get(cardName!) !== cardProposition(card)
+        }) ?? null
+      })
+    }
     if (isExactCommand && !match[2]) {
       // The final proposition application can mount its conclusion one React
       // commit after Lean accepts the drag. `exact` always means choosing the
