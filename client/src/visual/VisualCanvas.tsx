@@ -1374,13 +1374,15 @@ function inferCreatedHypName(stream: GoalStream, resultStep?: InteractiveGoalsWi
 function inferCreatedHypNames(stream: GoalStream, resultStep?: InteractiveGoalsWithHints): string[] {
   if (!resultStep) return []
   const goals = resultStep.focusedGoals?.length ? resultStep.focusedGoals : resultStep.goals
-  // Existential elimination has one successor goal. Avoid treating one visible
-  // branch of an Or/cases split as a tuple destructuring result.
-  if (goals?.length !== 1) return []
   const beforeNames = new Set(stream.hyps.flatMap(card => card.hyp.names))
-  return goals[0]!.goal.hyps
+  // The response can retain completed sibling streams alongside the one
+  // successor of an existential elimination. Select the successor that
+  // actually introduced the tuple fields instead of requiring the response
+  // to contain exactly one graph goal.
+  return (goals ?? []).map(goal => goal.goal.hyps
     .flatMap(hyp => hyp.names)
-    .filter(name => name !== '[anonymous]' && !beforeNames.has(name))
+    .filter(name => name !== '[anonymous]' && !beforeNames.has(name)))
+    .sort((left, right) => right.length - left.length)[0] ?? []
 }
 
 function inferCreatedHypNamesByGoal(
@@ -1506,7 +1508,10 @@ function inferLeanTacticFromVisualInteraction(
       if (stripOuterParens(hypType).includes('∨')) {
         const branchNames = inferCreatedHypNamesByGoal(stream!, resultStep)
         if (branchNames.length >= 2) {
-          return `rcases ${hypName} with ${branchNames.join(' | ')}`
+          // `Or` has exactly two constructors. The response can also include
+          // a subsequently selected sibling stream, whose freshly introduced
+          // binder must not become a spurious third `rcases` alternative.
+          return `rcases ${hypName} with ${branchNames.slice(0, 2).join(' | ')}`
         }
       }
       if (isConjunctionText(hypType)) {

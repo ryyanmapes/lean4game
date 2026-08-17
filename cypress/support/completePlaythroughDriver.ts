@@ -2738,6 +2738,12 @@ export class CompletePlaythroughDriver {
               || matchesTheoremPremise(source, previousResult, [])
               || previousResultPremiseMatch !== null
             )
+          // A one-off `apply ... at h` names the card the reference player
+          // deliberately chose. Trust the branch-reconciled alias and let
+          // Lean decide definitional compatibility. Surface matching cannot
+          // see, for example, that `1 = x + c` is the visible witness form of
+          // `x ≤ 1`, or that numeral `2` reduces to `succ (succ 0)`.
+          if (!continuesApplyAtChain && named) return named
           // Repeated `apply ... at h` steps form a visible derivation chain:
           // the player follows the newest card produced beside h, while the
           // original premise remains on the canvas. Initial one-off targets
