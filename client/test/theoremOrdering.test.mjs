@@ -53,7 +53,7 @@ test('combining categories recognize unlocked theorem metadata and fallbacks', (
   assert.equal(theoremBucket({ category: '+', theoremName: 'add_zero' }), 'add')
   assert.equal(theoremBucket({ category: '≠', theoremName: 'zero_ne_one' }), 'ne')
   assert.equal(theoremBucket({ category: '≤', theoremName: 'le_refl' }), 'le')
-  assert.equal(theoremBucket({ category: '+', theoremName: 'reflection' }), 'add')
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'reflection' }), 'add')
   assert.equal(theoremBucket({ theoremName: 'succ_inj' }), 'add')
 })
 

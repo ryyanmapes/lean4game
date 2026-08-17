@@ -667,7 +667,7 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     cy.contains(
       '.goal-info.below',
-      'Double-click there-exists goals to enter Construction Mode.',
+      'Click there-exists goals to enter Construction Mode.',
       { timeout: LOAD_TIMEOUT },
     ).should($info => {
       const tray = Cypress.$('#theorem-tray')[0]

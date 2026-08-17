@@ -677,6 +677,8 @@ interface VisualCanvasTestHarness {
   validateGeneratedProofs: () => Promise<{
     coreCompleted: boolean
     interactiveCompleted: boolean
+    coreError: string
+    interactiveError: string
     coreProofBody: string
     interactiveProofBody: string
   }>
@@ -6069,10 +6071,14 @@ export function VisualCanvas({
     // The classic editor applies the shared initial-state prelude invisibly;
     // reproduce that environment while validating only the code it displays.
     const coreResult = await validate([proofPrelude, coreProofBody].filter(Boolean).join('\n'))
+    const coreError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError ?? ''
     const interactiveResult = await validate([proofPrelude, interactiveProofBody].filter(Boolean).join('\n'))
+    const interactiveError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError ?? ''
     return {
       coreCompleted: coreResult?.completed === true,
       interactiveCompleted: interactiveResult?.completed === true,
+      coreError,
+      interactiveError,
       coreProofBody,
       interactiveProofBody,
     }

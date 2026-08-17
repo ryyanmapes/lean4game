@@ -20,7 +20,6 @@ interface HypCardProps {
   clickTooltip?: string
   isTransformable?: boolean
   isConstructable?: boolean
-  constructOnSingleClick?: boolean
   showDropTarget?: boolean
   isPotentialTarget?: boolean
   mobileList?: boolean
@@ -42,7 +41,6 @@ export function HypCard({
   isClickable = false,
   isTransformable = false,
   isConstructable = false,
-  constructOnSingleClick = false,
   showDropTarget = false,
   isPotentialTarget = false,
   mobileList = false,
@@ -109,12 +107,6 @@ export function HypCard({
   }, [])
 
   function handleClick() {
-    if (constructOnSingleClick && onDoubleClick) {
-      if (clickTimeoutRef.current !== null) window.clearTimeout(clickTimeoutRef.current)
-      clickTimeoutRef.current = null
-      onDoubleClick()
-      return
-    }
     if (!onClickAction) return
     if (onDoubleClick) {
       if (clickTimeoutRef.current !== null) {
@@ -149,8 +141,8 @@ export function HypCard({
       data-constructable={String(isConstructable)}
       style={style}
       className={classes}
-      onClick={isInteractive && (isClickable || constructOnSingleClick) && !isDragging ? handleClick : undefined}
-      onDoubleClick={isInteractive && (isTransformable || isConstructable) && !isDragging ? handleDoubleClick : undefined}
+      onClick={isInteractive && isClickable && !isDragging ? handleClick : undefined}
+      onDoubleClick={isInteractive && isTransformable && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
       {...(isInteractive ? listeners : {})}

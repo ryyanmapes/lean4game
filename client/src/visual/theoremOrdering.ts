@@ -78,7 +78,7 @@ export function theoremBucket(theorem: {
   if (category === '+') return 'add'
   if (category === '≤' || category === '<=') return 'le'
   if (category === '≠' || category === '!=') return 'ne'
-  if (/(?:^|[._\s])succ_inj(?:[._\s]|$)|(?:^|[._\s])add(?:[._\s]|$)|\+/u.test(searchable)) return 'add'
+  if (/(?:^|[._\s])(?:reflection|succ_inj)(?:[._\s]|$)|(?:^|[._\s])add(?:[._\s]|$)|\+/u.test(searchable)) return 'add'
   if (/(?:^|[._\s])le(?:[._\s]|$)|≤/u.test(searchable)) return 'le'
   if (/(?:^|[._\s])ne(?:[._\s]|$)|≠/u.test(searchable)) return 'ne'
   return 'other'

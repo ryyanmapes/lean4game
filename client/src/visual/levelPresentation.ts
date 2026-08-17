@@ -1,6 +1,6 @@
 import type { VisualGoalInfo } from './types'
 
-const USE_GOAL_TEXT = 'Double-click there-exists goals to enter Construction Mode.'
+const USE_GOAL_TEXT = 'Click there-exists goals to enter Construction Mode.'
 const IMPLICATION_THREE_TEXT =
   'Try solving this level both by dragging h1 onto h2, and dragging h2 onto the goal.'
 const SYMM_TEXT = 'The `symm` tactic can be used to swap the sides of any equality.'

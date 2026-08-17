@@ -36,6 +36,8 @@ interface VisualTestHarness {
   validateGeneratedProofs(): Promise<{
     coreCompleted: boolean
     interactiveCompleted: boolean
+    coreError: string
+    interactiveError: string
     coreProofBody: string
     interactiveProofBody: string
   }>
@@ -254,7 +256,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
           const generated = await (win as VisualHarnessWindow).__visualTestHarness!.validateGeneratedProofs()
           expect(
             generated.coreCompleted,
-            `${solution.world} ${solution.level} generated Core proof completes in classic Lean:\n${generated.coreProofBody}`,
+            `${solution.world} ${solution.level} generated Core proof completes in classic Lean:\n${generated.coreProofBody}\n${generated.coreError}`,
           ).to.equal(true)
           expect(
             generated.coreProofBody,
@@ -262,7 +264,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
           ).not.to.match(/^revert\b/u)
           expect(
             generated.interactiveCompleted,
-            `${solution.world} ${solution.level} generated Interaction proof completes in classic Lean:\n${generated.interactiveProofBody}`,
+            `${solution.world} ${solution.level} generated Interaction proof completes in classic Lean:\n${generated.interactiveProofBody}\n${generated.interactiveError}`,
           ).to.equal(true)
         })
         assertCompletedProofRestores(solution, audit)
