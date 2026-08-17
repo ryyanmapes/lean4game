@@ -2858,6 +2858,12 @@ export class CompletePlaythroughDriver {
       // opens Construction Mode (for example `le_one` on the witness equality
       // for `x ≤ 1`). Supply the same-named visible variable from the theorem
       // binder before continuing with the derived conclusion.
+      if (match[2] && finalForallBinders.length > 0) {
+        // The construction overlay is committed immediately after the play
+        // attempt, but can paint one React frame after dragAndWait observes
+        // the accepted drag.
+        await sleep(250)
+      }
       if (match[2] && this.win.document.querySelector('.tr-construction-overlay')) {
         const inferredBinder = finalForallBinders.find(binder => this.hyp(binder))
         if (!inferredBinder) {
