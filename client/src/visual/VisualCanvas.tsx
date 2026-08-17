@@ -1499,7 +1499,10 @@ function inferLeanTacticFromVisualInteraction(
     const hypCard = findHypCardByName(stream, hypName)
     if (hypCard) {
       const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
-      if (hypHasExistentialElimination(hypCard)) {
+      // A disjunction of comparisons contains `≤` text but must split into
+      // its two Or branches before either branch's reducible existential is
+      // eliminated.
+      if (hypHasExistentialElimination(hypCard) && !stripOuterParens(hypType).includes('∨')) {
         const createdNames = inferCreatedHypNames(stream!, resultStep)
         if (createdNames.length > 0) {
           return `rcases ${hypName} with ⟨${createdNames.join(', ')}⟩`

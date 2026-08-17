@@ -2576,7 +2576,7 @@ export class CompletePlaythroughDriver {
       if (!replacementName) throw new Error(`${command} did not identify its visible-premise conclusion`)
       source = await waitFor(`derived theorem ${replacementName}`, () => this.hyp(replacementName))
     }
-    for (let premise = 0; match[2] && premise < 8; premise += 1) {
+    for (let premise = 0; match[2] && sourceWasLocalHypothesis && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const intendedTarget = this.hyp(match[2])
       if (intendedTarget && exactlyMatchesTheoremPremise(source, intendedTarget)) break
@@ -2787,7 +2787,11 @@ export class CompletePlaythroughDriver {
               this.rememberAlias(match[2], reconciledName!)
               return reconciled
             }
-            return null
+            // The named card can be definitionally compatible even when its
+            // visible witness/equality form defeats the surface matcher. The
+            // reconciled alias is still the player's deliberate target; Lean
+            // remains authoritative and will reject a genuinely stale card.
+            return named
           }
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
@@ -2844,10 +2848,26 @@ export class CompletePlaythroughDriver {
         proposition: cardProposition(target),
       },
     }
+    const finalForallBinders = forallBinderNames(source)
     this.applicationSelectionHistory.push(applicationSelectionRecord)
     if (this.applicationSelectionHistory.length > 8) this.applicationSelectionHistory.shift()
     try {
       await this.dragAndWait(source, target, `${command} player drag`)
+      // Some reducible targets do not expose enough surface structure for the
+      // UI to infer a theorem's forall parameter. The player's drag then
+      // opens Construction Mode (for example `le_one` on the witness equality
+      // for `x ≤ 1`). Supply the same-named visible variable from the theorem
+      // binder before continuing with the derived conclusion.
+      if (match[2] && this.win.document.querySelector('.tr-construction-overlay')) {
+        const inferredBinder = finalForallBinders.find(binder => this.hyp(binder))
+        if (!inferredBinder) {
+          throw new Error(`${command} opened construction without an inferable forall binder`)
+        }
+        await this.submitConstruction(
+          parseConstructionExpr(inferredBinder),
+          `${command} inferred ${inferredBinder}`,
+        )
+      }
     } catch (error) {
       const visiblePropositions = visible(
         this.win.document.querySelectorAll<HTMLElement>(
