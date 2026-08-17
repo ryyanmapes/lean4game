@@ -6082,12 +6082,22 @@ export function VisualCanvas({
     const validate = onValidateProof ?? onInteraction
     const coreProofBody = buildStructuredLeanProof(proofSteps)
     const interactiveProofBody = buildStructuredProof(proofSteps, 'play')
+    const incompleteProofDetail = (result: ProofState | null) => {
+      if (!result || result.completed) return ''
+      const lastStep = result.steps.at(-1)
+      const goals = lastStep?.focusedGoals?.length
+        ? lastStep.focusedGoals
+        : lastStep?.goals ?? []
+      return `Proof replay left ${goals.length} goal(s): ${JSON.stringify(goals)}`
+    }
     // The classic editor applies the shared initial-state prelude invisibly;
     // reproduce that environment while validating only the code it displays.
     const coreResult = await validate([proofPrelude, coreProofBody].filter(Boolean).join('\n'))
-    const coreError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError ?? ''
+    const coreError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      || incompleteProofDetail(coreResult)
     const interactiveResult = await validate([proofPrelude, interactiveProofBody].filter(Boolean).join('\n'))
-    const interactiveError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError ?? ''
+    const interactiveError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      || incompleteProofDetail(interactiveResult)
     return {
       coreCompleted: coreResult?.completed === true,
       interactiveCompleted: interactiveResult?.completed === true,

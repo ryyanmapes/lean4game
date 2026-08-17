@@ -5,6 +5,7 @@ import {
   substituteVariables,
 } from '../../client/src/visual/expr-engine'
 import type { ExpressionNode } from '../../client/src/visual/expr-types'
+import { statementCanTargetGoal } from '../../client/src/visual/goalApplication'
 
 interface ProofAudit {
   completed: boolean
@@ -2572,7 +2573,16 @@ export class CompletePlaythroughDriver {
     // already a visible hypothesis. Apply it through the same card-on-card
     // drag a player uses, rather than applying A → B to the B goal and
     // accidentally creating a duplicate A subgoal.
-    for (let premise = 0; !match[2] && premise < 8; premise += 1) {
+    const goalBeforeImplicitApplication = harness(this.win).getCurrentStreamSnapshot().goalType
+    const sourceForallFooter = source.querySelector<HTMLElement>(
+      '.tr-forall-footer, .statement-forall-footer',
+    )?.textContent ?? undefined
+    const sourceCanTargetGoal = statementCanTargetGoal(
+      cardProposition(source),
+      goalBeforeImplicitApplication,
+      sourceForallFooter,
+    )
+    for (let premise = 0; !match[2] && !sourceCanTargetGoal && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const matchingHypothesis = visible(
         this.win.document.querySelectorAll<HTMLElement>(
