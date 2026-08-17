@@ -3880,6 +3880,32 @@ export class CompletePlaythroughDriver {
       INTERACTION_TIMEOUT,
     )
     if (harness(this.win).getProofAudit().completed) return
+    const pendingConstruction = this.win.document.querySelector<HTMLElement>(
+      '.tr-construction-overlay',
+    )
+    if (pendingConstruction) {
+      const requestedBinder = /\bSPECIFY\s+([\p{L}_][\p{L}\p{N}_']*)\s+FOR\b/iu.exec(
+        pendingConstruction.textContent ?? '',
+      )?.[1]
+      if (!requestedBinder) {
+        throw new Error(`Pending inferred construction has no named binder before ${command}`)
+      }
+      const visibleBinder = this.hyp(requestedBinder)
+        ? requestedBinder
+        : this.hyp(requestedBinder.toLocaleLowerCase())
+          ? requestedBinder.toLocaleLowerCase()
+          : requestedBinder
+      await this.submitConstruction(
+        parseConstructionExpr(visibleBinder),
+        `inferred ${visibleBinder} before ${command}`,
+      )
+      await waitFor(
+        `inferred construction to settle before ${command}`,
+        () => !harness(this.win).getProofAudit().processing,
+        INTERACTION_TIMEOUT,
+      )
+      if (harness(this.win).getProofAudit().completed) return
+    }
     await this.navigateFromCompletedBranch()
     const normalized = command.trim()
     if (!/^(?:apply|exact)\s+.+\s+at\s+\S+$/u.test(normalized)) {
