@@ -556,6 +556,9 @@ interface InteractionOptions {
   mobileInsertAfter?: string
   mobileInsertPlacement?: 'after' | 'replace'
   commandOverride?: string
+  /** Replay-safe line shown/exported in Interaction mode when the visual
+   * gesture itself requires a derived core command to preserve local names. */
+  playTacticOverride?: string
   leanTacticOverride?: string
   syntheticHyp?: { name: string; type: string }
   queueIfBusy?: boolean
@@ -3200,9 +3203,10 @@ export function VisualCanvas({
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
+    const recordedPlayTactic = options?.playTacticOverride ?? playTactic
     setProofSteps(prev => [...prev, {
       command,
-      playTactic,
+      playTactic: recordedPlayTactic,
       leanTactic,
       rotation,
       treeSnapshot: cloneProofTree(nextTree),
@@ -3211,7 +3215,7 @@ export function VisualCanvas({
       transformTargetSnapshot: null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
-    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
+    onProofStep?.(buildInteractiveProofLine(rotation, recordedPlayTactic))
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
     // `result.completed` describes the focused Lean script response.  With
@@ -3660,6 +3664,7 @@ export function VisualCanvas({
         mobileInsertAfter: theoremCopyMobileKey(droppedOnTheoremCopy),
         ...(theoremDerivation ? {
           commandOverride: theoremDerivation.command,
+          playTacticOverride: theoremDerivation.command,
           leanTacticOverride: theoremDerivation.command,
           syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
         } : {}),
@@ -3845,6 +3850,7 @@ export function VisualCanvas({
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
             ...(theoremDerivation ? {
               commandOverride: theoremDerivation.command,
+              playTacticOverride: theoremDerivation.command,
               leanTacticOverride: theoremDerivation.command,
               syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
             } : {}),
@@ -3931,6 +3937,7 @@ export function VisualCanvas({
             mobileInsertAfter: targetTheoremCopy ? theoremCopyMobileKey(targetTheoremCopy) : undefined,
             ...(theoremDerivation ? {
               commandOverride: theoremDerivation.command,
+              playTacticOverride: theoremDerivation.command,
               leanTacticOverride: theoremDerivation.command,
               syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
             } : {}),
@@ -3999,6 +4006,7 @@ export function VisualCanvas({
               : {}),
           ...(theoremDerivation ? {
             commandOverride: theoremDerivation.command,
+            playTacticOverride: theoremDerivation.command,
             leanTacticOverride: theoremDerivation.command,
             syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
           } : {}),
@@ -5825,6 +5833,7 @@ export function VisualCanvas({
       {
         targetStreamId: stream.id,
         commandOverride: derivation.command,
+        playTacticOverride: derivation.command,
         leanTacticOverride: derivation.command,
         syntheticHyp: { name: derivation.hypName, type: derivation.hypType },
       },
