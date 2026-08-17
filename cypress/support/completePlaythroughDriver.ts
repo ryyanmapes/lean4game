@@ -2015,7 +2015,7 @@ export class CompletePlaythroughDriver {
         ),
       )
       const falseCards = visibleCards.filter(card => cardProposition(card).trim() === 'False')
-      const logicalCards = visibleCards.filter(card => /^(?:∃)|(?:∨|∧)/u.test(
+      const logicalCards = visibleCards.filter(card => /^(?:∃|Exists\b|there exists\b)|(?:∨|∧)/iu.test(
         cardProposition(card).trim(),
       ))
       const rememberedType = this.aliasTypes.get(match[1])
@@ -3418,10 +3418,13 @@ export class CompletePlaythroughDriver {
       }
       if (target !== 'goal') {
         const targetCard = this.hypExact(target)
+        const targetProposition = targetCard ? cardProposition(targetCard).trim() : ''
+        const isDisplayedComparison = targetProposition.includes('≤')
+          || /^(?:∃|Exists\b|there exists\b)/iu.test(targetProposition)
         if (
           targetCard
           && parsed.targets.includes('goal')
-          && !targetCard.classList.contains('transformable')
+          && isDisplayedComparison
         ) {
           // Comparison cards deliberately do not enter Transformation Mode.
           // A classic solution can spell out numeral normalization before an

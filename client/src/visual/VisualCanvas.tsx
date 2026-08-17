@@ -824,6 +824,14 @@ function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType):
   ]
   const firstTypes = formulaCandidates(first)
   const secondTypes = formulaCandidates(second)
+  // A visible implication dropped on an equality is theorem application, not
+  // substitution. Its premise can contain variables represented in the card's
+  // forall footer, so surface-text equality is intentionally not required;
+  // Lean remains the authority on whether the application elaborates.
+  if (
+    firstTypes.some(type => splitImplicationText(type) !== null)
+    || secondTypes.some(type => splitImplicationText(type) !== null)
+  ) return false
   // Negation is displayed as `x ≠ y`, but its reducible form is the function
   // `x = y → False`. Keep that legitimate premise application available
   // while still blocking equality-on-equality substitution drags.
@@ -1375,6 +1383,21 @@ function inferCreatedHypNames(stream: GoalStream, resultStep?: InteractiveGoalsW
     .filter(name => name !== '[anonymous]' && !beforeNames.has(name))
 }
 
+function inferCreatedHypNamesByGoal(
+  stream: GoalStream,
+  resultStep?: InteractiveGoalsWithHints,
+): string[] {
+  if (!resultStep) return []
+  const goals = resultStep.focusedGoals?.length ? resultStep.focusedGoals : resultStep.goals
+  const beforeNames = new Set(stream.hyps.flatMap(card => card.hyp.names))
+  return (goals ?? []).flatMap(goal => {
+    const createdName = goal.goal.hyps
+      .flatMap(hyp => hyp.names)
+      .find(name => name !== '[anonymous]' && !beforeNames.has(name))
+    return createdName ? [createdName] : []
+  })
+}
+
 function hypHasExistentialElimination(card: HypCardType): boolean {
   const candidates = [
     TaggedText_stripTags(card.hyp.type),
@@ -1478,6 +1501,12 @@ function inferLeanTacticFromVisualInteraction(
         const createdNames = inferCreatedHypNames(stream!, resultStep)
         if (createdNames.length > 0) {
           return `rcases ${hypName} with ⟨${createdNames.join(', ')}⟩`
+        }
+      }
+      if (stripOuterParens(hypType).includes('∨')) {
+        const branchNames = inferCreatedHypNamesByGoal(stream!, resultStep)
+        if (branchNames.length >= 2) {
+          return `rcases ${hypName} with ${branchNames.join(' | ')}`
         }
       }
       if (isConjunctionText(hypType)) {
