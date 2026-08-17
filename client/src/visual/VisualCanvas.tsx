@@ -818,13 +818,22 @@ function hypCardFormula(card: HypCardType): string {
 function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType): boolean {
   if (!parsedHypEquality(first) && !parsedHypEquality(second)) return false
 
-  const firstType = hypCardFormula(first)
-  const secondType = hypCardFormula(second)
-  const firstImplication = splitImplicationText(firstType)
-  const secondImplication = splitImplicationText(secondType)
-  const isApplication =
-    Boolean(firstImplication && formulasMatch(firstImplication[0], secondType)) ||
-    Boolean(secondImplication && formulasMatch(secondImplication[0], firstType))
+  const formulaCandidates = (card: HypCardType) => [
+    hypCardFormula(card),
+    ...(card.hyp.reductionForms ?? []).map(normalizeFormulaText),
+  ]
+  const firstTypes = formulaCandidates(first)
+  const secondTypes = formulaCandidates(second)
+  // Negation is displayed as `x ≠ y`, but its reducible form is the function
+  // `x = y → False`. Keep that legitimate premise application available
+  // while still blocking equality-on-equality substitution drags.
+  const isApplication = firstTypes.some(firstType => {
+    const implication = splitImplicationText(firstType)
+    return Boolean(implication && secondTypes.some(secondType => formulasMatch(implication[0], secondType)))
+  }) || secondTypes.some(secondType => {
+    const implication = splitImplicationText(secondType)
+    return Boolean(implication && firstTypes.some(firstType => formulasMatch(implication[0], firstType)))
+  })
   return !isApplication
 }
 
@@ -1346,6 +1355,33 @@ function inferCreatedHypName(stream: GoalStream, resultStep?: InteractiveGoalsWi
     .find(name => name !== '[anonymous]' && !beforeNames.has(name)) ?? null
 }
 
+function inferCreatedHypNames(stream: GoalStream, resultStep?: InteractiveGoalsWithHints): string[] {
+  if (!resultStep) return []
+  const goals = resultStep.focusedGoals?.length ? resultStep.focusedGoals : resultStep.goals
+  // Existential elimination has one successor goal. Avoid treating one visible
+  // branch of an Or/cases split as a tuple destructuring result.
+  if (goals?.length !== 1) return []
+  const beforeNames = new Set(stream.hyps.flatMap(card => card.hyp.names))
+  return goals[0]!.goal.hyps
+    .flatMap(hyp => hyp.names)
+    .filter(name => name !== '[anonymous]' && !beforeNames.has(name))
+}
+
+function hypHasExistentialElimination(card: HypCardType): boolean {
+  const candidates = [
+    TaggedText_stripTags(card.hyp.type),
+    card.hyp.typeBody,
+    ...(card.hyp.reductionForms ?? []),
+  ].filter((candidate): candidate is string => Boolean(candidate))
+  return candidates.some(candidate => {
+    const normalized = stripOuterParens(normalizeFormulaText(candidate))
+    return normalized.startsWith('∃')
+      || normalized.startsWith('Exists ')
+      || normalized.includes('≤')
+      || normalized.includes('<=')
+  })
+}
+
 function nextLeanIntroName(stream: GoalStream, baseName: string): string {
   const existing = new Set(
     stream.hyps.flatMap(card => [
@@ -1430,6 +1466,12 @@ function inferLeanTacticFromVisualInteraction(
     const hypCard = findHypCardByName(stream, hypName)
     if (hypCard) {
       const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
+      if (hypHasExistentialElimination(hypCard)) {
+        const createdNames = inferCreatedHypNames(stream!, resultStep)
+        if (createdNames.length > 0) {
+          return `rcases ${hypName} with ⟨${createdNames.join(', ')}⟩`
+        }
+      }
       if (isConjunctionText(hypType)) {
         const leftName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}left` : 'left'
         const rightName = hypCard.isTheorem ? `${DERIVED_THEOREM_PREFIX}right` : 'right'

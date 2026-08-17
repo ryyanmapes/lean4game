@@ -15,6 +15,14 @@ interface VisualHarness {
 
 type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
 
+function visualHarness() {
+  return cy.window({ timeout: LOAD_TIMEOUT }).then(win => {
+    const harness = (win as HarnessWindow).__visualTestHarness
+    expect(harness).to.exist
+    return harness as VisualHarness
+  })
+}
+
 function openLastIncompleteBranch() {
   cy.get('[data-testid="proof-stream-leaf"][data-completed="false"]', { timeout: LOAD_TIMEOUT })
     .last()

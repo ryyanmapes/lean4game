@@ -1999,7 +1999,7 @@ export class CompletePlaythroughDriver {
     await this.exposeDeferredInitialBinders(match[1])
     const beforeSnapshot = harness(this.win).getCurrentStreamSnapshot()
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
-    const target = await waitFor(`hypothesis ${match[1]}`, () => {
+    const resolveCasesTarget = () => {
       const named = this.hyp(match[1])
       const isCaseableType = (value: string) =>
         /^(?:ℕ|Nat|MyNat|∃|False)|(?:∨|∧)/u.test(value.trim())
@@ -2025,7 +2025,8 @@ export class CompletePlaythroughDriver {
       const generatedName = semanticTarget.dataset.hypName
       if (generatedName) this.rememberAlias(match[1], generatedName)
       return semanticTarget
-    })
+    }
+    const target = await waitFor(`hypothesis ${match[1]}`, resolveCasesTarget)
     const eliminatedDisplayName = target.dataset.hypName
     const type = target.dataset.hypType ?? ''
     const casesNumber = /^(?:\u2115|Nat|MyNat)$/u.test(type.trim())
@@ -2050,7 +2051,7 @@ export class CompletePlaythroughDriver {
       await waitForPlayAttempt(this.win, previousAttempts, `clicking ${match[1]} player action`, () => {
         if (Date.now() - lastRetry < 250) return
         lastRetry = Date.now()
-        const current = this.hyp(match[1])
+        const current = resolveCasesTarget()
         if (current) click(current)
       })
       await waitForProofChange(this.win, before, `clicking ${match[1]} to split it`)
@@ -2696,8 +2697,18 @@ export class CompletePlaythroughDriver {
             // commit before its newly derived successor. Give the visible
             // matching card a short opportunity to mount instead of eagerly
             // dragging onto a stale, incompatible proposition.
-            if (continuesApplyAtChain && Date.now() - targetResolutionStartedAt < 750) return null
-            return named
+            if (Date.now() - targetResolutionStartedAt < 750) return null
+            // A card retaining the requested Lean name can now describe a
+            // different proposition after cases/reconciliation. Never send a
+            // theorem drag to that stale card merely because its label still
+            // matches; the visual backend correctly rejects such applications.
+            const reconciledName = this.latestRelationName()
+            const reconciled = reconciledName ? this.hypExact(reconciledName) : null
+            if (reconciled && matchesTheoremPremise(source, reconciled, [])) {
+              this.rememberAlias(match[2], reconciledName!)
+              return reconciled
+            }
+            return null
           }
           if (!this.aliases.has(match[2])) return null
           const reconciledName = this.latestRelationName()
@@ -2717,7 +2728,8 @@ export class CompletePlaythroughDriver {
       source = await waitFor(
         `${command} visible proof of the current goal`,
         () => this.visibleWorkspacePropositionOfType(goalType),
-      )
+        1_000,
+      ).catch(() => this.refreshCard(source))
     }
     const beforeFinalNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
     const visibleTypesBeforeFinal = new Map(visible(
