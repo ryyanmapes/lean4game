@@ -964,7 +964,7 @@ describe('NNG4 implication and definition display regressions', () => {
       const audit = (win as HarnessWindow).__visualTestHarness.getProofAudit()
       expect(audit.processing, 'nested reverse rewrite has finished').to.equal(false)
       expect(audit.completed, 'the nested rewrite does not solve the goal').to.equal(false)
-      expect(audit.coreLines).to.include('rw_nth 1 [← add_zero (succ(a))]')
+      expect(audit.coreLines).to.include('rw_nth 1 [← add_zero (succ (a))]')
     })
   })
 

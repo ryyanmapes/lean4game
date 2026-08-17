@@ -411,14 +411,14 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
   const cardMap = new Map<string, {
     position: { x: number; y: number }
     userPlaced?: boolean
-    estimatedWidth: number
+    proposition: string
   }>()
   for (const stream of current.streams) {
     for (const card of stream.hyps) {
       cardMap.set(card.id, {
         position: card.position,
         userPlaced: card.userPlaced,
-        estimatedWidth: estimatedHypSize(card).width,
+        proposition: TaggedText_stripTags(card.hyp.type).trim(),
       })
     }
   }
@@ -428,7 +428,7 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
   const removedTheoremsByName = new Map<string, {
     position: { x: number; y: number }
     userPlaced?: boolean
-    estimatedWidth: number
+    proposition: string
   }>()
   for (const stream of current.streams) {
     for (const card of stream.hyps) {
@@ -437,7 +437,7 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
         if (name) removedTheoremsByName.set(name, {
           position: card.position,
           userPlaced: card.userPlaced,
-          estimatedWidth: estimatedHypSize(card).width,
+          proposition: TaggedText_stripTags(card.hyp.type).trim(),
         })
       }
     }
@@ -454,7 +454,12 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
         // into a much longer implication. Let the oversized-card placement
         // scan treat that changed footprint as fresh; unchanged short cards
         // keep their exact historical positions.
-        if (estimatedHypSize(card).width <= Math.max(264, saved.estimatedWidth)) {
+        const proposition = TaggedText_stripTags(card.hyp.type).trim()
+        if (
+          saved.userPlaced
+          || estimatedHypSize(card).width <= 264
+          || proposition === saved.proposition
+        ) {
           preservedIds.add(card.id)
         }
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }

@@ -458,6 +458,20 @@ export function inferLocalTheoremPremiseApplication(
     : ''
   const firstImplication = splitImplicationTargetForRuntime(firstType)
   const secondImplication = splitImplicationTargetForRuntime(secondType)
+  const firstEquality = splitEqualityTarget(firstType)
+  const secondEquality = splitEqualityTarget(secondType)
+  // Dragging an equality onto a theorem proposition rewrites that theorem; it
+  // is not function application. Record a self-contained Lean term so the
+  // replacement theorem card can shadow its tray copy and exported Core Lean
+  // replays without recreating the temporary visual rewrite state.
+  if (firstEquality && !secondEquality && secondIsTheorem) {
+    const localName = secondCard?.hyp.names[0] ?? secondName
+    return `have ${localName} := by simpa [${firstName}] using ${secondName}`
+  }
+  if (secondEquality && !firstEquality && firstIsTheorem) {
+    const localName = firstCard?.hyp.names[0] ?? firstName
+    return `have ${localName} := by simpa [${secondName}] using ${firstName}`
+  }
   const [functionName, argumentName, theoremName] = firstImplication
     && normalizePropositionText(firstImplication[0]) === normalizePropositionText(secondType)
     ? [firstName, secondName, firstIsTheorem ? firstName : secondName]

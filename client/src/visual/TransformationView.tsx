@@ -219,6 +219,13 @@ interface Props {
   visualInfos?: VisualTransformInfo[]
 }
 
+function printLeanExpression(node: ExpressionNode): string {
+  if (node.type === 'variable') return node.name
+  if (node.type === 'constant') return node.value
+  if (node.type === 'app') return `${node.func} (${printLeanExpression(node.arg)})`
+  return `(${printLeanExpression(node.left)} ${node.op} ${printLeanExpression(node.right)})`
+}
+
 export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
@@ -807,7 +814,7 @@ export function TransformationView({
       })
     }
     const occurrence = targetIndex < 0
-      ? undefined
+      ? (isThm && isReverse && from.type === 'variable' ? 1 : undefined)
       : (workingSide === 'right' ? leftMatches.length : 0) + targetIndex + 1
 
     // Send to Lean — it is the final arbiter. Keep the overlay mounted and
@@ -822,7 +829,7 @@ export function TransformationView({
           rhsStr: printExpression(rewrittenExpr),
           relation,
           explicitReverseArg: isThm && isReverse && from.type === 'variable'
-            ? printExpression(targetNode)
+            ? printLeanExpression(targetNode)
             : undefined,
         }
       : {
@@ -830,7 +837,7 @@ export function TransformationView({
           rhsStr: goalRhsStr,
           relation,
           explicitReverseArg: isThm && isReverse && from.type === 'variable'
-            ? printExpression(targetNode)
+            ? printLeanExpression(targetNode)
             : undefined,
         }
     const outcome = await onRewrite(

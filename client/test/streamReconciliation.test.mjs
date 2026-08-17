@@ -1154,6 +1154,24 @@ test('drag_to keeps a local theorem card green and overwrites it regardless of d
   assert.equal(hypTypeFor(streamB, 'hp'), 'P')
 })
 
+test('an equality rewriting a theorem exports as a valid simpa term', () => {
+  const theorem = hyp('hyp-theorem', 'thm_one_ne_zero', '1 ≠ 0', { isTheorem: true })
+  theorem.hyp.playName = 'MyNat.one_ne_zero'
+  const focusedStream = stream('stream-theorem-rewrite', 'Goal', 'main', [
+    hyp('hyp-eq', 'h', 'x * y = 1'),
+    theorem,
+  ])
+
+  assert.equal(
+    inferLocalTheoremPremiseApplication(focusedStream, 'h', 'MyNat.one_ne_zero'),
+    'have thm_one_ne_zero := by simpa [h] using MyNat.one_ne_zero',
+  )
+  assert.equal(
+    inferLocalTheoremPremiseApplication(focusedStream, 'MyNat.one_ne_zero', 'h'),
+    'have thm_one_ne_zero := by simpa [h] using MyNat.one_ne_zero',
+  )
+})
+
 test('drag_to specializes a forall hypothesis without completing its goal', () => {
   const focusedStream = stream('stream-forall-drag', 'Goal', 'main', [
     hyp('hyp-x', 'x', 'ℕ'),
