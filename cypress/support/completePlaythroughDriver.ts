@@ -2000,7 +2000,7 @@ export class CompletePlaythroughDriver {
     const isCaseableType = (value: string) =>
       /^(?:ℕ|Nat|MyNat|∃|False)|(?:∨|∧)/u.test(value.trim())
     const preliminaryTarget = this.hyp(match[1])
-    if (preliminaryTarget && !isCaseableType(cardProposition(preliminaryTarget))) {
+    if (!preliminaryTarget || !isCaseableType(cardProposition(preliminaryTarget))) {
       const pendingConstruction = await waitFor(
         `pending construction before ${command}`,
         () => this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'),
