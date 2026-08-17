@@ -174,7 +174,7 @@ describe('Visual Lean mobile theorem player regressions', { testIsolation: false
     })
 
     cy.contains('.tr-tab-btn', 'Theorems').click()
-    findTheoremCard('mul_le_mul_right').dblclick({ force: true })
+    findTheoremCard('mul_le_mul_right').click({ force: true })
     cy.get('.visual-page.tr-construction-overlay .cn-propose-var', { timeout: 60_000 })
       .should('have.text', 'a')
     chooseConstructionBrick('b')
@@ -183,7 +183,7 @@ describe('Visual Lean mobile theorem player regressions', { testIsolation: false
     cy.get('.mobile-theorem-column [data-testid="hyp-card"].derived-theorem-card')
       .last().should('have.attr', 'data-constructable', 'true').then($card => {
         sourceTheoremBorder = getComputedStyle($card[0]!).borderColor
-        cy.wrap($card).dblclick({ force: true })
+        cy.wrap($card).click({ force: true })
       })
     cy.get('.visual-page.tr-construction-overlay .cn-propose-var', { timeout: 60_000 })
       .invoke('text').should('match', /^b1?$/)
@@ -198,6 +198,13 @@ describe('Visual Lean mobile theorem player regressions', { testIsolation: false
       .and($card => {
         expect(getComputedStyle($card[0]!).borderColor, 'specialized card retains theorem color')
           .to.equal(sourceTheoremBorder)
+      })
+    cy.get('.mobile-theorem-column [data-testid="hyp-card"].derived-theorem-card')
+      .then($cards => {
+        const names = Array.from($cards, card => card.getAttribute('data-hyp-name'))
+          .filter((name): name is string => Boolean(name))
+        expect(new Set(names).size, 'back-to-back specializations keep distinct names')
+          .to.equal(names.length)
       })
   })
 })

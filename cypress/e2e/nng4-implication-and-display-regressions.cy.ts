@@ -14,6 +14,7 @@ interface VisualHarness {
   copyTheoremToCanvas(theoremName: string): void
   dragHypToHyp(sourceName: string, targetName: string): Promise<void>
   dragTheoremToGoal(theoremName: string): Promise<boolean>
+  dragTheoremToHyp(theoremName: string, hypName: string): Promise<boolean>
   getProofAudit(): {
     completed: boolean
     processing: boolean
@@ -185,6 +186,27 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
     performPlayerGestures(['symm', 'exact zero_ne_one'])
+  })
+
+  it('specializes le_one from its unfolded less-or-equal witness equality', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/11/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['x', 'hx'])
+      await player.perform('have hx1 : (0 : ℕ) ≤ 1 := zero_le 1')
+      await player.perform('cases hx1 with c hc')
+      const accepted = await (win as HarnessWindow).__visualTestHarness!
+        .dragTheoremToHyp('MyNat.le_one', 'hc')
+      expect(accepted, 'le_one accepts the visible witness equality').to.equal(true)
+    })
+    cy.get('[data-testid="hyp-card"]')
+      .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('∨') ?? false)
+      .should('have.length.at.least', 1)
+    visualHarness().then(harness => {
+      expect(harness.getProofAudit().proofBody).to.include('MyNat.le_one')
+      expect(harness.getProofAudit().proofBody).to.include('⟨c, hc⟩')
+    })
   })
 
   it('rejects an incompatible theorem drop before generating goal syntax', () => {
@@ -555,9 +577,10 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('[data-testid="hyp-card"]')
       .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('≤') ?? false)
       .first()
-      .should('not.have.class', 'transformable')
+      .should('have.class', 'transformable')
       .dblclick()
-    cy.get('.tr-transformation-overlay').should('not.exist')
+    cy.get('.tr-transformation-overlay').should('be.visible')
+    cy.get('.tr-close-btn').click()
 
   })
 

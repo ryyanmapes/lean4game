@@ -39,6 +39,7 @@ export const TRANSFORM_THEOREM_ENTRIES = [
 ] as const
 
 export const COMBINING_THEOREM_ENTRIES = [
+  {"category":"+","name":"reflection","statement":"(n : ℕ) : n = n"},
   {"category":"+","name":"succ_inj","statement":"(a b : ℕ) (h : succ a = succ b) : a = b"},
   {"category":"+","name":"add_left_eq_zero","statement":"(a b : ℕ) (h : a + b = 0) : b = 0"},
   {"category":"+","name":"add_right_eq_zero","statement":"(a b : ℕ) (h : a + b = 0) : a = 0"},

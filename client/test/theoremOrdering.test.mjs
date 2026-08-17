@@ -39,7 +39,9 @@ test('editable theorem-order files are complete and synchronized downstream', as
   assert.equal(new Set(transforms.map(entry => entry.name)).size, transforms.length)
   assert.equal(new Set(theorems.map(entry => entry.name)).size, theorems.length)
   assert.equal(transforms.length, 34)
-  assert.equal(theorems.length, 29)
+  assert.equal(theorems.length, 30)
+  assert.equal(theorems.findIndex(entry => entry.name === 'reflection') + 1,
+    theorems.findIndex(entry => entry.name === 'succ_inj'))
 })
 
 test('multiplication category takes precedence over additive and order notation', () => {
@@ -51,6 +53,7 @@ test('combining categories recognize unlocked theorem metadata and fallbacks', (
   assert.equal(theoremBucket({ category: '+', theoremName: 'add_zero' }), 'add')
   assert.equal(theoremBucket({ category: '≠', theoremName: 'zero_ne_one' }), 'ne')
   assert.equal(theoremBucket({ category: '≤', theoremName: 'le_refl' }), 'le')
+  assert.equal(theoremBucket({ category: '+', theoremName: 'reflection' }), 'add')
   assert.equal(theoremBucket({ theoremName: 'succ_inj' }), 'add')
 })
 
@@ -95,7 +98,7 @@ test('every combining tab preserves the global theorem order', () => {
 
   const additionNames = new Set([
     'add_left_cancel', 'add_right_cancel', 'add_left_eq_self',
-    'add_right_eq_self', 'add_left_eq_zero', 'add_right_eq_zero', 'succ_inj',
+    'add_right_eq_self', 'add_left_eq_zero', 'add_right_eq_zero', 'reflection', 'succ_inj',
   ])
   const additionTab = unlocked
     .filter(item => additionNames.has(item.theoremName))

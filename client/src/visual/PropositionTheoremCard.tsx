@@ -61,6 +61,27 @@ function theoremCardLayoutClass(theorem: PropositionTheorem): string {
   return contentLength > 54 ? ' theorem-card-compact' : contentLength > 38 ? ' theorem-card-snug' : ''
 }
 
+function useClickWithoutDrag(isDragging: boolean, onClick?: () => void) {
+  const draggedRef = React.useRef(false)
+  const resetTimerRef = React.useRef<number | null>(null)
+  if (isDragging) draggedRef.current = true
+
+  React.useEffect(() => {
+    if (isDragging || !draggedRef.current) return
+    resetTimerRef.current = window.setTimeout(() => {
+      draggedRef.current = false
+      resetTimerRef.current = null
+    }, 0)
+    return () => {
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current)
+    }
+  }, [isDragging])
+
+  return () => {
+    if (!draggedRef.current) onClick?.()
+  }
+}
+
 export function PropositionTheoremPreviewCard({ theorem, iffDirection }: { theorem: PropositionTheorem; iffDirection?: IffDirection }) {
   return (
     <div className={`statement-card theorem-copy-card theorem-overlay-card${theorem.forallFooter ? ' has-forall-footer' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${theoremCardLayoutClass(theorem)}`}>
@@ -72,17 +93,19 @@ export function PropositionTheoremPreviewCard({ theorem, iffDirection }: { theor
 interface PropositionTheoremTemplateCardProps {
   theorem: PropositionTheorem
   iffDirection?: IffDirection
+  onClick?: () => void
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
   emphasized?: boolean
 }
 
-export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDoubleClick, onContextMenu, emphasized = false }: PropositionTheoremTemplateCardProps) {
+export function PropositionTheoremTemplateCard({ theorem, iffDirection, onClick, onDoubleClick, onContextMenu, emphasized = false }: PropositionTheoremTemplateCardProps) {
   const dragId = `theorem_template_${theorem.id}`
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: dragId,
     data: { theoremTemplate: true, theorem },
   })
+  const handleClick = useClickWithoutDrag(isDragging, onClick)
   const style: React.CSSProperties | undefined = isDragging ? { visibility: 'hidden' } : undefined
   return (
     <div
@@ -92,6 +115,7 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onDouble
       data-theorem-name={theorem.theoremName}
       style={style}
       className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${theoremCardLayoutClass(theorem)}${emphasized ? ' visual-emphasize' : ''}`}
+      onClick={onClick ? handleClick : undefined}
       onDoubleClick={!isDragging ? onDoubleClick : undefined}
       onContextMenu={onContextMenu}
       {...listeners}
@@ -106,17 +130,19 @@ interface PropositionTheoremCopyCardProps {
   copy: PropositionTheoremCopy
   isFailing?: boolean
   iffDirection?: IffDirection
+  onClick?: () => void
   onDoubleClick?: () => void
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void
   showDropTarget?: boolean
   mobileList?: boolean
 }
 
-export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirection, onDoubleClick, onContextMenu, showDropTarget = false, mobileList = false }: PropositionTheoremCopyCardProps) {
+export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirection, onClick, onDoubleClick, onContextMenu, showDropTarget = false, mobileList = false }: PropositionTheoremCopyCardProps) {
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: copy.id,
     data: { theoremCopy: true, theorem: copy.theorem },
   })
+  const handleClick = useClickWithoutDrag(isDragging, onClick)
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: copy.id,
@@ -156,6 +182,7 @@ export function PropositionTheoremCopyCard({ copy, isFailing = false, iffDirecti
       ref={setRef}
       style={style}
       className={classes}
+      onClick={onClick ? handleClick : undefined}
       onDoubleClick={!isDragging ? onDoubleClick : undefined}
       onContextMenu={onContextMenu}
       {...listeners}

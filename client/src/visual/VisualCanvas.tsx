@@ -644,6 +644,7 @@ interface VisualCanvasTestHarness {
   runPlayerTactic: (command: string) => Promise<void>
   dragHypToGoal: (hypName: string) => Promise<void>
   dragTheoremToGoal: (theoremName: string) => Promise<boolean>
+  dragTheoremToHyp: (theoremName: string, hypName: string) => Promise<boolean>
   dragHypToHyp: (sourceName: string, targetName: string) => Promise<void>
   copyTheoremToCanvas: (theoremName: string) => void
   moveHypTo: (hypName: string, x: number, y: number) => void
@@ -1058,6 +1059,25 @@ function nextFreshHypName(cards: HypCardType[], baseName: string): string {
   return `${baseName}${suffix}`
 }
 
+function reserveFreshHypName(
+  cards: HypCardType[],
+  reserved: Set<string>,
+  baseName: string,
+): string {
+  const existing = new Set([
+    ...cards.map(card => card.hyp.names[0] ?? ''),
+    ...reserved,
+  ])
+  let candidate = baseName
+  let suffix = 2
+  while (existing.has(candidate)) {
+    candidate = `${baseName}${suffix}`
+    suffix += 1
+  }
+  reserved.add(candidate)
+  return candidate
+}
+
 function normalizeFormulaText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
@@ -1101,10 +1121,9 @@ function formulasMatchLiterally(left: string, right: string): boolean {
 }
 
 function worldAllowsComparisonTransform(worldId: string): boolean {
-  // Transformation Mode is equality-only. Comparisons retain their dedicated
-  // construction/elimination gestures instead of opening the rewrite view.
+  // Comparisons use the same two-sided transformation view as equalities.
   void worldId
-  return false
+  return true
 }
 
 function backendWorkingSideForRelation(
@@ -1752,39 +1771,98 @@ function deriveTheoremApplication(
   const premiseRef = interactionHypName(premiseCard) ?? premiseCard.hyp.names[0]
   if (!premiseRef) return null
   const hypName = nextFreshHypName(stream.hyps, 'h')
-  const implicationText = [theoremText, ...(theorem.reductionForms ?? [])]
-    .find(candidate => splitImplicationText(candidate) !== null)
-  const implication = implicationText ? splitImplicationText(implicationText) : null
-  const premiseType = (premiseCard.hyp.typeBody ?? TaggedText_stripTags(premiseCard.hyp.type)).trim()
+  const implications = [theoremText, ...(theorem.reductionForms ?? [])]
+    .map(candidate => splitImplicationText(candidate))
+    .filter((candidate): candidate is [string, string] => candidate !== null)
+  // Prefer the proposition printed on the card. In particular, a visible
+  // `x ≤ 1` must match `le_one` even when the backend also supplies its
+  // definitionally-equal existential witness form as `typeBody`.
+  const premiseTypes = [
+    TaggedText_stripTags(premiseCard.hyp.type).trim(),
+    premiseCard.hyp.typeBody?.trim(),
+    ...(premiseCard.hyp.reductionForms ?? []),
+  ].filter((candidate, index, all): candidate is string =>
+    Boolean(candidate) && all.indexOf(candidate) === index,
+  )
 
-  if (implication) {
-    let resultType: string | null = null
-    let inferredValues: Record<string, string> = {}
-    try {
-      const patternTarget = premiseType.replace(/≠/gu, '=')
-      const patternPremise = implication[0].replace(/≠/gu, '=')
-      const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
-      if (bindings) {
-        resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
-        inferredValues = Object.fromEntries(
-          Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
-        )
+  for (const implication of implications) {
+    for (const premiseType of premiseTypes) {
+      let resultType: string | null = null
+      let inferredValues: Record<string, string> = {}
+      try {
+        const patternTarget = premiseType.replace(/≠/gu, '=')
+        const patternPremise = implication[0].replace(/≠/gu, '=')
+        const bindings = matchAndCapture(parse(patternTarget), parse(patternPremise))
+        if (bindings) {
+          resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+          inferredValues = Object.fromEntries(
+            Object.entries(bindings).map(([name, value]) => [name, printExpression(value)]),
+          )
+        }
+      } catch {
+        if (formulasMatch(implication[0], premiseType)) resultType = implication[1]
       }
-    } catch {
-      if (formulasMatch(implication[0], premiseType)) resultType = implication[1]
+      if (resultType !== null) {
+        const application = buildQuantifiedTheoremApplication(
+          theorem.theoremName,
+          theorem.forallFooter,
+          inferredValues,
+          premiseRef,
+        )
+        return {
+          kind: 'application',
+          command: `have ${hypName} := ${application}`,
+          hypName,
+          hypType: resultType,
+        }
+      }
     }
-    if (resultType !== null) {
-      const application = buildQuantifiedTheoremApplication(
-        theorem.theoremName,
-        theorem.forallFooter,
-        inferredValues,
-        premiseRef,
-      )
-      return {
-        kind: 'application',
-        command: `have ${hypName} := ${application}`,
-        hypName,
-        hypType: resultType,
+
+    // After eliminating the existential definition of ≤, the canvas shows a
+    // witness variable and an equality such as `1 = x + c`. Dropping `le_one`
+    // on that equality should rebuild the definitionally-equal premise
+    // `x ≤ 1` as `⟨c, h⟩` and specialize the theorem in one step.
+    const comparison = parseTransformTarget(implication[0])
+    const premiseEquality = parsedHypEquality(premiseCard)
+    if (comparison?.relation === '≤' && premiseEquality) {
+      const witnessPattern = '__visualLeWitness'
+      const orientations = [
+        [premiseEquality.lhsStr, premiseEquality.rhsStr],
+        [premiseEquality.rhsStr, premiseEquality.lhsStr],
+      ] as const
+      for (const [actualUpper, actualSum] of orientations) {
+        try {
+          const upperBindings = matchAndCapture(parse(actualUpper), parse(comparison.rhsStr))
+          if (!upperBindings) continue
+          const bindings = matchAndCapture(
+            parse(actualSum),
+            parse(`${comparison.lhsStr} + ${witnessPattern}`),
+            upperBindings,
+          )
+          const witness = bindings?.[witnessPattern]
+          if (!bindings || !witness) continue
+          const inferredValues = Object.fromEntries(
+            Object.entries(bindings)
+              .filter(([name]) => name !== witnessPattern)
+              .map(([name, value]) => [name, printExpression(value)]),
+          )
+          const resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+          const witnessProof = `⟨${printExpression(witness)}, ${premiseRef}⟩`
+          const application = buildQuantifiedTheoremApplication(
+            theorem.theoremName,
+            theorem.forallFooter,
+            inferredValues,
+            witnessProof,
+          )
+          return {
+            kind: 'application',
+            command: `have ${hypName} := ${application}`,
+            hypName,
+            hypType: resultType,
+          }
+        } catch {
+          // Try the opposite equality orientation or another theorem form.
+        }
       }
     }
   }
@@ -1981,7 +2059,7 @@ function TheoremTray({
   onTabChange,
   pageIndexByTab,
   onPageIndexChange,
-  onTheoremDoubleClick,
+  onTheoremClick,
   onTacticClick,
   getTemplateIffDirection,
   onTemplateContextMenu,
@@ -1993,7 +2071,7 @@ function TheoremTray({
   onTabChange: (tab: TrayTab) => void
   pageIndexByTab: Record<TrayTab, number>
   onPageIndexChange: (tab: TrayTab, pageIndex: number) => void
-  onTheoremDoubleClick?: (theorem: PropositionTheorem) => void
+  onTheoremClick?: (theorem: PropositionTheorem) => void
   onTacticClick?: (tactic: VisualTactic) => void
   getTemplateIffDirection: (templateId: string) => 'forward' | 'reverse'
   onTemplateContextMenu: (event: React.MouseEvent<HTMLDivElement>, templateId: string, theorem: PropositionTheorem) => void
@@ -2159,8 +2237,8 @@ function TheoremTray({
                           key={theorem.id}
                           theorem={theorem}
                           iffDirection={getTemplateIffDirection(templateId)}
-                          onDoubleClick={onTheoremDoubleClick && theorem.forallSpecification
-                            ? () => onTheoremDoubleClick(theorem)
+                          onClick={onTheoremClick && theorem.forallSpecification
+                            ? () => onTheoremClick(theorem)
                             : undefined}
                           onContextMenu={(event) => onTemplateContextMenu(event, templateId, theorem)}
                           emphasized={isEmphasized(item)}
@@ -2307,6 +2385,10 @@ export function VisualCanvas({
   const [positionOverrides, setPositionOverrides] = useState<Record<string, { x: number; y: number }>>({})
   const [theoremCopies, setTheoremCopies] = useState<PropositionTheoremCopy[]>(() => resumeState?.theoremCopies ?? [])
   const theoremCopiesRef = useRef(theoremCopies)
+  // A second construction can start before React commits the first result.
+  // Reserve generated names synchronously so the two Lean commands can never
+  // overwrite the same derived theorem card.
+  const specializationNameReservationsRef = useRef(new Set<string>())
   useEffect(() => {
     theoremCopiesRef.current = theoremCopies
   }, [theoremCopies])
@@ -3760,6 +3842,8 @@ export function VisualCanvas({
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
             ...(theoremDerivation ? {
+              commandOverride: theoremDerivation.command,
+              leanTacticOverride: theoremDerivation.command,
               syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
             } : {}),
           })
@@ -3912,6 +3996,8 @@ export function VisualCanvas({
               ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) }
               : {}),
           ...(theoremDerivation ? {
+            commandOverride: theoremDerivation.command,
+            leanTacticOverride: theoremDerivation.command,
             syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
           } : {}),
         })
@@ -4170,12 +4256,19 @@ export function VisualCanvas({
     })
   }
 
-  function handleHypDoubleClick(streamId: string, cardId: string) {
+  function handleHypConstructionClick(streamId: string, cardId: string) {
     if (isProcessing || canvasState.completed) return
     const stream = canvasState.streams.find(candidate => candidate.id === streamId)
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
-    if (openHypConstruction(stream, card)) return
+    openHypConstruction(stream, card)
+  }
+
+  function handleHypTransformDoubleClick(streamId: string, cardId: string) {
+    if (isProcessing || canvasState.completed) return
+    const stream = canvasState.streams.find(candidate => candidate.id === streamId)
+    const card = stream?.hyps.find(h => h.id === cardId)
+    if (!stream || !card) return
     if (!hypIsTransformable(card, comparisonTransformEnabled)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
@@ -4194,20 +4287,21 @@ export function VisualCanvas({
 
   // ── TransformationView callbacks ────────────────────────────────────────────
 
-  function handleGoalDoubleClick(streamId: string) {
+  function handleGoalConstructionClick(streamId: string) {
+    if (isProcessing || canvasState.completed) return
+    const stream = canvasState.streams.find(s => s.id === streamId)
+    if (!stream || !goalIsConstructable(stream)) return
+    closeReductionTooltip()
+    setSolvedGoalId(null)
+    setConstructionTarget({ kind: 'exists_goal', streamId })
+  }
+
+  function handleGoalTransformDoubleClick(streamId: string) {
     if (isProcessing || canvasState.completed) return
     const stream = canvasState.streams.find(s => s.id === streamId)
     if (!stream) return
-    closeReductionTooltip()
-
-    // Existential goal → construction mode
-    if (goalIsConstructable(stream)) {
-      setSolvedGoalId(null)
-      setConstructionTarget({ kind: 'exists_goal', streamId })
-      return
-    }
-
     if (!goalIsTransformable(stream, comparisonTransformEnabled)) return
+    closeReductionTooltip()
     setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
@@ -4216,13 +4310,13 @@ export function VisualCanvas({
     setTransformTarget({ kind: 'goal', streamId })
   }
 
-  function handleTheoremCopyDoubleClick(copyId: string, streamId?: string) {
+  function handleTheoremCopyConstructionClick(copyId: string, streamId?: string) {
     const copy = getTheoremCopyById(copyId)
     if (!copy) return
     openTheoremConstruction(copy.theorem, 'theorem_copy', copy.id, streamId)
   }
 
-  function handleTheoremTemplateDoubleClick(theorem: PropositionTheorem, streamId?: string) {
+  function handleTheoremTemplateConstructionClick(theorem: PropositionTheorem, streamId?: string) {
     openTheoremConstruction(theorem, 'theorem_template', undefined, streamId)
   }
 
@@ -4321,9 +4415,14 @@ export function VisualCanvas({
     let specializationName: string | null = null
 
     if (target.kind === 'forall_spec') {
-      const displayName = target.sourceKind === 'hyp'
-        ? nextFreshHypName(focusedStream.hyps, target.sourceRef)
-        : nextFreshHypName(focusedStream.hyps, 'h')
+      const latestStream = visualTestStateRef.current.canvasState.streams.find(
+        stream => stream.id === target.streamId,
+      ) ?? focusedStream
+      const displayName = reserveFreshHypName(
+        latestStream.hyps,
+        specializationNameReservationsRef.current,
+        target.sourceKind === 'hyp' ? target.sourceRef : 'h',
+      )
       // Lean's internal prefix lets proofStateToCanvas distinguish player-
       // generated theorem cards from ordinary assumptions. It is stripped for
       // display, so collision suffixes remain h1/h2 rather than h_1/h_2.
@@ -4378,7 +4477,10 @@ export function VisualCanvas({
       succeeded: result !== null,
     })
 
-    if (result === null) return false
+    if (result === null) {
+      if (specializationName) specializationNameReservationsRef.current.delete(specializationName)
+      return false
+    }
 
     const leanCanvas = proofStateToCanvas(result)
     leanGoalOrderRef.current = leanCanvas.streams.map(stream => stream.id)
@@ -5702,6 +5804,31 @@ export function VisualCanvas({
     )
   }
 
+  async function applyTestDragTheoremToHyp(theoremName: string, hypName: string): Promise<boolean> {
+    const stream = requireInteractiveCurrentStream()
+    const theorem = propositionTheorems.find(candidate => candidate.theoremName === theoremName)
+    if (!theorem) throw new Error(`Could not find proposition theorem "${theoremName}"`)
+    const premiseCard = requireHypCard(stream, hypName)
+    const derivation = safelyDeriveTheoremApplication(theorem, premiseCard, stream)
+    if (!derivation) return false
+    const latestApplyInteraction = applyInteractionRef.current
+    if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
+    return latestApplyInteraction(
+      interactionToPlayTactic({
+        type: 'drag_apply',
+        theoremName: theorem.theoremName,
+        hypName: interactionHypName(premiseCard) ?? hypName,
+      }),
+      theorem.id,
+      {
+        targetStreamId: stream.id,
+        commandOverride: derivation.command,
+        leanTacticOverride: derivation.command,
+        syntheticHyp: { name: derivation.hypName, type: derivation.hypType },
+      },
+    )
+  }
+
   async function applyTestDragHypToHyp(sourceName: string, targetName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, sourceName)
@@ -5817,13 +5944,13 @@ export function VisualCanvas({
 
   function openTestGoalTransform() {
     const stream = requireInteractiveCurrentStream()
-    handleGoalDoubleClick(stream.id)
+    handleGoalTransformDoubleClick(stream.id)
   }
 
   function openTestHypTransform(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const card = requireHypCard(stream, hypName)
-    handleHypDoubleClick(stream.id, card.id)
+    handleHypTransformDoubleClick(stream.id, card.id)
   }
 
   async function applyTestRewriteInTransform(
@@ -6008,6 +6135,7 @@ export function VisualCanvas({
       runPlayerTactic: applyTestPlayerTactic,
       dragHypToGoal: applyTestDragHypToGoal,
       dragTheoremToGoal: applyTestDragTheoremToGoal,
+      dragTheoremToHyp: applyTestDragTheoremToHyp,
       dragHypToHyp: applyTestDragHypToHyp,
       copyTheoremToCanvas: copyTestTheoremToCanvas,
       moveHypTo: moveTestHypTo,
@@ -6192,8 +6320,7 @@ export function VisualCanvas({
   function renderHypCard(card: HypCardType, mobileList = false) {
     const clickAction = card.hyp.clickAction
     const isConstructable = hypIsConstructable(card)
-    const opensConstructionOnTap = isPhonePortrait && isConstructable
-    const isClickable = hasClickAction(clickAction) || opensConstructionOnTap
+    const isClickable = hasClickAction(clickAction) || isConstructable
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
     const isTacticTarget = activeDraggedTactic
       ? tacticShouldHighlightHyp(activeDraggedTactic, card)
@@ -6217,21 +6344,20 @@ export function VisualCanvas({
         isFailing={failingCardId === card.id}
         isClickable={streamInteractionsEnabled && isClickable}
         clickTooltip={clickAction?.tooltip}
-        isTransformable={streamInteractionsEnabled && isTransformable && !isConstructable}
+        isTransformable={streamInteractionsEnabled && isTransformable}
         isConstructable={streamInteractionsEnabled && isConstructable}
-        constructOnSingleClick={streamInteractionsEnabled && opensConstructionOnTap}
         showDropTarget={activeDraggedTactic
           ? isTacticTarget
           : activeDragId !== null && activeDragId !== card.id && !blocksHypothesisSubstitution}
         isPotentialTarget={isTacticTarget}
         mobileList={mobileList}
         onClickAction={streamInteractionsEnabled && isClickable && displayStream
-          ? opensConstructionOnTap
-            ? () => handleHypDoubleClick(displayStream.id, card.id)
+          ? isConstructable
+            ? () => handleHypConstructionClick(displayStream.id, card.id)
             : () => handleHypClick(displayStream.id, card.id, clickAction)
           : undefined}
-        onDoubleClick={streamInteractionsEnabled && displayStream && (isConstructable || isTransformable)
-          ? () => handleHypDoubleClick(displayStream.id, card.id)
+        onDoubleClick={streamInteractionsEnabled && displayStream && isTransformable
+          ? () => handleHypTransformDoubleClick(displayStream.id, card.id)
           : undefined}
         onContextMenu={hypCardIsIff(card) ? (event) => handleHypContextMenu(event, card) : undefined}
         atomicContextNames={streamHypNames(displayStream)}
@@ -6366,10 +6492,12 @@ export function VisualCanvas({
         isPotentialTarget={isTacticTarget || isStatementTarget}
         atomicContextNames={streamHypNames(liveGoalStream)}
         reductionForms={stream.reductionForms}
-        onClick={streamInteractionsEnabled && isClickable
-          ? () => handleGoalClick(liveGoalStream.id, clickAction, renderedGoalText)
+        onClick={streamInteractionsEnabled && (isClickable || isConstructable)
+          ? isConstructable
+            ? () => handleGoalConstructionClick(liveGoalStream.id)
+            : () => handleGoalClick(liveGoalStream.id, clickAction, renderedGoalText)
           : undefined}
-        onDoubleClick={streamInteractionsEnabled && (isTransformable || isConstructable) ? () => handleGoalDoubleClick(liveGoalStream.id) : undefined}
+        onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleGoalTransformDoubleClick(liveGoalStream.id) : undefined}
       />
     )
   }
@@ -6553,8 +6681,8 @@ export function VisualCanvas({
                 isFailing={failingTheoremCopyId === copy.id}
                 showDropTarget={activeDragId !== null && activeDragId !== copy.id}
                 iffDirection={getIffDirection(copy.id)}
-                onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(copy.theorem) && currentStream
-                  ? () => handleTheoremCopyDoubleClick(copy.id, currentStream.id)
+                onClick={streamInteractionsEnabled && theoremForallSpecification(copy.theorem) && currentStream
+                  ? () => handleTheoremCopyConstructionClick(copy.id, currentStream.id)
                   : undefined}
                 onContextMenu={(event) => handleTheoremCardContextMenu(event, copy.id, copy.theorem)}
               />
@@ -6613,8 +6741,8 @@ export function VisualCanvas({
                                     isFailing={failingTheoremCopyId === item.copy.id}
                                     showDropTarget={activeDragId !== null && activeDragId !== item.copy.id}
                                     iffDirection={getIffDirection(item.copy.id)}
-                                    onDoubleClick={streamInteractionsEnabled && theoremForallSpecification(item.copy.theorem) && currentStream
-                                      ? () => handleTheoremCopyDoubleClick(item.copy!.id, currentStream.id)
+                                    onClick={streamInteractionsEnabled && theoremForallSpecification(item.copy.theorem) && currentStream
+                                      ? () => handleTheoremCopyConstructionClick(item.copy!.id, currentStream.id)
                                       : undefined}
                                     onContextMenu={(event) => handleTheoremCardContextMenu(event, item.copy!.id, item.copy!.theorem)}
                                   />
@@ -6701,8 +6829,8 @@ export function VisualCanvas({
               activeTab={activeTrayTab}
               onTabChange={setActiveTrayTab}
               onTacticClick={streamInteractionsEnabled && currentStream ? handleTrayTacticClick : undefined}
-              onTheoremDoubleClick={streamInteractionsEnabled && currentStream
-                ? theorem => handleTheoremTemplateDoubleClick(theorem, currentStream.id)
+              onTheoremClick={streamInteractionsEnabled && currentStream
+                ? theorem => handleTheoremTemplateConstructionClick(theorem, currentStream.id)
                 : undefined}
               getTemplateIffDirection={getIffDirection}
               onTemplateContextMenu={handleTheoremCardContextMenu}

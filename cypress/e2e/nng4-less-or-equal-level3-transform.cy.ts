@@ -75,7 +75,7 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
   })
 
   it('keeps the reflexive succ goal live until the player backs out and clicks it', () => {
-    goalCard().should('have.class', 'constructable').dblclick()
+    goalCard().should('have.class', 'constructable').click()
     cy.get('.cn-propose-label', { timeout: 60000 }).should('contain.text', 'Propose')
     cy.contains('button.cn-brick', /^1$/).click()
     cy.get('.cn-done-btn', { timeout: 60000 }).click()
@@ -137,7 +137,7 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
     cy.get('.proof-sidebar-tab').click()
     cy.get('.proof-sidebar').should('have.class', 'open')
 
-    goalCard().should('have.class', 'constructable').dblclick()
+    goalCard().should('have.class', 'constructable').click()
     cy.get('.visual-page.tr-construction-overlay .cn-propose-label', { timeout: 60000 })
       .should('be.visible')
 
@@ -172,7 +172,7 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     goalCard().should('be.visible')
 
-    goalCard().should('have.class', 'constructable').dblclick()
+    goalCard().should('have.class', 'constructable').click()
     cy.get('.cn-propose-label', { timeout: 60000 }).should('contain.text', 'Propose')
     cy.contains('button.cn-brick', /^1$/).click()
     cy.get('.cn-done-btn', { timeout: 60000 }).click()
