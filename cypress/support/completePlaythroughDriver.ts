@@ -1997,12 +1997,23 @@ export class CompletePlaythroughDriver {
     const match = /^cases\s+(\S+)/u.exec(command)
     if (!match) throw new Error(`Unsupported cases command: ${command}`)
     await this.exposeDeferredInitialBinders(match[1])
+    const isCaseableType = (value: string) =>
+      /^(?:ℕ|Nat|MyNat|∃|False)|(?:∨|∧)/u.test(value.trim())
+    const preliminaryTarget = this.hyp(match[1])
+    if (preliminaryTarget && !isCaseableType(cardProposition(preliminaryTarget))) {
+      const pendingConstruction = await waitFor(
+        `pending construction before ${command}`,
+        () => this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'),
+        3_000,
+      ).catch(() => null)
+      if (pendingConstruction) {
+        await this.completePendingInferredConstruction(command, pendingConstruction)
+      }
+    }
     const beforeSnapshot = harness(this.win).getCurrentStreamSnapshot()
     const beforeNames = new Set(Object.keys(beforeSnapshot.hypTypes))
     const resolveCasesTarget = () => {
       const named = this.hyp(match[1])
-      const isCaseableType = (value: string) =>
-        /^(?:ℕ|Nat|MyNat|∃|False)|(?:∨|∧)/u.test(value.trim())
       if (named && isCaseableType(named.dataset.hypType ?? '')) return named
       // Applying a tray theorem creates a generated `thm_*` proposition.
       // A preceding branch split can remap that generated Lean name even
@@ -3864,6 +3875,34 @@ export class CompletePlaythroughDriver {
     await this.dragTactic(name, await waitFor('current goal', () => currentGoal(this.win)))
   }
 
+  private async completePendingInferredConstruction(
+    command: string,
+    pendingConstruction = this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'),
+  ) {
+    if (!pendingConstruction) return false
+    const requestedBinder = /\bSPECIFY\s+([\p{L}_][\p{L}\p{N}_']*)\s+FOR\b/iu.exec(
+      pendingConstruction.textContent ?? '',
+    )?.[1]
+    if (!requestedBinder) {
+      throw new Error(`Pending inferred construction has no named binder before ${command}`)
+    }
+    const visibleBinder = this.hyp(requestedBinder)
+      ? requestedBinder
+      : this.hyp(requestedBinder.toLocaleLowerCase())
+        ? requestedBinder.toLocaleLowerCase()
+        : requestedBinder
+    await this.submitConstruction(
+      parseConstructionExpr(visibleBinder),
+      `inferred ${visibleBinder} before ${command}`,
+    )
+    await waitFor(
+      `inferred construction to settle before ${command}`,
+      () => !harness(this.win).getProofAudit().processing,
+      INTERACTION_TIMEOUT,
+    )
+    return true
+  }
+
   private async introduceLeadingForalls() {
     for (let count = 0; count < 32; count += 1) {
       const snapshot = harness(this.win).getCurrentStreamSnapshot()
@@ -3880,32 +3919,8 @@ export class CompletePlaythroughDriver {
       INTERACTION_TIMEOUT,
     )
     if (harness(this.win).getProofAudit().completed) return
-    const pendingConstruction = this.win.document.querySelector<HTMLElement>(
-      '.tr-construction-overlay',
-    )
-    if (pendingConstruction) {
-      const requestedBinder = /\bSPECIFY\s+([\p{L}_][\p{L}\p{N}_']*)\s+FOR\b/iu.exec(
-        pendingConstruction.textContent ?? '',
-      )?.[1]
-      if (!requestedBinder) {
-        throw new Error(`Pending inferred construction has no named binder before ${command}`)
-      }
-      const visibleBinder = this.hyp(requestedBinder)
-        ? requestedBinder
-        : this.hyp(requestedBinder.toLocaleLowerCase())
-          ? requestedBinder.toLocaleLowerCase()
-          : requestedBinder
-      await this.submitConstruction(
-        parseConstructionExpr(visibleBinder),
-        `inferred ${visibleBinder} before ${command}`,
-      )
-      await waitFor(
-        `inferred construction to settle before ${command}`,
-        () => !harness(this.win).getProofAudit().processing,
-        INTERACTION_TIMEOUT,
-      )
-      if (harness(this.win).getProofAudit().completed) return
-    }
+    await this.completePendingInferredConstruction(command)
+    if (harness(this.win).getProofAudit().completed) return
     await this.navigateFromCompletedBranch()
     const normalized = command.trim()
     if (!/^(?:apply|exact)\s+.+\s+at\s+\S+$/u.test(normalized)) {
