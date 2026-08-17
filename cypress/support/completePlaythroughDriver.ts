@@ -2858,13 +2858,22 @@ export class CompletePlaythroughDriver {
       // opens Construction Mode (for example `le_one` on the witness equality
       // for `x ≤ 1`). Supply the same-named visible variable from the theorem
       // binder before continuing with the derived conclusion.
-      if (match[2]) {
-        // The construction overlay is committed immediately after the play
-        // attempt, but can paint one React frame after dragAndWait observes
-        // the accepted drag.
-        await sleep(250)
-      }
-      if (match[2] && this.win.document.querySelector('.tr-construction-overlay')) {
+      const postDragApplication = match[2]
+        ? await waitFor(`${command} derived result or construction`, () => {
+            const overlay = this.win.document.querySelector<HTMLElement>('.tr-construction-overlay')
+            if (overlay) return { overlay }
+            const changedCard = visible(this.win.document.querySelectorAll<HTMLElement>(
+              '[data-testid="hyp-card"], [data-testid="theorem-copy-card"]',
+            )).some(card => {
+              const cardName = propositionCardName(card)
+              if (!cardName) return false
+              const previousType = visibleTypesBeforeFinal.get(cardName)
+              return previousType === undefined || previousType !== cardProposition(card)
+            })
+            return changedCard ? { overlay: null } : null
+          }, 3_000).catch(() => null)
+        : null
+      if (postDragApplication?.overlay) {
         const inferredBinder = finalForallBinders.find(binder => this.hyp(binder))
         if (!inferredBinder) {
           throw new Error(`${command} opened construction without an inferable forall binder`)
