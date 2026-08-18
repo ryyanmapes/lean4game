@@ -52,6 +52,15 @@ private def tryTactic (stx : TSyntax `tactic) : TacticM Bool := do
     restoreState savedState
     return false
 
+private def evalTacticString (src : String) : TacticM Unit := do
+  let env ← getEnv
+  match Lean.Parser.runParserCategory env `tactic src with
+  | .ok stx =>
+    let stx : TSyntax `tactic := ⟨stx⟩
+    evalTactic stx
+  | .error err =>
+    throwError "{err}"
+
 /- Lean 4.28 exposes the rewrite elaboration bridge from
 `Lean.Elab.Tactic.Rewrite`; keep the visual wrapper so the interaction syntax
 remains isolated from Lean's `rw` surface syntax. -/
@@ -424,9 +433,8 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
       let savedState ← saveState
       try
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-        let freshIdent := mkIdent freshName
-        evalTactic (← `(tactic| have $freshIdent := $arg))
-        evalTactic (← `(tactic| apply $fn at $freshIdent))
+        evalTacticString s!"have {freshName} := {arg.getId}"
+        evalTacticString s!"apply {fn.getId} at {freshName}"
         return
       catch _ =>
         restoreState savedState
@@ -549,15 +557,6 @@ private def navigateToSubterm (e : Expr) (path : List Nat) : MetaM Expr := do
 
 private def parsePathNode (numsNode : Syntax) : List Nat :=
   numsNode.getArgs.toList.filterMap Syntax.isNatLit?
-
-private def evalTacticString (src : String) : TacticM Unit := do
-  let env ← getEnv
-  match Lean.Parser.runParserCategory env `tactic src with
-  | .ok stx =>
-    let stx : TSyntax `tactic := ⟨stx⟩
-    evalTactic stx
-  | .error err =>
-    throwError "{err}"
 
 private def visibleFVarIds (lctx : LocalContext) : Std.HashSet FVarId := Id.run do
   let mut ids : Std.HashSet FVarId := {}
