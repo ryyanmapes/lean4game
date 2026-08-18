@@ -377,45 +377,12 @@ private def binaryApplicationArgs? (expr : Expr) : Option (Expr × Expr) := do
   if args.size < 2 then none
   else some (args[args.size - 2]!, args[args.size - 1]!)
 
-private partial def applyRightCancellationBinders?
-    (fnExpr currentType a b n argExpr argType : Expr) : MetaM (Option Expr) := do
-  let currentType ← whnf (← instantiateMVars currentType)
-  match currentType with
-  | .forallE binderName domain body binderInfo =>
-      let value? :=
-        if binderName == `a then some a
-        else if binderName == `b then some b
-        else if binderName == `n then some n
-        else none
-      if let some value := value? then
-        applyRightCancellationBinders?
-          (mkApp fnExpr value) (body.instantiate1 value) a b n argExpr argType
-      else
-        let checkpoint ← getMCtx
-        if binderInfo.isExplicit && (← visiblePropPremiseMatches domain argType) then
-          let proof ← abstractRemainingApplication
-            (mkApp fnExpr argExpr) (body.instantiate1 argExpr)
-          return some (← instantiateMVars proof)
-        setMCtx checkpoint
-        if binderInfo == .instImplicit then
-          if let some inst ← synthInstance? (← instantiateMVars domain) then
-            applyRightCancellationBinders?
-              (mkApp fnExpr inst) (body.instantiate1 inst) a b n argExpr argType
-          else
-            return none
-        else
-          let placeholder ← mkFreshExprMVar domain
-          applyRightCancellationBinders?
-            (mkApp fnExpr placeholder) (body.instantiate1 placeholder) a b n argExpr argType
-  | _ =>
-      return none
-
-/-- Build the explicit application for a right-cancellation theorem from an equality
+/-- Extract the named data arguments for a right-cancellation theorem from an equality
     `a + n = b + n`. Generated game theorem metadata can expose a telescope whose
-    assignments do not line up with the underlying four-argument declaration; the
-    equality itself provides the three data arguments without ambiguity. -/
-def mkRightCancellationApplication?
-    (fnExpr argExpr argType : Expr) : MetaM (Option Expr) := do
+    assignments do not line up with its source-level declaration; the equality itself
+    provides all three named arguments without ambiguity. -/
+def rightCancellationArguments?
+    (argType : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
   let savedMCtx ← getMCtx
   try
     let eqType ← whnf (← instantiateMVars argType)
@@ -428,11 +395,7 @@ def mkRightCancellationApplication?
     unless ← isDefEq n n' do
       setMCtx savedMCtx
       return none
-    let result ← applyRightCancellationBinders?
-      fnExpr (← inferType fnExpr) a b n argExpr argType
-    if result.isNone then
-      setMCtx savedMCtx
-    return result
+    return some (a, b, n)
   catch _ =>
     setMCtx savedMCtx
     return none

@@ -424,10 +424,13 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
       if fnOperand.theoremBase == "add_right_cancel" then
-        if let some proof ← mkRightCancellationApplication?
-            fnOperand.expr argOperand.expr argOperand.type then
+        if let some (a, b, n) ← rightCancellationArguments? argOperand.type then
           let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-          replaceNamedExprWithProof (mkIdent freshName) proof
+          let aText ← ppExpr a
+          let bText ← ppExpr b
+          let nText ← ppExpr n
+          evalTacticString s!"have {freshName} := {fn.getId} \
+            (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {arg.getId}"
           return
       if let some proof ← mkConstantPremiseApplication?
           fnOperand.expr argOperand.expr argOperand.type then
