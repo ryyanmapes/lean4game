@@ -429,6 +429,8 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
           let aText ← ppExpr a
           let bText ← ppExpr b
           let nText ← ppExpr n
+          withOptions (fun opts => opts.setBool `pp.all true) do
+            throwError "add_right_cancel explicit-type diagnostic\n  type: {← inferType fnOperand.expr}\n  a: {a}\n  b: {b}\n  n: {n}"
           evalTacticString s!"have {freshName} := {fn.getId} \
             (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {arg.getId}"
           return
