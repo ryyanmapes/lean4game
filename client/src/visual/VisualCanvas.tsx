@@ -1923,6 +1923,19 @@ function safelyDeriveTheoremApplication(
   }
 }
 
+/** Most implication applications must be elaborated by the backend, whose
+ * theorem telescope is authoritative. Keep a client-authored command only
+ * when the visual interaction constructs an existential witness that is not
+ * represented by a standalone hypothesis card, or performs a derived rewrite. */
+function locallyExecutableTheoremDerivation(
+  derivation: TheoremApplicationDerivation | null,
+): TheoremApplicationDerivation | null {
+  if (!derivation) return null
+  return derivation.kind === 'rewrite' || derivation.command.includes('⟨')
+    ? derivation
+    : null
+}
+
 function synthesizeForallSpecializationContinuation(
   focusedStream: GoalStream,
   hypName: string,
@@ -3678,6 +3691,7 @@ export function VisualCanvas({
         sourceCard,
         sourceStream,
       )
+      const localDerivation = locallyExecutableTheoremDerivation(theoremDerivation)
       const playTactic = interactionToPlayTactic({
         type: 'drag_apply',
         theoremName: droppedOnTheoremCopy.theorem.theoremName,
@@ -3686,11 +3700,11 @@ export function VisualCanvas({
       applyDroppedInteraction(playTactic, activeId, {
         consumedTheoremCopyIds: [droppedOnTheoremCopy.id],
         mobileInsertAfter: theoremCopyMobileKey(droppedOnTheoremCopy),
-        ...(theoremDerivation ? {
-          commandOverride: theoremDerivation.command,
-          playTacticOverride: theoremDerivation.command,
-          leanTacticOverride: theoremDerivation.command,
-          syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+        ...(localDerivation ? {
+          commandOverride: localDerivation.command,
+          playTacticOverride: localDerivation.command,
+          leanTacticOverride: localDerivation.command,
+          syntheticHyp: { name: localDerivation.hypName, type: localDerivation.hypType },
         } : {}),
       })
       return
@@ -3855,6 +3869,7 @@ export function VisualCanvas({
           const theoremDerivation = targetCard && targetStream
             ? safelyDeriveTheoremApplication(theoremTemplate, targetCard, targetStream)
             : null
+          const localDerivation = locallyExecutableTheoremDerivation(theoremDerivation)
           const playTactic = targetCard && theoremDerivation?.kind === 'application'
             ? interactionToPlayTactic({
                 type: 'drag_apply',
@@ -3872,11 +3887,11 @@ export function VisualCanvas({
             ...(targetStream ? { targetStreamId: targetStream.id } : {}),
             ...(targetCard && isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
             ...(targetTheoremCopy ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) } : {}),
-            ...(theoremDerivation ? {
-              commandOverride: theoremDerivation.command,
-              playTacticOverride: theoremDerivation.command,
-              leanTacticOverride: theoremDerivation.command,
-              syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+            ...(localDerivation ? {
+              commandOverride: localDerivation.command,
+              playTacticOverride: localDerivation.command,
+              leanTacticOverride: localDerivation.command,
+              syntheticHyp: { name: localDerivation.hypName, type: localDerivation.hypType },
             } : {}),
           })
           return
@@ -3956,14 +3971,15 @@ export function VisualCanvas({
           const theoremDerivation = sourceStream
             ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
+          const localDerivation = locallyExecutableTheoremDerivation(theoremDerivation)
           applyDroppedInteraction(playTactic, activeId, {
             consumedTheoremCopyIds: [targetTheoremCopy.id],
             mobileInsertAfter: targetTheoremCopy ? theoremCopyMobileKey(targetTheoremCopy) : undefined,
-            ...(theoremDerivation ? {
-              commandOverride: theoremDerivation.command,
-              playTacticOverride: theoremDerivation.command,
-              leanTacticOverride: theoremDerivation.command,
-              syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+            ...(localDerivation ? {
+              commandOverride: localDerivation.command,
+              playTacticOverride: localDerivation.command,
+              leanTacticOverride: localDerivation.command,
+              syntheticHyp: { name: localDerivation.hypName, type: localDerivation.hypType },
             } : {}),
           })
           return
@@ -4009,6 +4025,7 @@ export function VisualCanvas({
           : targetTheoremCopy && sourceCard && sourceStream
             ? safelyDeriveTheoremApplication(targetTheoremCopy.theorem, sourceCard, sourceStream)
             : null
+        const localDerivation = locallyExecutableTheoremDerivation(theoremDerivation)
         const playTactic = sourceTheoremCopy && targetCard
           && theoremDerivation?.kind === 'application'
           ? interactionToPlayTactic({
@@ -4028,11 +4045,11 @@ export function VisualCanvas({
             : targetTheoremCopy
               ? { mobileInsertAfter: theoremCopyMobileKey(targetTheoremCopy) }
               : {}),
-          ...(theoremDerivation ? {
-            commandOverride: theoremDerivation.command,
-            playTacticOverride: theoremDerivation.command,
-            leanTacticOverride: theoremDerivation.command,
-            syntheticHyp: { name: theoremDerivation.hypName, type: theoremDerivation.hypType },
+          ...(localDerivation ? {
+            commandOverride: localDerivation.command,
+            playTacticOverride: localDerivation.command,
+            leanTacticOverride: localDerivation.command,
+            syntheticHyp: { name: localDerivation.hypName, type: localDerivation.hypType },
           } : {}),
         })
       }
@@ -5845,6 +5862,7 @@ export function VisualCanvas({
     const premiseCard = requireHypCard(stream, hypName)
     const derivation = safelyDeriveTheoremApplication(theorem, premiseCard, stream)
     if (!derivation) return false
+    const localDerivation = locallyExecutableTheoremDerivation(derivation)
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
     return latestApplyInteraction(
@@ -5856,10 +5874,12 @@ export function VisualCanvas({
       theorem.id,
       {
         targetStreamId: stream.id,
-        commandOverride: derivation.command,
-        playTacticOverride: derivation.command,
-        leanTacticOverride: derivation.command,
-        syntheticHyp: { name: derivation.hypName, type: derivation.hypType },
+        ...(localDerivation ? {
+          commandOverride: localDerivation.command,
+          playTacticOverride: localDerivation.command,
+          leanTacticOverride: localDerivation.command,
+          syntheticHyp: { name: localDerivation.hypName, type: localDerivation.hypType },
+        } : {}),
       },
     )
   }
