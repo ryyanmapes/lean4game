@@ -296,6 +296,27 @@ def mkNamedBinderApplication?
     setMCtx savedMCtx
     return none
 
+/-- Locate the proposition binder consumed by a displayed premise.  The index counts
+    every binder exposed by `@theorem`, including implicit data and instance binders,
+    so callers can build an explicit application with inference holes before the
+    supplied proof. -/
+def premiseBinderIndex? (fnType argType : Expr) : MetaM (Option Nat) := do
+  let savedMCtx ← getMCtx
+  try
+    let (args, _, _) ← forallMetaTelescopeReducing fnType
+    for i in [:args.size] do
+      let checkpoint ← getMCtx
+      let dom ← instantiateMVars (← inferType args[i]!)
+      if ← visiblePropPremiseMatches dom argType then
+        setMCtx savedMCtx
+        return some i
+      setMCtx checkpoint
+    setMCtx savedMCtx
+    return none
+  catch _ =>
+    setMCtx savedMCtx
+    return none
+
 /-- Build the partially applied proof term for a theorem/hypothesis application in combining mode. -/
 def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option Expr) := do
   let savedMCtx ← getMCtx

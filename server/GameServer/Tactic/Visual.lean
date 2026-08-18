@@ -421,25 +421,19 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
-    -- For a global theorem applied to a supplied hypothesis, let Lean's own
-    -- `apply ... at` elaborator infer explicit data binders.  The structural
-    -- matcher below is needed for direction-independent/local-card cases, but
-    -- can under-assign repeated data parameters in a deeply nested premise
-    -- (for example `a + n = b + n`), shifting the proof into a Nat slot.
-    -- Work on a fresh copy so combining mode still preserves the player's
-    -- original hypothesis and produces the expected derived theorem card.
+    -- For a global theorem applied to a supplied hypothesis, expose the full
+    -- theorem telescope with `@` and put inference holes before the matched
+    -- proposition binder. This handles explicit data binders such as the
+    -- `a b n` in `add_right_cancel` without relying on `apply ... at`, whose
+    -- elaborator can place the proof into the first explicit Nat slot.
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
-      let savedState ← saveState
-      let applied ← try
-          let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-          evalTacticString s!"have {freshName} := {arg.getId}"
-          evalTacticString s!"apply {fn.getId} at {freshName}"
-          pure true
-        catch _ =>
-          restoreState savedState
-          pure false
-      if applied then return
+      if let some premiseIdx ← premiseBinderIndex? fnOperand.type argOperand.type then
+        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+        let holes := String.intercalate " " (List.replicate premiseIdx "_")
+        let prefix := if holes.isEmpty then s!"@{fn.getId}" else s!"@{fn.getId} {holes}"
+        evalTacticString s!"have {freshName} := {prefix} {arg.getId}"
+        return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return
