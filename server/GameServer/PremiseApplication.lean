@@ -341,33 +341,6 @@ private partial def abstractRemainingApplication
   | _ =>
       return fnExpr
 
-private partial def applyAtMatchingExplicitPremise?
-    (fnExpr currentType argExpr argType : Expr) : MetaM (Option Expr) := do
-  let currentType ← whnf (← instantiateMVars currentType)
-  match currentType with
-  | .forallE _ domain body binderInfo =>
-      let checkpoint ← getMCtx
-      if binderInfo.isExplicit && (← visiblePropPremiseMatches domain argType) then
-        let proof ← abstractRemainingApplication
-          (mkApp fnExpr argExpr) (body.instantiate1 argExpr)
-        let proof ← instantiateMVars proof
-        return some proof
-      setMCtx checkpoint
-      if binderInfo == .instImplicit then
-        if let some inst ← synthInstance? (← instantiateMVars domain) then
-          applyAtMatchingExplicitPremise?
-            (mkApp fnExpr inst) (body.instantiate1 inst) argExpr argType
-        else
-          let placeholder ← mkFreshExprMVar domain
-          applyAtMatchingExplicitPremise?
-            (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
-      else
-        let placeholder ← mkFreshExprMVar domain
-        applyAtMatchingExplicitPremise?
-          (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
-  | _ =>
-      return none
-
 /-- Apply a global theorem by walking its binders in order, inserting inference holes
     before the matching proposition instead of treating the proposition as the first
     explicit argument. Matching the proposition assigns those holes, and any binders
@@ -377,11 +350,24 @@ def mkConstantPremiseApplication?
   let .const _ _ := fnExpr.consumeMData | return none
   let savedMCtx ← getMCtx
   try
-    let result ← applyAtMatchingExplicitPremise?
-      fnExpr (← inferType fnExpr) argExpr argType
-    if result.isNone then
-      setMCtx savedMCtx
-    return result
+    let (args, binderInfos, _) ← forallMetaTelescopeReducing (← inferType fnExpr)
+    for i in [:args.size] do
+      let checkpoint ← getMCtx
+      let domain ← instantiateMVars (← inferType args[i]!)
+      if binderInfos[i]!.isExplicit && (← visiblePropPremiseMatches domain argType) then
+        let mut prefixArgs := args.extract 0 i
+        for j in [:prefixArgs.size] do
+          if binderInfos[j]! == .instImplicit then
+            let instanceType ← instantiateMVars (← inferType prefixArgs[j]!)
+            if let some inst ← synthInstance? instanceType then
+              prefixArgs := prefixArgs.set! j inst
+        prefixArgs := prefixArgs.push argExpr
+        let prefixProof ← instantiateMVars (mkAppN fnExpr prefixArgs)
+        let proof ← abstractRemainingApplication prefixProof (← inferType prefixProof)
+        return some (← instantiateMVars proof)
+      setMCtx checkpoint
+    setMCtx savedMCtx
+    return none
   catch _ =>
     setMCtx savedMCtx
     return none
