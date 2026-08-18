@@ -296,36 +296,6 @@ def mkNamedBinderApplication?
     setMCtx savedMCtx
     return none
 
-/-- Apply a constant theorem with the supplied proof placed in the matching explicit
-    argument slot. `mkAppOptM` then infers preceding explicit data arguments from that
-    proof, rather than treating the proof as the theorem's first explicit argument. -/
-def mkExplicitPremiseApplication?
-    (fnExpr fnType argExpr argType : Expr) : MetaM (Option Expr) := do
-  let .const constName _ := fnExpr.consumeMData | return none
-  let savedMCtx ← getMCtx
-  try
-    let (args, binderInfos, _) ← forallMetaTelescopeReducing fnType
-    let mut explicitArgs : Array (Option Expr) := #[]
-    for i in [:args.size] do
-      let checkpoint ← getMCtx
-      let dom ← instantiateMVars (← inferType args[i]!)
-      if binderInfos[i]!.isExplicit then
-        if ← visiblePropPremiseMatches dom argType then
-          let appliedArgs := explicitArgs.push (some argExpr)
-          let proof ← instantiateMVars (← mkAppOptM constName appliedArgs)
-          if !proof.hasMVar then
-            setMCtx savedMCtx
-            return some proof
-          setMCtx checkpoint
-        explicitArgs := explicitArgs.push none
-      else
-        setMCtx checkpoint
-    setMCtx savedMCtx
-    return none
-  catch _ =>
-    setMCtx savedMCtx
-    return none
-
 /-- Build the partially applied proof term for a theorem/hypothesis application in combining mode. -/
 def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option Expr) := do
   let savedMCtx ← getMCtx
@@ -348,5 +318,15 @@ def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option
   catch _ =>
     setMCtx savedMCtx
     return none
+
+/-- Apply a constant theorem using its complete declaration type. Tray metadata may carry
+    a type already specialized for display, while its expression is still the bare constant;
+    pairing that shortened type with the bare constant shifts a proof into an earlier data
+    argument. Inferring the constant's type restores the missing argument slots. -/
+def mkConstantPremiseApplication?
+    (fnExpr argExpr argType : Expr) : MetaM (Option Expr) := do
+  let .const _ _ := fnExpr.consumeMData | return none
+  let fullType ← inferType fnExpr
+  mkPremiseApplication? fnExpr fullType argExpr argType
 
 end GameServer
