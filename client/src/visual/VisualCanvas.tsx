@@ -209,46 +209,57 @@ function resolveCollisions(
     }
   }
 
-  // Ellipse repulsion gives natural-looking separation, but two diagonally
-  // offset rectangles can have non-intersecting ellipses while their corners
-  // still obscure each other. Resolve that residual only when an oversized
-  // card is involved, and move the later/oversized card by the minimum amount.
-  // This leaves the established positions of ordinary short expressions
-  // untouched while making long-card collision checks use their real bounds.
-  for (let iter = 0; iter < REPULSION_ITERATIONS; iter++) {
-    let changed = false
-    for (let i = 0; i < items.length; i++) {
-      for (let j = i + 1; j < items.length; j++) {
-        const first = items[i]
-        const second = items[j]
-        if ((!first.oversized && !second.oversized) || (first.fixed && second.fixed)) continue
-        const overlapX = (first.width + second.width) / 2 - Math.abs(second.cx - first.cx)
-        const overlapY = (first.height + second.height) / 2 - Math.abs(second.cy - first.cy)
-        if (overlapX <= 1 || overlapY <= 1) continue
-        // Preserve reading order: later cards yield to earlier cards whenever
-        // possible. Choosing whichever card happened to be oversized could
-        // move an earlier long card past a later short card, then reverse that
-        // decision against the next neighbour on the following layout pass.
-        const mover = !second.fixed
-          ? second
-          : first.oversized && !first.fixed
-            ? first
-            : null
-        if (!mover) continue
-        const anchor = mover === first ? second : first
-        // Always place the oversized card after its obstacle on the chosen
-        // axis. A sign based on their current centres can alternate when the
-        // card is clamped at a canvas edge, causing the layout effect to
-        // oscillate forever between two positions.
-        if (overlapX < overlapY) {
-          mover.cx = anchor.cx + (anchor.width + mover.width) / 2 + 2
-        } else {
-          mover.cy = anchor.cy + (anchor.height + mover.height) / 2 + 2
+  // Ellipse repulsion gives natural-looking separation, but diagonally offset
+  // rectangles can still overlap at their corners. Keep every ordinary card
+  // exactly where that established resolver put it; only measured oversized
+  // cards are assigned the first genuinely free reading-order slot.
+  const occupied = items
+    .filter(item => item.fixed || !item.oversized)
+    .map(item => ({
+      left: item.cx - item.width / 2,
+      top: item.cy - item.height / 2,
+      right: item.cx + item.width / 2,
+      bottom: item.cy + item.height / 2,
+    }))
+  const overlapsOccupied = (candidate: { left: number; top: number; right: number; bottom: number }) =>
+    occupied.some(rect =>
+      candidate.left < rect.right + 16 && candidate.right + 16 > rect.left
+      && candidate.top < rect.bottom + 16 && candidate.bottom + 16 > rect.top
+    )
+  const maxXLimit = canvasBounds.maxX ?? canvasBounds.width
+  const maxYLimit = canvasBounds.maxY ?? canvasBounds.height
+  for (const item of items) {
+    if (item.fixed || !item.oversized) continue
+    let candidate = {
+      left: item.cx - item.width / 2,
+      top: item.cy - item.height / 2,
+      right: item.cx + item.width / 2,
+      bottom: item.cy + item.height / 2,
+    }
+    if (overlapsOccupied(candidate)) {
+      let free: typeof candidate | null = null
+      for (let slot = 0; slot < Math.max(30, items.length * 3) && !free; slot += 1) {
+        const left = 80 + (slot % 3) * 280
+        const top = 130 + Math.floor(slot / 3) * 110
+        const next = {
+          left,
+          top,
+          right: left + item.width,
+          bottom: top + item.height,
         }
-        changed = true
+        if (
+          next.right <= maxXLimit - COLLISION_EDGE_MARGIN
+          && next.bottom <= maxYLimit - COLLISION_EDGE_MARGIN
+          && !overlapsOccupied(next)
+        ) free = next
+      }
+      if (free) {
+        candidate = free
+        item.cx = (free.left + free.right) / 2
+        item.cy = (free.top + free.bottom) / 2
       }
     }
-    if (!changed) break
+    occupied.push(candidate)
   }
 
   for (const item of items) {
