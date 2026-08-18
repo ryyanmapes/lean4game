@@ -213,7 +213,7 @@ describe('NNG4 implication and definition display regressions', () => {
       .should('have.length.at.least', 1)
     visualHarness().then(harness => {
       expect(harness.getProofAudit().proofBody).to.include('MyNat.le_one')
-      expect(harness.getProofAudit().proofBody).to.include('⟨c, hc⟩')
+      expect(harness.getProofAudit().proofBody).to.match(/⟨c, h\d*⟩/u)
     })
   })
 

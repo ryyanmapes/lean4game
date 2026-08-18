@@ -647,7 +647,12 @@ private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array E
         | ``Iff => some 2
         | ``LT.lt => some 2
         | ``LE.le => some 2
-        | _ => none
+        -- A game's notation can elaborate through its reducible `LE`
+        -- instance directly to the underlying predicate (for example
+        -- `MyNat.le x y`) rather than retaining `LE.le`.  Such a predicate
+        -- has exactly the two player-visible operands already present in the
+        -- target.  Keep them before `whnf` unfolds the predicate to `Exists`.
+        | _ => if args.size == 2 then some 2 else none
       match visibleArity? with
       | none => none
       | some visibleArity =>
@@ -1106,6 +1111,14 @@ example (x y : Nat) (h : x + 0 ≤ y) : x ≤ y := by
 
 example (x y : Nat) (h : x ≤ y + 0) : x ≤ y := by
   drag_rw_hyp_rhs h [add_zero_local]
+  exact h
+
+private def directLeLocal (x y : Nat) : Prop := x ≤ y
+
+-- Game-defined comparison notation can reduce its typeclass projection to a
+-- direct two-argument predicate before this tactic sees the hypothesis.
+example (x y : Nat) (h : directLeLocal (x + 0) y) : directLeLocal x y := by
+  drag_rw_hyp_lhs h [add_zero_local]
   exact h
 
 example (n : Nat) : n = n := by

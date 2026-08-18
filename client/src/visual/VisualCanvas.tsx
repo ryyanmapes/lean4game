@@ -232,10 +232,14 @@ function resolveCollisions(
             : null
         if (!mover) continue
         const anchor = mover === first ? second : first
+        // Always place the oversized card after its obstacle on the chosen
+        // axis. A sign based on their current centres can alternate when the
+        // card is clamped at a canvas edge, causing the layout effect to
+        // oscillate forever between two positions.
         if (overlapX < overlapY) {
-          mover.cx += (mover.cx >= anchor.cx ? 1 : -1) * (overlapX + 2)
+          mover.cx = anchor.cx + (anchor.width + mover.width) / 2 + 2
         } else {
-          mover.cy += (mover.cy >= anchor.cy ? 1 : -1) * (overlapY + 2)
+          mover.cy = anchor.cy + (anchor.height + mover.height) / 2 + 2
         }
         changed = true
       }
@@ -1885,7 +1889,9 @@ function deriveTheoremApplication(
     const comparison = parseTransformTarget(implication[0])
     const premiseEquality = parsedHypEquality(premiseCard)
     if (comparison?.relation === '≤' && premiseEquality) {
-      const witnessPattern = '__visualLeWitness'
+      // Expression identifiers must begin with a letter. Keeping this parser
+      // placeholder valid is what lets `1 = x + c` reconstruct `⟨c, h⟩`.
+      const witnessPattern = 'visualLeWitness'
       const orientations = [
         [premiseEquality.lhsStr, premiseEquality.rhsStr],
         [premiseEquality.rhsStr, premiseEquality.lhsStr],
