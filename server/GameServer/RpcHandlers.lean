@@ -934,6 +934,12 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
   let some argOperand ← resolveAnnotationOperand? drag.argName | return none
   if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
       && argOperand.kind == .provided then
+    if fnOperand.theoremBase == "add_right_cancel" then
+      if let some proof ← GameServer.mkRightCancellationApplication?
+          fnOperand.expr argOperand.expr argOperand.type then
+        let resultName ← freshDerivedTheoremName fnOperand.theoremBase
+        let appText ← ppExpr proof
+        return some s!"have {resultName} := {appText.pretty}"
     if let some proof ← GameServer.mkConstantPremiseApplication?
         fnOperand.expr argOperand.expr argOperand.type then
       let resultName ← freshDerivedTheoremName fnOperand.theoremBase

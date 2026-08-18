@@ -372,4 +372,34 @@ def mkConstantPremiseApplication?
     setMCtx savedMCtx
     return none
 
+private def binaryApplicationArgs? (expr : Expr) : Option (Expr × Expr) := do
+  let args := expr.consumeMData.getAppArgs
+  if args.size < 2 then none
+  else some (args[args.size - 2]!, args[args.size - 1]!)
+
+/-- Build the explicit application for a right-cancellation theorem from an equality
+    `a + n = b + n`. Generated game theorem metadata can expose a telescope whose
+    assignments do not line up with the underlying four-argument declaration; the
+    equality itself provides the three data arguments without ambiguity. -/
+def mkRightCancellationApplication?
+    (fnExpr argExpr argType : Expr) : MetaM (Option Expr) := do
+  let savedMCtx ← getMCtx
+  try
+    let eqType ← whnf (← instantiateMVars argType)
+    let .app (.app (.app (.const eqName _) _) lhs) rhs := eqType.consumeMData
+      | return none
+    unless eqName == ``Eq do return none
+    let some (a, n) := binaryApplicationArgs? lhs | return none
+    let some (b, n') := binaryApplicationArgs? rhs | return none
+    unless lhs.getAppFn == rhs.getAppFn do return none
+    unless ← isDefEq n n' do
+      setMCtx savedMCtx
+      return none
+    let proof ← instantiateMVars (mkApp4 fnExpr a b n argExpr)
+    discard <| inferType proof
+    return some proof
+  catch _ =>
+    setMCtx savedMCtx
+    return none
+
 end GameServer

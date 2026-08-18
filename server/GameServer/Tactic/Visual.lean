@@ -423,6 +423,12 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
     let argOperand ← resolveVisualOperand arg
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
+      if fnOperand.theoremBase == "add_right_cancel" then
+        if let some proof ← mkRightCancellationApplication?
+            fnOperand.expr argOperand.expr argOperand.type then
+          let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+          replaceNamedExprWithProof (mkIdent freshName) proof
+          return
       if let some proof ← mkConstantPremiseApplication?
           fnOperand.expr argOperand.expr argOperand.type then
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase
