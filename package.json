@@ -105,7 +105,7 @@
   "scripts": {
     "postinstall": "patch-package",
     "prestart": "node scripts/ensure-port-8080-free.cjs",
-    "start": "concurrently -n server,relay,client -c blue,yellow,green \"npm run build:server\" \"npm run start:relay\" \"npm run start:client\"",
+    "start": "npm run build:server && concurrently -n relay,client -c yellow,green \"npm run start:relay\" \"npm run start:client\"",
     "start:win": "node scripts/start-win.cjs",
     "start:relay": "node scripts/start-relay.cjs",
     "prestart:client": "node scripts/generate-theorem-order.mjs",
