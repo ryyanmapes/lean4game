@@ -11,6 +11,7 @@ interface ProofAudit {
   completed: boolean
   processing: boolean
   proofBody: string
+  interactiveProofBody: string
   coreLines: string[]
   interactiveLines: string[]
 }

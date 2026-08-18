@@ -141,6 +141,7 @@ function resolveCollisions(
     hw: number
     hh: number
     fixed: boolean
+    oversized: boolean
   }[] =
     hyps.map(h => {
       const el = document.getElementById(h.id)
@@ -156,6 +157,7 @@ function resolveCollisions(
         hw: width / 2 + HITBOX_PADDING,
         hh: height / 2 + HITBOX_PADDING,
         fixed: Boolean(h.userPlaced),
+        oversized: width > 264,
       }
     })
 
@@ -181,6 +183,7 @@ function resolveCollisions(
         hw: rect.width / 2 + HITBOX_PADDING,
         hh: rect.height / 2 + HITBOX_PADDING,
         fixed: true,
+        oversized: false,
       })
     }
   }
@@ -204,6 +207,40 @@ function resolveCollisions(
         }
       }
     }
+  }
+
+  // Ellipse repulsion gives natural-looking separation, but two diagonally
+  // offset rectangles can have non-intersecting ellipses while their corners
+  // still obscure each other. Resolve that residual only when an oversized
+  // card is involved, and move the later/oversized card by the minimum amount.
+  // This leaves the established positions of ordinary short expressions
+  // untouched while making long-card collision checks use their real bounds.
+  for (let iter = 0; iter < REPULSION_ITERATIONS; iter++) {
+    let changed = false
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const first = items[i]
+        const second = items[j]
+        if ((!first.oversized && !second.oversized) || (first.fixed && second.fixed)) continue
+        const overlapX = (first.width + second.width) / 2 - Math.abs(second.cx - first.cx)
+        const overlapY = (first.height + second.height) / 2 - Math.abs(second.cy - first.cy)
+        if (overlapX <= 1 || overlapY <= 1) continue
+        const mover = second.oversized && !second.fixed
+          ? second
+          : first.oversized && !first.fixed
+            ? first
+            : null
+        if (!mover) continue
+        const anchor = mover === first ? second : first
+        if (overlapX < overlapY) {
+          mover.cx += (mover.cx >= anchor.cx ? 1 : -1) * (overlapX + 2)
+        } else {
+          mover.cy += (mover.cy >= anchor.cy ? 1 : -1) * (overlapY + 2)
+        }
+        changed = true
+      }
+    }
+    if (!changed) break
   }
 
   for (const item of items) {
@@ -690,6 +727,7 @@ interface VisualCanvasTestHarness {
     processing: boolean
     proofBody: string
     coreProofBody: string
+    interactiveProofBody: string
     coreLines: string[]
     interactiveLines: string[]
     visibleNames: string[]
@@ -6117,6 +6155,7 @@ export function VisualCanvas({
       processing: isProcessingRef.current,
       proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
       coreProofBody: buildStructuredLeanProof(proofSteps),
+      interactiveProofBody: buildStructuredProof(proofSteps, 'play'),
       coreLines,
       interactiveLines,
       visibleNames: streams.flatMap(stream =>
@@ -6321,7 +6360,11 @@ export function VisualCanvas({
                 data-testid="proof-action-export-classic"
                 onClick={() => {
                   if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
-                  onOpenClassic(displayedProofLines(proofSteps, sideViewMode).join('\n'))
+                  // The sidebar shortens `MyNat.*` names for readability, but
+                  // the classic handoff is executable source. Preserve the
+                  // selected Core/Interactive mode without exporting those
+                  // display-only abbreviations.
+                  onOpenClassic(buildStructuredProof(proofSteps, sideViewMode))
                 }}
               >Export to classic mode</button>
             )}

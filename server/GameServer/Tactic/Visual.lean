@@ -634,26 +634,35 @@ private structure EqualitySideRewriteResult where
   mvarIds : List MVarId
 
 private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array Expr × Nat × Nat)) := do
-  -- Goals produced from reducible definitions (notably MyNat.LE after `use`)
-  -- can display as an equality while retaining a wrapper at the expression
-  -- head. Normalize that wrapper before classifying the relation.
-  let target ← withTransparency .all (whnf target)
-  let target := target.consumeMData
-  let fn := target.getAppFn
-  let args := target.getAppArgs
-  let some headName := fn.constName? | return none
-  let visibleArity? :=
-    match headName with
-    | ``Eq => some 2
-    | ``Iff => some 2
-    | ``LT.lt => some 2
-    | ``LE.le => some 2
-    | _ => none
-  let some visibleArity := visibleArity? | return none
-  if args.size < visibleArity then return none
-  let lhsIdx := args.size - visibleArity
-  let rhsIdx := lhsIdx + 1
-  return some (fn, args, lhsIdx, rhsIdx)
+  let classify (candidate : Expr) : Option (Expr × Array Expr × Nat × Nat) :=
+    let candidate := candidate.consumeMData
+    let fn := candidate.getAppFn
+    let args := candidate.getAppArgs
+    match fn.constName? with
+    | none => none
+    | some headName =>
+      let visibleArity? :=
+        match headName with
+        | ``Eq => some 2
+        | ``Iff => some 2
+        | ``LT.lt => some 2
+        | ``LE.le => some 2
+        | _ => none
+      match visibleArity? with
+      | none => none
+      | some visibleArity =>
+        if args.size < visibleArity then none
+        else
+          let lhsIdx := args.size - visibleArity
+          let rhsIdx := lhsIdx + 1
+          some (fn, args, lhsIdx, rhsIdx)
+  -- Preserve an already-visible relation head. In particular, normalizing
+  -- `LE.le` first unfolds game-defined `≤` into its existential definition,
+  -- losing the two sides selected by the player. Only unfold when the target
+  -- is actually hidden behind a reducible wrapper.
+  if let some info := classify target then return some info
+  let normalized ← withTransparency .all (whnf target)
+  return classify normalized
 
 private def replaceGoalPreservingTarget (mvarId : MVarId) (targetNew eqProof : Expr)
     (extraGoals : List MVarId) : TacticM Unit := do
@@ -1088,6 +1097,15 @@ example (y : Nat) : y + 2 = y + 2 := by
 
 example (y : Nat) (h : (y + 0) + 2 = y + 2) : y + 2 = y + 2 := by
   drag_rw_hyp_lhs_at h [add_zero_local] [1]
+  exact h
+
+-- Do not unfold a visible `LE.le` before selecting its displayed sides.
+example (x y : Nat) (h : x + 0 ≤ y) : x ≤ y := by
+  drag_rw_hyp_lhs h [add_zero_local]
+  exact h
+
+example (x y : Nat) (h : x ≤ y + 0) : x ≤ y := by
+  drag_rw_hyp_rhs h [add_zero_local]
   exact h
 
 example (n : Nat) : n = n := by

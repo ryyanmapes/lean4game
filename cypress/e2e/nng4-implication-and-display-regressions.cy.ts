@@ -19,6 +19,7 @@ interface VisualHarness {
     completed: boolean
     processing: boolean
     proofBody: string
+    interactiveProofBody: string
     coreLines: string[]
     interactiveLines: string[]
   }
@@ -971,7 +972,7 @@ describe('NNG4 implication and definition display regressions', () => {
           win.localStorage.getItem(`visual-proof-handoff/${decodeURIComponent(handoffMatch![1])}`) ?? 'null',
         )
         const expectedInteractive = (win as HarnessWindow).__visualTestHarness
-          .getProofAudit().interactiveLines.join('\n')
+          .getProofAudit().interactiveProofBody
         expect(handoff?.proofBody, 'selected Interactive tactics are exported').to.equal(expectedInteractive)
       })
     })
