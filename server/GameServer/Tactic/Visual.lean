@@ -870,6 +870,12 @@ private def evalDragRwHypCore
     match sideOpt with
     | some sideIsRhs =>
       if ← tryFocusedRewriteHyp targetHyp h isRev sideIsRhs [] then return
+      -- Some game-defined relations are stored in a local declaration only
+      -- through a definitionally-equal unfolded form, so their displayed
+      -- lhs/rhs boundary is no longer recoverable from the expression.  For
+      -- an unscoped rewrite, retain Lean's ordinary `rw ... at ...` as a
+      -- replay fallback. Path-scoped interactions remain strict below.
+      if ← tryRewriteAt targetHyp h isRev then return
     | none =>
       pure ()
     throwError "drag_rw: '{h.getId}' does not match any subterm in '{targetHyp.getId}'."

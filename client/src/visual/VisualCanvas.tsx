@@ -225,7 +225,11 @@ function resolveCollisions(
         const overlapX = (first.width + second.width) / 2 - Math.abs(second.cx - first.cx)
         const overlapY = (first.height + second.height) / 2 - Math.abs(second.cy - first.cy)
         if (overlapX <= 1 || overlapY <= 1) continue
-        const mover = second.oversized && !second.fixed
+        // Preserve reading order: later cards yield to earlier cards whenever
+        // possible. Choosing whichever card happened to be oversized could
+        // move an earlier long card past a later short card, then reverse that
+        // decision against the next neighbour on the following layout pass.
+        const mover = !second.fixed
           ? second
           : first.oversized && !first.fixed
             ? first
