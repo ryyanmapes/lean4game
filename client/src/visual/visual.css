@@ -211,6 +211,77 @@
   --cn-app-border: rgba(37, 99, 235, 0.28);
 }
 
+/* ── Elevator Pitch (VisualTest) accent: green in place of purple ──
+   Scoped by game so the Natural Numbers Game keeps its own palette. Generated
+   from the accent-bearing declarations above; keep them in step. */
+.app[data-game-id='g/local/VisualTest'] {
+  --visual-accent: #4bd8bd;
+  --visual-accent-soft: #7ee5cf;
+  --visual-accent-strong: #a7f0e2;
+  --visual-accent-glow: rgba(75, 216, 189, 0.5);
+  --visual-loading-ball-core: #4bd8bd;
+  --visual-loading-ball-highlight: #a7f0e2;
+  --visual-loading-ball-glow: rgba(75, 216, 189, 0.45);
+  --visual-scrollbar-thumb: rgba(75, 216, 189, 0.4);
+  --visual-scrollbar-thumb-hover: rgba(75, 216, 189, 0.65);
+  --visual-stream-current-ring: #4bd8bd;
+  --visual-drop-target-border: #4bd8bd;
+  --visual-drop-target-glow: rgba(75, 216, 189, 0.4);
+  --visual-drop-target-bg: rgba(75, 216, 189, 0.15);
+  --visual-sidebar-active-bg: rgba(75, 216, 189, 0.18);
+  --visual-sidebar-active-border: rgba(75, 216, 189, 0.45);
+  --visual-sidebar-active-text: #a7f0e2;
+  --visual-choice-border: rgba(75, 216, 189, 0.3);
+  --visual-choice-bg: rgba(75, 216, 189, 0.08);
+  --visual-choice-bg-hover: rgba(75, 216, 189, 0.2);
+  --visual-choice-border-hover: rgba(75, 216, 189, 0.6);
+  --visual-choice-label: #4bd8bd;
+  --visual-slot-text: #7ee5cf;
+  --visual-win-gradient-start: rgba(75, 216, 189, 0.2);
+  --visual-win-title-start: #7ee5cf;
+  --visual-hyp-text: #a7f0e2;
+  --visual-map-toggle-active-bg: rgba(75, 216, 189, 0.18);
+}
+
+.app[data-visual-theme='light'][data-game-id='g/local/VisualTest'] {
+  --visual-accent: #0d9488;
+  --visual-accent-soft: #0d9488;
+  --visual-accent-strong: #0f766e;
+  --visual-accent-glow: rgba(13, 148, 136, 0.25);
+  --visual-loading-ball-core: #0d9488;
+  --visual-loading-ball-highlight: #99f6e4;
+  --visual-loading-ball-glow: rgba(13, 148, 136, 0.22);
+  --visual-scrollbar-thumb: rgba(13, 148, 136, 0.28);
+  --visual-scrollbar-thumb-hover: rgba(13, 148, 136, 0.45);
+  --visual-stream-current-ring: #0d9488;
+  --visual-drop-target-border: #0f766e;
+  --visual-drop-target-glow: rgba(13, 148, 136, 0.18);
+  --visual-drop-target-bg: rgba(13, 148, 136, 0.12);
+  --visual-sidebar-active-bg: rgba(13, 148, 136, 0.12);
+  --visual-sidebar-active-border: rgba(13, 148, 136, 0.24);
+  --visual-sidebar-active-text: #115e59;
+  --visual-choice-border: rgba(13, 148, 136, 0.22);
+  --visual-choice-bg: rgba(13, 148, 136, 0.06);
+  --visual-choice-bg-hover: rgba(13, 148, 136, 0.12);
+  --visual-choice-border-hover: rgba(13, 148, 136, 0.32);
+  --visual-choice-label: #0f766e;
+  --visual-slot-border: rgba(13, 148, 136, 0.35);
+  --visual-slot-border-strong: rgba(13, 148, 136, 0.55);
+  --visual-slot-bg: rgba(13, 148, 136, 0.06);
+  --visual-slot-bg-hover: rgba(13, 148, 136, 0.1);
+  --visual-slot-bg-active: rgba(13, 148, 136, 0.16);
+  --visual-slot-bg-drop: rgba(13, 148, 136, 0.2);
+  --visual-slot-text: #0f766e;
+  --visual-slot-glow: rgba(13, 148, 136, 0.18);
+  --visual-slot-glow-strong: rgba(13, 148, 136, 0.22);
+  --visual-win-gradient-start: rgba(13, 148, 136, 0.12);
+  --visual-win-title-start: #0f766e;
+  --visual-hyp-text: #0f766e;
+  --visual-map-toggle-active-bg: rgba(13, 148, 136, 0.14);
+  --visual-map-toggle-active-text: #115e59;
+}
+
+
 .visual-page {
   --bg-gradient-start: var(--visual-bg-gradient-start);
   --bg-gradient-end: var(--visual-bg-gradient-end);
@@ -3648,6 +3719,18 @@
 .visual-map-page .visual-ending-world {
   cursor: default;
   pointer-events: none;
+}
+
+/* Finishing every level turns the ending world into the one link out of the
+   game, so it has to take pointer and keyboard input again. */
+.visual-map-page .visual-ending-world.complete {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.visual-map-page .visual-ending-world.complete:focus-visible {
+  outline: 2px solid var(--visual-accent, #b79dff);
+  outline-offset: 4px;
 }
 
 .visual-map-page .ending-world-label {

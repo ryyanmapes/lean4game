@@ -66,7 +66,7 @@ function App() {
   }, [isVisualLightMode])
 
   return (
-    <div className="app" data-visual-theme={isVisualLightMode ? 'light' : 'dark'}>
+    <div className="app" data-visual-theme={isVisualLightMode ? 'light' : 'dark'} data-game-id={gameId}>
       <GameIdContext.Provider value={gameId}>
           <WorldLevelIdContext.Provider value={{worldId, levelId}}>
           <PreferencesContext.Provider value={{

@@ -253,12 +253,23 @@ function VisualEndingWorldIcon({ position, completedLevels, totalLevels, palette
   const radius = 54
   const progress = totalLevels > 0 ? completedLevels / totalLevels : 0
   const complete = totalLevels > 0 && completedLevels === totalLevels
+  // The completion page is a sibling static page of this sub-app rather than a
+  // router route, so resolve it against the document base instead of navigate().
+  const openCompletionPage = () => {
+    window.location.href = new URL('../congratulations.html', document.baseURI).href
+  }
   return (
     <g
-      className={`visual-ending-world${complete ? ' complete' : ' locked'}`}
+      className={`visual-ending-world${complete ? ' complete visual-map-link' : ' locked'}`}
       data-world-id="Ending"
-      aria-label={`Ending World, ${completedLevels} of ${totalLevels} levels completed`}
-      aria-disabled="true"
+      role={complete ? 'link' : undefined}
+      tabIndex={complete ? 0 : undefined}
+      aria-label={complete
+        ? `Ending World, all ${totalLevels} levels completed. Open the congratulations page`
+        : `Ending World, ${completedLevels} of ${totalLevels} levels completed`}
+      aria-disabled={complete ? undefined : 'true'}
+      onClick={complete ? openCompletionPage : undefined}
+      onKeyDown={complete ? (event) => handleMapLinkKeyDown(event, openCompletionPage) : undefined}
     >
       <circle className="ending-world-background" cx={cx} cy={cy} r={radius + 5} fill={palette.background} />
       <circle
