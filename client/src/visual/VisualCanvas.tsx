@@ -1600,7 +1600,7 @@ function inferLeanTacticFromVisualInteraction(
     // the theorem's first term argument would shift it into a Nat slot. Let
     // Lean infer those data binders with the same `apply ... at` form used by
     // the server, while preserving the original premise card.
-    return `have ${createdName} := ${premiseName}\napply ${theoremName} at ${createdName}`
+    return `have ${createdName} := ${premiseName}\napply ${theoremBaseName} at ${createdName}`
   }
 
   const dragTo = /^drag_to\s+(?:←\s+)?(\S+)\s+(\S+)$/u.exec(playTactic)

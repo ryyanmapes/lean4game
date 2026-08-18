@@ -421,6 +421,16 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
+    -- Game theorem statements are elaborated in their level namespace. The
+    -- in-level theorem name follows the same resolution path as authored
+    -- `apply theorem at h` solutions; using the fully qualified tray name can
+    -- make `apply` consume a supplied proposition as an explicit data binder.
+    if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
+        && argOperand.kind == .provided then
+      let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+      evalTacticString s!"have {freshName} := {arg.getId}"
+      evalTacticString s!"apply {fnOperand.theoremBase} at {freshName}"
+      return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return

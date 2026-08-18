@@ -932,6 +932,10 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
     MetaM (Option String) := goal.withContext do
   let some fnOperand ← resolveAnnotationOperand? drag.fnName | return none
   let some argOperand ← resolveAnnotationOperand? drag.argName | return none
+  if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
+      && argOperand.kind == .provided then
+    let resultName ← freshDerivedTheoremName fnOperand.theoremBase
+    return some s!"have {resultName} := {argOperand.name}\napply {fnOperand.theoremBase} at {resultName}"
   premiseApplicationAnnotationFor? fnOperand argOperand
 
 /-- Extract the first payload between `[` and `]` after splitting on `[`. -/
