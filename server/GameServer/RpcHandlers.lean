@@ -932,21 +932,21 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
     MetaM (Option String) := goal.withContext do
   let some fnOperand ← resolveAnnotationOperand? drag.fnName | return none
   let some argOperand ← resolveAnnotationOperand? drag.argName | return none
+  if fnOperand.theoremBase == "add_right_cancel" then
+    if let some (a, b, n) ← GameServer.rightCancellationArguments? argOperand.type then
+      let resultName ← freshDerivedTheoremName fnOperand.theoremBase
+      let aText ← ppExpr a
+      let bText ← ppExpr b
+      let nText ← ppExpr n
+      return some s!"have {resultName} := {drag.fnName} \
+        (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {argOperand.name}"
+  if fnOperand.theoremBase == "zero_ne_succ" then
+    if let some a ← GameServer.zeroNeSuccArgument? argOperand.type then
+      let resultName ← freshDerivedTheoremName fnOperand.theoremBase
+      let aText ← ppExpr a
+      return some s!"have {resultName} := {drag.fnName} (a := {aText.pretty}) {argOperand.name}"
   if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
       && argOperand.kind == .provided then
-    if fnOperand.theoremBase == "add_right_cancel" then
-      if let some (a, b, n) ← GameServer.rightCancellationArguments? argOperand.type then
-        let resultName ← freshDerivedTheoremName fnOperand.theoremBase
-        let aText ← ppExpr a
-        let bText ← ppExpr b
-        let nText ← ppExpr n
-        return some s!"have {resultName} := {drag.fnName} \
-          (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {argOperand.name}"
-    if fnOperand.theoremBase == "zero_ne_succ" then
-      if let some a ← GameServer.zeroNeSuccArgument? argOperand.type then
-        let resultName ← freshDerivedTheoremName fnOperand.theoremBase
-        let aText ← ppExpr a
-        return some s!"have {resultName} := {drag.fnName} (a := {aText.pretty}) {argOperand.name}"
     if let some proof ← GameServer.mkConstantPremiseApplication?
         fnOperand.expr argOperand.expr argOperand.type then
       let resultName ← freshDerivedTheoremName fnOperand.theoremBase
