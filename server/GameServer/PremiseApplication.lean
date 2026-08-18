@@ -319,14 +319,62 @@ def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option
     setMCtx savedMCtx
     return none
 
-/-- Apply a constant theorem using its complete declaration type. Tray metadata may carry
-    a type already specialized for display, while its expression is still the bare constant;
-    pairing that shortened type with the bare constant shifts a proof into an earlier data
-    argument. Inferring the constant's type restores the missing argument slots. -/
+private partial def abstractRemainingApplication
+    (fnExpr currentType : Expr) : MetaM Expr := do
+  let currentType ← whnf (← instantiateMVars currentType)
+  match currentType with
+  | .forallE binderName domain body binderInfo =>
+      let domain ← instantiateMVars domain
+      if binderInfo == .instImplicit then
+        if let some inst ← synthInstance? domain then
+          abstractRemainingApplication (mkApp fnExpr inst) (body.instantiate1 inst)
+        else
+          withLocalDecl binderName binderInfo domain fun localExpr => do
+            let result ← abstractRemainingApplication
+              (mkApp fnExpr localExpr) (body.instantiate1 localExpr)
+            mkLambdaFVars #[localExpr] result
+      else
+        withLocalDecl binderName binderInfo domain fun localExpr => do
+          let result ← abstractRemainingApplication
+            (mkApp fnExpr localExpr) (body.instantiate1 localExpr)
+          mkLambdaFVars #[localExpr] result
+  | _ =>
+      return fnExpr
+
+private partial def applyAtMatchingExplicitPremise?
+    (fnExpr currentType argExpr argType : Expr) : MetaM (Option Expr) := do
+  let currentType ← whnf (← instantiateMVars currentType)
+  match currentType with
+  | .forallE _ domain body binderInfo =>
+      let checkpoint ← getMCtx
+      if binderInfo.isExplicit && (← visiblePropPremiseMatches domain argType) then
+        let proof ← abstractRemainingApplication
+          (mkApp fnExpr argExpr) (body.instantiate1 argExpr)
+        let proof ← instantiateMVars proof
+        if !proof.hasMVar then
+          return some proof
+      setMCtx checkpoint
+      let placeholder ← mkFreshExprMVar domain
+      applyAtMatchingExplicitPremise?
+        (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
+  | _ =>
+      return none
+
+/-- Apply a global theorem by walking its binders in order, inserting inference holes
+    before the matching proposition instead of treating the proposition as the first
+    explicit argument. Matching the proposition assigns those holes, and any binders
+    after it remain explicit lambdas in the derived theorem card. -/
 def mkConstantPremiseApplication?
     (fnExpr argExpr argType : Expr) : MetaM (Option Expr) := do
   let .const _ _ := fnExpr.consumeMData | return none
-  let fullType ← inferType fnExpr
-  mkPremiseApplication? fnExpr fullType argExpr argType
+  let savedMCtx ← getMCtx
+  try
+    let result ← applyAtMatchingExplicitPremise?
+      fnExpr (← inferType fnExpr) argExpr argType
+    setMCtx savedMCtx
+    return result
+  catch _ =>
+    setMCtx savedMCtx
+    return none
 
 end GameServer
