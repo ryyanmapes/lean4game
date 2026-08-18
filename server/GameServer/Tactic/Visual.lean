@@ -431,13 +431,15 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
       let savedState ← saveState
-      try
-        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-        evalTacticString s!"have {freshName} := {arg.getId}"
-        evalTacticString s!"apply {fn.getId} at {freshName}"
-        return
-      catch _ =>
-        restoreState savedState
+      let applied ← try
+          let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+          evalTacticString s!"have {freshName} := {arg.getId}"
+          evalTacticString s!"apply {fn.getId} at {freshName}"
+          pure true
+        catch _ =>
+          restoreState savedState
+          pure false
+      if applied then return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return

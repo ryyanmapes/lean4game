@@ -2582,7 +2582,15 @@ export class CompletePlaythroughDriver {
       goalBeforeImplicitApplication,
       sourceForallFooter,
     )
-    for (let premise = 0; !match[2] && !sourceCanTargetGoal && premise < 8; premise += 1) {
+    const sourceAlreadyIsGoal = this.normalizedProposition(cardProposition(source))
+      === this.normalizedProposition(goalBeforeImplicitApplication)
+    // `exact f` must consume a visible premise when f still has implication
+    // shape. Dragging `A → B` straight onto the B goal performs `apply f`
+    // and leaves A as a new goal, which is not the player's exact proof when
+    // the existing A card is already on the canvas.
+    const shouldConsumeVisiblePremise = !sourceCanTargetGoal
+      || (isExactCommand && !sourceAlreadyIsGoal)
+    for (let premise = 0; !match[2] && shouldConsumeVisiblePremise && premise < 8; premise += 1) {
       source = this.refreshCard(source)
       const matchingHypothesis = visible(
         this.win.document.querySelectorAll<HTMLElement>(
