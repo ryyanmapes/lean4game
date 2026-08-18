@@ -429,8 +429,13 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
           let aText ← ppExpr a
           let bText ← ppExpr b
           let nText ← ppExpr n
-          evalTacticString s!"have {freshName} := {fn.getId} \
+          let command := s!"have {freshName} := {fn.getId} \
             (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {arg.getId}"
+          try evalTacticString command
+          catch _ =>
+            withOptions (fun opts => opts.setBool `pp.all true) do
+              let theoremTypeText ← ppExpr (← inferType fnOperand.expr)
+              throwError "right-cancellation command failed\n  command: {command}\n  theorem type: {theoremTypeText.pretty}"
           return
       if fnOperand.theoremBase == "zero_ne_succ" then
         if let some a ← zeroNeSuccArgument? argOperand.type then
