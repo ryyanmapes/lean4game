@@ -431,8 +431,8 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
       if let some premiseIdx ← premiseBinderIndex? fnOperand.type argOperand.type then
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase
         let holes := String.intercalate " " (List.replicate premiseIdx "_")
-        let prefix := if holes.isEmpty then s!"@{fn.getId}" else s!"@{fn.getId} {holes}"
-        evalTacticString s!"have {freshName} := {prefix} {arg.getId}"
+        let appPrefix := if holes.isEmpty then s!"@{fn.getId}" else s!"@{fn.getId} {holes}"
+        evalTacticString s!"have {freshName} := {appPrefix} {arg.getId}"
         return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result

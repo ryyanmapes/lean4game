@@ -937,8 +937,8 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
     if let some premiseIdx ← GameServer.premiseBinderIndex? fnOperand.type argOperand.type then
       let resultName ← freshDerivedTheoremName fnOperand.theoremBase
       let holes := String.intercalate " " (List.replicate premiseIdx "_")
-      let prefix := if holes.isEmpty then s!"@{fnOperand.name}" else s!"@{fnOperand.name} {holes}"
-      return some s!"have {resultName} := {prefix} {argOperand.name}"
+      let appPrefix := if holes.isEmpty then s!"@{fnOperand.name}" else s!"@{fnOperand.name} {holes}"
+      return some s!"have {resultName} := {appPrefix} {argOperand.name}"
   premiseApplicationAnnotationFor? fnOperand argOperand
 
 /-- Extract the first payload between `[` and `]` after splitting on `[`. -/
