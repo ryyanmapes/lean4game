@@ -351,9 +351,7 @@ private partial def applyAtMatchingExplicitPremise?
         let proof ← abstractRemainingApplication
           (mkApp fnExpr argExpr) (body.instantiate1 argExpr)
         let proof ← instantiateMVars proof
-        if !proof.hasMVar then
-          return some proof
-        throwError "matched explicit premise but application remains unresolved\n  domain: {domain}\n  proof: {proof}"
+        return some proof
       setMCtx checkpoint
       let placeholder ← mkFreshExprMVar domain
       applyAtMatchingExplicitPremise?
@@ -369,9 +367,14 @@ def mkConstantPremiseApplication?
     (fnExpr argExpr argType : Expr) : MetaM (Option Expr) := do
   let .const _ _ := fnExpr.consumeMData | return none
   let savedMCtx ← getMCtx
-  let result ← applyAtMatchingExplicitPremise?
-    fnExpr (← inferType fnExpr) argExpr argType
-  setMCtx savedMCtx
-  return result
+  try
+    let result ← applyAtMatchingExplicitPremise?
+      fnExpr (← inferType fnExpr) argExpr argType
+    if result.isNone then
+      setMCtx savedMCtx
+    return result
+  catch _ =>
+    setMCtx savedMCtx
+    return none
 
 end GameServer

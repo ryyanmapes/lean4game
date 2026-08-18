@@ -428,8 +428,6 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase
         replaceNamedExprWithProof (mkIdent freshName) proof
         return
-      if fnOperand.theoremBase == "add_right_cancel" then
-        throwError "drag_apply diagnostic: no explicit premise application\n  theorem: {fnOperand.expr}\n  type: {← inferType fnOperand.expr}\n  argument type: {argOperand.type}"
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return
