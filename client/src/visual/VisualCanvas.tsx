@@ -1595,10 +1595,12 @@ function inferLeanTacticFromVisualInteraction(
     const theoremBaseName = theoremName.split('.').at(-1) ?? theoremName
     const createdName = inferCreatedHypName(stream, resultStep)
       ?? nextFreshHypName(stream.hyps, `${DERIVED_THEOREM_PREFIX}${theoremBaseName}`)
-    // Browser annotations for visual-only commands are placeholders. A
-    // successful tray-theorem-on-premise drag is ordinary function
-    // application, so record its valid Lean `have` in the proof pane.
-    return `have ${createdName} := ${theoremName} ${premiseName}`
+    // Explicit data binders can precede the proposition consumed by this
+    // drag (for example `add_right_cancel a b n h`).  Applying the premise as
+    // the theorem's first term argument would shift it into a Nat slot. Let
+    // Lean infer those data binders with the same `apply ... at` form used by
+    // the server, while preserving the original premise card.
+    return `have ${createdName} := ${premiseName}\napply ${theoremName} at ${createdName}`
   }
 
   const dragTo = /^drag_to\s+(?:←\s+)?(\S+)\s+(\S+)$/u.exec(playTactic)
