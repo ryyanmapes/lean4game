@@ -648,7 +648,8 @@ edit('.lake/packages/mathlib/Mathlib/Logic/Basic.lean', source => {
 // to obtain common tactic/command syntax.  None is part of the declarations'
 // computational content.  Direct proof terms preserve the same kernel-checked
 // theorems while keeping all three Mathlib tactic closures out of the browser.
-edit('Game/MyNat/PeanoAxioms.lean', () => `import Game.MyNat.Definition
+edit('Game/MyNat/PeanoAxioms.lean', source => {
+  const replacement = `import Game.MyNat.Definition
 
 namespace MyNat
 
@@ -674,7 +675,25 @@ theorem is_zero_succ (n : MyNat) : is_zero (succ n) = False := rfl
 
 theorem zero_ne_succ (a : MyNat) : 0 ≠ succ a := fun h =>
   Eq.mp (congrArg is_zero h) True.intro
-`)
+`
+  // Replacing the file wholesale means an upstream addition here is invisible
+  // to the browser build until a level references it, and then the failure
+  // surfaces as `unknown identifier` in whichever level happened to use it.
+  // Fail on the dropped declaration instead, naming it directly.
+  const declaration = /^\s*(?:@\[[^\]]*\]\s*)?(?:theorem|lemma|def)\s+([A-Za-z_][A-Za-z0-9_']*)/gm
+  const names = [...new Set([...source.matchAll(declaration)].map(match => match[1]))]
+  const missing = names.filter(name => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return !new RegExp(`^\\s*(?:@\\[[^\\]]*\\]\\s*)?(?:theorem|lemma|def)\\s+${escaped}\\b`, 'm')
+      .test(replacement)
+  })
+  if (missing.length > 0) {
+    throw new Error(
+      'The Cauli PeanoAxioms replacement drops upstream declarations: ' +
+      `${missing.join(', ')}. Add a term-mode equivalent for each.`)
+  }
+  return replacement
+})
 
 edit('Game/MyNat/LE.lean', source => {
   const exposed = source
