@@ -424,8 +424,9 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
       let savedState ← saveState
       try
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-        evalTacticString s!"have {freshName} := {arg.getId}"
-        evalTacticString s!"apply {fn.getId} at {freshName}"
+        let freshIdent := mkIdent freshName
+        evalTactic (← `(tactic| have $freshIdent := $arg))
+        evalTactic (← `(tactic| apply $fn at $freshIdent))
         return
       catch _ =>
         restoreState savedState
