@@ -353,9 +353,18 @@ private partial def applyAtMatchingExplicitPremise?
         let proof ← instantiateMVars proof
         return some proof
       setMCtx checkpoint
-      let placeholder ← mkFreshExprMVar domain
-      applyAtMatchingExplicitPremise?
-        (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
+      if binderInfo == .instImplicit then
+        if let some inst ← synthInstance? (← instantiateMVars domain) then
+          applyAtMatchingExplicitPremise?
+            (mkApp fnExpr inst) (body.instantiate1 inst) argExpr argType
+        else
+          let placeholder ← mkFreshExprMVar domain
+          applyAtMatchingExplicitPremise?
+            (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
+      else
+        let placeholder ← mkFreshExprMVar domain
+        applyAtMatchingExplicitPremise?
+          (mkApp fnExpr placeholder) (body.instantiate1 placeholder) argExpr argType
   | _ =>
       return none
 
