@@ -487,7 +487,13 @@ export function VisualProofPage() {
 
   const handleProofValidation = useCallback(async (proofBody: string): Promise<ProofState | null> => {
     if (!worldId || !levelId) return null
-    return getClient(worldId, levelId).sendProofUpdate(proofBody)
+    const client = getClient(worldId, levelId)
+    // Export validation must be independent of the live, completed proof
+    // document. In particular, validate Core and Interaction scripts from a
+    // fresh declaration each time so the second compile cannot inherit a
+    // terminal goal/context from the first one.
+    await client.loadProofState(worldId, levelId)
+    return client.sendProofUpdate(proofBody)
   }, [getClient, levelId, worldId])
 
   // Fetch the level JSON directly to get the lemma list (InventoryPanel is not mounted
