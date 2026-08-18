@@ -421,6 +421,8 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
+    if fn.getId.toString.contains "add_right_cancel" then
+      throwError "add_right_cancel operand diagnostic\n  base: {fnOperand.theoremBase}\n  function kind theorem: {fnOperand.kind == .theorem}\n  function local: {fnOperand.localDecl?.isSome}\n  argument kind provided: {argOperand.kind == .provided}\n  argument type: {argOperand.type}"
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
       if fnOperand.theoremBase == "add_right_cancel" then
