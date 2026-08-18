@@ -383,31 +383,26 @@ private def binaryApplicationArgs? (expr : Expr) : Option (Expr × Expr) := do
     provides all three named arguments without ambiguity. -/
 def rightCancellationArguments?
     (argType : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
-  let savedMCtx ← getMCtx
   try
-    let eqType ← whnf (← instantiateMVars argType)
-    let .app (.app (.app (.const eqName _) _) lhs) rhs := eqType.consumeMData
-      | return none
-    unless eqName == ``Eq do return none
+    let eqType ← instantiateMVars argType
+    let eqArgs := eqType.consumeMData.getAppArgs
+    if eqArgs.size < 2 then return none
+    let lhs := eqArgs[eqArgs.size - 2]!
+    let rhs := eqArgs[eqArgs.size - 1]!
     let some (a, n) := binaryApplicationArgs? lhs | return none
-    let some (b, n') := binaryApplicationArgs? rhs | return none
-    unless lhs.getAppFn == rhs.getAppFn do return none
-    unless ← isDefEq n n' do
-      setMCtx savedMCtx
-      return none
+    let some (b, _) := binaryApplicationArgs? rhs | return none
     return some (a, b, n)
   catch _ =>
-    setMCtx savedMCtx
     return none
 
 /-- Extract `a` from a displayed contradiction `0 = succ a` so the generated
     `zero_ne_succ` theorem can be elaborated with its source-level named argument. -/
 def zeroNeSuccArgument? (argType : Expr) : MetaM (Option Expr) := do
   try
-    let eqType ← whnf (← instantiateMVars argType)
-    let .app (.app (.app (.const eqName _) _) _) rhs := eqType.consumeMData
-      | return none
-    unless eqName == ``Eq do return none
+    let eqType ← instantiateMVars argType
+    let eqArgs := eqType.consumeMData.getAppArgs
+    if eqArgs.isEmpty then return none
+    let rhs := eqArgs.back!
     let rhsArgs := rhs.consumeMData.getAppArgs
     return rhsArgs.back?
   catch _ =>
