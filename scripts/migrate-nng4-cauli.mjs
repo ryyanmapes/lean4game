@@ -660,6 +660,8 @@ attribute [-simp] MyNat.succ.injEq
 
 theorem pred_succ (n : MyNat) : pred (succ n) = n := rfl
 
+theorem reflection (n : MyNat) : n = n := rfl
+
 theorem succ_inj (a b : MyNat) (h : succ a = succ b) : a = b :=
   congrArg pred h
 
