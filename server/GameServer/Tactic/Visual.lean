@@ -421,9 +421,9 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
-    if fnOperand.theoremBase == "add_right_cancel" then
+    if fn.getId.toString.endsWith "add_right_cancel" then
       if let some (a, b, n) ← rightCancellationArguments? argOperand.type then
-        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+        let freshName ← freshDerivedTheoremName "add_right_cancel"
         let aText ← ppExpr a
         let bText ← ppExpr b
         let nText ← ppExpr n
@@ -435,12 +435,14 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
             let theoremTypeText ← ppExpr (← inferType fnOperand.expr)
             throwError "right-cancellation command failed\n  command: {command}\n  theorem type: {theoremTypeText.pretty}"
         return
-    if fnOperand.theoremBase == "zero_ne_succ" then
+      throwError "right-cancellation premise extraction failed\n  premise type: {argOperand.type}"
+    if fn.getId.toString.endsWith "zero_ne_succ" then
       if let some a ← zeroNeSuccArgument? argOperand.type then
-        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+        let freshName ← freshDerivedTheoremName "zero_ne_succ"
         let aText ← ppExpr a
         evalTacticString s!"have {freshName} := {fn.getId} (a := {aText.pretty}) {arg.getId}"
         return
+      throwError "zero-successor premise extraction failed\n  premise type: {argOperand.type}"
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided then
       if let some proof ← mkConstantPremiseApplication?
