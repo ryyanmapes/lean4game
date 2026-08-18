@@ -492,7 +492,7 @@ export function VisualProofPage() {
     // document. In particular, validate Core and Interaction scripts from a
     // fresh declaration each time so the second compile cannot inherit a
     // terminal goal/context from the first one.
-    await client.loadProofState(worldId, levelId)
+    await client.loadProofState(worldId, levelId, { fresh: true })
     return client.sendProofUpdate(proofBody)
   }, [getClient, levelId, worldId])
 

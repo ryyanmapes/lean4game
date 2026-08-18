@@ -6133,9 +6133,11 @@ export function VisualCanvas({
     // reproduce that environment while validating only the code it displays.
     const coreResult = await validate([proofPrelude, coreProofBody].filter(Boolean).join('\n'))
     const coreError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      || sessionStorage.getItem('visual-last-lean-error')
       || incompleteProofDetail(coreResult)
     const interactiveResult = await validate([proofPrelude, interactiveProofBody].filter(Boolean).join('\n'))
     const interactiveError = (window as typeof window & { __lastLeanProofError?: string }).__lastLeanProofError
+      || sessionStorage.getItem('visual-last-lean-error')
       || incompleteProofDetail(interactiveResult)
     return {
       coreCompleted: coreResult?.completed === true,
