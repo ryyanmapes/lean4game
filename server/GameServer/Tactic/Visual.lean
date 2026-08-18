@@ -421,19 +421,6 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
-    -- For a global theorem applied to a supplied hypothesis, expose the full
-    -- theorem telescope with `@` and put inference holes before the matched
-    -- proposition binder. This handles explicit data binders such as the
-    -- `a b n` in `add_right_cancel` without relying on `apply ... at`, whose
-    -- elaborator can place the proof into the first explicit Nat slot.
-    if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
-        && argOperand.kind == .provided then
-      if let some premiseIdx ← premiseBinderIndex? fnOperand.type argOperand.type then
-        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-        let holes := String.intercalate " " (List.replicate premiseIdx "_")
-        let appPrefix := if holes.isEmpty then s!"@{fn.getId}" else s!"@{fn.getId} {holes}"
-        evalTacticString s!"have {freshName} := {appPrefix} {arg.getId}"
-        return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return
@@ -1215,6 +1202,14 @@ example (x : Nat) (h : Nat.succ x = Nat.succ 3) : x = 3 := by
 private theorem addEqSelfLocal (x y : Nat) : x + y = x → y = y := by
   intro _
   rfl
+
+private axiom addRightCancelShapeLocal (a b n : Nat) : a + n = b + n → a = b
+
+-- Repeated data parameters in a nested equality must all be inferred before
+-- the supplied proposition is applied. This mirrors NNG4's `add_right_cancel`.
+example (x y : Nat) (h : x + y = 0 + y) : x = 0 := by
+  drag_apply addRightCancelShapeLocal h
+  exact thm_addRightCancelShapeLocal
 
 example (x y : Nat) (h : x + y = x) : y = y := by
   drag_to addEqSelfLocal h
