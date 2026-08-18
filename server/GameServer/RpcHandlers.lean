@@ -933,7 +933,7 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
   let some fnOperand ← resolveAnnotationOperand? drag.fnName | return none
   let some argOperand ← resolveAnnotationOperand? drag.argName | return none
   if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
-      && argOperand.kind == .provided then
+      && argOperand.kind == .provided && drag.fnName.toString.contains "." then
     let resultName ← freshDerivedTheoremName fnOperand.theoremBase
     return some s!"have {resultName} := {argOperand.name}\napply {fnOperand.theoremBase} at {resultName}"
   premiseApplicationAnnotationFor? fnOperand argOperand

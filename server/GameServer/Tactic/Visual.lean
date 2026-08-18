@@ -426,12 +426,10 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
     -- `apply theorem at h` solutions; using the fully qualified tray name can
     -- make `apply` consume a supplied proposition as an explicit data binder.
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
-        && argOperand.kind == .provided then
+        && argOperand.kind == .provided && fn.getId.toString.contains "." then
       let freshName ← freshDerivedTheoremName fnOperand.theoremBase
       evalTacticString s!"have {freshName} := {arg.getId}"
-      -- Parentheses terminate the term when parsing this standalone tactic
-      -- string; otherwise an unqualified identifier can greedily absorb `at`.
-      evalTacticString s!"apply ({fnOperand.theoremBase}) at {freshName}"
+      evalTacticString s!"apply {fnOperand.theoremBase} at {freshName}"
       return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
