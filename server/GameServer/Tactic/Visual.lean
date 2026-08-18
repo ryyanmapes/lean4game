@@ -421,30 +421,13 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
-    -- Game theorem statements are elaborated in their level namespace. The
-    -- in-level theorem name follows the same resolution path as authored
-    -- `apply theorem at h` solutions; using the fully qualified tray name can
-    -- make `apply` consume a supplied proposition as an explicit data binder.
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
-        && argOperand.kind == .provided && fn.getId.toString.contains "." then
-      let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-      let originalName ← freshHiddenDerivedTheoremName arg.getId.toString
-      evalTacticString s!"have {originalName} := {arg.getId}"
-      -- Apply to the authored hypothesis name exactly as the level's classic
-      -- solution does, then swap names so combining mode still retains the
-      -- untouched premise alongside the derived theorem card.
-      evalTacticString s!"apply {fnOperand.theoremBase} at {arg.getId}"
-      withMainContext do
-        let lctx ← getLCtx
-        let some transformed := lctx.findFromUserName? arg.getId
-          | throwError "drag_apply: transformed hypothesis '{arg.getId}' disappeared"
-        let some original := lctx.findFromUserName? originalName
-          | throwError "drag_apply: saved hypothesis '{originalName}' disappeared"
-        let goal ← getMainGoal
-        let goal ← goal.rename transformed.fvarId freshName
-        let goal ← goal.rename original.fvarId arg.getId
-        replaceMainGoal [goal]
-      return
+        && argOperand.kind == .provided then
+      if let some proof ← mkExplicitPremiseApplication?
+          fnOperand.expr fnOperand.type argOperand.expr argOperand.type then
+        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+        replaceNamedExprWithProof (mkIdent freshName) proof
+        return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return
