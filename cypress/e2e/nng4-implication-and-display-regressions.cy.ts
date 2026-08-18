@@ -5,6 +5,7 @@ import {
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
+const LAYOUT_REGRESSION_TIMEOUT = 60_000
 const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
   .split(',')
   .map(value => value.trim())
@@ -328,7 +329,7 @@ describe('NNG4 implication and definition display regressions', () => {
   it('places newly generated long Implication hypotheses into non-overlapping grid slots', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+    cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT }).then({ timeout: LAYOUT_REGRESSION_TIMEOUT }, async win => {
       const player = new CompletePlaythroughDriver(win)
       await player.perform('intro h')
       await player.perform('rw [add_succ, add_succ, add_zero] at h')
@@ -336,7 +337,7 @@ describe('NNG4 implication and definition display regressions', () => {
     })
     cy.get(
       '[data-testid="combining-canvas"] [data-testid="hyp-card"], [data-testid="combining-canvas"] [data-testid="theorem-copy-card"]',
-      { timeout: LOAD_TIMEOUT },
+      { timeout: LAYOUT_REGRESSION_TIMEOUT },
     ).should($cards => {
       const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
       expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
