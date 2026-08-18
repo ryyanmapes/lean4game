@@ -4117,11 +4117,17 @@ export class CompletePlaythroughDriver {
         const source = await this.sourceCard(theoremName)
         const target = this.hypExact(currentTargetName)
         if (!target || !matchesTheoremPremise(source, target, [])) break
+        const namesBeforeApplication = new Set(Object.keys(
+          harness(this.win).getCurrentStreamSnapshot().hypTypes,
+        ))
         await this.applyOrExact(`apply ${theoremApplication} at ${currentTargetName}`)
         // applyOrExact records the concrete card produced by the drag. Follow
         // that card on the next repetition instead of resolving the original
         // classic name again after React has reconciled the stream.
-        currentTargetName = this.previousApplyAtResultName
+        const generatedName = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
+          .find(name => !namesBeforeApplication.has(name))
+        currentTargetName = generatedName
+          ?? this.previousApplyAtResultName
           ?? this.resolveName(currentTargetName)
       }
       if (applications === 0) {

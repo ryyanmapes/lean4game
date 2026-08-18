@@ -1941,12 +1941,27 @@ function deriveTheoremApplication(
             }
           }
           const witnessProof = `⟨${printLeanTerm(witness)}, ${premiseRef}⟩`
-          const application = buildQuantifiedTheoremApplication(
+          let application = buildQuantifiedTheoremApplication(
             theorem.theoremName,
             theorem.forallFooter,
             inferredValues,
             witnessProof,
           )
+          // Some theorem docs omit the compact forall footer even though the
+          // visible comparison pattern captured its data parameter. Without
+          // that metadata the pair proof would be consumed as the first `Nat`
+          // argument (`le_one ⟨c, h⟩`). Preserve capture order as a
+          // positional fallback so this remains `le_one 0 ⟨c, h⟩`.
+          if (
+            Object.keys(inferredValues).length > 0
+            && application === `${theorem.theoremName} ${witnessProof}`
+          ) {
+            application = [
+              theorem.theoremName,
+              ...Object.values(inferredValues),
+              witnessProof,
+            ].join(' ')
+          }
           return {
             kind: 'application',
             command: `have ${hypName} := ${application}`,
