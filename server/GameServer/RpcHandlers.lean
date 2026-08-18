@@ -942,6 +942,11 @@ private def dragApplyAnnotationForParsed? (drag : ParsedDragApply) (goal : MVarI
         let nText ← ppExpr n
         return some s!"have {resultName} := {drag.fnName} \
           (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {argOperand.name}"
+    if fnOperand.theoremBase == "zero_ne_succ" then
+      if let some a ← GameServer.zeroNeSuccArgument? argOperand.type then
+        let resultName ← freshDerivedTheoremName fnOperand.theoremBase
+        let aText ← ppExpr a
+        return some s!"have {resultName} := {drag.fnName} (a := {aText.pretty}) {argOperand.name}"
     if let some proof ← GameServer.mkConstantPremiseApplication?
         fnOperand.expr argOperand.expr argOperand.type then
       let resultName ← freshDerivedTheoremName fnOperand.theoremBase

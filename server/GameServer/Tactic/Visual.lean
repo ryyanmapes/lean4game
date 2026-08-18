@@ -432,6 +432,12 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
           evalTacticString s!"have {freshName} := {fn.getId} \
             (a := {aText.pretty}) (b := {bText.pretty}) (n := {nText.pretty}) {arg.getId}"
           return
+      if fnOperand.theoremBase == "zero_ne_succ" then
+        if let some a ← zeroNeSuccArgument? argOperand.type then
+          let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+          let aText ← ppExpr a
+          evalTacticString s!"have {freshName} := {fn.getId} (a := {aText.pretty}) {arg.getId}"
+          return
       if let some proof ← mkConstantPremiseApplication?
           fnOperand.expr argOperand.expr argOperand.type then
         let freshName ← freshDerivedTheoremName fnOperand.theoremBase

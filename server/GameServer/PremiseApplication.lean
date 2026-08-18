@@ -400,4 +400,17 @@ def rightCancellationArguments?
     setMCtx savedMCtx
     return none
 
+/-- Extract `a` from a displayed contradiction `0 = succ a` so the generated
+    `zero_ne_succ` theorem can be elaborated with its source-level named argument. -/
+def zeroNeSuccArgument? (argType : Expr) : MetaM (Option Expr) := do
+  try
+    let eqType ← whnf (← instantiateMVars argType)
+    let .app (.app (.app (.const eqName _) _) _) rhs := eqType.consumeMData
+      | return none
+    unless eqName == ``Eq do return none
+    let rhsArgs := rhs.consumeMData.getAppArgs
+    return rhsArgs.back?
+  catch _ =>
+    return none
+
 end GameServer
