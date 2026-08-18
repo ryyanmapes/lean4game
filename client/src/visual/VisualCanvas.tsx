@@ -1868,7 +1868,19 @@ function deriveTheoremApplication(
               .filter(([name]) => name !== witnessPattern)
               .map(([name, value]) => [name, printLeanTerm(value)]),
           )
-          const resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+          let resultType = implication[1]
+          try {
+            resultType = printExpression(substituteVariables(parse(implication[1]), bindings))
+          } catch {
+            // Proposition conclusions such as `x = 0 ∨ x = 1` are outside
+            // the small arithmetic expression parser.  The witness match is
+            // nevertheless authoritative; instantiate its captured names in
+            // the displayed conclusion without discarding the application.
+            for (const [name, value] of Object.entries(bindings)) {
+              if (name === witnessPattern) continue
+              resultType = replaceIdentifier(resultType, name, printLeanTerm(value))
+            }
+          }
           const witnessProof = `⟨${printLeanTerm(witness)}, ${premiseRef}⟩`
           const application = buildQuantifiedTheoremApplication(
             theorem.theoremName,
