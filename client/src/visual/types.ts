@@ -68,7 +68,7 @@ export interface VisualGoalInfo {
 }
 
 export interface VisualTransformInfo {
-  kind: 'side' | 'rewrite' | 'back' | 'reverse'
+  kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'info'
   side?: 'left' | 'right' | null
   source?: string
   target?: string

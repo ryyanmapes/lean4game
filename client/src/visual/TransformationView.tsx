@@ -221,7 +221,7 @@ interface Props {
 
 function printLeanExpression(node: ExpressionNode): string {
   if (node.type === 'variable') return node.name
-  if (node.type === 'constant') return node.value
+  if (node.type === 'constant') return String(node.value)
   if (node.type === 'app') return `${node.func} (${printLeanExpression(node.arg)})`
   return `(${printLeanExpression(node.left)} ${node.op} ${printLeanExpression(node.right)})`
 }
