@@ -429,7 +429,9 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
         && argOperand.kind == .provided then
       let freshName ← freshDerivedTheoremName fnOperand.theoremBase
       evalTacticString s!"have {freshName} := {arg.getId}"
-      evalTacticString s!"apply {fnOperand.theoremBase} at {freshName}"
+      -- Parentheses terminate the term when parsing this standalone tactic
+      -- string; otherwise an unqualified identifier can greedily absorb `at`.
+      evalTacticString s!"apply ({fnOperand.theoremBase}) at {freshName}"
       return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
