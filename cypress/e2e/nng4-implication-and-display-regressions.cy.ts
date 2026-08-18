@@ -207,7 +207,9 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(witnessEqualityName, 'cases exposes a new witness equality').to.be.a('string')
       const accepted = await (win as HarnessWindow).__visualTestHarness!
         .dragTheoremToHyp('MyNat.le_one', witnessEqualityName!)
-      expect(accepted, 'le_one accepts the visible witness equality').to.equal(true)
+      const leanError = win.sessionStorage.getItem('visual-last-lean-error')
+      expect(accepted, `le_one accepts the visible witness equality${leanError ? `: ${leanError}` : ''}`)
+        .to.equal(true)
     })
     cy.get('[data-testid="hyp-card"]')
       .filter((_, card) => card.getAttribute('data-hyp-type')?.includes('∨') ?? false)

@@ -4121,7 +4121,8 @@ export class CompletePlaythroughDriver {
         // applyOrExact records the concrete card produced by the drag. Follow
         // that card on the next repetition instead of resolving the original
         // classic name again after React has reconciled the stream.
-        currentTargetName = this.resolveName(currentTargetName)
+        currentTargetName = this.previousApplyAtResultName
+          ?? this.resolveName(currentTargetName)
       }
       if (applications === 0) {
         throw new Error(`${normalized} had no player-applicable premise`)
