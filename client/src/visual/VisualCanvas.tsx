@@ -2746,6 +2746,20 @@ export function VisualCanvas({
     }
   }
 
+  // Positions are deliberately excluded: this effect writes resolved
+  // positions itself. Depending on the streams array object made that write
+  // immediately schedule another collision pass and allowed measured cards
+  // near an edge to oscillate until React hit its update-depth limit.
+  const collisionStructureKey = canvasState.streams.map(stream => [
+    stream.id,
+    stream.hyps.map(hyp => [
+      hyp.id,
+      TaggedText_stripTags(hyp.hyp.type),
+      hyp.hyp.forallFooter ?? '',
+      hyp.userPlaced ? 'placed' : 'auto',
+    ].join(':')).join(','),
+  ].join(':')).join('|')
+
   useLayoutEffect(() => {
     if (isPhonePortrait) {
       setCanvasState(prev => phonePortraitGridSnap(prev, goalStackHeight))
@@ -2753,7 +2767,7 @@ export function VisualCanvas({
     }
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait }))
-  }, [canvasState.streams, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
+  }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current
