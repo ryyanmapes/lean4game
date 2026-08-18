@@ -412,6 +412,23 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
   withMainContext do
     let fnOperand ← resolveVisualOperand fn true
     let argOperand ← resolveVisualOperand arg
+    -- For a global theorem applied to a supplied hypothesis, let Lean's own
+    -- `apply ... at` elaborator infer explicit data binders.  The structural
+    -- matcher below is needed for direction-independent/local-card cases, but
+    -- can under-assign repeated data parameters in a deeply nested premise
+    -- (for example `a + n = b + n`), shifting the proof into a Nat slot.
+    -- Work on a fresh copy so combining mode still preserves the player's
+    -- original hypothesis and produces the expected derived theorem card.
+    if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
+        && argOperand.kind == .provided then
+      let savedState ← saveState
+      try
+        let freshName ← freshDerivedTheoremName fnOperand.theoremBase
+        evalTacticString s!"have {freshName} := {arg.getId}"
+        evalTacticString s!"apply {fn.getId} at {freshName}"
+        return
+      catch _ =>
+        restoreState savedState
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
       return

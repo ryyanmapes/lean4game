@@ -249,7 +249,10 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
       })
 
       auditProofState(solution, 'completed visual proof').then(audit => {
-        expect(audit.completed, `${solution.world} ${solution.level} completes visually`).to.equal(true)
+        expect(
+          audit.completed,
+          `${solution.world} ${solution.level} completes visually; audit=${JSON.stringify(audit)}`,
+        ).to.equal(true)
         expect(audit.coreLines, 'Core proof log is populated').not.to.deep.equal([])
         expect(audit.interactiveLines, 'Interactive proof log is populated').not.to.deep.equal([])
         cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {

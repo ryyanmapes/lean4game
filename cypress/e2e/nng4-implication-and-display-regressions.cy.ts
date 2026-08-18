@@ -195,9 +195,16 @@ describe('NNG4 implication and definition display regressions', () => {
       const player = new CompletePlaythroughDriver(win)
       await player.prepareInitialBinders(['x', 'hx'])
       await player.perform('have hx1 : (0 : ℕ) ≤ 1 := zero_le 1')
+      const namesBeforeCases = new Set(Object.keys(
+        (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes,
+      ))
       await player.perform('cases hx1 with c hc')
+      const witnessEqualityName = Object.entries(
+        (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes,
+      ).find(([name, type]) => !namesBeforeCases.has(name) && type.includes('='))?.[0]
+      expect(witnessEqualityName, 'cases exposes a new witness equality').to.be.a('string')
       const accepted = await (win as HarnessWindow).__visualTestHarness!
-        .dragTheoremToHyp('MyNat.le_one', 'hc')
+        .dragTheoremToHyp('MyNat.le_one', witnessEqualityName!)
       expect(accepted, 'le_one accepts the visible witness equality').to.equal(true)
     })
     cy.get('[data-testid="hyp-card"]')

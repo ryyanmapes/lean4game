@@ -6247,7 +6247,7 @@ export function VisualCanvas({
   }
 
   function copyDisplayedProof() {
-    const text = buildStructuredProof(proofSteps, sideViewMode)
+    const text = displayedProofLines(proofSteps, sideViewMode).join('\n')
     navigator.clipboard.writeText(text).catch(() => {})
   }
 
@@ -6285,7 +6285,7 @@ export function VisualCanvas({
                 data-testid="proof-action-export-classic"
                 onClick={() => {
                   if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
-                  onOpenClassic(buildStructuredProof(proofSteps, sideViewMode))
+                  onOpenClassic(displayedProofLines(proofSteps, sideViewMode).join('\n'))
                 }}
               >Export to classic mode</button>
             )}
