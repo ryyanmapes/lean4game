@@ -428,8 +428,22 @@ syntax (name := drag_apply) "drag_apply" ident ident : tactic
     if fnOperand.kind == .theorem && fnOperand.localDecl?.isNone
         && argOperand.kind == .provided && fn.getId.toString.contains "." then
       let freshName ← freshDerivedTheoremName fnOperand.theoremBase
-      evalTacticString s!"have {freshName} := {arg.getId}"
-      evalTacticString s!"apply {fnOperand.theoremBase} at {freshName}"
+      let originalName ← freshHiddenDerivedTheoremName arg.getId.toString
+      evalTacticString s!"have {originalName} := {arg.getId}"
+      -- Apply to the authored hypothesis name exactly as the level's classic
+      -- solution does, then swap names so combining mode still retains the
+      -- untouched premise alongside the derived theorem card.
+      evalTacticString s!"apply {fnOperand.theoremBase} at {arg.getId}"
+      withMainContext do
+        let lctx ← getLCtx
+        let some transformed := lctx.findFromUserName? arg.getId
+          | throwError "drag_apply: transformed hypothesis '{arg.getId}' disappeared"
+        let some original := lctx.findFromUserName? originalName
+          | throwError "drag_apply: saved hypothesis '{originalName}' disappeared"
+        let goal ← getMainGoal
+        let goal ← goal.rename transformed.fvarId freshName
+        let goal ← goal.rename original.fvarId arg.getId
+        replaceMainGoal [goal]
       return
     if let some result ← premiseApplicationBetween? fnOperand argOperand then
       applyPremiseApplicationPolicy fnOperand argOperand result
