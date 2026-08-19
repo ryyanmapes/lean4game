@@ -1671,19 +1671,48 @@ function inferLeanTacticFromVisualInteraction(
       const secondType = normalizeFormulaText(TaggedText_stripTags(secondCard.hyp.type))
       const firstImplication = splitImplicationText(firstType)
       const secondImplication = splitImplicationText(secondType)
-      const application = firstImplication && formulasMatch(firstImplication[0], secondType)
-        ? `${firstName} ${secondName}`
+      // Whichever card is the implication gets applied; the other is the
+      // argument, and an in-place `apply … at` leaves the result in that
+      // argument's card. When no fresh card was created the binding has to
+      // reuse that name — inventing one leaves later steps referring to the
+      // argument while the exported Lean bound something else entirely.
+      const applied = firstImplication && formulasMatch(firstImplication[0], secondType)
+        ? { application: `${firstName} ${secondName}`, argument: secondName }
         : secondImplication && formulasMatch(secondImplication[0], firstType)
-          ? `${secondName} ${firstName}`
+          ? { application: `${secondName} ${firstName}`, argument: firstName }
           : null
-      if (application) {
-        return `have ${inferCreatedHypName(stream, resultStep) ?? nextFreshHypName(stream.hyps, 'h')} := ${application}`
+      if (applied) {
+        // The result shadows whichever card is the theorem, matching how the
+        // stream renames it — that is the argument's card for `apply hd at h`
+        // but the function's when a derived theorem consumes a plain
+        // hypothesis. Only fall back to the argument when neither is a theorem.
+        const isTheoremSide = (name: string, card?: HypCardType) =>
+          Boolean(card?.isTheorem) || name.startsWith(DERIVED_THEOREM_PREFIX)
+        const shadowed = isTheoremSide(firstName, firstCard)
+          ? firstName
+          : isTheoremSide(secondName, secondCard)
+            ? secondName
+            : applied.argument
+        return `have ${inferCreatedHypName(stream, resultStep) ?? shadowed} := ${applied.application}`
       }
     }
     const localTheoremApplication = inferLocalTheoremPremiseApplication(stream, firstName, secondName)
     if (localTheoremApplication) return localTheoremApplication
     const createdName = inferCreatedHypName(stream, resultStep)
-    if (createdName) return `have ${createdName} := ${secondName} ${firstName}`
+    if (createdName) {
+      // A name with no card in the stream is a tray theorem being applied.
+      // Explicit data binders can precede the proposition it consumes, so
+      // passing the premise as its first term argument shifts that premise
+      // into a `ℕ` slot. Use the same `apply … at` form as drag_apply and let
+      // Lean infer those binders.
+      const trayTheoremName = !firstCard ? firstName : !secondCard ? secondName : null
+      if (trayTheoremName) {
+        const premiseName = trayTheoremName === firstName ? secondName : firstName
+        const theoremBaseName = trayTheoremName.split('.').at(-1) ?? trayTheoremName
+        return `have ${createdName} := ${premiseName}\napply ${theoremBaseName} at ${createdName}`
+      }
+      return `have ${createdName} := ${secondName} ${firstName}`
+    }
   }
 
   if (playTactic.startsWith('induction ')) return playTactic
@@ -1697,6 +1726,20 @@ function inferLeanTacticFromVisualInteraction(
   if (forallSpecialization) {
     if (forallSpecialization.newName === forallSpecialization.source) {
       return `specialize ${forallSpecialization.source} ${forallSpecialization.value}`
+    }
+    // Lean disambiguates a shadowed binder when it prints a type — `y` becomes
+    // `y_1` — and that printed spelling is rejected as a named argument. When
+    // the binder being specialized is the leading one, applying it positionally
+    // means exactly the same thing without having to name it at all.
+    const specializedCard = stream
+      ? findHypCardByName(stream, forallSpecialization.source)
+      : undefined
+    const specializedType = specializedCard
+      ? TaggedText_stripTags(specializedCard.hyp.type).trim()
+      : ''
+    const leadingBinder = /^∀\s*\(?\s*([^\s:,)]+)/u.exec(specializedType)?.[1]
+    if (leadingBinder && leadingBinder === forallSpecialization.binder) {
+      return `have ${forallSpecialization.newName} := ${forallSpecialization.source} (${forallSpecialization.value})`
     }
     return `have ${forallSpecialization.newName} := ${forallSpecialization.source} (${forallSpecialization.binder} := ${forallSpecialization.value})`
   }

@@ -15,7 +15,13 @@ function browserCompatibleProof(proofBody: string): string {
       // player's final click even when the preceding rewrite has already
       // closed Lean's underlying goal. Keep displaying that Core step as
       // `rfl`, but make classic/browser replay accept both states.
-      return `${rflMatch[1]}all_goals rfl`
+      //
+      // Close only the goal the click belongs to. A bare `all_goals rfl` also
+      // demands the branches the player has not reached yet be reflexive, so
+      // after `induction` it failed on the successor goal while the player was
+      // still finishing the base case. Falling back to `all_goals` keeps the
+      // already-closed case working, where no goal remains for `rfl` itself.
+      return `${rflMatch[1]}first | rfl | all_goals rfl`
     }
     const tautoMatch = line.match(/^(\s*)tauto\s*$/u)
     if (tautoMatch) {

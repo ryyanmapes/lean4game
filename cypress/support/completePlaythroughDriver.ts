@@ -2664,7 +2664,7 @@ export class CompletePlaythroughDriver {
           // proof: construct the same witness, then drag that equality to the
           // resulting equality goal.
           click(goal)
-          await waitFor('construction view', () =>
+          await waitFor('witness construction view', () =>
             this.win.document.querySelector('.tr-construction-overlay'))
           await this.submitConstruction(parseConstructionExpr(witness), `${command} witness`)
           const constructedGoalType = harness(this.win).getCurrentStreamSnapshot().goalType
@@ -3625,7 +3625,7 @@ export class CompletePlaythroughDriver {
   }
 
   private async clickConstructionBrick(brickId: string) {
-    const overlay = await waitFor('construction view', () =>
+    const overlay = await waitFor('construction view for brick', () =>
       this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'))
     for (const tabName of ['Everything', 'Variables', 'Numbers', 'Functions']) {
       const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
@@ -3654,7 +3654,7 @@ export class CompletePlaythroughDriver {
   }
 
   private async constructionBrickIds(tabName: string, prefix: string) {
-    const overlay = await waitFor('construction view', () =>
+    const overlay = await waitFor('construction view for brick ids', () =>
       this.win.document.querySelector<HTMLElement>('.tr-construction-overlay'))
     const tab = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
       .find(button => button.textContent?.trim() === tabName)
@@ -3833,7 +3833,7 @@ export class CompletePlaythroughDriver {
     const goal = await waitFor('current goal', () => currentGoal(this.win))
     click(goal)
     let lastRetry = Date.now()
-    await waitFor('construction view', () => {
+    await waitFor('construction view for use', () => {
       const overlay = this.win.document.querySelector('.tr-construction-overlay')
       if (overlay) return overlay
       if (Date.now() - lastRetry >= 250) {

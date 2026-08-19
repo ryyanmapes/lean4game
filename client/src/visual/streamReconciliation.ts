@@ -478,9 +478,11 @@ export function inferLocalTheoremPremiseApplication(
     : secondImplication
       && normalizePropositionText(secondImplication[0]) === normalizePropositionText(firstType)
       ? [secondName, firstName, secondIsTheorem ? secondName : firstName]
-      : firstIsTheorem
-        ? [secondImplication ? secondName : firstName, secondImplication ? firstName : secondName, firstName]
-        : [firstImplication ? firstName : secondName, firstImplication ? secondName : firstName, secondName]
+      // Neither card's premise is the other card's proposition, so there is no
+      // function application to record here. Picking a direction anyway
+      // produced Lean that passed a theorem where its own premise was wanted;
+      // returning nothing lets the caller emit the `apply … at` form instead.
+      : [null, null, null]
   return functionName && argumentName && theoremName
     ? `have ${theoremName} := ${functionName} ${argumentName}`
     : null
