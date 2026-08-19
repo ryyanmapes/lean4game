@@ -4165,8 +4165,8 @@ export class CompletePlaythroughDriver {
       }
       return
     }
-    if (normalized === 'tauto') {
-      await this.dragTactic('tauto', await waitFor('current goal', () => currentGoal(this.win)))
+    if (normalized === 'tauto' || normalized === 'exfalso') {
+      await this.dragTactic(normalized, await waitFor('current goal', () => currentGoal(this.win)))
       return
     }
     throw new Error(`No player gesture mapping exists for: ${command}`)

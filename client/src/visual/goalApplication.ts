@@ -38,8 +38,15 @@ function terminalConclusion(statement: string): string {
   let conclusion = stripOuterParentheses(statement)
   while (true) {
     const implication = splitTopLevel(conclusion, '→') ?? splitTopLevel(conclusion, '->')
-    if (!implication) return conclusion
-    conclusion = stripOuterParentheses(implication[1])
+    if (implication) {
+      conclusion = stripOuterParentheses(implication[1])
+      continue
+    }
+    // `x ≠ y` is notation for `x = y → False`. Without this the arrow is
+    // invisible to the walk above, so a disequality could not be applied to a
+    // `False` goal and the drag was silently discarded.
+    if (splitTopLevel(conclusion, '≠')) return 'False'
+    return conclusion
   }
 }
 

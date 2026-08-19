@@ -1039,8 +1039,8 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
     const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
     return parsedHypEquality(card) !== null || typeText.includes('↔') || typeText.includes('≠')
   }
-  // `tauto` operates on the goal; it does not have a meaningful `at h` form.
-  if (tactic.name === 'tauto') return false
+  // `exfalso` replaces the goal with `False`; it has no meaningful `at h` form.
+  if (tactic.name === 'exfalso') return false
   return true
 }
 
@@ -1694,6 +1694,33 @@ function inferLeanTacticFromVisualInteraction(
             ? secondName
             : applied.argument
         return `have ${inferCreatedHypName(stream, resultStep) ?? shadowed} := ${applied.application}`
+      }
+      // A theorem states its premise with generic variables, so it often will
+      // not match the argument's concrete type literally. When exactly one side
+      // is an implication the direction is still unambiguous, and without this
+      // the step exports as an unresolved `?`.
+      const unambiguous = secondImplication && !firstImplication
+        ? { application: `${secondName} ${firstName}`, shadowed: secondName }
+        : firstImplication && !secondImplication
+          ? { application: `${firstName} ${secondName}`, shadowed: firstName }
+          : null
+      if (unambiguous) {
+        // A leading forall binder swallows the argument as data — the same trap
+        // drag_apply documents — so route those through `apply … at` and let
+        // Lean infer the binders instead of passing the premise positionally.
+        const functionIsFirst = unambiguous.shadowed === firstName
+        const functionType = functionIsFirst ? firstType : secondType
+        if (/^∀/u.test(functionType)) {
+          const target = functionIsFirst ? secondName : firstName
+          const created = inferCreatedHypName(stream, resultStep)
+          // When the stream produced a fresh card, bind it first and rewrite
+          // that one, exactly as drag_apply does; applying in place would leave
+          // later steps naming a card the exported Lean never bound.
+          return created && created !== target
+            ? `have ${created} := ${target}\napply ${unambiguous.shadowed} at ${created}`
+            : `apply ${unambiguous.shadowed} at ${target}`
+        }
+        return `have ${inferCreatedHypName(stream, resultStep) ?? unambiguous.shadowed} := ${unambiguous.application}`
       }
     }
     const localTheoremApplication = inferLocalTheoremPremiseApplication(stream, firstName, secondName)

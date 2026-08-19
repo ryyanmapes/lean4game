@@ -27,3 +27,12 @@ test('rejects incompatible conclusions and False elimination', () => {
 test('accepts either usable side of an iff', () => {
   assert.equal(statementCanTargetGoal('a = b ↔ b = a', 'x = y', '∀ (a b : ℕ)'), true)
 })
+
+test('a disequality hypothesis can be applied to a False goal', () => {
+  // `a * b ≠ 0` is notation for `a * b = 0 → False`, so dragging it onto a
+  // `False` goal is ordinary implication use even with no arrow written.
+  assert.equal(statementCanTargetGoal('a * b ≠ 0', 'False'), true)
+  assert.equal(statementCanTargetGoal('b ≠ 0', 'False'), true)
+  // It must not become a universal donor: the conclusion is False, nothing else.
+  assert.equal(statementCanTargetGoal('a * b ≠ 0', 'b = 0'), false)
+})

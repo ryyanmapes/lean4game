@@ -18,7 +18,7 @@ const shippedWorlds = new Set([
   'AdvMultiplication',
 ])
 
-const tacticStart = /^(?:induction|cases|intro|repeat\s+(?:rw|apply)|rw|rfl|exact|apply|nth_rewrite|symm|tauto|use|have|left|right|contrapose!?|decide|simp(?:_add)?|trivial|revert|positivity|xyzzy)\b/u
+const tacticStart = /^(?:induction|cases|intro|repeat\s+(?:rw|apply)|rw|rfl|exact|apply|nth_rewrite|symm|tauto|exfalso|use|have|left|right|contrapose!?|decide|simp(?:_add)?|trivial|revert|positivity|xyzzy)\b/u
 
 function indentation(line) {
   return line.length - line.trimStart().length
