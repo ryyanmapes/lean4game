@@ -4,10 +4,10 @@ describe('local NNG4 release maps', () => {
 
     cy.contains('h1', 'Visual Lean').should('be.visible')
     cy.contains('An experimental graphical user interface for writing Lean code.').should('be.visible')
-    cy.contains('Lean verification runs locally on both desktop and mobile.').should('be.visible')
+    cy.contains('Lean verification runs locally on both desktop and mobile through WASM.').should('be.visible')
     cy.get('a.destination[href="/lean4game/index.html#/g/local/NNG4/visual"]')
       .should('contain.text', 'Start here: The Visual Natural Numbers Game')
-      .and('contain.text', 'Formally prove the foundational properties of arithmetic!')
+      .and('contain.text', 'Prove the fundamental properties of arithmetic from scratch!')
     cy.get('a.destination[href="/lean4game/index.html#/g/local/VisualTest/visual"]')
       .should('contain.text', 'Elevator Pitch')
       .and('contain.text', "Take a brief tour of Visual Lean's three modes.")

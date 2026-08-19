@@ -4,7 +4,7 @@ describe('Visual Lean release landing page', () => {
 
     cy.contains('h1', 'Visual Lean').should('be.visible')
     cy.contains('An experimental graphical user interface for writing Lean code.').should('be.visible')
-    cy.contains('Lean verification runs locally on both desktop and mobile.').should('be.visible')
+    cy.contains('Lean verification runs locally on both desktop and mobile through WASM.').should('be.visible')
     cy.get('a.destination[href="/lean4game/index.html#/g/local/NNG4/visual"]')
       .should('contain.text', 'Start here: The Visual Natural Numbers Game')
     cy.get('a.destination[href="/lean4game/index.html#/g/local/VisualTest/visual"]')
