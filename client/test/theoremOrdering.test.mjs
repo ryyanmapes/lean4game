@@ -41,8 +41,9 @@ test('editable theorem-order files are complete and synchronized downstream', as
   assert.equal(new Set(theorems.map(entry => entry.name)).size, theorems.length)
   assert.equal(transforms.length, 34)
   assert.equal(theorems.length, 31)
+  // The two Peano-tab facts lead the global order, in that order.
   assert.equal(theorems.findIndex(entry => entry.name === 'reflection') + 1,
-    theorems.findIndex(entry => entry.name === 'succ_inj'))
+    theorems.findIndex(entry => entry.name === 'peano_cases'))
 })
 
 test('multiplication category takes precedence over additive and order notation', () => {
@@ -119,8 +120,10 @@ test('Peano axioms get their own bucket, first after All', () => {
   // The explicit category wins over the name-shape fallbacks, which would
   // otherwise file `reflection` and `succ_inj` under `+`.
   assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.reflection' }), 'peano')
-  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.succ_inj' }), 'peano')
-  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.zero_ne_succ' }), 'peano')
+  // Classic mode files these under Peano too, but the visual tab keeps the
+  // two foundational facts only.
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.succ_inj' }), 'add')
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.zero_ne_succ' }), 'ne')
   assert.equal(
     theoremBucket({ category: 'Peano', theoremName: 'MyNat.peano_cases',
       proposition: '∀ (a : ℕ), a = 0 ∨ ∃ b, a = succ b' }),

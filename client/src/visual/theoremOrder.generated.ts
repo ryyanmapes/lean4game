@@ -40,9 +40,8 @@ export const TRANSFORM_THEOREM_ENTRIES = [
 
 export const COMBINING_THEOREM_ENTRIES = [
   {"category":"Peano","name":"reflection","statement":"(n : ℕ) : n = n"},
-  {"category":"Peano","name":"succ_inj","statement":"(a b : ℕ) (h : succ a = succ b) : a = b"},
-  {"category":"Peano","name":"zero_ne_succ","statement":"(a : ℕ) : 0 ≠ succ a"},
   {"category":"Peano","name":"peano_cases","statement":"(a : ℕ) : a = 0 ∨ ∃ b, a = succ b"},
+  {"category":"+","name":"succ_inj","statement":"(a b : ℕ) (h : succ a = succ b) : a = b"},
   {"category":"+","name":"add_left_eq_zero","statement":"(a b : ℕ) (h : a + b = 0) : b = 0"},
   {"category":"+","name":"add_right_eq_zero","statement":"(a b : ℕ) (h : a + b = 0) : a = 0"},
   {"category":"+","name":"add_left_eq_self","statement":"(x y : ℕ) (h : x + y = y) : x = 0"},
@@ -57,6 +56,7 @@ export const COMBINING_THEOREM_ENTRIES = [
   {"category":"*","name":"mul_le_mul_right","statement":"(a b t : ℕ) (h : a ≤ b) : a * t ≤ b * t"},
   {"category":"≠","name":"zero_ne_one","statement":"0 ≠ 1"},
   {"category":"≠","name":"one_ne_zero","statement":"1 ≠ 0"},
+  {"category":"≠","name":"zero_ne_succ","statement":"(a : ℕ) : 0 ≠ succ a"},
   {"category":"≤","name":"le_refl","statement":"(x : ℕ) : x ≤ x"},
   {"category":"≤","name":"le_antisymm","statement":"(x y : ℕ) (hxy : x ≤ y) (hyx : y ≤ x) : x = y"},
   {"category":"≤","name":"le_trans","statement":"(x y z : ℕ) (hxy : x ≤ y) (hyz : y ≤ z) : x ≤ z"},

@@ -15,6 +15,10 @@ export type TheoremBucket = 'peano' | 'add' | 'ne' | 'le' | 'mul' | 'other'
 // The tray renders `All` first and then these in order, so the Peano axioms
 // sit immediately to its right: they underpin every other world rather than
 // belonging to one operation.
+/** Only these two live in the visual Peano tab; `succ_inj` and `zero_ne_succ`
+ * stay on the operation tabs players already know them from. */
+const PEANO_TAB_THEOREMS = new Set(['reflection', 'peano_cases'])
+
 export const THEOREM_BUCKETS: ReadonlyArray<{ id: TheoremBucket; label: string }> = [
   { id: 'peano', label: 'Peano' },
   { id: 'add', label: '+' },
@@ -77,9 +81,12 @@ export function theoremBucket(theorem: {
   const category = theorem.category?.trim()
   const searchable = `${theorem.theoremName ?? ''} ${theorem.label ?? ''} ${theorem.proposition ?? ''}`
 
-  // An explicit Peano category is authoritative: `reflection` and `succ_inj`
-  // both read as additive to the name-shape fallbacks below.
-  if (category === 'Peano') return 'peano'
+  // NNG4 files several theorems under `Peano` for classic mode's tabs, but the
+  // visual tab is meant for the two foundational facts only. Everything else
+  // keeps the operation tab it already had.
+  if (category === 'Peano' && PEANO_TAB_THEOREMS.has(baseName(theorem.theoremName ?? ''))) {
+    return 'peano'
+  }
   // Multiplication wins when a theorem could also look additive or ordered.
   if (category === '*' || /(?:^|[._\s])mul(?:[._\s]|$)|\*/u.test(searchable)) return 'mul'
   if (category === '+') return 'add'
