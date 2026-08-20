@@ -518,6 +518,13 @@ syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
       evalTactic (← `(tactic| exact $h))
       return
 
+    -- A proof of `False` discharges any goal whatsoever. The canvas offers
+    -- this drag only when the player has switched Fast `exfalso` on, so the
+    -- tactic just has to honour it wherever it arrives.
+    if hType.isConstOf ``False then
+      evalTactic (← `(tactic| exact False.elim $h))
+      return
+
     if let .app (.app (.app (.const ``Eq _) _) _) _ := hType then
       if ← tryRewrite h.raw isRev then return
       if ← tryRewrite h.raw (!isRev) then return

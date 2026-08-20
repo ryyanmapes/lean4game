@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualLightModePreference } from "./local_storage";
+import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference, loadVisualLightModePreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -9,6 +9,7 @@ export interface PreferencesState {
   isSuggestionsMobileMode: boolean;
   isVisualLightMode: boolean;
   isVisualAutoBranchSwitching: boolean;
+  isVisualFastExfalso: boolean;
 }
 
 export function getWindowDimensions() {
@@ -25,17 +26,20 @@ const defaultPreferencesState: PreferencesState = {
   isSuggestionsMobileMode: 'ontouchstart' in document.documentElement,
   isVisualLightMode: false,
   isVisualAutoBranchSwitching: false,
+  isVisualFastExfalso: false,
 }
 
 const savedPreferences = loadPreferences()
 const savedVisualLightMode = loadVisualLightModePreference()
 const savedVisualAutoBranchSwitching = loadVisualAutoBranchSwitchPreference()
+const savedVisualFastExfalso = loadVisualFastExfalsoPreference()
 
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
   ...savedPreferences,
   isVisualLightMode: savedVisualLightMode ?? savedPreferences?.isVisualLightMode ?? defaultPreferencesState.isVisualLightMode,
   isVisualAutoBranchSwitching: savedVisualAutoBranchSwitching ?? savedPreferences?.isVisualAutoBranchSwitching ?? defaultPreferencesState.isVisualAutoBranchSwitching,
+  isVisualFastExfalso: savedVisualFastExfalso ?? savedPreferences?.isVisualFastExfalso ?? defaultPreferencesState.isVisualFastExfalso,
 }
 
 export const preferencesSlice = createSlice({
@@ -60,6 +64,9 @@ export const preferencesSlice = createSlice({
     setIsVisualAutoBranchSwitching: (state, action) => {
       state.isVisualAutoBranchSwitching = action.payload;
     },
+    setIsVisualFastExfalso: (state, action) => {
+      state.isVisualFastExfalso = action.payload;
+    },
   },
 });
 
@@ -70,4 +77,5 @@ export const {
   setIsSuggestionsMobileMode,
   setIsVisualLightMode,
   setIsVisualAutoBranchSwitching,
+  setIsVisualFastExfalso,
 } = preferencesSlice.actions;

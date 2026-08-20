@@ -8,7 +8,7 @@ import { connection } from '../connection'
 import { apiSlice } from './api'
 import { progressSlice } from './progress'
 import { preferencesSlice } from "./preferences"
-import { saveState, savePreferences, removePreferences, saveVisualAutoBranchSwitchPreference, saveVisualLightModePreference } from "./local_storage";
+import { saveState, savePreferences, removePreferences, saveVisualAutoBranchSwitchPreference, saveVisualFastExfalsoPreference, saveVisualLightModePreference } from "./local_storage";
 
 
 export const store = configureStore({
@@ -33,6 +33,7 @@ store.subscribe(
     const preferencesState = store.getState()[preferencesSlice.name]
     saveVisualLightModePreference(preferencesState.isVisualLightMode)
     saveVisualAutoBranchSwitchPreference(preferencesState.isVisualAutoBranchSwitching)
+    saveVisualFastExfalsoPreference(preferencesState.isVisualFastExfalso)
     preferencesState.isSavePreferences ? savePreferences(preferencesState) : removePreferences()
   }, 800)
 );

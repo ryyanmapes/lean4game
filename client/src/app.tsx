@@ -31,12 +31,14 @@ function App() {
     isSuggestionsMobileMode,
     isVisualLightMode,
     isVisualAutoBranchSwitching,
+    isVisualFastExfalso,
     setLayout,
     setIsSavePreferences,
     setLanguage,
     setIsSuggestionsMobileMode,
     setIsVisualLightMode,
     setIsVisualAutoBranchSwitching,
+    setIsVisualFastExfalso,
   } = UsePreferences()
 
   React.useEffect(() => {
@@ -77,12 +79,14 @@ function App() {
             isSuggestionsMobileMode,
             isVisualLightMode,
             isVisualAutoBranchSwitching,
+            isVisualFastExfalso,
             setLayout,
             setIsSavePreferences,
             setLanguage,
             setIsSuggestionsMobileMode,
             setIsVisualLightMode,
             setIsVisualAutoBranchSwitching,
+            setIsVisualFastExfalso,
           }}>
             <VisualRpcProvider>
               <React.Suspense>

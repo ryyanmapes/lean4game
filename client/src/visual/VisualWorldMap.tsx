@@ -11,6 +11,7 @@ import {
   faArrowLeft,
   faArrowRightArrowLeft,
   faBars,
+  faBolt,
   faCircleInfo,
   faDownload,
   faEraser,
@@ -453,12 +454,16 @@ function VisualMapAppBar({
   onToggleLightMode,
   autoBranchSwitching,
   onToggleAutoBranchSwitching,
+  fastExfalso,
+  onToggleFastExfalso,
 }: {
   gameTitle: string
   isLightMode: boolean
   onToggleLightMode: () => void
   autoBranchSwitching: boolean
   onToggleAutoBranchSwitching: () => void
+  fastExfalso: boolean
+  onToggleFastExfalso: () => void
 }) {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -518,6 +523,17 @@ function VisualMapAppBar({
         </button>
         <button
           type="button"
+          className={`visual-map-menu-toggle${fastExfalso ? ' active' : ''}`}
+          aria-pressed={fastExfalso}
+          onClick={onToggleFastExfalso}
+          title="Dropping a False proof on any goal closes it through exfalso"
+        >
+          <FontAwesomeIcon icon={toIconProp(faBolt)} />
+          <span>{t('Fast exfalso')}</span>
+          <span className="visual-map-toggle-state" aria-hidden="true">{fastExfalso ? 'On' : 'Off'}</span>
+        </button>
+        <button
+          type="button"
           className={`visual-map-menu-toggle${telemetryEnabled ? ' active' : ''}`}
           aria-pressed={telemetryEnabled}
           onClick={() => {
@@ -545,6 +561,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     setIsVisualLightMode,
     isVisualAutoBranchSwitching,
     setIsVisualAutoBranchSwitching,
+    isVisualFastExfalso,
+    setIsVisualFastExfalso,
   } = React.useContext(PreferencesContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
   useRetryUntilData(gameInfo)
@@ -912,6 +930,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
         autoBranchSwitching={isVisualAutoBranchSwitching}
         onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
+        fastExfalso={isVisualFastExfalso}
+        onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
       />
       <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg
