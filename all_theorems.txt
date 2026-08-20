@@ -3,8 +3,10 @@
 # Reorder whole lines. Each category tab uses its subset of this global list,
 # preserving the order below.
 
-+ | reflection | (n : ℕ) : n = n
-+ | succ_inj | (a b : ℕ) (h : succ a = succ b) : a = b
+Peano | reflection | (n : ℕ) : n = n
+Peano | succ_inj | (a b : ℕ) (h : succ a = succ b) : a = b
+Peano | zero_ne_succ | (a : ℕ) : 0 ≠ succ a
+Peano | peano_cases | (a : ℕ) : a = 0 ∨ ∃ b, a = succ b
 + | add_left_eq_zero | (a b : ℕ) (h : a + b = 0) : b = 0
 + | add_right_eq_zero | (a b : ℕ) (h : a + b = 0) : a = 0
 + | add_left_eq_self | (x y : ℕ) (h : x + y = y) : x = 0
@@ -19,7 +21,6 @@
 * | mul_le_mul_right | (a b t : ℕ) (h : a ≤ b) : a * t ≤ b * t
 ≠ | zero_ne_one | 0 ≠ 1
 ≠ | one_ne_zero | 1 ≠ 0
-≠ | zero_ne_succ | (a : ℕ) : 0 ≠ succ a
 ≤ | le_refl | (x : ℕ) : x ≤ x
 ≤ | le_antisymm | (x y : ℕ) (hxy : x ≤ y) (hyx : y ≤ x) : x = y
 ≤ | le_trans | (x y z : ℕ) (hxy : x ≤ y) (hyz : y ≤ z) : x ≤ z

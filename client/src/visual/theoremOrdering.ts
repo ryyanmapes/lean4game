@@ -10,9 +10,13 @@ export {
   TRANSFORM_THEOREM_ORDER,
 } from './theoremOrder.generated.js'
 
-export type TheoremBucket = 'add' | 'ne' | 'le' | 'mul' | 'other'
+export type TheoremBucket = 'peano' | 'add' | 'ne' | 'le' | 'mul' | 'other'
 
+// The tray renders `All` first and then these in order, so the Peano axioms
+// sit immediately to its right: they underpin every other world rather than
+// belonging to one operation.
 export const THEOREM_BUCKETS: ReadonlyArray<{ id: TheoremBucket; label: string }> = [
+  { id: 'peano', label: 'Peano' },
   { id: 'add', label: '+' },
   { id: 'ne', label: '≠' },
   { id: 'le', label: '≤' },
@@ -73,6 +77,9 @@ export function theoremBucket(theorem: {
   const category = theorem.category?.trim()
   const searchable = `${theorem.theoremName ?? ''} ${theorem.label ?? ''} ${theorem.proposition ?? ''}`
 
+  // An explicit Peano category is authoritative: `reflection` and `succ_inj`
+  // both read as additive to the name-shape fallbacks below.
+  if (category === 'Peano') return 'peano'
   // Multiplication wins when a theorem could also look additive or ordered.
   if (category === '*' || /(?:^|[._\s])mul(?:[._\s]|$)|\*/u.test(searchable)) return 'mul'
   if (category === '+') return 'add'

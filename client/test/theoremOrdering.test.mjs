@@ -12,6 +12,7 @@ const {
   TRANSFORM_THEOREM_ENTRIES,
   TRANSFORM_THEOREM_ORDER,
   theoremBucket,
+  THEOREM_BUCKETS,
 } = await import('../../tmp-theorem-ordering-tests/theoremOrdering.js')
 
 async function editableOrder(filename) {
@@ -39,7 +40,7 @@ test('editable theorem-order files are complete and synchronized downstream', as
   assert.equal(new Set(transforms.map(entry => entry.name)).size, transforms.length)
   assert.equal(new Set(theorems.map(entry => entry.name)).size, theorems.length)
   assert.equal(transforms.length, 34)
-  assert.equal(theorems.length, 30)
+  assert.equal(theorems.length, 31)
   assert.equal(theorems.findIndex(entry => entry.name === 'reflection') + 1,
     theorems.findIndex(entry => entry.name === 'succ_inj'))
 })
@@ -53,7 +54,9 @@ test('combining categories recognize unlocked theorem metadata and fallbacks', (
   assert.equal(theoremBucket({ category: '+', theoremName: 'add_zero' }), 'add')
   assert.equal(theoremBucket({ category: '≠', theoremName: 'zero_ne_one' }), 'ne')
   assert.equal(theoremBucket({ category: '≤', theoremName: 'le_refl' }), 'le')
-  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'reflection' }), 'add')
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'reflection' }), 'peano')
+  // Without a category the name shape still decides, so an uncategorised
+  // `succ_inj` stays additive.
   assert.equal(theoremBucket({ theoremName: 'succ_inj' }), 'add')
 })
 
@@ -108,4 +111,22 @@ test('every combining tab preserves the global theorem order', () => {
     additionTab,
     COMBINING_THEOREM_ORDER.filter(name => additionNames.has(name)),
   )
+})
+
+test('Peano axioms get their own bucket, first after All', () => {
+  assert.equal(THEOREM_BUCKETS[0]?.id, 'peano')
+  assert.equal(THEOREM_BUCKETS[0]?.label, 'Peano')
+  // The explicit category wins over the name-shape fallbacks, which would
+  // otherwise file `reflection` and `succ_inj` under `+`.
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.reflection' }), 'peano')
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.succ_inj' }), 'peano')
+  assert.equal(theoremBucket({ category: 'Peano', theoremName: 'MyNat.zero_ne_succ' }), 'peano')
+  assert.equal(
+    theoremBucket({ category: 'Peano', theoremName: 'MyNat.peano_cases',
+      proposition: '∀ (a : ℕ), a = 0 ∨ ∃ b, a = succ b' }),
+    'peano',
+  )
+  // Other categories are untouched.
+  assert.equal(theoremBucket({ category: '+', theoremName: 'MyNat.add_comm' }), 'add')
+  assert.equal(theoremBucket({ category: '*', theoremName: 'MyNat.mul_comm' }), 'mul')
 })

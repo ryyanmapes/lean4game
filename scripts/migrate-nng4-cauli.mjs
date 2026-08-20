@@ -663,6 +663,11 @@ theorem pred_succ (n : MyNat) : pred (succ n) = n := rfl
 
 theorem reflection (n : MyNat) : n = n := rfl
 
+theorem peano_cases (a : MyNat) : a = 0 ∨ ∃ b, a = succ b :=
+  match a with
+  | 0 => Or.inl rfl
+  | succ b => Or.inr ⟨b, rfl⟩
+
 theorem succ_inj (a b : MyNat) (h : succ a = succ b) : a = b :=
   congrArg pred h
 
