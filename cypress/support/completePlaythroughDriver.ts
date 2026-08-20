@@ -3782,14 +3782,40 @@ export class CompletePlaythroughDriver {
     if (!match) throw new Error(`Unsupported have command: ${command}`)
     const expectedName = match[1]
     const arguments_ = match[3]?.trim().split(/\s+/u).filter(Boolean) ?? []
-    let source = await this.theorem(match[2])
+    // A generalized induction hypothesis is specialized exactly like a tray
+    // theorem, but it lives on the canvas as a local hypothesis card. Resolve
+    // through the same lookup order a player uses: their own hypotheses first,
+    // then the theorem tray.
+    let source = await this.sourceCard(match[2])
     let createdName: string | null = null
+    // Lean applies arguments in order: term arguments fill the visible forall
+    // binders through Construction Mode, and once those are gone the remaining
+    // arguments are proofs, applied by the same card-on-card drag a player
+    // performs. Treating a proof argument as a construction expression asks
+    // the player to type a hypothesis name into the number pad.
+    let remainingForallArguments = Math.min(arguments_.length, forallBinderNames(source).length)
     for (const argument of arguments_) {
-      const beforeNames = new Set(Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes))
-      await this.openConstructionFromCard(source, command)
-      await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
-      const afterNames = Object.keys(harness(this.win).getCurrentStreamSnapshot().hypTypes)
-      createdName = afterNames.find(name => !beforeNames.has(name)) ?? null
+      const typesBefore = harness(this.win).getCurrentStreamSnapshot().hypTypes
+      const beforeNames = new Set(Object.keys(typesBefore))
+      const sourceNameBefore = propositionCardName(source)
+      const premise = remainingForallArguments > 0 ? null : this.hyp(argument)
+      if (premise) {
+        await this.dragAndWait(source, premise, `${command} premise ${argument} application`)
+      } else {
+        await this.openConstructionFromCard(source, command)
+        await this.submitConstruction(parseConstructionExpr(argument), `${command} (${argument})`)
+        if (remainingForallArguments > 0) remainingForallArguments -= 1
+      }
+      const typesAfter = harness(this.win).getCurrentStreamSnapshot().hypTypes
+      // Applying a premise can either mount the conclusion under a new name or
+      // narrow the held card in place; both are the same player-visible
+      // result, so follow whichever one the browser produced.
+      createdName = Object.keys(typesAfter).find(name => !beforeNames.has(name))
+        ?? (sourceNameBefore && typesAfter[sourceNameBefore] !== undefined
+          && typesAfter[sourceNameBefore] !== typesBefore[sourceNameBefore]
+            ? sourceNameBefore
+            : null)
+        ?? null
       if (!createdName) throw new Error(`${command} did not create a specialized theorem card`)
       source = await waitFor(`specialized theorem ${createdName}`, () => this.hyp(createdName!))
     }

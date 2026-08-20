@@ -294,7 +294,7 @@
     {
       "world": "AdvMultiplication",
       "level": 5,
-      "title": "`le_mul_right`",
+      "title": "`le_mul_right` 🌶️",
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L05le_mul_right.lean",
@@ -387,7 +387,7 @@
     {
       "world": "AdvMultiplication",
       "level": 9,
-      "title": "`mul_left_cancel`",
+      "title": "`mul_left_cancel` 🌶️🌶️",
       "visualSkip": false,
       "completionNeutral": false,
       "source": "NNG4/Game/Levels/AdvMultiplication/L09mul_left_cancel.lean",
@@ -417,8 +417,10 @@
         "exact h",
         "rw [mul_succ, mul_succ] at h",
         "apply add_right_cancel at h",
-        "apply hd at h",
-        "rw [h]",
+        "have hde := hd e",
+        "have hde2 := hde ha",
+        "have h2 := hde2 h",
+        "rw [h2]",
         "rfl"
       ]
     },
