@@ -214,3 +214,67 @@ export function inferAtomicReductionForms(displayText: string): string[] {
 
   return []
 }
+
+function splitTopLevelBinderForm(form: string):
+  | { quantifier: string; binder: string; body: string }
+  | null {
+  const trimmed = form.trim()
+  const quantifier = trimmed[0]
+  if (quantifier !== '∃' && quantifier !== '∀') return null
+  let depth = 0
+  for (let idx = 1; idx < trimmed.length; idx++) {
+    const ch = trimmed[idx]
+    if (ch === '(' || ch === '{' || ch === '[') depth += 1
+    else if ((ch === ')' || ch === '}' || ch === ']') && depth > 0) depth -= 1
+    else if (ch === ',' && depth === 0) {
+      const binder = trimmed.slice(1, idx).trim()
+      const body = trimmed.slice(idx + 1).trim()
+      if (!binder || !body) return null
+      return { quantifier, binder, body }
+    }
+  }
+  return null
+}
+
+function binderNames(binder: string): string[] {
+  let inner = binder.trim()
+  const opens = '({['
+  const closes = ')}]'
+  const openIndex = opens.indexOf(inner[0] ?? '')
+  if (openIndex >= 0 && inner.endsWith(closes[openIndex]!)) {
+    inner = inner.slice(1, -1).trim()
+  }
+  const colonIndex = inner.indexOf(':')
+  const declared = (colonIndex >= 0 ? inner.slice(0, colonIndex) : inner).trim()
+  return declared.split(/\s+/u).filter(Boolean)
+}
+
+/**
+ * Canonically rename the leading `∃`/`∀` binders so that alpha-equivalent
+ * statements compare equal as text. `∃ b, a = succ b` and `∃ n, a = succ n`
+ * are the same proposition, and Lean accepts either as a proof of the other;
+ * only the rendered binder name differed.
+ */
+export function alphaNormalizeBinders(text: string): string {
+  // A canonical name must be an identifier the source text cannot contain, or
+  // renaming an inner binder could collide with an already-renamed outer one.
+  let prefix = 'bv'
+  while (text.includes(prefix)) prefix = `${prefix}v`
+
+  const normalizeFrom = (form: string, depth: number): string => {
+    const parsed = splitTopLevelBinderForm(form)
+    if (!parsed) return form.trim()
+    const names = binderNames(parsed.binder)
+    if (names.length === 0) return form.trim()
+    let binder = parsed.binder
+    let body = parsed.body
+    names.forEach((name, index) => {
+      const canonical = `${prefix}${depth + index}`
+      binder = replaceIdentifier(binder, name, canonical)
+      body = replaceIdentifier(body, name, canonical)
+    })
+    return `${parsed.quantifier} ${binder}, ${normalizeFrom(body, depth + names.length)}`
+  }
+
+  return normalizeFrom(text, 0)
+}

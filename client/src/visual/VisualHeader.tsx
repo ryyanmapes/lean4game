@@ -38,6 +38,16 @@ export function VisualHeader({
   getFeedbackProofState,
   hideNav,
 }: VisualHeaderProps) {
+  // A level the player already finished opens green, with no replay of the
+  // completion flourish. `previouslyCompleted` alone cannot say that: solving
+  // the level marks it completed straight away, so remember the value this
+  // level was entered with and refresh it only when the level changes.
+  const entryKey = `${worldId ?? ''}/${levelId}`
+  const entryRef = React.useRef<{ key: string; completed: boolean } | null>(null)
+  if (entryRef.current?.key !== entryKey) {
+    entryRef.current = { key: entryKey, completed: previouslyCompleted }
+  }
+  const completedOnEntry = entryRef.current.completed
   const emphasizeMap = isCompleted && !hasNext
   const shownLevelId = displayLevelId ?? levelId
   const plainTitle = levelTitle ? plainLevelTitle(levelTitle) : ''
@@ -47,7 +57,7 @@ export function VisualHeader({
   const splitLongTitle = Boolean(plainTitle && `${levelLabel}: ${plainTitle}`.length > 28)
 
   return (
-    <div className={`visual-header${isCompleted ? ' completed' : ''}`}>
+    <div className={`visual-header${isCompleted || completedOnEntry ? ' completed' : ''}${completedOnEntry ? ' precompleted' : ''}`}>
       <div className="visual-header-side">
         {!hideNav && <>
           <button

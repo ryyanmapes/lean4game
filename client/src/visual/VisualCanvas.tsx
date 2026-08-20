@@ -506,18 +506,13 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
       const mergedHyps = stream.hyps.map(card => {
         const saved = cardMap.get(card.id) ?? removedTheoremsByName.get(card.hyp.names[0] ?? '')
         if (!saved) return card
-        // A replacement theorem may retain its card identity while growing
-        // into a much longer implication. Let the oversized-card placement
-        // scan treat that changed footprint as fresh; unchanged short cards
-        // keep their exact historical positions.
-        const proposition = TaggedText_stripTags(card.hyp.type).trim()
-        if (
-          saved.userPlaced
-          || estimatedHypSize(card).width <= 264
-          || proposition === saved.proposition
-        ) {
-          preservedIds.add(card.id)
-        }
+        // Any card the player has already seen keeps exactly where it was,
+        // including one a step rewrote into a much wider proposition. Letting
+        // the oversized-card scan re-flow those made `cases` on a variable, or
+        // specializing a theorem, visibly scatter the rest of the canvas and
+        // cost the player their spatial memory of it. Only genuinely new cards
+        // are placed by the scan below; carried-over cards are its obstacles.
+        preservedIds.add(card.id)
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
       })
       return { ...stream, hyps: avoidFreshOversizedCollisions(mergedHyps, preservedIds) }
@@ -584,6 +579,10 @@ interface ProofStepRecord {
   treeSnapshot: ProofStreamTreeNode
   canvasSnapshot: CanvasState
   activeStreamIdAfter: string | null
+  /** The stream the player was working in when this step was taken. Switching
+   * streams is not itself a proof step, so only this can return an undo to the
+   * branch the player actually acted on. */
+  activeStreamIdBefore: string | null
   /** The transform target active when this step was applied (non-null = was a rewrite). Used by undo to navigate back to the right mode. */
   transformTargetSnapshot: TransformTarget | null
   /** Workspace theorem copies immediately before this interaction. */
@@ -617,6 +616,11 @@ interface InteractionOptions {
   playTacticOverride?: string
   leanTacticOverride?: string
   syntheticHyp?: { name: string; type: string }
+  /** Proposition to show on the goal card of the branch this step closes.
+   * Eliminating a `False` hypothesis discharges the goal without Lean ever
+   * rewriting it, so the frozen view would otherwise still show the original
+   * goal rather than the contradiction the player actually used. */
+  solvedGoalDisplay?: string
   queueIfBusy?: boolean
 }
 
@@ -932,37 +936,73 @@ function splitNegationAsImplication(text: string): [string, string] | null {
   return null
 }
 
+/** One side of a card-on-card drop, reduced to the text the substitution guard
+ *  reasons about. Local hypotheses, workspace theorem copies and tray theorems
+ *  all reach the same drop handlers, so the guard cannot take `HypCardType`. */
+interface DropProposition {
+  formulas: string[]
+  forallFooter?: string
+  isEquality: boolean
+}
+
 /** Equality hypotheses may still be premises to an implication. What is no
  * longer supported is using an equality to rewrite/substitute inside another
- * hypothesis by dropping the two local cards together. */
-function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType): boolean {
-  if (!parsedHypEquality(first) && !parsedHypEquality(second)) return false
-
-  const formulaCandidates = (card: HypCardType) => [
-    hypCardFormula(card),
-    ...(card.hyp.reductionForms ?? []).map(normalizeFormulaText),
-  ]
-  const firstTypes = formulaCandidates(first)
-  const secondTypes = formulaCandidates(second)
-  // A visible implication dropped on an equality is theorem application, not
-  // substitution. Its premise can contain variables represented in the card's
-  // forall footer, so surface-text equality is intentionally not required;
-  // Lean remains the authority on whether the application elaborates.
-  if (
-    firstTypes.some(type => splitNegationAsImplication(type) !== null)
-    || secondTypes.some(type => splitNegationAsImplication(type) !== null)
-  ) return false
+ * proposition by dropping the two cards together. */
+function propositionDropWouldSubstitute(first: DropProposition, second: DropProposition): boolean {
+  if (!first.isEquality && !second.isEquality) return false
   // Negation is displayed as `x ≠ y`, but its reducible form is the function
-  // `x = y → False`. Keep that legitimate premise application available
-  // while still blocking equality-on-equality substitution drags.
-  const isApplication = firstTypes.some(firstType => {
-    const implication = splitNegationAsImplication(firstType)
-    return Boolean(implication && secondTypes.some(secondType => formulasMatch(implication[0], secondType)))
-  }) || secondTypes.some(secondType => {
-    const implication = splitNegationAsImplication(secondType)
-    return Boolean(implication && firstTypes.some(firstType => formulasMatch(implication[0], firstType)))
-  })
-  return !isApplication
+  // `x = y → False`. A theorem states its premise with its own bound variables
+  // (`0 = succ a` for `zero_ne_succ`), so the match reads the card's forall
+  // footer as wildcards rather than demanding surface-text equality.
+  const applies = (fn: DropProposition, argument: DropProposition) =>
+    fn.formulas.some(formula => {
+      const implication = splitNegationAsImplication(formula)
+      if (!implication) return false
+      return argument.formulas.some(candidate =>
+        formulasMatch(implication[0], candidate)
+        || statementCanTargetGoal(implication[0], candidate, fn.forallFooter))
+    })
+  if (applies(first, second) || applies(second, first)) return false
+  // No premise fits, so all `drag_to` has left is substituting the equality
+  // into the other statement. Doing that to a still-quantified proposition
+  // rewrites a general lemma into another general lemma — `succ n = 0` on
+  // `zero_ne_succ` yields `∀ a, succ n ≠ succ a` — which is never what the
+  // player reached for; they wanted an application that does not typecheck.
+  // Substituting into a concrete proposition stays available.
+  const isQuantified = (proposition: DropProposition) =>
+    Boolean(proposition.forallFooter?.trim())
+    || proposition.formulas.some(formula => /^∀/u.test(formula.trim()))
+  if (isQuantified(first) || isQuantified(second)) return true
+  // Otherwise an implication-shaped card is an application attempt, and Lean
+  // stays the authority on whether it elaborates.
+  return !(
+    first.formulas.some(formula => splitNegationAsImplication(formula) !== null)
+    || second.formulas.some(formula => splitNegationAsImplication(formula) !== null)
+  )
+}
+
+function hypDropProposition(card: HypCardType): DropProposition {
+  return {
+    formulas: [hypCardFormula(card), ...(card.hyp.reductionForms ?? []).map(normalizeFormulaText)],
+    forallFooter: card.hyp.forallFooter,
+    isEquality: parsedHypEquality(card) !== null,
+  }
+}
+
+function theoremDropProposition(theorem: PropositionTheorem): DropProposition {
+  const formulas = [
+    normalizeFormulaText(theorem.proposition || theorem.label),
+    ...(theorem.reductionForms ?? []).map(normalizeFormulaText),
+  ].filter(Boolean)
+  return {
+    formulas,
+    forallFooter: theorem.forallFooter,
+    isEquality: formulas.some(formula => parseGoalEquality(formula) !== null),
+  }
+}
+
+function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType): boolean {
+  return propositionDropWouldSubstitute(hypDropProposition(first), hypDropProposition(second))
 }
 
 function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): ParsedTransformTarget | null {
@@ -1069,7 +1109,15 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
 
 function tacticShouldHighlightHyp(tactic: VisualTactic, card: HypCardType): boolean {
   if (tactic.name !== 'cases') return tacticCanTargetHyp(tactic, card)
-  return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) === 'False'
+  // `cases` splits a number into zero and successor, eliminates `False`, and
+  // takes apart the connectives whose proofs carry a case each. Highlighting
+  // only `False` left the most common target — a natural number variable —
+  // looking like an invalid drop.
+  if (isNaturalVariableCard(card)) return true
+  const typeText = normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
+  if (typeText === 'False') return true
+  const splittableForms = [typeText, ...(card.hyp.reductionForms ?? [])]
+  return splittableForms.some(form => /[∨∧∃↔≤]/u.test(form))
 }
 
 function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean {
@@ -1091,8 +1139,15 @@ function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): 
     ))
 }
 
-function hypCanTargetGoal(card: HypCardType, stream: GoalStream): boolean {
+function hypCanTargetGoal(
+  card: HypCardType,
+  stream: GoalStream,
+  fastExfalso = false,
+): boolean {
   const statement = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
+  // With Fast `exfalso` on, a proof of False closes any goal at all: the drop
+  // stands in for turning the goal into False first and then discharging it.
+  if (fastExfalso && normalizeFormulaText(statement) === 'False') return true
   const goalText = TaggedText_stripTags(stream.goal.type)
   const goalForms = [goalText, ...(stream.reductionForms ?? [])]
   return [statement, ...(card.hyp.reductionForms ?? [])]
@@ -1810,7 +1865,9 @@ function inferLeanTacticFromVisualInteraction(
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
     if (hypType === 'False') {
       const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
-      return goalType === 'False' ? `exact ${hypName}` : null
+      // Reaching a non-False goal means Fast `exfalso` accepted the drop, so
+      // spell out the two steps it stands for instead of leaving a `?`.
+      return goalType === 'False' ? `exact ${hypName}` : `exfalso; exact ${hypName}`
     }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
     const iffSides = splitIffText(hypType)
@@ -2525,7 +2582,8 @@ export function VisualCanvas({
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
-  const { isVisualAutoBranchSwitching } = React.useContext(PreferencesContext)
+  const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
+    React.useContext(PreferencesContext)
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
   const goalsContainerRef = useRef<HTMLDivElement>(null)
@@ -3087,8 +3145,28 @@ export function VisualCanvas({
     return cloneCanvasState({ ...sourceCanvas, completed: true })
   }
 
-  function freezeCompletedProof(baseCanvas: CanvasState, completedStreamId?: string | null) {
-    const completedCanvas = completedCanvasFrom(baseCanvas)
+  function freezeCompletedProof(
+    baseCanvas: CanvasState,
+    completedStreamId?: string | null,
+    solvedGoalDisplay?: string,
+  ) {
+    const frozenCanvas = completedCanvasFrom(baseCanvas)
+    const completedCanvas = solvedGoalDisplay && completedStreamId
+      ? {
+          ...frozenCanvas,
+          streams: frozenCanvas.streams.map(stream => stream.id === completedStreamId
+            ? {
+                ...stream,
+                goal: {
+                  ...stream.goal,
+                  type: { text: solvedGoalDisplay },
+                  clickAction: undefined,
+                  reductionForms: [],
+                },
+              }
+            : stream),
+        }
+      : frozenCanvas
     const preferredActiveId =
       completedStreamId && completedCanvas.streams.some(stream => stream.id === completedStreamId)
         ? completedStreamId
@@ -3337,12 +3415,13 @@ export function VisualCanvas({
         treeSnapshot: cloneProofTree(nextTree),
         canvasSnapshot: cloneCanvasState(nextCanvas),
         activeStreamIdAfter: nextActiveId,
+      activeStreamIdBefore: activeStreamId,
         transformTargetSnapshot: null,
         theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
       }])
 
       if (nextCanvas.completed && options?.solvedGoalId) {
-        freezeCompletedProof(canvasState, options.solvedGoalId)
+        freezeCompletedProof(canvasState, options.solvedGoalId, options.solvedGoalDisplay)
         return true
       }
 
@@ -3444,6 +3523,7 @@ export function VisualCanvas({
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
+      activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
@@ -3459,7 +3539,7 @@ export function VisualCanvas({
       const completionCanvas = options?.placementHint
         ? placeHypNearAnchor(nextCanvas, options.placementHint)
         : canvasState
-      freezeCompletedProof(completionCanvas, options.solvedGoalId)
+      freezeCompletedProof(completionCanvas, options.solvedGoalId, options.solvedGoalDisplay)
       return true
     }
 
@@ -3501,7 +3581,16 @@ export function VisualCanvas({
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
     const nextTree = newSteps.at(-1)?.treeSnapshot ?? cloneProofTree(initialProofTreeRef.current)
-    const nextActiveId = newSteps.at(-1)?.activeStreamIdAfter
+    // Return the player to the branch they took the undone step in. The
+    // previous step's `activeStreamIdAfter` is not that branch whenever the
+    // player switched streams by hand in between, and being thrown back to
+    // stream 1 after undoing a step taken in stream 2 loses their place.
+    const restorableStreamIds = new Set(collectActiveStreamIds(nextTree))
+    const nextActiveId = (removedStep.activeStreamIdBefore
+      && restorableStreamIds.has(removedStep.activeStreamIdBefore)
+        ? removedStep.activeStreamIdBefore
+        : null)
+      ?? newSteps.at(-1)?.activeStreamIdAfter
       ?? collectActiveStreamIds(nextTree)[0]
       ?? null
     const nextCanvas = newSteps.at(-1)?.canvasSnapshot
@@ -3564,6 +3653,46 @@ export function VisualCanvas({
     // Keep the imperative guard raised until every restored snapshot and mode
     // update has been queued. Large expressions make this reconciliation gap
     // visible enough for a second click to otherwise start from stale steps.
+    updateProcessingState(false)
+    return true
+  }
+
+  /**
+   * Return the level to its opening position in one action. A completed proof
+   * is often worth replaying a different way, and stepping back through a long
+   * solution one undo at a time is not that offer.
+   */
+  async function resetProof(): Promise<boolean> {
+    if (proofSteps.length === 0 || isProcessingRef.current) return false
+    setGoalChoiceMenu(null)
+    closeReductionTooltip()
+    setPendingTransformSync(null)
+    updateProcessingState(true)
+
+    const result = await onInteraction(serializeProofCommands([]))
+    if (result === null) {
+      pendingMobileInsertionRef.current = null
+      updateProcessingState(false)
+      return false
+    }
+    leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
+
+    const restoredTree = cloneProofTree(initialProofTreeRef.current)
+    const restoredCanvas = cloneCanvasState(initialState)
+    // The first recorded step remembers the tray exactly as the level opened,
+    // including any copies the player had already placed before acting.
+    const initialCopies = proofSteps[0]?.theoremCopiesBefore
+    if (initialCopies) setTheoremCopies(cloneTheoremCopies(initialCopies))
+
+    setProofSteps([])
+    setProofTree(restoredTree)
+    setSolvedGoalId(null)
+    setDisplayCanvasState(cloneCanvasState(restoredCanvas))
+    setCanvasState(restoredCanvas)
+    onProofStep?.('undo')
+    setActiveStreamId(collectActiveStreamIds(restoredTree)[0] ?? null)
+    dismissTransformationView()
+
     updateProcessingState(false)
     return true
   }
@@ -4005,6 +4134,9 @@ export function VisualCanvas({
             // producing child streams. Mark that exact goal as the one solved
             // so a final branch gets the normal one-time completion animation.
             solvedGoalId: streamSplit ? undefined : targetStream.id,
+            // The goal was discharged by the contradiction, not by anything
+            // that touched its statement. Show what actually closed it.
+            solvedGoalDisplay: streamSplit ? undefined : 'False',
             targetStreamId: targetStream.id,
           })
           return
@@ -4046,6 +4178,19 @@ export function VisualCanvas({
         const { stream: targetStream, card: targetCard } = resolveHypDropTarget(overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
+        // A theorem is not a rewrite rule here. Without this the backend's
+        // `drag_to` fallback would happily substitute an equality into the
+        // theorem's statement, inventing a hypothesis the player never asked
+        // for instead of reporting that the two do not fit together.
+        const targetProposition = targetCard
+          ? hypDropProposition(targetCard)
+          : targetTheoremCopy
+            ? theoremDropProposition(targetTheoremCopy.theorem)
+            : null
+        if (targetProposition && propositionDropWouldSubstitute(
+          theoremDropProposition(theoremTemplate),
+          targetProposition,
+        )) return
         if (targetName) {
           const placementHint = targetCard && targetStream
             ? {
@@ -4131,13 +4276,20 @@ export function VisualCanvas({
         const targetGoal = interactionStreams.find(stream => stream.id === overId)
         const canTarget = sourceTheoremCopy
           ? Boolean(targetGoal && theoremCanTargetGoal(sourceTheoremCopy.theorem, targetGoal))
-          : Boolean(sourceCard && targetGoal && hypCanTargetGoal(sourceCard, targetGoal))
+          : Boolean(sourceCard && targetGoal && hypCanTargetGoal(sourceCard, targetGoal, fastExfalso))
         if (!canTarget) return
         // Dropped on a goal card → drag_goal
         const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
+        // A Fast `exfalso` drop reaches the goal through False, so show the
+        // goal the contradiction actually discharged rather than the original.
+        const dischargedThroughFalse = Boolean(sourceCard)
+          && normalizeFormulaText(
+            sourceCard!.hyp.typeBody ?? TaggedText_stripTags(sourceCard!.hyp.type),
+          ) === 'False'
         applyDroppedInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
           targetStreamId: overId as string,
+          ...(dischargedThroughFalse ? { solvedGoalDisplay: 'False' } : {}),
           consumedTheoremCopyIds: sourceTheoremCopy ? [sourceTheoremCopy.id] : undefined,
         })
       } else {
@@ -4150,8 +4302,21 @@ export function VisualCanvas({
 
         // Equality rewrites belong in Transformation Mode. Keep ordinary
         // premise/function application available, including when the premise
-        // itself happens to be an equality proposition.
-        if (sourceCard && targetCard && hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
+        // itself happens to be an equality proposition. Workspace theorem
+        // copies are checked on the same terms as local cards: `drag_to` will
+        // otherwise substitute an equality into a theorem's statement and
+        // produce a hypothesis the player never asked for.
+        const dropSource = sourceCard
+          ? hypDropProposition(sourceCard)
+          : sourceTheoremCopy
+            ? theoremDropProposition(sourceTheoremCopy.theorem)
+            : null
+        const dropTarget = targetCard
+          ? hypDropProposition(targetCard)
+          : targetTheoremCopy
+            ? theoremDropProposition(targetTheoremCopy.theorem)
+            : null
+        if (dropSource && dropTarget && propositionDropWouldSubstitute(dropSource, dropTarget)) return
 
         // When dropping a hyp onto a constructable theorem copy, use drag_apply
         // to partially apply the theorem to the hyp (pattern-matching its type
@@ -4188,7 +4353,13 @@ export function VisualCanvas({
           const anchorCard =
             localTheoremCount === 1
               ? (sourceIsLocalTheorem ? sourceCard : targetCard)
-              : undefined
+              // Applying one workspace theorem to another derives its result
+              // from the target. Without an anchor the derived card is laid
+              // out afresh, which reads as the drop shoving the card the
+              // player aimed at; keep it exactly where the target sits.
+              : localTheoremCount === 2
+                ? targetCard
+                : undefined
           const anchorStream =
             anchorCard?.id === sourceCard?.id
               ? sourceStream
@@ -4772,6 +4943,7 @@ export function VisualCanvas({
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
+      activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
@@ -5185,6 +5357,7 @@ export function VisualCanvas({
       treeSnapshot: cloneProofTree(nextTree),
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
+      activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: transformTarget,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     }])
@@ -6023,7 +6196,7 @@ export function VisualCanvas({
   async function applyTestDragHypToGoal(hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, hypName)
-    if (!hypCanTargetGoal(sourceCard, stream)) return
+    if (!hypCanTargetGoal(sourceCard, stream, fastExfalso)) return
     const playTactic = interactionToPlayTactic({
       type: 'drag_goal',
       hypName: interactionHypName(sourceCard) ?? hypName,
@@ -6740,7 +6913,7 @@ export function VisualCanvas({
     const isStatementTarget = activeDraggedTheorem
       ? theoremCanTargetGoal(activeDraggedTheorem, liveGoalStream)
       : draggedHypCard
-        ? hypCanTargetGoal(draggedHypCard, liveGoalStream)
+        ? hypCanTargetGoal(draggedHypCard, liveGoalStream, fastExfalso)
         : false
     return (
       <GoalCard
@@ -7151,6 +7324,15 @@ export function VisualCanvas({
                 className="tr-ctrl-btn active-undo"
                 aria-label="Undo"
               >↩</button>
+              {canvasState.completed && (
+                <button
+                  onClick={() => void resetProof()}
+                  aria-disabled={isProcessing}
+                  className="tr-ctrl-btn active-reset"
+                  aria-label="Reset level"
+                  title="Start this level over"
+                >⟲</button>
+              )}
             </div>
           )}
           {isPhonePortrait && (

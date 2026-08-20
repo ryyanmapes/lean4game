@@ -1511,6 +1511,12 @@
   animation: headerComplete 0.5s ease-out;
 }
 
+/* Re-entering a solved level: already green, so neither fade nor flourish. */
+.visual-header.completed.precompleted {
+  animation: none;
+  transition: none;
+}
+
 @keyframes headerComplete {
   from { background: var(--visual-surface); border-bottom-color: var(--visual-border-subtle); }
   to   { background: var(--visual-header-complete-bg); border-bottom-color: var(--visual-header-complete-border); }
@@ -1935,6 +1941,8 @@
 .visual-page .tr-ctrl-btn.active-undo { color: var(--visual-warning); background: var(--visual-warning-bg); }
 .visual-page .tr-ctrl-btn.active-reverse { color: var(--visual-slot-text); background: var(--visual-choice-bg); }
 .visual-page .tr-ctrl-btn.reset { color: var(--visual-danger); }
+/* Offered only on a solved level, so it reads as "try it again", not "undo". */
+.visual-page .tr-ctrl-btn.active-reset { color: var(--visual-danger); background: var(--visual-danger-bg); }
 
 .visual-page.tr-transformation-overlay .tr-controls {
   left: 2rem;

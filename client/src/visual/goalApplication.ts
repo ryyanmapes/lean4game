@@ -1,3 +1,4 @@
+import { alphaNormalizeBinders } from './existsDisplay'
 import { formatFormulaText, parse } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { forallBinderNamesFromFooter } from './quantifiedStatement'
@@ -80,6 +81,9 @@ function formulaMatchesGoal(patternText: string, goalText: string, wildcards: Re
   const pattern = formatFormulaText(patternText).trim()
   const goal = formatFormulaText(goalText).trim()
   if (pattern === goal) return true
+  // Bound-variable names are display detail. Lean accepts `∃ b, a = succ b`
+  // as a proof of `∃ n, a = succ n`, so the canvas must offer that drag too.
+  if (alphaNormalizeBinders(pattern) === alphaNormalizeBinders(goal)) return true
   try {
     return expressionMatches(parse(goal), parse(pattern), wildcards, new Map())
   } catch {
