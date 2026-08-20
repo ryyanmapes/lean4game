@@ -909,6 +909,29 @@ function hypCardFormula(card: HypCardType): string {
   return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
 }
 
+/** `a ≠ b` is notation for `a = b → False`, but `splitImplicationText` only
+ * walks `→` and so never sees it. Spell the equivalence out here rather than in
+ * the shared splitter, which also decides which branch the `drag_to`
+ * derivations take. */
+function splitNegationAsImplication(text: string): [string, string] | null {
+  const arrow = splitImplicationText(text)
+  if (arrow) return arrow
+
+  const normalized = stripOuterParens(text)
+  let depth = 0
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (depth === 0 && normalized.startsWith('≠', i)) {
+      const left = normalized.slice(0, i).trim()
+      const right = normalized.slice(i + '≠'.length).trim()
+      if (left && right) return [`${left} = ${right}`, 'False']
+    }
+  }
+  return null
+}
+
 /** Equality hypotheses may still be premises to an implication. What is no
  * longer supported is using an equality to rewrite/substitute inside another
  * hypothesis by dropping the two local cards together. */
@@ -926,17 +949,17 @@ function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType):
   // forall footer, so surface-text equality is intentionally not required;
   // Lean remains the authority on whether the application elaborates.
   if (
-    firstTypes.some(type => splitImplicationText(type) !== null)
-    || secondTypes.some(type => splitImplicationText(type) !== null)
+    firstTypes.some(type => splitNegationAsImplication(type) !== null)
+    || secondTypes.some(type => splitNegationAsImplication(type) !== null)
   ) return false
   // Negation is displayed as `x ≠ y`, but its reducible form is the function
   // `x = y → False`. Keep that legitimate premise application available
   // while still blocking equality-on-equality substitution drags.
   const isApplication = firstTypes.some(firstType => {
-    const implication = splitImplicationText(firstType)
+    const implication = splitNegationAsImplication(firstType)
     return Boolean(implication && secondTypes.some(secondType => formulasMatch(implication[0], secondType)))
   }) || secondTypes.some(secondType => {
-    const implication = splitImplicationText(secondType)
+    const implication = splitNegationAsImplication(secondType)
     return Boolean(implication && firstTypes.some(firstType => formulasMatch(implication[0], firstType)))
   })
   return !isApplication
@@ -1669,8 +1692,10 @@ function inferLeanTacticFromVisualInteraction(
     if (firstCard && secondCard) {
       const firstType = normalizeFormulaText(TaggedText_stripTags(firstCard.hyp.type))
       const secondType = normalizeFormulaText(TaggedText_stripTags(secondCard.hyp.type))
-      const firstImplication = splitImplicationText(firstType)
-      const secondImplication = splitImplicationText(secondType)
+      // `x ≠ y` is a function from `x = y`, so it has to count as an
+      // implication here or the direction gets decided the wrong way round.
+      const firstImplication = splitNegationAsImplication(firstType)
+      const secondImplication = splitNegationAsImplication(secondType)
       // Whichever card is the implication gets applied; the other is the
       // argument, and an in-place `apply … at` leaves the result in that
       // argument's card. When no fresh card was created the binding has to
