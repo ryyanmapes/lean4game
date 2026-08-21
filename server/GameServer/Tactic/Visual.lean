@@ -303,47 +303,6 @@ private def applyPremiseApplicationPolicy
       let freshName ← freshDerivedTheoremName (theoremResultBase result a b)
       replaceNamedExprWithProof (mkIdent freshName) result.proof
 
-private def typeIsEquality (type : Expr) : MetaM Bool := do
-  let type ← withReducible (whnf type)
-  pure <| match type.consumeMData with
-    | .app (.app (.app (.const ``Eq _) _) _) _ => true
-    | _ => false
-
-/-- Derive a new proposition by rewriting a theorem/proposition proof with a
-    visible equality. This is the proof-producing counterpart of `rw at`: it
-    lets a player combine, for example, `h : x * y = 1` with `1 ≠ 0` to obtain
-    `x * y ≠ 0` without mutating either supplied assumption. -/
-private def rewrittenOperandProof?
-    (target equality : ResolvedVisualOperand) (symm : Bool) : TacticM (Option Expr) := do
-  unless ← typeIsEquality equality.rawType do return none
-  let savedState ← saveState
-  try
-    let result ← Term.withSynthesize <| withMainContext do
-      elabVisualRewrite (← getMainGoal) target.rawType equality.ident.raw symm
-    let result ← finishVisualRewrite result
-    unless result.mvarIds.isEmpty do
-      restoreState savedState
-      return none
-    let proof ← instantiateMVars (← mkAppM ``Eq.mp #[result.eqProof, target.expr])
-    if proof.hasMVar then
-      restoreState savedState
-      return none
-    pure (some proof)
-  catch _ =>
-    restoreState savedState
-    pure none
-
-private def tryDerivedEqualityRewrite
-    (target equality : ResolvedVisualOperand) (symm : Bool) : TacticM Bool := do
-  if let some proof ← rewrittenOperandProof? target equality symm then
-    applyPremiseApplicationPolicy target equality {
-      proof
-      functionOperand := target
-      argumentOperand := equality
-    }
-    return true
-  pure false
-
 /-- If `type` is `A ↔ B`, project `expr : A ↔ B` through `.mp` or `.mpr` to
     produce a function of type `A → B` (forward) or `B → A` (reverse). Returns
     `none` if the type is not an `Iff`. -/
@@ -389,13 +348,10 @@ syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
       applyPremiseApplicationPolicy aRaw bRaw result
       return
 
-    -- Equality cards also act on proposition cards by substitution. Keep
-    -- both orientations available because either side of the equality may be
-    -- the expression present in the proposition.
-    if ← tryDerivedEqualityRewrite aRaw bRaw isRev then return
-    if ← tryDerivedEqualityRewrite aRaw bRaw (!isRev) then return
-    if ← tryDerivedEqualityRewrite bRaw aRaw isRev then return
-    if ← tryDerivedEqualityRewrite bRaw aRaw (!isRev) then return
+    -- An equality never rewrites the statement it is dropped on. Substituting
+    -- one into a neighbouring statement silently produced a statement the
+    -- player never asked for whenever the application they intended did not
+    -- typecheck; that is what Transformation Mode is for.
 
     -- Rewrite fallback: if either side is an iff (possibly forall-quantified),
     -- try using it to rewrite the other hypothesis.
@@ -1274,9 +1230,10 @@ example (x : Nat) : True := by
   drag_apply explicitNotPremiseLocal thm_visibleNot
   exact thm_explicitNotPremiseLocal
 
+-- Substituting an equality into a neighbouring statement is not a drop; it is
+-- what Transformation Mode is for.
 example (x y : Nat) (h : x * y = 1) : True := by
-  drag_to oneNeZeroRewriteLocal h
-  have _hx : x * y ≠ 0 := thm_oneNeZeroRewriteLocal
+  fail_if_success drag_to oneNeZeroRewriteLocal h
   trivial
 
 example (x : Nat) : x + 1 = 4 → x = 3 := by

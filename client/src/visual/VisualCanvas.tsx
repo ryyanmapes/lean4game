@@ -962,23 +962,13 @@ function propositionDropWouldSubstitute(first: DropProposition, second: DropProp
         formulasMatch(implication[0], candidate)
         || statementCanTargetGoal(implication[0], candidate, fn.forallFooter))
     })
-  if (applies(first, second) || applies(second, first)) return false
-  // No premise fits, so all `drag_to` has left is substituting the equality
-  // into the other statement. Doing that to a still-quantified proposition
-  // rewrites a general lemma into another general lemma — `succ n = 0` on
-  // `zero_ne_succ` yields `∀ a, succ n ≠ succ a` — which is never what the
-  // player reached for; they wanted an application that does not typecheck.
-  // Substituting into a concrete proposition stays available.
-  const isQuantified = (proposition: DropProposition) =>
-    Boolean(proposition.forallFooter?.trim())
-    || proposition.formulas.some(formula => /^∀/u.test(formula.trim()))
-  if (isQuantified(first) || isQuantified(second)) return true
-  // Otherwise an implication-shaped card is an application attempt, and Lean
-  // stays the authority on whether it elaborates.
-  return !(
-    first.formulas.some(formula => splitNegationAsImplication(formula) !== null)
-    || second.formulas.some(formula => splitNegationAsImplication(formula) !== null)
-  )
+  // No premise fits, so all that is left for `drag_to` is substituting the
+  // equality into the other statement. Dropping two statements together
+  // applies one to the other and nothing else: rewriting is what
+  // Transformation Mode is for, and inventing a rewritten statement whenever
+  // the intended application failed to typecheck only ever produced cards the
+  // player never asked for.
+  return !(applies(first, second) || applies(second, first))
 }
 
 function hypDropProposition(card: HypCardType): DropProposition {
