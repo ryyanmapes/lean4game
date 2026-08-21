@@ -22,8 +22,8 @@ describe('Visual Lean release landing page', () => {
         .to.equal(page?.getComputedStyle(body).fontFamily)
     })
     cy.get('#credits').scrollIntoView().should('be.visible')
-      .and('contain.text', 'Visual Lean was coded with the help of Codex and Claude Code.')
-      .and('contain.text', 'license info tbd')
+      .and('contain.text', 'It was coded with the help of Codex and Claude Code.')
+      .and('contain.text', 'GPL-3.0 license')
   })
 
   it('stays within a phone viewport', () => {

@@ -944,63 +944,25 @@ function splitNegationAsImplication(text: string): [string, string] | null {
   return null
 }
 
-/** One side of a card-on-card drop, reduced to the text the substitution guard
- *  reasons about. Local hypotheses, workspace theorem copies and tray theorems
- *  all reach the same drop handlers, so the guard cannot take `HypCardType`. */
-interface DropProposition {
-  formulas: string[]
-  forallFooter?: string
-  isEquality: boolean
-}
-
 /** Equality hypotheses may still be premises to an implication. What is no
  * longer supported is using an equality to rewrite/substitute inside another
- * proposition by dropping the two cards together. */
-function propositionDropWouldSubstitute(first: DropProposition, second: DropProposition): boolean {
-  if (!first.isEquality && !second.isEquality) return false
-  // Negation is displayed as `x ≠ y`, but its reducible form is the function
-  // `x = y → False`. A theorem states its premise with its own bound variables
-  // (`0 = succ a` for `zero_ne_succ`), so the match reads the card's forall
-  // footer as wildcards rather than demanding surface-text equality.
-  const applies = (fn: DropProposition, argument: DropProposition) =>
-    fn.formulas.some(formula => {
-      const implication = splitNegationAsImplication(formula)
-      if (!implication) return false
-      return argument.formulas.some(candidate =>
-        formulasMatch(implication[0], candidate)
-        || statementCanTargetGoal(implication[0], candidate, fn.forallFooter))
-    })
-  // No premise fits, so all that is left for `drag_to` is substituting the
-  // equality into the other statement. Dropping two statements together
-  // applies one to the other and nothing else: rewriting is what
-  // Transformation Mode is for, and inventing a rewritten statement whenever
-  // the intended application failed to typecheck only ever produced cards the
-  // player never asked for.
-  return !(applies(first, second) || applies(second, first))
-}
-
-function hypDropProposition(card: HypCardType): DropProposition {
-  return {
-    formulas: [hypCardFormula(card), ...(card.hyp.reductionForms ?? []).map(normalizeFormulaText)],
-    forallFooter: card.hyp.forallFooter,
-    isEquality: parsedHypEquality(card) !== null,
-  }
-}
-
-function theoremDropProposition(theorem: PropositionTheorem): DropProposition {
-  const formulas = [
-    normalizeFormulaText(theorem.proposition || theorem.label),
-    ...(theorem.reductionForms ?? []).map(normalizeFormulaText),
-  ].filter(Boolean)
-  return {
-    formulas,
-    forallFooter: theorem.forallFooter,
-    isEquality: formulas.some(formula => parseGoalEquality(formula) !== null),
-  }
-}
-
+ * hypothesis by dropping the two local cards together. Lean's `drag_to` now
+ * refuses that outright, so this only has to keep the obvious case from being
+ * dispatched at all; anything implication-shaped is an application attempt and
+ * Lean stays the authority on whether it elaborates. */
 function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType): boolean {
-  return propositionDropWouldSubstitute(hypDropProposition(first), hypDropProposition(second))
+  if (!parsedHypEquality(first) && !parsedHypEquality(second)) return false
+
+  const formulaCandidates = (card: HypCardType) => [
+    hypCardFormula(card),
+    ...(card.hyp.reductionForms ?? []).map(normalizeFormulaText),
+  ]
+  const firstTypes = formulaCandidates(first)
+  const secondTypes = formulaCandidates(second)
+  return !(
+    firstTypes.some(type => splitNegationAsImplication(type) !== null)
+    || secondTypes.some(type => splitNegationAsImplication(type) !== null)
+  )
 }
 
 function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): ParsedTransformTarget | null {
@@ -4178,19 +4140,11 @@ export function VisualCanvas({
         const { stream: targetStream, card: targetCard } = resolveHypDropTarget(overId)
         const targetTheoremCopy = overId ? getTheoremCopyById(overId) : undefined
         const targetName = interactionHypName(targetCard) ?? targetTheoremCopy?.theorem.theoremName
-        // A theorem is not a rewrite rule here. Without this the backend's
-        // `drag_to` fallback would happily substitute an equality into the
-        // theorem's statement, inventing a hypothesis the player never asked
-        // for instead of reporting that the two do not fit together.
-        const targetProposition = targetCard
-          ? hypDropProposition(targetCard)
-          : targetTheoremCopy
-            ? theoremDropProposition(targetTheoremCopy.theorem)
-            : null
-        if (targetProposition && propositionDropWouldSubstitute(
-          theoremDropProposition(theoremTemplate),
-          targetProposition,
-        )) return
+        // A theorem dropped on a proposition is not a rewrite rule, but that
+        // is `drag_to`'s judgement to make, not the canvas's. Refusing here
+        // turned Lean's explicit rejection into a silent no-op the moment a
+        // premise stopped matching -- `succ_inj` on a hypothesis it had
+        // already reduced to `x = 3` -- and the player got no feedback at all.
         if (targetName) {
           const placementHint = targetCard && targetStream
             ? {
@@ -4313,17 +4267,7 @@ export function VisualCanvas({
         // copies are checked on the same terms as local cards: `drag_to` will
         // otherwise substitute an equality into a theorem's statement and
         // produce a hypothesis the player never asked for.
-        const dropSource = sourceCard
-          ? hypDropProposition(sourceCard)
-          : sourceTheoremCopy
-            ? theoremDropProposition(sourceTheoremCopy.theorem)
-            : null
-        const dropTarget = targetCard
-          ? hypDropProposition(targetCard)
-          : targetTheoremCopy
-            ? theoremDropProposition(targetTheoremCopy.theorem)
-            : null
-        if (dropSource && dropTarget && propositionDropWouldSubstitute(dropSource, dropTarget)) return
+        if (sourceCard && targetCard && hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
 
         // When dropping a hyp onto a constructable theorem copy, use drag_apply
         // to partially apply the theorem to the hyp (pattern-matching its type
