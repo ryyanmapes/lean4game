@@ -399,7 +399,7 @@
         "h"
       ],
       "commands": [
-        "induction b with d hd generalizing c",
+        "induction b with d hd generalizing c ha",
         "rw [mul_zero] at h",
         "symm at h",
         "apply mul_eq_zero at h",
@@ -418,7 +418,8 @@
         "rw [mul_succ, mul_succ] at h",
         "apply add_right_cancel at h",
         "have hde := hd e",
-        "have h2 := hde h",
+        "have hde2 := hde ha",
+        "have h2 := hde2 h",
         "rw [h2]",
         "rfl"
       ]

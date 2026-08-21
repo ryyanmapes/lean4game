@@ -42,6 +42,9 @@ export function VisualHeader({
   // completion flourish. `previouslyCompleted` alone cannot say that: solving
   // the level marks it completed straight away, so remember the value this
   // level was entered with and refresh it only when the level changes.
+  // This suppresses the animation; it must never turn the header green on its
+  // own, because completion metadata can outlive any restorable proof and the
+  // header would then claim a solved state the canvas is not showing.
   const entryKey = `${worldId ?? ''}/${levelId}`
   const entryRef = React.useRef<{ key: string; completed: boolean } | null>(null)
   if (entryRef.current?.key !== entryKey) {
@@ -57,7 +60,7 @@ export function VisualHeader({
   const splitLongTitle = Boolean(plainTitle && `${levelLabel}: ${plainTitle}`.length > 28)
 
   return (
-    <div className={`visual-header${isCompleted || completedOnEntry ? ' completed' : ''}${completedOnEntry ? ' precompleted' : ''}`}>
+    <div className={`visual-header${isCompleted ? ' completed' : ''}${completedOnEntry ? ' precompleted' : ''}`}>
       <div className="visual-header-side">
         {!hideNav && <>
           <button
