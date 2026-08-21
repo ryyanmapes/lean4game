@@ -54,6 +54,15 @@ function findHypCardByInteractionName(stream: GoalStream, hypName: string): HypC
   ) ?? null
 }
 
+/** Both gestures that discharge the focused goal by dropping a proof on it.
+ *  Fast `exfalso` reaches the goal through False rather than by matching it,
+ *  but it closes the branch just as `drag_goal` does. The two `drag_goal `
+ *  checks below stay exact: only that gesture can leave a *new* goal behind. */
+function solvesFocusedGoalDirectly(playTactic?: string): boolean {
+  return (playTactic?.startsWith('drag_goal ') ?? false)
+    || (playTactic?.startsWith('drag_goal_exfalso ') ?? false)
+}
+
 function dragGoalApplyNextGoalType(
   focusedStream: GoalStream,
   playTactic?: string,
@@ -1491,7 +1500,7 @@ export function reconcileProofTreeAfterInteraction(
     if (unmatchedExactFocusedStreams.length === 0) {
       return undefined
     }
-    if (playTactic?.startsWith('drag_goal ')) {
+    if (solvesFocusedGoalDirectly(playTactic)) {
       return unmatchedExactFocusedStreams
     }
     const matchesFocusedBranch = unmatchedExactFocusedStreams.some(stream =>
@@ -1509,7 +1518,7 @@ export function reconcileProofTreeAfterInteraction(
     (playTactic?.startsWith('drag_apply ') ?? false) ||
     /^symm(?:\s+at\s+\S+)?$/u.test(playTactic ?? '')
   const solvesFocusedGoal =
-    (playTactic?.startsWith('drag_goal ') ?? false) || solvesFocusedByReflexiveClick
+    solvesFocusedGoalDirectly(playTactic) || solvesFocusedByReflexiveClick
   const hasSiblingBranches = siblingStreamsByBeforeId.size > 0
   const canPromoteSingleRemainingStream =
     !interactionRequiresFollowUp &&

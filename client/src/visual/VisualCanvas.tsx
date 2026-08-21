@@ -1851,6 +1851,10 @@ function inferLeanTacticFromVisualInteraction(
     return `have ${forallSpecialization.newName} := ${forallSpecialization.source} (${forallSpecialization.binder} := ${forallSpecialization.value})`
   }
 
+  // Fast `exfalso` records one gesture; Core Lean spells out both steps.
+  const fastExfalsoDrop = /^drag_goal_exfalso\s+(\S+)$/u.exec(playTactic.trim())
+  if (fastExfalsoDrop) return `exfalso; exact ${fastExfalsoDrop[1]}`
+
   const parsedDragGoal = parseDragGoalPlayTactic(playTactic)
   if (parsedDragGoal) {
     const { hypName, reverse } = parsedDragGoal
@@ -1865,9 +1869,7 @@ function inferLeanTacticFromVisualInteraction(
     const hypType = normalizeFormulaText(TaggedText_stripTags(hypCard.hyp.type))
     if (hypType === 'False') {
       const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
-      // Reaching a non-False goal means Fast `exfalso` accepted the drop, so
-      // spell out the two steps it stands for instead of leaving a `?`.
-      return goalType === 'False' ? `exact ${hypName}` : `exfalso; exact ${hypName}`
+      return goalType === 'False' ? `exact ${hypName}` : null
     }
     const goalType = normalizeFormulaText(TaggedText_stripTags(stream.goal.type))
     const iffSides = splitIffText(hypType)
@@ -4279,13 +4281,20 @@ export function VisualCanvas({
           : Boolean(sourceCard && targetGoal && hypCanTargetGoal(sourceCard, targetGoal, fastExfalso))
         if (!canTarget) return
         // Dropped on a goal card → drag_goal
-        const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
-        // A Fast `exfalso` drop reaches the goal through False, so show the
-        // goal the contradiction actually discharged rather than the original.
+        // A proof of False dropped on a goal that is not False only reaches
+        // here with Fast `exfalso` on. Plain `drag_goal` deliberately refuses
+        // that, so name the tactic that stands for exfalso-then-discharge —
+        // which also keeps the recorded proof replayable with the setting off.
         const dischargedThroughFalse = Boolean(sourceCard)
           && normalizeFormulaText(
             sourceCard!.hyp.typeBody ?? TaggedText_stripTags(sourceCard!.hyp.type),
           ) === 'False'
+          && normalizeFormulaText(
+            TaggedText_stripTags(targetGoal?.goal.type ?? { text: '' }),
+          ) !== 'False'
+        const playTactic = dischargedThroughFalse
+          ? interactionToPlayTactic({ type: 'drag_goal_exfalso', hypName: sourceName })
+          : interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse })
         applyDroppedInteraction(playTactic, activeId, {
           solvedGoalId: overId as string,
           targetStreamId: overId as string,

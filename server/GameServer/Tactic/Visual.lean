@@ -518,13 +518,6 @@ syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
       evalTactic (← `(tactic| exact $h))
       return
 
-    -- A proof of `False` discharges any goal whatsoever. The canvas offers
-    -- this drag only when the player has switched Fast `exfalso` on, so the
-    -- tactic just has to honour it wherever it arrives.
-    if hType.isConstOf ``False then
-      evalTactic (← `(tactic| exact False.elim $h))
-      return
-
     if let .app (.app (.app (.const ``Eq _) _) _) _ := hType then
       if ← tryRewrite h.raw isRev then return
       if ← tryRewrite h.raw (!isRev) then return
@@ -536,6 +529,23 @@ syntax (name := drag_goal) "drag_goal" ("←")? ident : tactic
 
     throwError "drag_goal: '{h.getId}' cannot be used here.\n\
       {h.getId} : {hTypeRaw}\n  goal : {← getMainTarget}"
+
+/-- `drag_goal_exfalso h` — the player dropped a proof of `False` straight onto
+    a goal with Fast `exfalso` switched on. It stands for turning the goal into
+    `False` and then discharging it, which is why plain `drag_goal` still
+    refuses the same drop: without the setting, that route is the one the
+    player is meant to take by hand. -/
+syntax (name := drag_goal_exfalso) "drag_goal_exfalso" ident : tactic
+
+@[tactic drag_goal_exfalso] def evalDragGoalExfalso : Tactic := fun stx => do
+  let h : Ident := ⟨stx[1]⟩
+  withMainContext do
+    let (_, hTypeRaw) ← resolveNamedExprAndType h
+    let hType ← whnf hTypeRaw
+    unless hType.isConstOf ``False do
+      throwError "drag_goal_exfalso: '{h.getId}' is not a proof of False.\n\
+        {h.getId} : {hTypeRaw}"
+    evalTactic (← `(tactic| exact False.elim $h))
 
 syntax (name := drag_rw)
   "drag_rw" "[" ("←")? ident "]" ("on" ("lhs" <|> "rhs"))? ("at" "[" num,* "]")? : tactic
@@ -1206,6 +1216,17 @@ example (n : Nat) (h : False) : n = 42 := by
   drag_goal h
 
 example (h : False) : False := by
+  drag_goal h
+
+-- Fast `exfalso` takes the drop plain `drag_goal` refuses, on any goal at all.
+example (P Q : Prop) (h : False) : P ∧ Q := by
+  drag_goal_exfalso h
+
+example (n : Nat) (h : False) : n = 42 := by
+  drag_goal_exfalso h
+
+example (n : Nat) (h : n = 42) : n = 42 := by
+  fail_if_success drag_goal_exfalso h
   drag_goal h
 
 private theorem flipEqLocal (x y : Nat) : x = y → y = x := by

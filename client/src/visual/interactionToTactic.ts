@@ -8,6 +8,8 @@
 export type VisualInteraction =
   | { type: 'drag_to';    nameA: string; nameB: string; reverse?: boolean }
   | { type: 'drag_goal';  hypName: string; reverse?: boolean }
+  /** Fast `exfalso`: a proof of False dropped straight onto an unrelated goal. */
+  | { type: 'drag_goal_exfalso'; hypName: string }
   | { type: 'drag_apply'; theoremName: string; hypName: string }
   | { type: 'drag_tactic'; tacticName: string; targetHypName?: string }
   | {
@@ -38,6 +40,8 @@ export function interactionToPlayTactic(i: VisualInteraction): string {
       return i.reverse
         ? `drag_goal ← ${i.hypName}`
         : `drag_goal ${i.hypName}`
+    case 'drag_goal_exfalso':
+      return `drag_goal_exfalso ${i.hypName}`
     case 'drag_apply':
       return `drag_apply ${i.theoremName} ${i.hypName}`
     case 'drag_tactic':
