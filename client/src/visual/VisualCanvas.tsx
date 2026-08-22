@@ -6609,6 +6609,8 @@ export function VisualCanvas({
               type="button"
               role="menuitem"
               data-testid="proof-action-copy"
+              disabled={proofSteps.length === 0}
+              title={proofSteps.length === 0 ? 'There is no proof to copy yet' : undefined}
               onClick={() => {
                 copyDisplayedProof()
                 if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
@@ -6619,6 +6621,15 @@ export function VisualCanvas({
                 type="button"
                 role="menuitem"
                 data-testid="proof-action-export-classic"
+                // A level finished in an earlier session opens with no
+                // restorable script when its autosave is stale: the map still
+                // shows it solved, but there is nothing to hand off. Exporting
+                // anyway opened classic mode on an empty proof, which is
+                // indistinguishable from the button being broken.
+                disabled={proofSteps.length === 0}
+                title={proofSteps.length === 0
+                  ? 'Replay this level to export it — its saved proof could not be restored'
+                  : undefined}
                 onClick={() => {
                   if (proofActionsMenuRef.current) proofActionsMenuRef.current.open = false
                   // The sidebar shortens `MyNat.*` names for readability, but

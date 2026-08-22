@@ -903,6 +903,17 @@ describe('NNG4 implication and definition display regressions', () => {
         expect(style.boxShadow, 'unrestored goal retains its incomplete glow').to.contain('234, 179, 8')
       })
     cy.get('.visual-header').should('not.have.class', 'completed')
+
+    // Nothing was restored, so there is no proof to hand off. Offering the
+    // export anyway sent classic mode an empty body, which is exactly how a
+    // player experiences "the export button does not work" on a level they
+    // finished in an earlier session.
+    cy.get('.proof-sidebar', { timeout: LOAD_TIMEOUT }).then(sidebar => {
+      if (!sidebar.hasClass('open')) cy.wrap(sidebar).find('.proof-sidebar-tab').click()
+    })
+    cy.get('[data-testid="proof-actions-toggle"]', { timeout: LOAD_TIMEOUT }).click()
+    cy.get('[data-testid="proof-action-export-classic"]').should('be.disabled')
+    cy.get('[data-testid="proof-action-copy"]').should('be.disabled')
   })
 
   it('rewrites the selected x to x + 0 with reverse add_zero', () => {
