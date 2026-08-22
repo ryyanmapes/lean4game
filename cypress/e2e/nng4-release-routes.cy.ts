@@ -102,12 +102,10 @@ describe('local NNG4 release maps', () => {
     cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
     cy.contains('button', 'Unlock levels').should('not.exist')
     cy.get('a.visual-map-back-btn[href="/"]').should('exist')
-    cy.get('.app').invoke('attr', 'data-visual-theme').then(initialTheme => {
-      cy.get('.visual-map-theme-toggle').click()
-      cy.get('.app').should('have.attr', 'data-visual-theme').and('not.equal', initialTheme)
-    })
-    cy.get('.visual-map-theme-toggle').should('not.contain.text', 'Light').and('not.contain.text', 'Dark')
-      .and('have.attr', 'title')
+    // Light mode is retired: no control offers it, and a stored preference
+    // for it no longer applies, so the map always renders dark.
+    cy.get('.visual-map-theme-toggle').should('not.exist')
+    cy.get('.app').should('have.attr', 'data-visual-theme', 'dark')
     cy.get('.visual-map-link.level').first().focus()
     cy.get('.map-level-name-tooltip').should('be.visible').and('not.be.empty')
       .then($tooltip => {
