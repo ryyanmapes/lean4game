@@ -8,6 +8,7 @@ import { useAppSelector, useAppDispatch } from '../hooks'
 import { selectCompleted, levelCompleted, levelEntered } from '../state/progress'
 import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
+import { decodeAutosave, writeAutosave } from './autosaveStorage'
 import { VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
 import type { VisualProofResumeState } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
@@ -48,16 +49,22 @@ interface StoredVisualProof {
   session: VisualProofResumeState
 }
 
+const VISUAL_PROOF_STORAGE_PREFIX = 'visual-proof-autosave/'
+
 function visualProofStorageKey(gameId: string, worldId: string, levelId: number) {
-  return `visual-proof-autosave/${gameId}/${worldId}/${levelId}`
+  return `${VISUAL_PROOF_STORAGE_PREFIX}${gameId}/${worldId}/${levelId}`
 }
 
-function loadVisualProofAutosave(gameId: string, worldId: string, levelId: number): VisualProofResumeState | null {
+async function loadVisualProofAutosave(
+  gameId: string,
+  worldId: string,
+  levelId: number,
+): Promise<VisualProofResumeState | null> {
   const key = visualProofStorageKey(gameId, worldId, levelId)
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return null
-    const stored = JSON.parse(raw) as Partial<StoredVisualProof>
+    const stored = await decodeAutosave(raw) as Partial<StoredVisualProof>
     if (
       stored.version !== VISUAL_PROOF_AUTOSAVE_VERSION ||
       stored.gameId !== gameId ||
@@ -343,9 +350,13 @@ export function VisualProofPage() {
         levelId,
         session,
       }
-      localStorage.setItem(visualProofStorageKey(gameId, worldId, levelId), JSON.stringify(stored))
+      void writeAutosave(
+        visualProofStorageKey(gameId, worldId, levelId),
+        VISUAL_PROOF_STORAGE_PREFIX,
+        stored,
+      )
     } catch {
-      // Storage may be disabled or full; gameplay should continue normally.
+      // Storage may be disabled; gameplay should continue normally.
     }
   }, [gameId, levelId, worldId])
 
@@ -416,7 +427,7 @@ export function VisualProofPage() {
             proofPreludeRef.current = prepared.prelude
             initialCanvas = prepared.canvas
           }
-          const saved = loadVisualProofAutosave(gameId, worldId, levelId)
+          const saved = await loadVisualProofAutosave(gameId, worldId, levelId)
           let validatedResume: VisualProofResumeState | null = null
           if (saved && saved.proofBody.trim().length > 0 && saved.proofSteps.length > 0) {
             try {
