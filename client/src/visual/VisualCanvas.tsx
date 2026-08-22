@@ -506,21 +506,13 @@ function mergeCanvasState(fresh: CanvasState, current: CanvasState): CanvasState
       const mergedHyps = stream.hyps.map(card => {
         const saved = cardMap.get(card.id) ?? removedTheoremsByName.get(card.hyp.names[0] ?? '')
         if (!saved) return card
-        // A replacement theorem may retain its card identity while growing
-        // into a much longer implication. Let the oversized-card placement
-        // scan treat that changed footprint as fresh; unchanged short cards
-        // keep their exact historical positions. Preserving *every* carried
-        // card here stopped `cases` scattering the canvas, but it also let a
-        // widened card sit on top of its neighbour, which the release layout
-        // suite rightly rejects.
-        const proposition = TaggedText_stripTags(card.hyp.type).trim()
-        if (
-          saved.userPlaced
-          || estimatedHypSize(card).width <= 264
-          || proposition === saved.proposition
-        ) {
-          preservedIds.add(card.id)
-        }
+        // Any card the player has already seen keeps exactly where it was,
+        // including one a step rewrote into a much wider proposition. Letting
+        // the oversized-card scan re-flow those made `cases` on a variable, or
+        // specializing a theorem, visibly scatter the rest of the canvas and
+        // cost the player their spatial memory of it. Only genuinely new cards
+        // are placed by the scan below; carried-over cards are its obstacles.
+        preservedIds.add(card.id)
         return { ...card, position: saved.position, userPlaced: saved.userPlaced }
       })
       return { ...stream, hyps: avoidFreshOversizedCollisions(mergedHyps, preservedIds) }
