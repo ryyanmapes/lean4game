@@ -2919,6 +2919,29 @@ export class CompletePlaythroughDriver {
     const finalForallBinders = forallBinderNames(source)
     this.applicationSelectionHistory.push(applicationSelectionRecord)
     if (this.applicationSelectionHistory.length > 8) this.applicationSelectionHistory.shift()
+    // The canvas decides whether a drop is legal from the goal it has
+    // rendered, which can trail the accepted proof by a commit. Dropping into
+    // that window is refused silently and looks exactly like a broken drag --
+    // `symm` then `exact zero_ne_one` failed this way intermittently. A player
+    // reads the goal before reaching for the theorem; wait for the same thing.
+    if (target.matches('[data-testid="goal-card"]')) {
+      const sourceFooter = source.querySelector<HTMLElement>(
+        '.tr-forall-footer, .statement-forall-footer',
+      )?.textContent ?? undefined
+      await waitFor(
+        `${command} goal ready to accept the drop`,
+        () => {
+          const goal = currentGoal(this.win)
+          if (!goal) return null
+          return statementCanTargetGoal(
+            cardProposition(source),
+            cardProposition(goal),
+            sourceFooter,
+          ) ? goal : null
+        },
+        10_000,
+      ).catch(() => null)
+    }
     try {
       await this.dragAndWait(source, target, `${command} player drag`)
       // Some reducible targets do not expose enough surface structure for the
