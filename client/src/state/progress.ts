@@ -270,3 +270,12 @@ export function selectTypewriterMode(game: string) {
 export const { changedSelection, codeEdited, levelCompleted, levelEntered, deleteProgress,
   deleteLevelProgress, deleteWorldProgress, loadProgress, helpEdited, changedInventory, changedReadIntro,
   changedDifficulty, changeTypewriterMode, changeUnlockLevels} = progressSlice.actions
+
+/** Classic mode keeps its own progress record.
+ *
+ * Both modes address the same game, so keying progress by game id alone made
+ * the classic map report visual completions. The visual game is the primary
+ * product and keeps the plain key; classic is qualified. */
+export function classicProgressId(game: string): string {
+  return `${game}/classic`
+}

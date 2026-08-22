@@ -117,7 +117,7 @@ function isNng4Game(gameId: string): boolean {
 }
 
 function getVisualMapGameTitle(gameId: string, title?: string | null): string {
-  return isNng4Game(gameId) ? 'The Natural Numbers Game' : (title || gameId)
+  return isNng4Game(gameId) ? 'The Natural Numbers Video Game' : (title || gameId)
 }
 
 function handleMapLinkKeyDown(

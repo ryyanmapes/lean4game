@@ -99,7 +99,7 @@ describe('local NNG4 release maps', () => {
   it('uses the same map chrome for visual play and retains visual level routes', () => {
     cy.visit('/lean4game/index.html#/g/local/NNG4/visual')
 
-    cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
+    cy.contains('The Natural Numbers Video Game', { timeout: 30_000 }).should('be.visible')
     cy.contains('button', 'Unlock levels').should('not.exist')
     cy.get('a.visual-map-back-btn[href="/"]').should('exist')
     // Light mode is retired: no control offers it, and a stored preference
@@ -147,7 +147,7 @@ describe('local NNG4 release maps', () => {
 
   it('keeps erase confirmation concise and offers no combined download action', () => {
     cy.visit('/lean4game/index.html#/g/local/NNG4/visual')
-    cy.contains('The Natural Numbers Game', { timeout: 30_000 }).should('be.visible')
+    cy.contains('The Natural Numbers Video Game', { timeout: 30_000 }).should('be.visible')
     cy.get('.visual-map-menu-btn').click()
     cy.contains('.visual-map-dropdown button', 'Reset').click()
     cy.contains('h2', 'Reset Progress?').should('be.visible')

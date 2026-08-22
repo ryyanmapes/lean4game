@@ -10,6 +10,7 @@ import { useGetGameInfoQuery, useLoadLevelQuery } from '../state/api'
 import {
   changedInventory,
   changeTypewriterMode,
+  classicProgressId,
   levelCompleted,
   selectInventory,
   selectTypewriterMode,
@@ -390,7 +391,7 @@ export default function LocalClassicLevel() {
 
   React.useEffect(() => {
     if (!proof.completed || !level.data) return
-    dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
+    dispatch(levelCompleted({ game: classicProgressId(gameId), world: worldId, level: levelId }))
     const unlocked = [
       ...level.data.tactics,
       ...level.data.lemmas,

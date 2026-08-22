@@ -19,7 +19,7 @@ import { Diagnostic } from 'vscode-languageserver-types'
 import { GameIdContext } from '../app'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { useGetGameInfoQuery, useLoadInventoryOverviewQuery, useLoadLevelQuery } from '../state/api'
-import { changedSelection, codeEdited, selectCode, selectSelections, selectCompleted, helpEdited,
+import { changedSelection, classicProgressId, codeEdited, selectCode, selectSelections, selectCompleted, helpEdited,
   selectHelp, selectDifficulty, selectInventory, selectTypewriterMode, changeTypewriterMode } from '../state/progress'
 import { store } from '../state/store'
 import { Button } from './button'
@@ -113,7 +113,7 @@ export function ChatPanel({lastLevel, visible = true}) {
   const {proof, setProof} = useContext(ProofContext)
   const {deletedChat, setDeletedChat, showHelp, setShowHelp} = useContext(DeletedChatContext)
   const {selectedStep, setSelectedStep} = useContext(SelectionContext)
-  const completed = useAppSelector(selectCompleted(gameId, worldId, levelId))
+  const completed = useAppSelector(selectCompleted(classicProgressId(gameId), worldId, levelId))
 
   let k = proof?.steps.length ? proof?.steps.length - (lastStepHasErrors(proof) ? 2 : 1) : 0
 

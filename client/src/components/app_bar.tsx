@@ -9,7 +9,7 @@ import { faDownload, faUpload, faEraser, faBook, faBookOpen, faGlobe, faHome,
 import { GameIdContext } from "../app"
 import { InputModeContext, PreferencesContext, WorldLevelIdContext } from "./infoview/context"
 import { GameInfo, useGetGameInfoQuery } from '../state/api'
-import { changedReadIntro, selectCompleted, selectDifficulty, selectProgress } from '../state/progress'
+import { changedReadIntro, classicProgressId, selectCompleted, selectDifficulty, selectProgress } from '../state/progress'
 import { useAppDispatch, useAppSelector } from '../hooks'
 import { Button } from './button'
 import { downloadProgress } from './popup/erase'
@@ -278,7 +278,7 @@ export function LevelAppBar({isLoading, levelTitle, pageNumber=undefined, setPag
   const {mobile} = React.useContext(PreferencesContext)
   const [navOpen, setNavOpen] = useAtom(navOpenAtom)
   const gameInfo = useGetGameInfoQuery({game: gameId})
-  const completed = useAppSelector(selectCompleted(gameId, worldId, levelId))
+  const completed = useAppSelector(selectCompleted(classicProgressId(gameId), worldId, levelId))
   const difficulty = useAppSelector(selectDifficulty(gameId))
   const gameProgress = useAppSelector(selectProgress(gameId))
 

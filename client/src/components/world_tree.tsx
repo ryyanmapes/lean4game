@@ -7,7 +7,7 @@ import cytoscape, { LayoutOptions } from 'cytoscape'
 import klay from 'cytoscape-klay'
 
 import { GameIdContext } from '../app'
-import { selectCompleted } from '../state/progress'
+import { classicProgressId, selectCompleted } from '../state/progress'
 import { store } from '../state/store'
 
 import '../css/world_tree.css'
@@ -289,7 +289,7 @@ export function WorldTreePanel({worlds, worldSize, completionNeutralLevels = {}}
     for (let worldId in nodes) {
       completed[worldId] = Array.from({ length: worldSize[worldId] + 1 }, (_, i) => {
         // index `0` starts off as `true` but can be set to `false` by any edge with non-completed source
-        return i == 0 || selectCompleted(gameId, worldId, i)(store.getState())
+        return i == 0 || selectCompleted(classicProgressId(gameId), worldId, i)(store.getState())
       })
       const neutral = new Set(completionNeutralLevels[worldId] ?? [])
       satisfied[worldId] = completed[worldId].map((done, i) => done || neutral.has(i))

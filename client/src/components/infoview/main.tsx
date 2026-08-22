@@ -22,7 +22,7 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'
 import { GameIdContext } from '../../app';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { LevelInfo, useGetGameInfoQuery } from '../../state/api';
-import { changedInventory, levelCompleted, selectCode, selectCompleted, selectInventory } from '../../state/progress';
+import { changedInventory, classicProgressId, levelCompleted, selectCode, selectCompleted, selectInventory } from '../../state/progress';
 import { Markdown } from '../markdown';
 
 import { Infos } from './infos';
@@ -74,7 +74,7 @@ function DualEditorMain({ worldId, levelId, level, worldSize }: { worldId: strin
 
   React.useEffect(() => {
     if (proof?.completed) {
-      dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
+      dispatch(levelCompleted({ game: classicProgressId(gameId), world: worldId, level: levelId }))
 
       // On completion, add the names of all new items to the local storage
       let newTiles = [
