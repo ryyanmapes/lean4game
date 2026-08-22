@@ -5,13 +5,13 @@ describe('local NNG4 release maps', () => {
     cy.contains('h1', 'Visual Lean').should('be.visible')
     cy.contains('An experimental graphical user interface for writing Lean code.').should('be.visible')
     cy.contains('Lean verification runs locally on both desktop and mobile through WASM.').should('be.visible')
-    cy.get('a.destination[href="/lean4game/index.html#/g/local/NNG4/visual"]')
+    cy.get('a.destination[href="/visualNNG"]')
       .should('contain.text', 'Start here: The Visual Natural Numbers Game')
       .and('contain.text', 'Prove the fundamental properties of arithmetic from scratch!')
-    cy.get('a.destination[href="/lean4game/index.html#/g/local/VisualTest/visual"]')
+    cy.get('a.destination[href="/pitch"]')
       .should('contain.text', 'Elevator Pitch')
       .and('contain.text', "Take a brief tour of Visual Lean's three modes.")
-    cy.get('a.destination[href="/lean4game/index.html#/g/local/NNG4"]')
+    cy.get('a.destination[href="/classicNNG"]')
       .should('contain.text', 'The Natural Numbers Game Classic')
     cy.contains(/Real Numbers Game/iu).should('not.exist')
     cy.get('#credits').scrollIntoView().should('be.visible')
@@ -19,6 +19,21 @@ describe('local NNG4 release maps', () => {
       .and('contain.text', 'GPL-3.0 license')
     cy.get('#credits a[href="https://github.com/cauli/lean4-wasm-in-browser"]')
       .should('contain.text', 'Lean4.js')
+  })
+
+  it('serves each game from a short shareable path', () => {
+    // The client is a hash router under /lean4game/, and GitHub Pages has no
+    // rewrites, so each short path is a real page that replaces itself with
+    // the hash URL. Check the destination, not just that the page loads.
+    for (const [shortPath, expectedHash] of [
+      ['/visualNNG', '#/g/local/NNG4/visual'],
+      ['/classicNNG', '#/g/local/NNG4'],
+      ['/pitch', '#/g/local/VisualTest/visual'],
+    ] as const) {
+      cy.visit(shortPath)
+      cy.location('pathname', { timeout: 30_000 }).should('include', '/lean4game/')
+      cy.location('hash', { timeout: 30_000 }).should('equal', expectedHash)
+    }
   })
 
   it('uses the original three-column NNG4 map with every grey level clickable', () => {
