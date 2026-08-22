@@ -5,7 +5,10 @@ import {
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
-const LAYOUT_REGRESSION_TIMEOUT = 60_000
+// `repeat apply` is several Lean round-trips inside one gesture, and 60s was
+// not enough for it in CI even with each gesture budgeted separately -- the
+// layout assertions below have never actually run. Give it real headroom.
+const LAYOUT_REGRESSION_TIMEOUT = 180_000
 const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
   .split(',')
   .map(value => value.trim())
@@ -1029,9 +1032,23 @@ describe('NNG4 implication and definition display regressions', () => {
       // Undo is deliberately dropped while the canvas is still processing, so
       // clicking early tests the guard rather than the double-click race this
       // is about.
+      // The overlay keeps its own processing flag, separate from the canvas
+      // audit, and a `disabled` button swallows `.click()` outright -- which
+      // is why both clicks previously vanished and two rewrites survived.
+      // Wait for the control the player would actually be able to press.
+      const liveUndo = () => win.document.querySelector<HTMLButtonElement>(
+        '.tr-transformation-overlay button[aria-label="Undo"]',
+      )
       for (let attempt = 0; ; attempt += 1) {
-        if (!(win as HarnessWindow).__visualTestHarness.getProofAudit().processing) break
-        if (attempt >= 400) throw new Error('the second rewrite never settled')
+        const undo = liveUndo()
+        const canvasIdle = !(win as HarnessWindow).__visualTestHarness.getProofAudit().processing
+        if (canvasIdle && undo && !undo.disabled && undo.getAttribute('aria-disabled') !== 'true') break
+        if (attempt >= 400) {
+          throw new Error(
+            `undo never became pressable: canvasIdle=${canvasIdle} present=${Boolean(undo)} ` +
+            `disabled=${undo?.disabled} ariaDisabled=${undo?.getAttribute('aria-disabled')}`,
+          )
+        }
         await new Promise(resolve => win.setTimeout(resolve, 50))
       }
       // Click the button that is actually mounted each time. React can replace
