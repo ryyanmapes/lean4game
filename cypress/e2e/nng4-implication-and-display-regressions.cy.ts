@@ -331,12 +331,26 @@ describe('NNG4 implication and definition display regressions', () => {
   it('places newly generated long Implication hypotheses into non-overlapping grid slots', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT }).then({ timeout: LAYOUT_REGRESSION_TIMEOUT }, async win => {
-      const player = new CompletePlaythroughDriver(win)
-      await player.perform('intro h')
-      await player.perform('rw [add_succ, add_succ, add_zero] at h')
-      await player.perform('repeat apply succ_inj at h')
+    // One budget for the whole sequence is not enough: `repeat apply` alone is
+    // several Lean round-trips, and the shared cap expired before the layout
+    // this test exists to check was ever reached. Give each gesture its own.
+    // One driver across all three: it carries the alias table that maps the
+    // reference proof's names onto the collision-safe names the UI created,
+    // so a fresh instance per gesture would lose `h` after the first intro.
+    let player: CompletePlaythroughDriver
+    cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT }).then(win => {
+      player = new CompletePlaythroughDriver(win)
     })
+    for (const command of [
+      'intro h',
+      'rw [add_succ, add_succ, add_zero] at h',
+      'repeat apply succ_inj at h',
+    ]) {
+      cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT })
+        .then({ timeout: LAYOUT_REGRESSION_TIMEOUT }, async () => {
+          await player.perform(command)
+        })
+    }
     cy.get(
       '[data-testid="combining-canvas"] [data-testid="hyp-card"], [data-testid="combining-canvas"] [data-testid="theorem-copy-card"]',
       { timeout: LAYOUT_REGRESSION_TIMEOUT },
@@ -1011,12 +1025,27 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.performRewriteOnSide('rw [add_zero]', 'left', true)
       await player.performRewriteOnSide('rw [add_zero]', 'left', true)
 
-      const undo = win.document.querySelector<HTMLButtonElement>(
-        '.tr-transformation-overlay button[aria-label="Undo"]',
-      )
-      expect(undo, 'transformation undo button').to.exist
-      undo!.click()
-      undo!.click()
+      // A player reaches the control only once the second rewrite has settled.
+      // Undo is deliberately dropped while the canvas is still processing, so
+      // clicking early tests the guard rather than the double-click race this
+      // is about.
+      for (let attempt = 0; ; attempt += 1) {
+        if (!(win as HarnessWindow).__visualTestHarness.getProofAudit().processing) break
+        if (attempt >= 400) throw new Error('the second rewrite never settled')
+        await new Promise(resolve => win.setTimeout(resolve, 50))
+      }
+      // Click the button that is actually mounted each time. React can replace
+      // the node between commits, and a captured reference then delivers both
+      // clicks to a detached element that no longer has a handler.
+      const clickUndo = () => {
+        const undo = win.document.querySelector<HTMLButtonElement>(
+          '.tr-transformation-overlay button[aria-label="Undo"]',
+        )
+        expect(undo, 'transformation undo button').to.exist
+        undo!.click()
+      }
+      clickUndo()
+      clickUndo()
     })
 
     cy.window().should(win => {
