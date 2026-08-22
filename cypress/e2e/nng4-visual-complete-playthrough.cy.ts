@@ -25,6 +25,7 @@ interface ProofAudit {
   processing: boolean
   proofBody: string
   coreProofBody: string
+  interactiveProofBody: string
   coreLines: string[]
   interactiveLines: string[]
   visibleNames: string[]
@@ -302,33 +303,56 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
           .should('be.visible')
           .click()
 
-        cy.get('@openClassic').should('have.been.calledOnce').then(openClassic => {
-          const [target, browsingContext, features] =
-            (openClassic as unknown as { getCall(index: number): { args: unknown[] } }).getCall(0).args
-          expect(browsingContext).to.equal('_blank')
-          expect(features).to.include('noopener')
-          const handoffMatch = /[?&]visualHandoff=([^&]+)/u.exec(String(target))
-          expect(handoffMatch, 'classic-mode URL contains a proof handoff token').not.to.equal(null)
-          cy.window().then(win => {
-            const handoff = JSON.parse(
-              win.localStorage.getItem(`visual-proof-handoff/${decodeURIComponent(handoffMatch![1])}`) ?? 'null',
-            )
-            expect(handoff?.proofBody, 'exported classic proof body').to.equal(audit.coreProofBody)
-            cy.visit(String(target))
-          })
+        // Export the Interaction log as well. Only the Core body was ever
+        // handed off here, so a broken Interaction export could not be seen.
+        cy.contains('.proof-sidebar-mode-btn', 'Interactive').click()
+        cy.get('[data-testid="proof-actions-toggle"]', { timeout: LOAD_TIMEOUT })
+          .should('be.visible')
+          .click()
+        cy.contains('button', 'Export to classic mode', { timeout: LOAD_TIMEOUT })
+          .scrollIntoView()
+          .should('be.visible')
+          .click()
+
+        cy.get('@openClassic').should('have.been.calledTwice').then(openClassic => {
+          const calls = openClassic as unknown as { getCall(index: number): { args: unknown[] } }
+          const exported = [audit.coreProofBody, audit.interactiveProofBody]
+          const targets: string[] = []
+          for (const [index, expectedBody] of exported.entries()) {
+            const mode = index === 0 ? 'Core' : 'Interaction'
+            const [target, browsingContext, features] = calls.getCall(index).args
+            expect(browsingContext).to.equal('_blank')
+            expect(features).to.include('noopener')
+            const handoffMatch = /[?&]visualHandoff=([^&]+)/u.exec(String(target))
+            expect(handoffMatch, `${mode} classic-mode URL contains a proof handoff token`)
+              .not.to.equal(null)
+            targets.push(String(target))
+            cy.window().then(win => {
+              const handoff = JSON.parse(
+                win.localStorage.getItem(`visual-proof-handoff/${decodeURIComponent(handoffMatch![1])}`) ?? 'null',
+              )
+              expect(handoff?.proofBody, `exported ${mode} classic proof body`).to.equal(expectedBody)
+            })
+          }
+          // Both handoffs must open a classic level that Lean reports solved.
+          for (const [index, target] of targets.entries()) {
+            const mode = index === 0 ? 'Core' : 'Interaction'
+            cy.visit(target)
+            if (mountPath.includes('/lean4game/')) {
+              cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
+                .should('have.class', 'local-wasm-code-editor')
+                .and('be.visible')
+                .should('have.value', exported[index])
+              cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
+                .should('contain.text', 'Proof complete')
+                .and('have.class', 'is-complete')
+            } else {
+              cy.location('hash', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
+              cy.get('.exercise-panel .exercise', { timeout: LOAD_TIMEOUT }).should('be.visible')
+            }
+            cy.log(`${mode} export solved the classic level`)
+          }
         })
-        if (mountPath.includes('/lean4game/')) {
-          cy.get('#local-classic-proof', { timeout: LOAD_TIMEOUT })
-            .should('have.class', 'local-wasm-code-editor')
-            .and('be.visible')
-            .should('have.value', audit.coreProofBody)
-          cy.get('.local-classic-status', { timeout: LOAD_TIMEOUT })
-            .should('contain.text', 'Proof complete')
-            .and('have.class', 'is-complete')
-        } else {
-          cy.location('hash', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
-          cy.get('.exercise-panel .exercise', { timeout: LOAD_TIMEOUT }).should('be.visible')
-        }
       })
     })
   }

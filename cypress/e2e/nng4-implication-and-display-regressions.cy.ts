@@ -640,17 +640,17 @@ describe('NNG4 implication and definition display regressions', () => {
     openAndExpect(
       'LessOrEqual',
       8,
-      "Induct after only 'a' is introduced to get a more general inductive hypothesis.",
+      "Induct after ONLY 'x' is introduced to get a more general inductive hypothesis.",
     )
     let introducedName = ''
     cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
       introducedName = await new CompletePlaythroughDriver(win).introduceOneForall()
     })
-    cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('be.visible')
+    cy.contains('.goal-info.below', "Induct after ONLY 'x' is introduced").should('be.visible')
     cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
       await new CompletePlaythroughDriver(win).inductVisibleVariable(introducedName)
     })
-    cy.contains('.goal-info.below', "Induct after only 'a' is introduced").should('not.exist')
+    cy.contains('.goal-info.below', "Induct after ONLY 'x' is introduced").should('not.exist')
 
     openAndExpect(
       'LessOrEqual',

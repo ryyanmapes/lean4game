@@ -9,7 +9,7 @@ const OR_TEXT =
   "Click an 'or' goal to specifify which side must be true. Be careful not to dead end " +
   'yourself by specifying the goal too early!'
 const INDUCTION_TEXT =
-  "Induct after only 'a' is introduced to get a more general inductive hypothesis."
+  "Induct after ONLY 'x' is introduced to get a more general inductive hypothesis."
 const CASES_TEXT =
   'The `cases` tactic allows you to split a variable into every form it could take. ' +
   'For instance, natural numbers can take two forms: either 0 or the successor of another natural number. ' +

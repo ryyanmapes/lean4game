@@ -46,7 +46,7 @@ describe('LessOrEqual level 8 goal choices', () => {
     cy.viewport(1440, 900)
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/8/visual`)
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    cy.contains('.goal-info', "Induct after only 'a' is introduced").should('be.visible')
+    cy.contains('.goal-info', "Induct after ONLY 'x' is introduced").should('be.visible')
 
     cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
       const player = new CompletePlaythroughDriver(win)
@@ -55,7 +55,7 @@ describe('LessOrEqual level 8 goal choices', () => {
       await player.inductVisibleVariable(x)
     })
 
-    cy.contains('.goal-info', "Induct after only 'a' is introduced").should('be.visible')
+    cy.contains('.goal-info', "Induct after ONLY 'x' is introduced").should('be.visible')
   })
 
   it('keeps the branch live after dragging a variable onto the forall induction hypothesis', () => {
