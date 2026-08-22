@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference, loadVisualLightModePreference } from "./local_storage";
+import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -30,14 +30,16 @@ const defaultPreferencesState: PreferencesState = {
 }
 
 const savedPreferences = loadPreferences()
-const savedVisualLightMode = loadVisualLightModePreference()
 const savedVisualAutoBranchSwitching = loadVisualAutoBranchSwitchPreference()
 const savedVisualFastExfalso = loadVisualFastExfalsoPreference()
 
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
   ...savedPreferences,
-  isVisualLightMode: savedVisualLightMode ?? savedPreferences?.isVisualLightMode ?? defaultPreferencesState.isVisualLightMode,
+  // Light mode is retired. Anyone still carrying a stored preference for it
+  // returns to dark, rather than being stranded in a theme with no control
+  // left to leave it by.
+  isVisualLightMode: false,
   isVisualAutoBranchSwitching: savedVisualAutoBranchSwitching ?? savedPreferences?.isVisualAutoBranchSwitching ?? defaultPreferencesState.isVisualAutoBranchSwitching,
   isVisualFastExfalso: savedVisualFastExfalso ?? savedPreferences?.isVisualFastExfalso ?? defaultPreferencesState.isVisualFastExfalso,
 }

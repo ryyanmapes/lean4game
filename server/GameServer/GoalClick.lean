@@ -26,8 +26,15 @@ private def isComparisonPropForVar (fvar : Expr) (prop : Expr) : MetaM Bool := d
   let lhs? := args[args.size - 2]?
   let rhs? := args[args.size - 1]?
   match lhs?, rhs? with
-  | some lhs, some rhs =>
-      pure (lhs.consumeMData == fvar || rhs.consumeMData == fvar)
+  | some lhs, _ =>
+      -- Only the bound variable on the left. `∀ y ≥ x, y ≤ x → x = y` and
+      -- `∀ y, x ≤ y → y ≤ x → x = y` elaborate to the same term, so accepting
+      -- the variable on either side made every plain binder whose next
+      -- hypothesis happened to mention it look like bounded notation, and one
+      -- click introduced two things. `≥`/`>` bounded notation, which unfolds
+      -- with the variable on the right, now introduces one binder at a time;
+      -- `≤`/`<` keeps its combined introduction.
+      pure (lhs.consumeMData == fvar)
   | _, _ =>
       pure false
 

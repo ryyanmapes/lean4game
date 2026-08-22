@@ -15,8 +15,6 @@ import {
   faCircleInfo,
   faDownload,
   faEraser,
-  faMoon,
-  faSun,
   faUpload,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons'
@@ -450,16 +448,12 @@ function VisualMapMenuButton() {
 
 function VisualMapAppBar({
   gameTitle,
-  isLightMode,
-  onToggleLightMode,
   autoBranchSwitching,
   onToggleAutoBranchSwitching,
   fastExfalso,
   onToggleFastExfalso,
 }: {
   gameTitle: string
-  isLightMode: boolean
-  onToggleLightMode: () => void
   autoBranchSwitching: boolean
   onToggleAutoBranchSwitching: () => void
   fastExfalso: boolean
@@ -489,27 +483,25 @@ function VisualMapAppBar({
       </div>
       <span className="visual-map-title">{gameTitle}</span>
       <div className="visual-map-side visual-map-actions">
-        <button
-          type="button"
-          className={`visual-map-theme-toggle${isLightMode ? ' active' : ''}`}
-          onClick={onToggleLightMode}
-          aria-pressed={isLightMode}
-          aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
-          title={isLightMode ? 'Light mode' : 'Dark mode'}
-        >
-          <FontAwesomeIcon icon={toIconProp(isLightMode ? faSun : faMoon)} />
-        </button>
         <VisualMapMenuButton />
       </div>
       <div className={`visual-map-dropdown${navOpen ? ' open' : ''}`}>
-        <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Import')}
+        <button onClick={() => { setPopup(PopupType.privacy); closeMenu() }}>
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Privacy Policy')}
         </button>
-        <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Export')}
-        </button>
-        <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Reset')}
+        <button
+          type="button"
+          className={`visual-map-menu-toggle${telemetryEnabled ? ' active' : ''}`}
+          aria-pressed={telemetryEnabled}
+          onClick={() => {
+            const next = !telemetryEnabled
+            setConsent(next)
+            setTelemetryEnabled(next)
+          }}
+        >
+          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />
+          <span>{t('Anonymous telemetry')}</span>
+          <span className="visual-map-toggle-state" aria-hidden="true">{telemetryEnabled ? 'On' : 'Off'}</span>
         </button>
         <button
           type="button"
@@ -532,22 +524,14 @@ function VisualMapAppBar({
           <span>{t('Fast exfalso')}</span>
           <span className="visual-map-toggle-state" aria-hidden="true">{fastExfalso ? 'On' : 'Off'}</span>
         </button>
-        <button
-          type="button"
-          className={`visual-map-menu-toggle${telemetryEnabled ? ' active' : ''}`}
-          aria-pressed={telemetryEnabled}
-          onClick={() => {
-            const next = !telemetryEnabled
-            setConsent(next)
-            setTelemetryEnabled(next)
-          }}
-        >
-          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />
-          <span>{t('Anonymous telemetry')}</span>
-          <span className="visual-map-toggle-state" aria-hidden="true">{telemetryEnabled ? 'On' : 'Off'}</span>
+        <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
+          <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Import')}
         </button>
-        <button onClick={() => { setPopup(PopupType.privacy); closeMenu() }}>
-          <FontAwesomeIcon icon={toIconProp(faCircleInfo)} />&nbsp;{t('Privacy Policy')}
+        <button onClick={(ev) => { downloadProgress(gameId, gameProgress, ev); closeMenu() }}>
+          <FontAwesomeIcon icon={toIconProp(faDownload)} />&nbsp;{t('Export')}
+        </button>
+        <button className="danger" onClick={() => { setPopup(PopupType.erase); closeMenu() }}>
+          <FontAwesomeIcon icon={toIconProp(faEraser)} />&nbsp;{t('Reset')}
         </button>
       </div>
     </div>
@@ -926,8 +910,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     <div className="visual-page visual-map-page">
       <VisualMapAppBar
         gameTitle={getVisualMapGameTitle(gameId, title)}
-        isLightMode={isVisualLightMode}
-        onToggleLightMode={() => setIsVisualLightMode(!isVisualLightMode)}
         autoBranchSwitching={isVisualAutoBranchSwitching}
         onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
         fastExfalso={isVisualFastExfalso}
