@@ -1112,7 +1112,8 @@ example (P : Prop) : P → P := by
 
 example (P : Nat → Prop) (h : ∀ a > 0, P a) : ∀ a > 0, P a := by
   click_goal
-  exact h a ha
+  click_goal
+  exact h a h1
 
 example (P Q : Prop) (h : P ∧ Q) : P := by
   click_prop h
