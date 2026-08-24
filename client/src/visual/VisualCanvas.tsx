@@ -1081,13 +1081,40 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
   return true
 }
 
-function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): boolean {
-  const goalText = TaggedText_stripTags(stream.goal.type)
-  const goalForms = [goalText, formatFormulaText(goalText), ...(stream.reductionForms ?? [])]
+function theoremCanTargetGoalText(
+  theorem: PropositionTheorem,
+  goalText: string,
+  reductionForms: string[] = [],
+): boolean {
+  const goalForms = [goalText, formatFormulaText(goalText), ...reductionForms]
   return [theorem.label, theorem.proposition, ...(theorem.reductionForms ?? [])]
     .some(statement => goalForms.some(goalForm =>
       normalizeFormulaText(statement) === normalizeFormulaText(goalForm)
       || statementCanTargetGoal(statement, goalForm, theorem.forallFooter),
+    ))
+}
+
+function theoremCanTargetGoal(theorem: PropositionTheorem, stream: GoalStream): boolean {
+  return theoremCanTargetGoalText(
+    theorem,
+    TaggedText_stripTags(stream.goal.type),
+    stream.reductionForms ?? [],
+  )
+}
+
+function hypCanTargetGoalText(
+  card: HypCardType,
+  goalText: string,
+  reductionForms: string[] = [],
+  fastExfalso = false,
+): boolean {
+  const statement = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
+  if (fastExfalso && normalizeFormulaText(statement) === 'False') return true
+  const goalForms = [goalText, ...reductionForms]
+  return [statement, ...(card.hyp.reductionForms ?? [])]
+    .some(candidate => goalForms.some(goalForm =>
+      normalizeFormulaText(candidate) === normalizeFormulaText(goalForm)
+      || statementCanTargetGoal(candidate, goalForm, card.hyp.forallFooter),
     ))
 }
 
@@ -1096,17 +1123,12 @@ function hypCanTargetGoal(
   stream: GoalStream,
   fastExfalso = false,
 ): boolean {
-  const statement = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
-  // With Fast `exfalso` on, a proof of False closes any goal at all: the drop
-  // stands in for turning the goal into False first and then discharging it.
-  if (fastExfalso && normalizeFormulaText(statement) === 'False') return true
-  const goalText = TaggedText_stripTags(stream.goal.type)
-  const goalForms = [goalText, ...(stream.reductionForms ?? [])]
-  return [statement, ...(card.hyp.reductionForms ?? [])]
-    .some(candidate => goalForms.some(goalForm =>
-      normalizeFormulaText(candidate) === normalizeFormulaText(goalForm)
-      || statementCanTargetGoal(candidate, goalForm, card.hyp.forallFooter),
-    ))
+  return hypCanTargetGoalText(
+    card,
+    TaggedText_stripTags(stream.goal.type),
+    stream.reductionForms ?? [],
+    fastExfalso,
+  )
 }
 
 function casesTacticSplits(card: HypCardType): boolean {
@@ -3943,6 +3965,16 @@ export function VisualCanvas({
     // theorem name even though the player grabbed the newly displayed card.
     const { stream: sourceStream, card: sourceCard } = resolveHypDropTarget(activeId)
     const goalIds = new Set(interactionStreams.map(s => s.id))
+    // A rewrite can update the rendered goal one React commit before the
+    // matching GoalStream object. Resolve the proposition from the card the
+    // player actually dropped on as an additional semantic source; otherwise
+    // a valid theorem/hypothesis drop is silently discarded against the stale
+    // pre-rewrite goal (for example `symm` followed by `exact zero_ne_one`).
+    const renderedGoalText = (id: string): string | undefined =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-testid="goal-card"]'))
+        .find(element => element.id === id && element.getBoundingClientRect().width > 0
+          && element.getBoundingClientRect().height > 0)
+        ?.dataset.goalText
     const draggedRect = active.rect.current.initial
     const draggedWidth = draggedRect?.width ?? DEFAULT_WIDTH
     const draggedHeight = draggedRect?.height ?? DEFAULT_HEIGHT
@@ -4120,7 +4152,11 @@ export function VisualCanvas({
       if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
         if (goalIds.has(overId as string)) {
           const targetGoal = interactionStreams.find(stream => stream.id === overId)
-          if (!targetGoal || !theoremCanTargetGoal(theoremTemplate, targetGoal)) return
+          const liveGoalText = renderedGoalText(overId as string)
+          if (!targetGoal || !(
+            theoremCanTargetGoal(theoremTemplate, targetGoal)
+            || Boolean(liveGoalText && theoremCanTargetGoalText(theoremTemplate, liveGoalText))
+          )) return
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyDroppedInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
@@ -4220,9 +4256,18 @@ export function VisualCanvas({
 
       if (goalIds.has(overId as string)) {
         const targetGoal = interactionStreams.find(stream => stream.id === overId)
+        const liveGoalText = renderedGoalText(overId as string)
         const canTarget = sourceTheoremCopy
-          ? Boolean(targetGoal && theoremCanTargetGoal(sourceTheoremCopy.theorem, targetGoal))
-          : Boolean(sourceCard && targetGoal && hypCanTargetGoal(sourceCard, targetGoal, fastExfalso))
+          ? Boolean(targetGoal && (
+              theoremCanTargetGoal(sourceTheoremCopy.theorem, targetGoal)
+              || Boolean(liveGoalText
+                && theoremCanTargetGoalText(sourceTheoremCopy.theorem, liveGoalText))
+            ))
+          : Boolean(sourceCard && targetGoal && (
+              hypCanTargetGoal(sourceCard, targetGoal, fastExfalso)
+              || Boolean(liveGoalText
+                && hypCanTargetGoalText(sourceCard, liveGoalText, [], fastExfalso))
+            ))
         if (!canTarget) return
         // Dropped on a goal card → drag_goal
         // A proof of False dropped on a goal that is not False only reaches
