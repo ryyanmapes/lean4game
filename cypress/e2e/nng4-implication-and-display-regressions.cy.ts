@@ -1050,10 +1050,14 @@ describe('NNG4 implication and definition display regressions', () => {
       const liveUndo = () => win.document.querySelector<HTMLButtonElement>(
         '.tr-transformation-overlay button[aria-label="Undo"]',
       )
+      let undoButton: HTMLButtonElement | null = null
       for (let attempt = 0; ; attempt += 1) {
         const undo = liveUndo()
         const canvasIdle = !(win as HarnessWindow).__visualTestHarness.getProofAudit().processing
-        if (canvasIdle && undo && !undo.disabled && undo.getAttribute('aria-disabled') !== 'true') break
+        if (canvasIdle && undo && !undo.disabled && undo.getAttribute('aria-disabled') !== 'true') {
+          undoButton = undo
+          break
+        }
         if (attempt >= 400) {
           throw new Error(
             `undo never became pressable: canvasIdle=${canvasIdle} present=${Boolean(undo)} ` +
@@ -1062,18 +1066,13 @@ describe('NNG4 implication and definition display regressions', () => {
         }
         await new Promise(resolve => win.setTimeout(resolve, 50))
       }
-      // Click the button that is actually mounted each time. React can replace
-      // the node between commits, and a captured reference then delivers both
-      // clicks to a detached element that no longer has a handler.
-      const clickUndo = () => {
-        const undo = win.document.querySelector<HTMLButtonElement>(
-          '.tr-transformation-overlay button[aria-label="Undo"]',
-        )
-        expect(undo, 'transformation undo button').to.exist
-        undo!.click()
-      }
-      clickUndo()
-      clickUndo()
+      // Deliver the rapid double click to the exact live control whose enabled
+      // state was observed above. Re-querying between synchronous clicks can
+      // land in the overlay's successor-id remount gap and test a missing DOM
+      // node instead of the in-flight guard.
+      expect(undoButton, 'transformation undo button').to.exist
+      undoButton!.click()
+      undoButton!.click()
     })
 
     cy.window().should(win => {

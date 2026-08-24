@@ -2928,7 +2928,7 @@ export class CompletePlaythroughDriver {
       const sourceFooter = source.querySelector<HTMLElement>(
         '.tr-forall-footer, .statement-forall-footer',
       )?.textContent ?? undefined
-      await waitFor(
+      target = await waitFor(
         `${command} goal ready to accept the drop`,
         () => {
           const goal = currentGoal(this.win)
@@ -2940,7 +2940,7 @@ export class CompletePlaythroughDriver {
           ) ? goal : null
         },
         10_000,
-      ).catch(() => null)
+      ).catch(() => target)
     }
     try {
       await this.dragAndWait(source, target, `${command} player drag`)

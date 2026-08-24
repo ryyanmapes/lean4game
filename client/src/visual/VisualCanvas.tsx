@@ -275,6 +275,57 @@ function resolveCollisions(
     }
   }
 
+  // The bounds clamp above can move a card back toward a neighbour after the
+  // ellipse pass found a clear position. This is most visible when several
+  // long generated hypotheses fill the last row above the theorem tray: the
+  // lowest card is clamped upward and its border clips the row above. Finish
+  // with a measured rectangle pass, reclamping after every push. Repeating is
+  // important when one card is already at an edge, because the other card
+  // must absorb the remainder of the separation on the following iteration.
+  const clampItem = (item: typeof items[number]) => {
+    if (item.fixed) return
+    const minX = (canvasBounds.minX ?? 0) + item.hw + COLLISION_EDGE_MARGIN
+    const maxXLimit = canvasBounds.maxX ?? canvasBounds.width
+    const maxX = Math.max(minX, maxXLimit - item.hw - COLLISION_EDGE_MARGIN)
+    const minY = (canvasBounds.minY ?? 0) + item.hh + COLLISION_EDGE_MARGIN
+    const maxYLimit = canvasBounds.maxY ?? canvasBounds.height
+    const maxY = Math.max(minY, maxYLimit - item.hh - COLLISION_EDGE_MARGIN)
+    item.cx = Math.max(minX, Math.min(maxX, item.cx))
+    item.cy = Math.max(minY, Math.min(maxY, item.cy))
+  }
+  const RECTANGLE_GAP = 2
+  for (let iter = 0; iter < REPULSION_ITERATIONS * 2; iter += 1) {
+    let moved = false
+    for (let i = 0; i < items.length; i += 1) {
+      for (let j = i + 1; j < items.length; j += 1) {
+        const left = items[i]!
+        const right = items[j]!
+        if (left.fixed && right.fixed) continue
+        const dx = right.cx - left.cx
+        const dy = right.cy - left.cy
+        const overlapX = (left.width + right.width) / 2 + RECTANGLE_GAP - Math.abs(dx)
+        const overlapY = (left.height + right.height) / 2 + RECTANGLE_GAP - Math.abs(dy)
+        if (overlapX <= 0 || overlapY <= 0) continue
+
+        moved = true
+        const moveLeft = left.fixed ? 0 : right.fixed ? 1 : 0.5
+        const moveRight = right.fixed ? 0 : left.fixed ? 1 : 0.5
+        if (overlapX < overlapY) {
+          const direction = dx >= 0 ? 1 : -1
+          left.cx -= direction * overlapX * moveLeft
+          right.cx += direction * overlapX * moveRight
+        } else {
+          const direction = dy >= 0 ? 1 : -1
+          left.cy -= direction * overlapY * moveLeft
+          right.cy += direction * overlapY * moveRight
+        }
+        clampItem(left)
+        clampItem(right)
+      }
+    }
+    if (!moved) break
+  }
+
   return hyps.map(h => {
     const item = items.find(p => p.id === h.id)
     return item
