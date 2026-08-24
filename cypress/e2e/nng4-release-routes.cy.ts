@@ -22,18 +22,22 @@ describe('local NNG4 release maps', () => {
   })
 
   it('serves each game from a short shareable path', () => {
-    // The client is a hash router under /lean4game/, and GitHub Pages has no
-    // rewrites, so each short path is a real page that replaces itself with
-    // the hash URL. Check the destination, not just that the page loads.
-    for (const [shortPath, expectedHash] of [
-      ['/visualNNG', '#/g/local/NNG4/visual'],
-      ['/classicNNG', '#/g/local/NNG4'],
-      ['/pitch', '#/g/local/VisualTest/visual'],
+    // Each short path is a route the client owns, served by the 404/nginx
+    // fallback. The point is that the address bar keeps showing it, so assert
+    // the path is unchanged and no hash appeared.
+    for (const [shortPath, heading] of [
+      ['/visualNNG', 'The Natural Numbers Video Game'],
+      ['/pitch', 'Visual Test'],
     ] as const) {
       cy.visit(shortPath)
-      cy.location('pathname', { timeout: 30_000 }).should('include', '/lean4game/')
-      cy.location('hash', { timeout: 30_000 }).should('equal', expectedHash)
+      cy.contains(heading, { timeout: 30_000 }).should('be.visible')
+      cy.location('pathname', { timeout: 30_000 }).should('equal', shortPath)
+      cy.location('hash').should('equal', '')
     }
+    cy.visit('/classicNNG')
+    cy.get('.welcome', { timeout: 30_000 }).should('be.visible')
+    cy.location('pathname').should('equal', '/classicNNG')
+    cy.location('hash').should('equal', '')
   })
 
   it('uses the original three-column NNG4 map with every grey level clickable', () => {
@@ -99,8 +103,8 @@ describe('local NNG4 release maps', () => {
     cy.get('.map-level-name-tooltip').should('be.visible').and('not.be.empty')
 
     cy.get('a[aria-label="Open Tutorial World"]').click()
-    cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1$/u)
-    cy.location('hash').should('not.include', '/visual')
+    cy.location('pathname').should('match', /\/g\/local\/NNG4\/world\/Tutorial\/level\/1$/u)
+    cy.location('pathname').should('not.include', '/visual')
 
     cy.location('protocol').should('match', /^https?:$/u)
     cy.then(() => {
@@ -157,7 +161,7 @@ describe('local NNG4 release maps', () => {
       expect(win.localStorage.getItem('visual_auto_branch_switch')).to.equal('true')
     })
     cy.get('[role="link"][aria-label="Open Tutorial World"]').click({ force: true })
-    cy.location('hash').should('match', /#\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
+    cy.location('pathname').should('match', /\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })
 
   it('keeps erase confirmation concise and offers no combined download action', () => {

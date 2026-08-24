@@ -16,10 +16,12 @@ import { VisualRpcProvider } from './visual/VisualRpcProvider'
 
 export const GameIdContext = React.createContext<string>(undefined);
 
-function App() {
+/** The short shareable paths (`/visualNNG`) name one fixed game, so they have
+ *  no `:owner`/`:repo` params to read. Let a route supply them directly. */
+function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
 
   const params = useParams()
-  const gameId = "g/" + params.owner + "/" + params.repo
+  const gameId = "g/" + (owner ?? params.owner) + "/" + (repo ?? params.repo)
   const levelId = parseInt(params.levelId)
   const worldId = params.worldId
 

@@ -392,7 +392,12 @@ export class LeanRpcClient {
   private readonly implementation: WebSocketLeanRpcClient | LocalWasmRpcClient
 
   constructor(gameId: string, worldId: string, levelId: number) {
-    this.implementation = window.location.pathname.startsWith('/lean4game')
+    // Which build this is, not where it is routed. The release sub-app is the
+    // one built under a base path and carries the in-browser Lean worker;
+    // sniffing the pathname stopped working once routes became real URLs, and
+    // the level then waited forever on a relay socket that does not exist.
+    const releaseBuild = ((import.meta.env?.BASE_URL as string | undefined) ?? '/') !== '/'
+    this.implementation = releaseBuild
       ? new LocalWasmRpcClient(gameId, worldId, levelId)
       : new WebSocketLeanRpcClient(gameId, worldId, levelId)
   }

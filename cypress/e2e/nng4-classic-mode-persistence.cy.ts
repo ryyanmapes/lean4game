@@ -33,6 +33,6 @@ describe('local classic input modes', () => {
     cy.get('.local-classic-status')
       .should('contain.text', 'Proof complete')
       .and('have.class', 'is-complete')
-    cy.location('hash').should('include', '/world/Tutorial/level/1')
+    cy.location('pathname').should('include', '/world/Tutorial/level/1')
   })
 })

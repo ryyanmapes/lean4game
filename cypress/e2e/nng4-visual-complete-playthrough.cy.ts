@@ -1,5 +1,6 @@
 import solutionFixture from '../fixtures/nng4-visual-solutions.json'
 import { CompletePlaythroughDriver } from '../support/completePlaythroughDriver'
+import { decodeAutosave } from '../../client/src/visual/autosaveStorage'
 
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
@@ -83,11 +84,18 @@ const skippedSolutions = selectedSolutions.filter(solution => solution.visualSki
 const recordedIssues = new Set<string>()
 
 function levelUrl(solution: ReferenceSolution) {
-  return `${mountPath}#/g/local/NNG4/world/${solution.world}/level/${solution.level}/visual`
+  return levelPath(solution)
 }
 
-function levelHash(solution: ReferenceSolution) {
-  return `#/g/local/NNG4/world/${solution.world}/level/${solution.level}/visual`
+function levelPath(solution: ReferenceSolution) {
+  return `/g/local/NNG4/world/${solution.world}/level/${solution.level}/visual`
+}
+
+/** Navigate the way a link click does, without reloading the Lean runtime.
+ *  Routes are real paths now, so assigning the hash no longer moves the app. */
+function navigateWithinApp(win: Cypress.AUTWindow, path: string) {
+  win.history.pushState({}, '', path)
+  win.dispatchEvent(new win.PopStateEvent('popstate'))
 }
 
 function auditProofState(solution: ReferenceSolution, phase: string) {
@@ -145,21 +153,34 @@ function auditProofState(solution: ReferenceSolution, phase: string) {
 
 function assertCompletedProofRestores(solution: ReferenceSolution, completedAudit: ProofAudit) {
   const autosaveKey = `visual-proof-autosave/g/local/NNG4/${solution.world}/${solution.level}`
-  cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
-    const stored = JSON.parse(win.localStorage.getItem(autosaveKey) ?? 'null')
-    expect(stored?.session?.canvasState?.completed, 'completed canvas reached autosave').to.equal(true)
-    expect(stored?.session?.proofSteps, 'completed proof steps reached autosave').to.have.length.greaterThan(0)
-    expect(stored?.session?.proofBody, 'completed proof body reached autosave').to.equal(completedAudit.proofBody)
-  })
+  // Saves are stored gzipped; read them the way the app does. Checking the
+  // decoded contents also proves the compression is lossless on real proofs,
+  // not only on the synthetic payload the unit round trip uses.
+  cy.window({ timeout: LOAD_TIMEOUT })
+    .then({ timeout: LOAD_TIMEOUT }, async win => {
+      const raw = win.localStorage.getItem(autosaveKey) ?? ''
+      expect(raw, 'autosave was written at all').not.to.equal('')
+      return await decodeAutosave(raw) as { session?: Record<string, unknown> } | null
+    })
+    .then(stored => {
+      const session = stored?.session as {
+        canvasState?: { completed?: boolean }
+        proofSteps?: unknown[]
+        proofBody?: string
+      } | undefined
+      expect(session?.canvasState?.completed, 'completed canvas reached autosave').to.equal(true)
+      expect(session?.proofSteps, 'completed proof steps reached autosave').to.have.length.greaterThan(0)
+      expect(session?.proofBody, 'completed proof body reached autosave').to.equal(completedAudit.proofBody)
+    })
   cy.get('[data-testid="goal-card"]')
     .should('have.class', 'solved')
     .and('have.class', 'just-solved')
 
   // Leave the route completely, then reopen it as a returning player. This
   // exercises persistence and Lean revalidation, not merely React state.
-  cy.window().then(win => { win.location.hash = '#/g/local/NNG4/visual' })
+  cy.window().then(win => { navigateWithinApp(win, '/g/local/NNG4/visual') })
   cy.get('[data-testid="visual-world-map"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-  cy.window().then(win => { win.location.hash = levelHash(solution) })
+  cy.window().then(win => { navigateWithinApp(win, levelPath(solution)) })
   cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })
     .should('be.visible')
     .and('have.attr', 'data-world-id', solution.world)
@@ -226,7 +247,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
         applicationStarted = true
       } else {
         cy.window().then(win => {
-          win.location.hash = levelHash(solution)
+          navigateWithinApp(win, levelPath(solution))
         })
       }
       cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })
@@ -347,7 +368,7 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
                 .should('contain.text', 'Proof complete')
                 .and('have.class', 'is-complete')
             } else {
-              cy.location('hash', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
+              cy.location('search', { timeout: LOAD_TIMEOUT }).should('include', 'visualHandoff=')
               cy.get('.exercise-panel .exercise', { timeout: LOAD_TIMEOUT }).should('be.visible')
             }
             cy.log(`${mode} export solved the classic level`)

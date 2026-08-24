@@ -270,8 +270,12 @@ export function VisualProofPage() {
       openInEditor: true,
       sourceAttemptId: solvingId,
     }))
-    const target = new URL(window.location.href)
-    target.hash = `#/${gameId}/world/${worldId}/level/${levelId}?visualHandoff=${encodeURIComponent(token)}`
+    // Routes are real paths now, so the handoff token travels in the query
+    // string rather than inside a hash fragment.
+    const target = new URL(
+      `/${gameId}/world/${worldId}/level/${levelId}?visualHandoff=${encodeURIComponent(token)}`,
+      window.location.origin,
+    )
     window.open(target.toString(), '_blank', 'noopener,noreferrer')
   }, [gameId, levelId, solvingId, worldId])
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))

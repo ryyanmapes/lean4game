@@ -4,7 +4,7 @@ import App from './app'
 import { store } from './state/store'
 import { Provider } from 'react-redux'
 import type { RouteObject } from "react-router"
-import { createHashRouter, RouterProvider, Route, redirect } from "react-router-dom"
+import { createBrowserRouter, RouterProvider, Route, redirect } from "react-router-dom"
 import ErrorPage from './components/error_page'
 import Welcome from './components/welcome'
 import VisualProofPage from './visual/VisualProofPage'
@@ -17,7 +17,17 @@ import './i18n';
 // `/g/local/game` or customized VITE_LEAN4GAME_SINGLE_NAME. This is used for the devcontainer setup
 let single_game = (import.meta.env.VITE_LEAN4GAME_SINGLE === "true")
 let single_game_name = (import.meta.env.VITE_LEAN4GAME_SINGLE_NAME === undefined) ? "game" : import.meta.env.VITE_LEAN4GAME_SINGLE_NAME
-const mountedLocalRelease = window.location.pathname.startsWith('/lean4game')
+// Legacy links carry the route in the hash. Rewrite them to a real path before
+// the router reads the location, so old bookmarks and the handoff URLs written
+// by earlier builds keep working.
+if (window.location.hash.startsWith('#/')) {
+  window.history.replaceState(null, '', window.location.hash.slice(1))
+}
+
+// Which build this is, not where it happens to be routed. The release sub-app
+// is the one built under a base path; sniffing the pathname broke as soon as
+// routes became real URLs, because the shim above rewrites it before this runs.
+const mountedLocalRelease = ((import.meta.env?.BASE_URL as string | undefined) ?? '/') !== '/'
 const HostedLevel = React.lazy(() => import('./components/level'))
 const LocalClassicLevel = React.lazy(() => import('./components/local_classic_level'))
 
@@ -39,7 +49,7 @@ let root_object: RouteObject = mountedLocalRelease ? {
   loader: () => redirect("/g/leanprover-community/nng4")
 }
 
-const router = createHashRouter([
+const router = createBrowserRouter([
   root_object,
   {
     // For backwards compatibility
@@ -50,6 +60,26 @@ const router = createHashRouter([
     // For backwards compatibility
     path: "/g/hhu-adam/NNG4",
     loader: () => redirect("/g/leanprover-community/nng4")
+  },
+  {
+    // Short shareable paths. These render the game directly rather than
+    // redirecting, so the address bar keeps showing /visualNNG.
+    path: "/visualNNG",
+    element: <App owner="local" repo="NNG4" />,
+    errorElement: <ErrorPage />,
+    children: [{ index: true, element: <VisualWorldMap levelMode="visual" /> }],
+  },
+  {
+    path: "/classicNNG",
+    element: <App owner="local" repo="NNG4" />,
+    errorElement: <ErrorPage />,
+    children: [{ index: true, element: <Welcome /> }],
+  },
+  {
+    path: "/pitch",
+    element: <App owner="local" repo="VisualTest" />,
+    errorElement: <ErrorPage />,
+    children: [{ index: true, element: <VisualWorldMap levelMode="visual" /> }],
   },
   {
     path: "/g/:owner/:repo",
