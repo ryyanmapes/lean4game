@@ -158,9 +158,26 @@ function assertCompletedProofRestores(solution: ReferenceSolution, completedAudi
   // not only on the synthetic payload the unit round trip uses.
   cy.window({ timeout: LOAD_TIMEOUT })
     .then({ timeout: LOAD_TIMEOUT }, async win => {
-      const raw = win.localStorage.getItem(autosaveKey) ?? ''
-      expect(raw, 'autosave was written at all').not.to.equal('')
-      return await decodeAutosave(raw) as { session?: Record<string, unknown> } | null
+      const deadline = Date.now() + LOAD_TIMEOUT
+      let stored: { session?: Record<string, unknown> } | null = null
+      do {
+        const raw = win.localStorage.getItem(autosaveKey) ?? ''
+        if (raw !== '') {
+          stored = await decodeAutosave(raw) as { session?: Record<string, unknown> } | null
+          const session = stored?.session as {
+            canvasState?: { completed?: boolean }
+            proofSteps?: unknown[]
+            proofBody?: string
+          } | undefined
+          if (
+            session?.canvasState?.completed === true &&
+            (session.proofSteps?.length ?? 0) > 0 &&
+            session.proofBody === completedAudit.proofBody
+          ) return stored
+        }
+        await new Cypress.Promise(resolve => setTimeout(resolve, 100))
+      } while (Date.now() < deadline)
+      return stored
     })
     .then(stored => {
       const session = stored?.session as {
