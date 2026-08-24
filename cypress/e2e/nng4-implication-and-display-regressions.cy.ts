@@ -8,7 +8,7 @@ const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 // `repeat apply` is several Lean round-trips inside one gesture, and 60s was
 // not enough for it in CI even with each gesture budgeted separately -- the
 // layout assertions below have never actually run. Give it real headroom.
-const LAYOUT_REGRESSION_TIMEOUT = 180_000
+const LAYOUT_REGRESSION_TIMEOUT = LOAD_TIMEOUT
 const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
   .split(',')
   .map(value => value.trim())

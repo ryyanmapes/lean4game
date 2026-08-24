@@ -2717,6 +2717,7 @@ export function VisualCanvas({
   })
   const lastTransformRewriteDebugRef = useRef<TransformRewriteDebug | null>(null)
   const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<boolean>) | null>(null)
+  const undoLastStepRef = useRef<(() => Promise<boolean>) | null>(null)
 
   // Stable game key for play log
   const logKey = `${gameId}/${worldId}/${levelId}`
@@ -3538,7 +3539,26 @@ export function VisualCanvas({
   }
 
   async function undoLastStep(): Promise<boolean> {
-    if (proofSteps.length === 0 || isProcessingRef.current) return false
+    if (proofSteps.length === 0) return false
+    if (isProcessingRef.current) {
+      // The transformation overlay can finish its own rewrite bookkeeping one
+      // render before the canvas clears its imperative processing guard. An
+      // enabled Undo click in that window must wait for the accepted rewrite,
+      // not disappear as a rejected action. TransformationView keeps its own
+      // in-flight ref raised while this awaits, so a second rapid click is
+      // still ignored and cannot undo twice.
+      const deadline = Date.now() + 120_000
+      while (isProcessingRef.current && Date.now() < deadline) {
+        await new Promise<void>(resolve => window.setTimeout(resolve, 25))
+      }
+      if (isProcessingRef.current) return false
+      // Resume through the newest render so proofSteps and canvas snapshots
+      // include the rewrite that was finishing when Undo was pressed.
+      const latestUndoLastStep = undoLastStepRef.current
+      if (latestUndoLastStep && latestUndoLastStep !== undoLastStep) {
+        return latestUndoLastStep()
+      }
+    }
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
@@ -6131,6 +6151,7 @@ export function VisualCanvas({
     canvasCompleted: canvasState.completed,
   }
   applyInteractionRef.current = applyInteraction
+  undoLastStepRef.current = undoLastStep
 
   function requireInteractiveCurrentStream(): GoalStream {
     const {
