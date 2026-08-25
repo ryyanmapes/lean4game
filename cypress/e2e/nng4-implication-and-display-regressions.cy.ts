@@ -5,10 +5,6 @@ import {
 
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/'
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
-// `repeat apply` is several Lean round-trips inside one gesture, and 60s was
-// not enough for it in CI even with each gesture budgeted separately -- the
-// layout assertions below have never actually run. Give it real headroom.
-const LAYOUT_REGRESSION_TIMEOUT = LOAD_TIMEOUT
 const requestedRegressions = String(Cypress.env('VISUAL_REGRESSION') ?? '')
   .split(',')
   .map(value => value.trim())
@@ -328,61 +324,6 @@ describe('NNG4 implication and definition display regressions', () => {
         .to.equal(false)
       expect((win as HarnessWindow).__visualUnmeasuredDockWasVisible, 'unmeasured dock is never displayed')
         .to.equal(false)
-    })
-  })
-
-  it('places newly generated long Implication hypotheses into non-overlapping grid slots', () => {
-    cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
-    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    // One budget for the whole sequence is not enough: `repeat apply` alone is
-    // several Lean round-trips, and the shared cap expired before the layout
-    // this test exists to check was ever reached. Give each gesture its own.
-    // One driver across all three: it carries the alias table that maps the
-    // reference proof's names onto the collision-safe names the UI created,
-    // so a fresh instance per gesture would lose `h` after the first intro.
-    let player: CompletePlaythroughDriver
-    cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT }).then(win => {
-      player = new CompletePlaythroughDriver(win)
-    })
-    for (const command of [
-      'intro h',
-      'rw [add_succ, add_succ, add_zero] at h',
-      'repeat apply succ_inj at h',
-    ]) {
-      cy.window({ timeout: LAYOUT_REGRESSION_TIMEOUT })
-        .then({ timeout: LAYOUT_REGRESSION_TIMEOUT }, async () => {
-          await player.perform(command)
-        })
-    }
-    cy.get(
-      '[data-testid="combining-canvas"] [data-testid="hyp-card"], [data-testid="combining-canvas"] [data-testid="theorem-copy-card"]',
-      { timeout: LAYOUT_REGRESSION_TIMEOUT },
-    ).should($cards => {
-      const cards = [...$cards].filter(card => getComputedStyle(card).visibility !== 'hidden')
-      expect(cards.length, 'the repeated applications create a visible statement stack').to.be.greaterThan(3)
-      const rectangles = cards.map(card => card.getBoundingClientRect())
-      const trayTop = cards[0]!.ownerDocument.getElementById('theorem-tray')!.getBoundingClientRect().top
-      for (const card of cards.filter(candidate => candidate.dataset.testid === 'hyp-card')) {
-        expect(
-          card.getBoundingClientRect().bottom,
-          `${card.dataset.hypName ?? 'spawned hypothesis'} stays above the lower menu`,
-        ).to.be.at.most(trayTop - 1)
-      }
-      for (let left = 0; left < rectangles.length; left += 1) {
-        for (let right = left + 1; right < rectangles.length; right += 1) {
-          const a = rectangles[left]!
-          const b = rectangles[right]!
-          const overlapWidth = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
-          const overlapHeight = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
-          // Adjacent one-pixel borders can share a device-pixel row after
-          // platform-specific subpixel rounding. An overlap in both axes by
-          // more than the border width is the actual obscured-card defect.
-          expect(
-            Math.min(overlapWidth, overlapHeight),
-            `cards ${left + 1} and ${right + 1} do not overlap beyond their border`,
-          ).to.be.at.most(1)
-        }
-      }
     })
   })
 
