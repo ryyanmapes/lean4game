@@ -3959,7 +3959,16 @@ export function VisualCanvas({
     stopMobileAutoScroll()
     const theoremTemplate = active.data.current?.theoremTemplate
       ? active.data.current.theorem as PropositionTheorem
-      : null
+      // The lower tray can repack/remount while the preceding interaction is
+      // reconciling. dnd-kit retains the active id but drops the component's
+      // data by pointer-up, so recover the same unlocked theorem just as the
+      // tactic path below does. Without this, `symm` followed by dragging
+      // `zero_ne_one` onto the now-compatible goal is silently discarded.
+      : activeId.startsWith('theorem_template_')
+        ? propositionTheorems.find(theorem =>
+            `theorem_template_${theorem.id}` === activeId,
+          ) ?? null
+        : null
     const activeTactic = active.data.current?.tactic as VisualTactic | undefined
     const tacticTemplate = active.data.current?.visualTactic && activeTactic
       ? activeTactic
