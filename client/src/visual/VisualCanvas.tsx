@@ -307,51 +307,17 @@ function resolveCollisions(
         const overlapY = (left.height + right.height) / 2 + RECTANGLE_GAP - Math.abs(dy)
         if (overlapX <= 0 || overlapY <= 0) continue
 
-        const centerBounds = (item: typeof items[number], axis: 'x' | 'y') => {
-          if (item.fixed) return { min: axis === 'x' ? item.cx : item.cy, max: axis === 'x' ? item.cx : item.cy }
-          const halfSize = axis === 'x' ? item.hw : item.hh
-          const minimum = axis === 'x' ? (canvasBounds.minX ?? 0) : (canvasBounds.minY ?? 0)
-          const maximum = axis === 'x'
-            ? (canvasBounds.maxX ?? canvasBounds.width)
-            : (canvasBounds.maxY ?? canvasBounds.height)
-          const min = minimum + halfSize + COLLISION_EDGE_MARGIN
-          return { min, max: Math.max(min, maximum - halfSize - COLLISION_EDGE_MARGIN) }
-        }
-        const axisMovement = (axis: 'x' | 'y', delta: number) => {
-          const leftPosition = axis === 'x' ? left.cx : left.cy
-          const rightPosition = axis === 'x' ? right.cx : right.cy
-          const leftBounds = centerBounds(left, axis)
-          const rightBounds = centerBounds(right, axis)
-          const direction = delta >= 0 ? 1 : -1
-          const leftCapacity = Math.max(0, direction > 0
-            ? leftPosition - leftBounds.min
-            : leftBounds.max - leftPosition)
-          const rightCapacity = Math.max(0, direction > 0
-            ? rightBounds.max - rightPosition
-            : rightPosition - rightBounds.min)
-          return { direction, leftCapacity, rightCapacity, capacity: leftCapacity + rightCapacity }
-        }
-        const xMovement = axisMovement('x', dx)
-        const yMovement = axisMovement('y', dy)
-        // Prefer the shorter visual move only when the canvas actually has
-        // room for it. At the bottom edge, selecting Y and then clamping both
-        // cards simply recreated the overlap forever.
-        const useX = xMovement.capacity >= overlapX - 0.01
-          && (yMovement.capacity < overlapY - 0.01 || overlapX < overlapY)
-        const overlap = useX ? overlapX : overlapY
-        const movement = useX ? xMovement : yMovement
-        if (movement.capacity <= 0) continue
         moved = true
-        let leftMove = Math.min(overlap / 2, movement.leftCapacity)
-        let rightMove = Math.min(overlap - leftMove, movement.rightCapacity)
-        leftMove += Math.min(overlap - leftMove - rightMove, movement.leftCapacity - leftMove)
-        rightMove += Math.min(overlap - leftMove - rightMove, movement.rightCapacity - rightMove)
-        if (useX) {
-          left.cx -= movement.direction * leftMove
-          right.cx += movement.direction * rightMove
+        const moveLeft = left.fixed ? 0 : right.fixed ? 1 : 0.5
+        const moveRight = right.fixed ? 0 : left.fixed ? 1 : 0.5
+        if (overlapX < overlapY) {
+          const direction = dx >= 0 ? 1 : -1
+          left.cx -= direction * overlapX * moveLeft
+          right.cx += direction * overlapX * moveRight
         } else {
-          left.cy -= movement.direction * leftMove
-          right.cy += movement.direction * rightMove
+          const direction = dy >= 0 ? 1 : -1
+          left.cy -= direction * overlapY * moveLeft
+          right.cy += direction * overlapY * moveRight
         }
         clampItem(left)
         clampItem(right)
@@ -3009,20 +2975,6 @@ export function VisualCanvas({
     }
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait }))
-    // Generated cards can be moved to their semantic anchor in a short timer
-    // after this structural effect. Run one bounded settle pass after that
-    // placement, when every new card has its final DOM dimensions. Positions
-    // remain absent from the dependency key, so this cannot create a layout
-    // feedback loop.
-    const settleTimer = window.setTimeout(() => {
-      const settledBounds = getCombiningCanvasBounds()
-      setCanvasState(prev => resolveCanvasStateCollisions(
-        prev,
-        settledBounds,
-        { phonePortrait: isPhonePortrait },
-      ))
-    }, 80)
-    return () => window.clearTimeout(settleTimer)
   }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
@@ -3629,11 +3581,7 @@ export function VisualCanvas({
       nextCanvas = updatePlacedHypPosition(nextCanvas, options.placementHint, options.placementHint.droppedPosition)
       setCanvasState(nextCanvas)
       window.setTimeout(() => {
-        setCanvasState(prev => resolveCanvasStateCollisions(
-          placeHypNearAnchor(prev, options.placementHint!),
-          getCombiningCanvasBounds(),
-          { phonePortrait: isPhonePortrait },
-        ))
+        setCanvasState(prev => placeHypNearAnchor(prev, options.placementHint!))
       }, 24)
       return true
     }
@@ -5112,11 +5060,7 @@ export function VisualCanvas({
     setCanvasState(nextCanvas)
     if (placementHint) {
       window.setTimeout(() => {
-        setCanvasState(prev => resolveCanvasStateCollisions(
-          placeHypNearAnchor(prev, placementHint!),
-          getCombiningCanvasBounds(),
-          { phonePortrait: isPhonePortrait },
-        ))
+        setCanvasState(prev => placeHypNearAnchor(prev, placementHint!))
       }, 24)
     }
 
