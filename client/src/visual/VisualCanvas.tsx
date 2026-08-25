@@ -3290,7 +3290,11 @@ export function VisualCanvas({
         const targetIdx = stream.hyps.findIndex(h => h.id === hint.hypId || h.hyp.names[0] === hint.hypName)
         if (targetIdx === -1) return stream
         const moved = stream.hyps.map((hyp, idx) =>
-          idx === targetIdx ? { ...hyp, position: nextPosition } : hyp
+          // This is a newly generated result being placed near the drag
+          // anchor, not a card the player positioned directly. A theorem
+          // replacement can inherit userPlaced during reconciliation; clear
+          // it so measured collision resolution may settle the result.
+          idx === targetIdx ? { ...hyp, position: nextPosition, userPlaced: false } : hyp
         )
         return { ...stream, hyps: moved }
       }),
