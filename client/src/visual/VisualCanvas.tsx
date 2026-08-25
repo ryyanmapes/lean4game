@@ -326,6 +326,60 @@ function resolveCollisions(
     if (!moved) break
   }
 
+  // A pair can remain interlocked when the shorter separation axis is pinned
+  // at both canvas edges: pushing along that axis and clamping simply restores
+  // the overlap. Repair only those residual collisions by moving the later
+  // generated card to the nearest measured free position. The scan uses the
+  // real card rectangles (rather than the padded ellipse hitboxes), so it
+  // preserves the established layout while guaranteeing visible borders do
+  // not cover one another.
+  const rectangleFor = (item: typeof items[number], cx = item.cx, cy = item.cy) => ({
+    left: cx - item.width / 2,
+    top: cy - item.height / 2,
+    right: cx + item.width / 2,
+    bottom: cy + item.height / 2,
+  })
+  const rectanglesOverlap = (
+    left: ReturnType<typeof rectangleFor>,
+    right: ReturnType<typeof rectangleFor>,
+  ) => left.left < right.right + RECTANGLE_GAP
+    && left.right + RECTANGLE_GAP > right.left
+    && left.top < right.bottom + RECTANGLE_GAP
+    && left.bottom + RECTANGLE_GAP > right.top
+  const placed = items.filter(item => item.fixed)
+  for (const item of items) {
+    if (item.fixed) continue
+    if (placed.some(other => rectanglesOverlap(rectangleFor(item), rectangleFor(other)))) {
+      const minCx = (canvasBounds.minX ?? 0) + item.hw + COLLISION_EDGE_MARGIN
+      const maxCxLimit = canvasBounds.maxX ?? canvasBounds.width
+      const maxCx = Math.max(minCx, maxCxLimit - item.hw - COLLISION_EDGE_MARGIN)
+      const minCy = (canvasBounds.minY ?? 0) + item.hh + COLLISION_EDGE_MARGIN
+      const maxCyLimit = canvasBounds.maxY ?? canvasBounds.height
+      const maxCy = Math.max(minCy, maxCyLimit - item.hh - COLLISION_EDGE_MARGIN)
+      const originalCx = item.cx
+      const originalCy = item.cy
+      let best: { cx: number; cy: number; distance: number } | null = null
+      const consider = (cx: number, cy: number) => {
+        const candidate = rectangleFor(item, cx, cy)
+        if (placed.some(other => rectanglesOverlap(candidate, rectangleFor(other)))) return
+        const distance = (cx - originalCx) ** 2 + (cy - originalCy) ** 2
+        if (!best || distance < best.distance) best = { cx, cy, distance }
+      }
+      const step = 8
+      for (let cy = minCy; cy <= maxCy; cy += step) {
+        for (let cx = minCx; cx <= maxCx; cx += step) consider(cx, cy)
+        consider(maxCx, cy)
+      }
+      for (let cx = minCx; cx <= maxCx; cx += step) consider(cx, maxCy)
+      consider(maxCx, maxCy)
+      if (best) {
+        item.cx = best.cx
+        item.cy = best.cy
+      }
+    }
+    placed.push(item)
+  }
+
   return hyps.map(h => {
     const item = items.find(p => p.id === h.id)
     return item
@@ -2769,6 +2823,7 @@ export function VisualCanvas({
   const lastTransformRewriteDebugRef = useRef<TransformRewriteDebug | null>(null)
   const applyInteractionRef = useRef<((playTactic: string, sourceCardId: string, options?: InteractionOptions) => Promise<boolean>) | null>(null)
   const undoLastStepRef = useRef<(() => Promise<boolean>) | null>(null)
+  const undoRequestInFlightRef = useRef(false)
 
   // Stable game key for play log
   const logKey = `${gameId}/${worldId}/${levelId}`
@@ -3590,6 +3645,19 @@ export function VisualCanvas({
   }
 
   async function undoLastStep(): Promise<boolean> {
+    // The DOM button can receive a second synchronous click before React has
+    // committed its disabled state. Claim the operation imperatively so only
+    // one request can consume a proof step.
+    if (undoRequestInFlightRef.current) return false
+    undoRequestInFlightRef.current = true
+    try {
+      return await undoLastStepUnlocked()
+    } finally {
+      undoRequestInFlightRef.current = false
+    }
+  }
+
+  async function undoLastStepUnlocked(): Promise<boolean> {
     if (proofSteps.length === 0) return false
     if (isProcessingRef.current) {
       // The transformation overlay can finish its own rewrite bookkeeping one
@@ -3607,6 +3675,9 @@ export function VisualCanvas({
       // include the rewrite that was finishing when Undo was pressed.
       const latestUndoLastStep = undoLastStepRef.current
       if (latestUndoLastStep && latestUndoLastStep !== undoLastStep) {
+        // Transfer the lock to the callback from the render that contains the
+        // rewrite which just finished. No await occurs while it is unclaimed.
+        undoRequestInFlightRef.current = false
         return latestUndoLastStep()
       }
     }

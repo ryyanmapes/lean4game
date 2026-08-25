@@ -753,18 +753,25 @@ describe('NNG4 implication and definition display regressions', () => {
       const rect = $card[0]!.getBoundingClientRect()
       const pointer = { pointerId: 27, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }
       cy.wrap($card).trigger('pointerdown', {
+        eventConstructor: 'PointerEvent',
         ...pointer,
         clientX: rect.left + rect.width / 2,
         clientY: rect.top + rect.height / 2,
+        pageX: rect.left + rect.width / 2,
+        pageY: rect.top + rect.height / 2,
         force: true,
       })
       cy.get('body').trigger('pointermove', {
+        eventConstructor: 'PointerEvent',
         ...pointer,
         clientX: rect.left + rect.width / 2 + 12,
         clientY: rect.top + rect.height / 2 + 12,
+        pageX: rect.left + rect.width / 2 + 12,
+        pageY: rect.top + rect.height / 2 + 12,
         force: true,
       })
     })
+    cy.get('[data-tactic-name="induction"]').should('have.class', 'dragging')
     cy.get('[data-testid="hyp-card"][data-hyp-name="n"]')
       .should('have.class', 'potential-drop-target')
       .should($card => {
