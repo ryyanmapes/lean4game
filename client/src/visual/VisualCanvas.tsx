@@ -147,7 +147,11 @@ function resolveCollisions(
       const el = document.getElementById(h.id)
       const rect = el?.getBoundingClientRect()
       const width = rect ? rect.width : DEFAULT_WIDTH
-      const height = rect ? rect.height : DEFAULT_HEIGHT
+      // KaTeX/webfont metrics can grow a mounted statement by several pixels
+      // after the structural collision effect has run. Reserve the established
+      // fallback height even when an early, smaller rectangle is measurable so
+      // the final painted cards retain a real border gap.
+      const height = rect ? Math.max(rect.height, DEFAULT_HEIGHT) : DEFAULT_HEIGHT
       return {
         id: h.id,
         cx: h.position.x + width / 2,

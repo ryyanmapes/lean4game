@@ -13,16 +13,13 @@ interface VisualHarness {
 
 type HarnessWindow = Cypress.AUTWindow & { __visualTestHarness?: VisualHarness }
 
-let applicationStarted = false
-
 function openLevel(world: string, level: number) {
   const hash = `#/g/local/NNG4/world/${world}/level/${level}/visual`
-  if (!applicationStarted) {
-    cy.visit(`${mountPath}${hash}`)
-    applicationStarted = true
-  } else {
-    cy.window().then(win => { win.location.hash = hash })
-  }
+  // Load each isolated test at its requested route. If an earlier assertion
+  // aborts its command queue, retaining a module-level "started" flag leaves
+  // the next test on the previous world and turns the original failure into a
+  // ten-minute navigation timeout.
+  cy.visit(`${mountPath}${hash}`)
   cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT })
     .should('be.visible')
     .and('have.attr', 'data-world-id', world)
@@ -137,7 +134,7 @@ describe('Visual Lean mobile theorem player regressions', { testIsolation: false
     openLevel('Implication', 9)
     cy.contains('.tr-tab-btn', 'Theorems').click()
     cy.get('[data-testid="theorem-category-tabs"] .tr-tab-btn').then($tabs => {
-      expect(Array.from($tabs, tab => tab.textContent?.trim())).to.deep.equal(['All', '+', '≠'])
+      expect(Array.from($tabs, tab => tab.textContent?.trim())).to.deep.equal(['All', 'Peano', '+', '≠'])
     })
     cy.get('[data-testid="theorem-category-tabs"]').should('not.contain.text', '≤').and('not.contain.text', '*')
     findTheoremCard('zero_ne_succ').then($template => {
