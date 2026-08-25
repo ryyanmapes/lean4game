@@ -78,6 +78,16 @@ const selectedSolutions = allSolutions
   .filter((_, index) => requestedSelection || index % shardTotal === shardIndex)
 const playableSolutions = selectedSolutions
   .filter(solution => !solution.visualSkip && !solution.completionNeutral)
+  // Implication 10 closes with an `exact` immediately after `symm`. Exercise
+  // that short, timing-sensitive handoff before this shard has accumulated the
+  // extra Core/Interaction validation compiles and autosave restores from its
+  // longer levels. The shard still completes every assigned level; only their
+  // execution order changes.
+  .sort((left, right) => {
+    const priority = (solution: ReferenceSolution) =>
+      solution.world === 'Implication' && solution.level === 10 ? 0 : 1
+    return priority(left) - priority(right)
+  })
 const completionNeutralSolutions = selectedSolutions
   .filter(solution => !solution.visualSkip && solution.completionNeutral)
 const skippedSolutions = selectedSolutions.filter(solution => solution.visualSkip)
