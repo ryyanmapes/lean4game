@@ -224,6 +224,17 @@ function assertCompletedProofRestores(solution: ReferenceSolution, completedAudi
     .and('have.attr', 'aria-disabled', 'false')
 }
 
+function retryState(runnable: unknown) {
+  const retryable = runnable as {
+    currentRetry?: () => number
+    retries?: () => number
+  } | undefined
+  return {
+    current: retryable?.currentRetry?.() ?? 0,
+    maximum: retryable?.retries?.() ?? 0,
+  }
+}
+
 describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false }, () => {
   let applicationStarted = false
   let player: CompletePlaythroughDriver
@@ -245,17 +256,19 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
     // Every level is independently expensive because it is checked by Lean.
     // Once one player interaction fails, stop this spec so CI reports that
     // actionable failure instead of waiting through the remaining levels.
-    if (this.currentTest?.state === 'failed') Cypress.stop()
+    // Allow Cypress to exhaust any configured retry first.
+    const retry = retryState(this.currentTest)
+    if (this.currentTest?.state === 'failed' && retry.current >= retry.maximum) Cypress.stop()
   })
 
   for (const solution of playableSolutions) {
-    it(`${solution.world} ${solution.level}: ${solution.title}`, () => {
+    it(`${solution.world} ${solution.level}: ${solution.title}`, function () {
       // Exercise the same responsive layout and visible branch controls used
       // by phone players. The shared driver deliberately switches to a live
       // sibling and back after every split, then explicitly selects the next
       // unfinished branch after completing one.
       cy.viewport(390, 844)
-      if (!applicationStarted) {
+      if (!applicationStarted || retryState(this.test).current > 0) {
         cy.visit(levelUrl(solution), {
           onBeforeLoad(win) {
             win.localStorage.setItem('visual_auto_branch_switch', 'false')
