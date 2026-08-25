@@ -21,6 +21,7 @@ import { inferAtomicReductionForms } from './existsDisplay'
 import { goalInfosForLevel } from './levelPresentation'
 import type { ProofState } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
+import { gameMapPath } from '../utils/gameRoutes'
 import { useVisualRpcClient } from './VisualRpcProvider'
 import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
@@ -258,7 +259,7 @@ export function VisualProofPage() {
     if (levelId > 0) dispatch(levelEntered({ game: gameId, world: worldId, level: levelId }))
   }, [dispatch, gameId, levelId, worldId])
   const handleWorldMap = useCallback(() => {
-    navigate(`/${gameId}/visual`)
+    navigate(gameMapPath(gameId, 'visual'))
   }, [navigate, gameId])
   const handleOpenClassic = useCallback((proofBody: string) => {
     const token = createSolvingId()

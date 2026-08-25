@@ -61,7 +61,7 @@ export function Documentation({ type } : {type : InventoryTab}) {
     {docTile.proven && <>
         <h2>Further details</h2>
         <ul>
-          {docTile.proven && <li>Proven in: <a href={`#/${gameId}/world/${docTile.world}/level/${docTile.level}`}>{docTile.world} level {docTile.level}</a></li>}
+          {docTile.proven && <li>Proven in: <a href={`/${gameId}/world/${docTile.world}/level/${docTile.level}`}>{docTile.world} level {docTile.level}</a></li>}
         </ul>
       </>
     }

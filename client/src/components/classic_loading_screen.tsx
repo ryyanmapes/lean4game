@@ -8,6 +8,7 @@ import { PreferencesContext } from './infoview/context'
 import { HopLoadingIndicator } from '../visual/VisualLoadingScreen'
 import { TelemetryConsent, type TelemetryConsentGate } from './telemetry_consent'
 import { AnnotatedLevelTitle } from './annotated_level_title'
+import { gameMapPath } from '../utils/gameRoutes'
 
 import '../css/classic-loading.css'
 
@@ -44,7 +45,7 @@ export function ClassicLoadingScreen({
       <div className="app-bar classic-loading-app-bar">
         <div className="app-bar-left">
           <button className="btn btn-inverted" type="button"
-            title="Home" aria-label="Home" onClick={() => navigate(`/${gameId}`)}>
+            title="Home" aria-label="Home" onClick={() => navigate(gameMapPath(gameId, 'classic'))}>
             <FontAwesomeIcon icon={faHome} />
           </button>
           <span className="app-bar-title">{worldTitle ?? ''}</span>

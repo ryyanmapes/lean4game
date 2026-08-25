@@ -164,6 +164,43 @@ describe('local NNG4 release maps', () => {
     cy.location('pathname').should('match', /\/g\/local\/NNG4\/world\/Tutorial\/level\/1\/visual$/u)
   })
 
+  it('opens the root congratulations page after every required level is complete', () => {
+    cy.request('/lean4game/data/g/local/NNG4/game.json').then(response => {
+      const worldSize = response.body.worldSize as Record<string, number>
+      const data = Object.fromEntries(Object.entries(worldSize).map(([world, size]) => [
+        world,
+        {
+          readIntro: true,
+          ...Object.fromEntries(Array.from({ length: size }, (_, index) => [
+            index + 1,
+            { code: '', selections: [], completed: true, help: [] },
+          ])),
+        },
+      ]))
+
+      cy.visit('/g/local/NNG4/visual', {
+        onBeforeLoad(win) {
+          win.localStorage.setItem('game_progress', JSON.stringify({
+            games: {
+              'g/local/nng4': {
+                inventory: [],
+                difficulty: 2,
+                readIntro: true,
+                data,
+              },
+            },
+          }))
+        },
+      })
+    })
+
+    cy.get('[data-world-id="Ending"][role="link"]', { timeout: 30_000 })
+      .should('have.attr', 'aria-label').and('include', 'Open the congratulations page')
+    cy.get('[data-world-id="Ending"][role="link"]').click({ force: true })
+    cy.location('pathname', { timeout: 30_000 }).should('equal', '/congratulations.html')
+    cy.contains('h1', 'Congratulations!').should('be.visible')
+  })
+
   it('keeps erase confirmation concise and offers no combined download action', () => {
     cy.visit('/lean4game/index.html#/g/local/NNG4/visual')
     cy.contains('The Natural Numbers Video Game', { timeout: 30_000 }).should('be.visible')
@@ -195,6 +232,43 @@ describe('local NNG4 release maps', () => {
     }).its('status').should('equal', 404)
   })
 
+  it('publishes the Prototype transformation and existential teaching prompts', () => {
+    cy.request('/lean4game/data/g/local/VisualTest/level__Prototype__4.json').then(response => {
+      expect(response.body.visualTransformInfos).to.deep.include({
+        kind: 'back',
+        side: null,
+        source: '',
+        target: '',
+        goal: '(y + 1) * 5 = (y + 1) * 5',
+        text: "Now that both sides of the equality match, return to Combining Mode with the 'back' button, then click the goal once to apply 'rfl' and finish the level.",
+      })
+      expect(response.body.visualGoalInfos).to.deep.include({
+        position: 'below',
+        arrow: true,
+        goal: '(y + 1) * 5 = (y + 1) * 5',
+        requireHypType: null,
+        excludeHypType: null,
+        text: "Click once to apply 'rfl' and finish the level.",
+      })
+    })
+
+    cy.request('/lean4game/data/g/local/VisualTest/level__Prototype__5.json').then(response => {
+      expect(response.body.visualGoalInfos).to.deep.include({
+        position: 'below',
+        arrow: false,
+        goal: '∃ a : ℕ, a + a = a',
+        requireHypType: null,
+        excludeHypType: null,
+        text: 'Click there-exists goals to specialize them with a particular constructed example',
+      })
+      expect(JSON.stringify(response.body)).not.to.match(/double-click[^"\n]*(?:there-exists|existential)/iu)
+    })
+
+    cy.request('/lean4game/data/g/local/NNG4/level__LessOrEqual__4.json').then(response => {
+      expect(JSON.stringify(response.body)).not.to.match(/double-click[^"\n]*(?:there-exists|existential)/iu)
+    })
+  })
+
   it('shows Fermat as a playable optional level with an accessible title annotation', () => {
     cy.visit('/lean4game/index.html#/g/local/NNG4/world/Power/level/10/visual', {
       onBeforeLoad(win) {
@@ -223,6 +297,7 @@ describe('local NNG4 release maps', () => {
     })
 
     cy.contains('button', 'Back to map').click()
+    cy.location('pathname').should('equal', '/visualNNG')
     cy.get('[role="link"][aria-label^="Open Power level 10:"]', { timeout: 30_000 })
       .should('have.attr', 'data-map-completed', 'true')
   })

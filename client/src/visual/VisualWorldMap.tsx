@@ -252,10 +252,11 @@ function VisualEndingWorldIcon({ position, completedLevels, totalLevels, palette
   const radius = 54
   const progress = totalLevels > 0 ? completedLevels / totalLevels : 0
   const complete = totalLevels > 0 && completedLevels === totalLevels
-  // The completion page is a sibling static page of this sub-app rather than a
-  // router route, so resolve it against the document base instead of navigate().
+  // The completion page belongs to the release root rather than the nested
+  // game route. Using a relative URL here would resolve `/g/local/NNG4/visual`
+  // to the nonexistent `/g/local/congratulations.html`.
   const openCompletionPage = () => {
-    window.location.href = new URL('../congratulations.html', document.baseURI).href
+    window.location.href = new URL('/congratulations.html', window.location.origin).href
   }
   return (
     <g

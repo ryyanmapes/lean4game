@@ -136,6 +136,7 @@
     "test:visual-proof-text": "node ./node_modules/typescript/bin/tsc client/src/visual/proofText.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-proof-text-tests --skipLibCheck --esModuleInterop && node --test client/test/proofText.test.mjs",
     "test:visual-adaptive-pagination": "node ./node_modules/typescript/bin/tsc client/src/visual/adaptivePagination.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-adaptive-pagination-tests --skipLibCheck --esModuleInterop && node --test client/test/adaptivePagination.test.mjs",
     "test:game-progress-storage": "node ./node_modules/typescript/bin/tsc client/src/state/gameProgressStorage.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-game-storage-tests --skipLibCheck --esModuleInterop && node --test client/test/gameProgressStorage.test.mjs",
+    "test:game-routes": "node ./node_modules/typescript/bin/tsc client/src/utils/gameRoutes.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-game-routes-tests --skipLibCheck --esModuleInterop && node --test client/test/gameRoutes.test.mjs",
     "test:visual-world-progress": "node ./node_modules/typescript/bin/tsc client/src/visual/visualWorldProgress.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-visual-world-progress-tests --skipLibCheck --esModuleInterop && node --test client/test/visualWorldProgress.test.mjs",
     "test:visual-browser-proof": "node scripts/run-browser-proof-tests.mjs",
     "test:visual-complete-fixture": "node scripts/generate-nng4-visual-solutions.mjs",
@@ -146,7 +147,7 @@
     "test:prod": "npm run build",
     "test:visual-interaction-to-tactic": "node ./node_modules/typescript/bin/tsc client/src/visual/interactionToTactic.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-interaction-tests --skipLibCheck --esModuleInterop && node --test client/test/interactionToTactic.test.mjs",
     "test:visual-transformation-view": "node ./node_modules/typescript/bin/tsc client/src/visual/TransformationView.tsx --jsx react --module commonjs --target es2022 --moduleResolution node --outDir tmp-transformation-tests --skipLibCheck --esModuleInterop && node scripts/write-cjs-marker.cjs tmp-transformation-tests && node --test client/test/transformationView.test.mjs",
-    "test:visual-units": "node scripts/run-sequential.cjs test:visual-expr-engine test:visual-stream-reconcile test:visual-quantified-statement test:visual-theorem-ordering test:visual-exists-display test:visual-level-presentation test:visual-goal-application test:visual-proof-text test:visual-adaptive-pagination test:visual-world-progress test:visual-interaction-to-tactic test:visual-transformation-view test:game-progress-storage"
+    "test:visual-units": "node scripts/run-sequential.cjs test:visual-expr-engine test:visual-stream-reconcile test:visual-quantified-statement test:visual-theorem-ordering test:visual-exists-display test:visual-level-presentation test:visual-goal-application test:visual-proof-text test:visual-adaptive-pagination test:visual-world-progress test:visual-interaction-to-tactic test:visual-transformation-view test:game-progress-storage test:game-routes"
   },
   "eslintConfig": {
     "extends": [

@@ -8,6 +8,7 @@ const {
   parseTransformTarget,
   parseGoalEquality,
   parseEqualityHyp,
+  transformInfoMatchesGoal,
 } = require('../../tmp-transformation-tests/visual/TransformationView.js')
 
 test('parseGoalEquality accepts a top-level equality', () => {
@@ -19,6 +20,27 @@ test('parseGoalEquality accepts a top-level equality', () => {
 
 test('parseGoalEquality rejects implications containing equalities', () => {
   assert.equal(parseGoalEquality('x * 0 = 1 → x = 1'), null)
+})
+
+test('reflexive back guidance follows any matching pair of transformed sides', () => {
+  const info = {
+    kind: 'back',
+    goal: '(y + 1) * 5 = (y + 1) * 5',
+    text: 'Return to Combining Mode',
+  }
+  assert.equal(
+    transformInfoMatchesGoal(info, '5 * (y + 1) = 5 * (y + 1)', '=', true),
+    true,
+  )
+  assert.equal(
+    transformInfoMatchesGoal(info, '5 * (y + 1) = (y + 1) * 5', '=', false),
+    false,
+  )
+  assert.equal(
+    transformInfoMatchesGoal({ ...info, kind: 'info' }, '5 * y = y * 5', '=', false),
+    false,
+    'ordinary status guidance remains tied to its exact authored goal',
+  )
 })
 
 test('parseEqualityHyp rejects implication hypotheses with equality premises', () => {

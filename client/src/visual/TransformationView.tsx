@@ -154,6 +154,20 @@ export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: st
   return parsed ? { lhsStr: parsed.lhsStr, rhsStr: parsed.rhsStr } : null
 }
 
+/** A back-button lesson authored for a reflexive equality describes the state
+ * "both sides now match", not just one particular printed normal form. */
+export function transformInfoMatchesGoal(
+  info: VisualTransformInfo,
+  currentGoalText: string,
+  relation: TransformRelation,
+  currentSidesMatch: boolean,
+): boolean {
+  if (!info.goal || formatFormulaText(info.goal) === currentGoalText) return true
+  if (info.kind !== 'back' || relation !== '=' || !currentSidesMatch) return false
+  const authored = parseTransformTarget(info.goal)
+  return authored?.relation === '=' && expressionsEqual(authored.lhs, authored.rhs)
+}
+
 /** Try to parse a hyp type string as "lhsStr = rhsStr". */
 export function parseEqualityHyp(typeStr: string, hypName: string, hypId: string): EqualityHyp | null {
   const parsed = parseTransformTarget(typeStr)
@@ -475,9 +489,11 @@ export function TransformationView({
   const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
   const staticStr = formatFormulaText(rawStaticStr)
   const currentGoalText = formatFormulaText(`${printExpression(lhs)} ${relation} ${printExpression(rhs)}`)
+  const currentSidesMatch = relation === '=' && expressionsEqual(lhs, rhs)
   const activeVisualInfos = useMemo(
-    () => visualInfos.filter(info => !info.goal || formatFormulaText(info.goal) === currentGoalText),
-    [currentGoalText, visualInfos],
+    () => visualInfos.filter(info =>
+      transformInfoMatchesGoal(info, currentGoalText, relation, currentSidesMatch)),
+    [currentGoalText, currentSidesMatch, relation, visualInfos],
   )
   const sideInfo = activeVisualInfos.find(info =>
     info.kind === 'side' && (info.side === 'left' || info.side === 'right') && info.side !== workingSide

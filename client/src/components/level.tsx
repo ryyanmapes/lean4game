@@ -42,6 +42,7 @@ import { isLastStepWithErrors, lastStepHasErrors } from './infoview/goals'
 import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { useGameTranslation } from '../utils/translation'
+import { gameMapPath } from '../utils/gameRoutes'
 import { InventoryPanel } from './inventory/inventory_panel'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { getWebsocketUrl } from '../utils/url'
@@ -202,7 +203,7 @@ export function ChatPanel({lastLevel, visible = true}) {
     </div>
     <div className="button-row">
       {proof?.completed && (lastLevel ?
-        <Button ref={focusRef} to={`/${gameId}`}>
+        <Button ref={focusRef} to={gameMapPath(gameId, 'classic')}>
           <FontAwesomeIcon icon={faHome} />&nbsp;{t("Home")}
         </Button> :
         <Button ref={focusRef} to={`/${gameId}/world/${worldId}/level/${levelId + 1}`}>
@@ -649,7 +650,7 @@ function IntroductionPanel({gameInfo}) {
     </div>
     <div className={`button-row${mobile ? ' mobile' : ''}`}>
       {gameInfo.data?.worldSize[worldId] == 0 ?
-        <Button to={`/${gameId}`}>
+        <Button to={gameMapPath(gameId, 'classic')}>
           <FontAwesomeIcon icon={faHome} />
           </Button> :
         <Button ref={focusRef} to={`/${gameId}/world/${worldId}/level/1`}>

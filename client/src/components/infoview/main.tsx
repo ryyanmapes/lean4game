@@ -41,6 +41,7 @@ import { DiagnosticSeverity } from 'vscode-languageclient';
 import { useTranslation } from 'react-i18next';
 import path from 'path';
 import { useGameTranslation } from '../../utils/translation';
+import { gameMapPath } from '../../utils/gameRoutes';
 
 /** Wrapper for the two editors. It is important that the `div` with `codeViewRef` is
  * always present, or the monaco editor cannot start.
@@ -696,7 +697,7 @@ export function TypewriterInterface({props}) {
             {mobile && proof?.completed &&
               <div className="button-row mobile">
                 {props.level >= props.worldSize ?
-                  <Button to={`/${gameId}`}>
+                  <Button to={gameMapPath(gameId, 'classic')}>
                     <FontAwesomeIcon icon={faHome} />&nbsp;{t("Home")}
                   </Button>
                 :

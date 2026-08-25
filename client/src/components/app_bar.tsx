@@ -20,6 +20,7 @@ import { closeNavAtom, navOpenAtom } from '../store/navigation-atoms'
 import { useGameTranslation } from '../utils/translation'
 import { AnnotatedLevelTitle } from './annotated_level_title'
 import { FeedbackReportButton } from './feedback_report'
+import { gameMapPath } from '../utils/gameRoutes'
 
 /** navigation buttons for mobile welcome page to switch between intro/tree/inventory. */
 function MobileNavButtons({pageNumber, setPageNumber}:
@@ -84,7 +85,7 @@ function NextButton({worldSize, difficulty, completed}) {
       <FontAwesomeIcon icon={faArrowRight} />&nbsp;{levelId ? t("Next") : t("Start")}
     </Button>
     :
-    <Button to={`/${gameId}`} inverted="true" title={t("Home")} id="home-btn">
+    <Button to={gameMapPath(gameId, 'classic')} inverted="true" title={t("Home")} id="home-btn">
       <FontAwesomeIcon icon={faHome} />&nbsp;{t("Home")}
     </Button>
   )
@@ -200,7 +201,7 @@ function UploadButton () {
 function HomeButton({isDropdown}) {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
-  return <Button to={`/${gameId}`} inverted="true" title={t("Home")} id="home-btn">
+  return <Button to={gameMapPath(gameId, 'classic')} inverted="true" title={t("Home")} id="home-btn">
     <FontAwesomeIcon icon={faHome} />
     {isDropdown && <>&nbsp;{t("Home")}</>}
   </Button>
