@@ -307,77 +307,57 @@ function resolveCollisions(
         const overlapY = (left.height + right.height) / 2 + RECTANGLE_GAP - Math.abs(dy)
         if (overlapX <= 0 || overlapY <= 0) continue
 
+        const centerBounds = (item: typeof items[number], axis: 'x' | 'y') => {
+          if (item.fixed) return { min: axis === 'x' ? item.cx : item.cy, max: axis === 'x' ? item.cx : item.cy }
+          const halfSize = axis === 'x' ? item.hw : item.hh
+          const minimum = axis === 'x' ? (canvasBounds.minX ?? 0) : (canvasBounds.minY ?? 0)
+          const maximum = axis === 'x'
+            ? (canvasBounds.maxX ?? canvasBounds.width)
+            : (canvasBounds.maxY ?? canvasBounds.height)
+          const min = minimum + halfSize + COLLISION_EDGE_MARGIN
+          return { min, max: Math.max(min, maximum - halfSize - COLLISION_EDGE_MARGIN) }
+        }
+        const axisMovement = (axis: 'x' | 'y', delta: number) => {
+          const leftPosition = axis === 'x' ? left.cx : left.cy
+          const rightPosition = axis === 'x' ? right.cx : right.cy
+          const leftBounds = centerBounds(left, axis)
+          const rightBounds = centerBounds(right, axis)
+          const direction = delta >= 0 ? 1 : -1
+          const leftCapacity = Math.max(0, direction > 0
+            ? leftPosition - leftBounds.min
+            : leftBounds.max - leftPosition)
+          const rightCapacity = Math.max(0, direction > 0
+            ? rightBounds.max - rightPosition
+            : rightPosition - rightBounds.min)
+          return { direction, leftCapacity, rightCapacity, capacity: leftCapacity + rightCapacity }
+        }
+        const xMovement = axisMovement('x', dx)
+        const yMovement = axisMovement('y', dy)
+        // Prefer the shorter visual move only when the canvas actually has
+        // room for it. At the bottom edge, selecting Y and then clamping both
+        // cards simply recreated the overlap forever.
+        const useX = xMovement.capacity >= overlapX - 0.01
+          && (yMovement.capacity < overlapY - 0.01 || overlapX < overlapY)
+        const overlap = useX ? overlapX : overlapY
+        const movement = useX ? xMovement : yMovement
+        if (movement.capacity <= 0) continue
         moved = true
-        const moveLeft = left.fixed ? 0 : right.fixed ? 1 : 0.5
-        const moveRight = right.fixed ? 0 : left.fixed ? 1 : 0.5
-        if (overlapX < overlapY) {
-          const direction = dx >= 0 ? 1 : -1
-          left.cx -= direction * overlapX * moveLeft
-          right.cx += direction * overlapX * moveRight
+        let leftMove = Math.min(overlap / 2, movement.leftCapacity)
+        let rightMove = Math.min(overlap - leftMove, movement.rightCapacity)
+        leftMove += Math.min(overlap - leftMove - rightMove, movement.leftCapacity - leftMove)
+        rightMove += Math.min(overlap - leftMove - rightMove, movement.rightCapacity - rightMove)
+        if (useX) {
+          left.cx -= movement.direction * leftMove
+          right.cx += movement.direction * rightMove
         } else {
-          const direction = dy >= 0 ? 1 : -1
-          left.cy -= direction * overlapY * moveLeft
-          right.cy += direction * overlapY * moveRight
+          left.cy -= movement.direction * leftMove
+          right.cy += movement.direction * rightMove
         }
         clampItem(left)
         clampItem(right)
       }
     }
     if (!moved) break
-  }
-
-  // A pair can remain interlocked when the shorter separation axis is pinned
-  // at both canvas edges: pushing along that axis and clamping simply restores
-  // the overlap. Repair only those residual collisions by moving the later
-  // generated card to the nearest measured free position. The scan uses the
-  // real card rectangles (rather than the padded ellipse hitboxes), so it
-  // preserves the established layout while guaranteeing visible borders do
-  // not cover one another.
-  const rectangleFor = (item: typeof items[number], cx = item.cx, cy = item.cy) => ({
-    left: cx - item.width / 2,
-    top: cy - item.height / 2,
-    right: cx + item.width / 2,
-    bottom: cy + item.height / 2,
-  })
-  const rectanglesOverlap = (
-    left: ReturnType<typeof rectangleFor>,
-    right: ReturnType<typeof rectangleFor>,
-  ) => left.left < right.right + RECTANGLE_GAP
-    && left.right + RECTANGLE_GAP > right.left
-    && left.top < right.bottom + RECTANGLE_GAP
-    && left.bottom + RECTANGLE_GAP > right.top
-  const placed = items.filter(item => item.fixed)
-  for (const item of items) {
-    if (item.fixed) continue
-    if (placed.some(other => rectanglesOverlap(rectangleFor(item), rectangleFor(other)))) {
-      const minCx = (canvasBounds.minX ?? 0) + item.hw + COLLISION_EDGE_MARGIN
-      const maxCxLimit = canvasBounds.maxX ?? canvasBounds.width
-      const maxCx = Math.max(minCx, maxCxLimit - item.hw - COLLISION_EDGE_MARGIN)
-      const minCy = (canvasBounds.minY ?? 0) + item.hh + COLLISION_EDGE_MARGIN
-      const maxCyLimit = canvasBounds.maxY ?? canvasBounds.height
-      const maxCy = Math.max(minCy, maxCyLimit - item.hh - COLLISION_EDGE_MARGIN)
-      const originalCx = item.cx
-      const originalCy = item.cy
-      let best: { cx: number; cy: number; distance: number } | null = null
-      const consider = (cx: number, cy: number) => {
-        const candidate = rectangleFor(item, cx, cy)
-        if (placed.some(other => rectanglesOverlap(candidate, rectangleFor(other)))) return
-        const distance = (cx - originalCx) ** 2 + (cy - originalCy) ** 2
-        if (!best || distance < best.distance) best = { cx, cy, distance }
-      }
-      const step = 8
-      for (let cy = minCy; cy <= maxCy; cy += step) {
-        for (let cx = minCx; cx <= maxCx; cx += step) consider(cx, cy)
-        consider(maxCx, cy)
-      }
-      for (let cx = minCx; cx <= maxCx; cx += step) consider(cx, maxCy)
-      consider(maxCx, maxCy)
-      if (best) {
-        item.cx = best.cx
-        item.cy = best.cy
-      }
-    }
-    placed.push(item)
   }
 
   return hyps.map(h => {
