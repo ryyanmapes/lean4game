@@ -3884,7 +3884,11 @@ export function VisualCanvas({
         ...lastDragDebugRef.current,
         dispatch: { playTactic, sourceCardId, processing: isProcessingRef.current },
       }
-      void applyInteraction(playTactic, sourceCardId, { ...options, queueIfBusy: true })
+      // dnd-kit can retain the drag-end callback from the render that began
+      // the gesture. Dispatch through the latest render so a theorem dropped
+      // immediately after a rewrite includes that rewrite in its proof script.
+      const latestApplyInteraction = applyInteractionRef.current ?? applyInteraction
+      void latestApplyInteraction(playTactic, sourceCardId, { ...options, queueIfBusy: true })
         .then(succeeded => {
           lastDragDebugRef.current = {
             ...lastDragDebugRef.current,
