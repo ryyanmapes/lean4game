@@ -256,7 +256,7 @@ describe('local NNG4 release maps', () => {
       expect(response.body.visualGoalInfos).to.deep.include({
         position: 'below',
         arrow: false,
-        goal: '∃ a : ℕ, a + a = a',
+        goal: '∃ a, a + a = a',
         requireHypType: null,
         excludeHypType: null,
         text: 'Click there-exists goals to specialize them with a particular constructed example',
