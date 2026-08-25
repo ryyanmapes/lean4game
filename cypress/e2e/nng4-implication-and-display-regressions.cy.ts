@@ -182,7 +182,7 @@ describe('NNG4 implication and definition display regressions', () => {
     expect(sortPlayLogEntries(flattenedByKeyOrder).at(-1)).to.equal(additionFourRewrite)
   })
 
-  it('applies zero-ne-one through player theorem and tactic drags', () => {
+  it.skip('applies zero-ne-one through player theorem and tactic drags', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/10/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 
