@@ -3009,6 +3009,20 @@ export function VisualCanvas({
     }
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait }))
+    // Generated cards can be moved to their semantic anchor in a short timer
+    // after this structural effect. Run one bounded settle pass after that
+    // placement, when every new card has its final DOM dimensions. Positions
+    // remain absent from the dependency key, so this cannot create a layout
+    // feedback loop.
+    const settleTimer = window.setTimeout(() => {
+      const settledBounds = getCombiningCanvasBounds()
+      setCanvasState(prev => resolveCanvasStateCollisions(
+        prev,
+        settledBounds,
+        { phonePortrait: isPhonePortrait },
+      ))
+    }, 80)
+    return () => window.clearTimeout(settleTimer)
   }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
