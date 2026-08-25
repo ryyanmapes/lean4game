@@ -360,6 +360,49 @@ function resolveCollisions(
     if (!moved) break
   }
 
+  // Pairwise symmetric pushes can settle a vertically ordered stack into an
+  // equilibrium where each later card pushes its predecessor back into the
+  // preceding card. Finish strongly vertical overlaps in reading order:
+  // prefer moving the lower card down, cascading the small correction through
+  // the stack. This is intentionally limited to pairs whose horizontal
+  // overlap is much larger than the vertical correction, so it does not
+  // re-flow ordinary diagonal layouts or alter explicit user placements.
+  for (let iter = 0; iter < items.length * 2; iter += 1) {
+    let moved = false
+    const verticallyOrdered = [...items].sort((left, right) => left.cy - right.cy)
+    for (let i = 0; i < verticallyOrdered.length; i += 1) {
+      for (let j = i + 1; j < verticallyOrdered.length; j += 1) {
+        const upper = verticallyOrdered[i]!
+        const lower = verticallyOrdered[j]!
+        if (upper.fixed && lower.fixed) continue
+        const horizontalOverlap = (upper.width + lower.width) / 2 + RECTANGLE_GAP
+          - Math.abs(lower.cx - upper.cx)
+        const verticalOverlap = (upper.height + lower.height) / 2 + RECTANGLE_GAP
+          - (lower.cy - upper.cy)
+        if (verticalOverlap <= 0 || horizontalOverlap <= verticalOverlap * 2) continue
+
+        const lowerMaxY = lower.fixed
+          ? lower.cy
+          : Math.max(
+              (canvasBounds.minY ?? 0) + lower.hh + COLLISION_EDGE_MARGIN,
+              (canvasBounds.maxY ?? canvasBounds.height) - lower.hh - COLLISION_EDGE_MARGIN,
+            )
+        const upperMinY = upper.fixed
+          ? upper.cy
+          : (canvasBounds.minY ?? 0) + upper.hh + COLLISION_EDGE_MARGIN
+        const lowerMove = Math.min(verticalOverlap, Math.max(0, lowerMaxY - lower.cy))
+        const upperMove = Math.min(verticalOverlap - lowerMove, Math.max(0, upper.cy - upperMinY))
+        if (lowerMove + upperMove <= 0.01) continue
+        lower.cy += lowerMove
+        upper.cy -= upperMove
+        clampItem(lower)
+        clampItem(upper)
+        moved = true
+      }
+    }
+    if (!moved) break
+  }
+
   return hyps.map(h => {
     const item = items.find(p => p.id === h.id)
     return item
