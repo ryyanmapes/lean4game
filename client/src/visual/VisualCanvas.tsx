@@ -147,11 +147,7 @@ function resolveCollisions(
       const el = document.getElementById(h.id)
       const rect = el?.getBoundingClientRect()
       const width = rect ? rect.width : DEFAULT_WIDTH
-      // KaTeX/webfont metrics can grow a mounted statement by several pixels
-      // after the structural collision effect has run. Reserve the established
-      // fallback height even when an early, smaller rectangle is measurable so
-      // the final painted cards retain a real border gap.
-      const height = rect ? Math.max(rect.height, DEFAULT_HEIGHT) : DEFAULT_HEIGHT
+      const height = rect ? rect.height : DEFAULT_HEIGHT
       return {
         id: h.id,
         cx: h.position.x + width / 2,
@@ -3619,7 +3615,11 @@ export function VisualCanvas({
       nextCanvas = updatePlacedHypPosition(nextCanvas, options.placementHint, options.placementHint.droppedPosition)
       setCanvasState(nextCanvas)
       window.setTimeout(() => {
-        setCanvasState(prev => placeHypNearAnchor(prev, options.placementHint!))
+        setCanvasState(prev => resolveCanvasStateCollisions(
+          placeHypNearAnchor(prev, options.placementHint!),
+          getCombiningCanvasBounds(),
+          { phonePortrait: isPhonePortrait },
+        ))
       }, 24)
       return true
     }
@@ -5098,7 +5098,11 @@ export function VisualCanvas({
     setCanvasState(nextCanvas)
     if (placementHint) {
       window.setTimeout(() => {
-        setCanvasState(prev => placeHypNearAnchor(prev, placementHint!))
+        setCanvasState(prev => resolveCanvasStateCollisions(
+          placeHypNearAnchor(prev, placementHint!),
+          getCombiningCanvasBounds(),
+          { phonePortrait: isPhonePortrait },
+        ))
       }, 24)
     }
 
