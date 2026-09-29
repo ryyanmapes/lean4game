@@ -13,6 +13,10 @@ import { VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
 import type { VisualProofResumeState } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
 import { VisualLoadingScreen } from './VisualLoadingScreen'
+import { LoadFailureScreen } from './LoadFailureScreen'
+import { classifyLoadFailure } from './loadFailure'
+import { unloadedFeedbackState } from './loadDiagnostics'
+import type { LoadFailure } from './loadFailure'
 import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
@@ -315,7 +319,7 @@ export function VisualProofPage() {
   }, [gameId, worldId, levelId, solvingId, telemetryStartedAt])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [resumeState, setResumeState] = useState<VisualProofResumeState | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LoadFailure | null>(null)
   const [presentationReady, setPresentationReady] = useState(false)
   const [showLoadingChrome, setShowLoadingChrome] = useState(false)
   const [levelTitle, setLevelTitle] = useState<string | null>(null)
@@ -483,7 +487,7 @@ export function VisualProofPage() {
       }
 
       if (active) {
-        setError(lastError instanceof Error ? lastError.message : 'Connection failed')
+        setError(classifyLoadFailure(lastError ?? new Error('Connection failed')))
       }
     })()
 
@@ -695,7 +699,11 @@ export function VisualProofPage() {
   }, [canvasState, presentationReady, sendLevelStartTelemetry, telemetryConsent.consentState])
 
   if (error) {
-    return <div className={`visual-page visual-loading${isPhonePortrait ? ' phone-portrait' : ''}`} style={{ color: 'var(--visual-error-text)' }}>Error: {error}</div>
+    return <LoadFailureScreen
+      failure={error}
+      phonePortrait={isPhonePortrait}
+      feedback={{ gameId, worldId, levelId, mode: 'visual' }}
+    />
   }
 
   // Skip-aware prev/next: find closest non-skipped neighbour.
@@ -727,6 +735,8 @@ export function VisualProofPage() {
       onNext={handleNextLevel}
       phonePortrait={isPhonePortrait}
       telemetryConsent={telemetryConsent}
+      gameId={gameId}
+      getFeedbackProofState={() => unloadedFeedbackState()}
     />
   }
 

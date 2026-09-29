@@ -1,0 +1,114 @@
+# Visual Lean — messages shown when Lean fails to start on page load.
+#
+# Format
+#   [case-id]            starts a case (do not rename the ids)
+#   # ...                notes for the author; never shown to players
+#   everything else      shown to the player exactly as written, line by line
+#                        (blank lines and empty "title:" lines are ignored)
+#
+# A case with no text falls back to the short built-in default in
+# loadFailure.ts. The raw technical error is always available to players under
+# a collapsed "Technical details" line, so this text can stay friendly.
+#
+# This file is bundled into the client at build time: rebuild/sync after
+# editing it (lean4.js: npm run sync-lean4game-client).
+#
+# Test any case in a browser by appending ?simulateFailure=<case-id> to a level
+# URL, e.g. /pitch/...?simulateFailure=stack-overflow
+
+
+[wasm-disabled]
+# Detected before loading: the browser exposes no working WebAssembly.
+# Typical causes: iOS/macOS Lockdown Mode; Edge "enhanced security" mode;
+# Brave or enterprise policies that disable JIT/WebAssembly; very old browsers.
+# Suggested advice: turn Lockdown Mode / hardened security off for this site,
+# or use another browser.
+title:
+Visual Lean requires WASM to be enabled. 
+You may need a newer or more permissive browser.
+
+
+[browser-outdated]
+# Detected before loading: WebAssembly exists but a newer web platform feature
+# Lean needs is missing (Web Workers, streaming downloads/decompression, or
+# 64-bit integer support). Roughly: iOS/Safari older than 16.4, Chrome/Brave
+# older than 80, Firefox older than 113.
+# Suggested advice: update the OS/browser, or try on another device.
+title:
+Visual Lean is missing key WASM features needed to run. 
+You will need a more up-to-date browser or device to continue.
+
+
+[stack-overflow]
+# Lean ran out of call stack while starting ("Maximum call stack size
+# exceeded", "too much recursion"). Lean's elaborator is deeply recursive and
+# the browser's worker-thread stack limit is set by the browser engine, not by
+# us. Older phones, 32-bit Android builds and older engine versions have less
+# headroom. This is the most likely match for the Brave-on-older-phone report.
+# Suggested advice: try a desktop/laptop, or a newer phone.
+title:
+Visual Lean requires a larger stack size to run. 
+You will need a more up-to-date browser or device to continue.
+
+
+[out-of-memory]
+# The browser refused to give Lean enough memory ("Out of memory", "could not
+# allocate memory", "Array buffer allocation failed", "Cannot enlarge memory").
+# Lean needs roughly 1 GB of working memory once loaded.
+# Suggested advice: close other tabs/apps and reload, or use a device with more
+# memory.
+title:
+Visual Lean requires more working memory to run. 
+Try closing unneeded tabs or using a more up-to-date device to continue.
+
+
+[tab-crashed]
+# The previous attempt to load Lean in this tab never finished and the page was
+# restarted. iOS and Android do this silently when a tab uses too much memory,
+# so without this case the player just sees the page reload in a loop. The
+# screen offers a "Try again" button instead of retrying automatically.
+# Suggested advice: close other tabs/apps, then try again; otherwise use a
+# device with more memory.
+title:
+Visual Lean is failing to start, likely due to memory constraints. 
+Try closing unneeded tabs or using a more up-to-date device to continue.
+
+
+[download-failed]
+# A file Lean needs could not be downloaded ("Failed to fetch", "Load failed",
+# "NetworkError", an HTTP error status). Usually a flaky connection; can also
+# be a content blocker, a captive portal, or an overly strict proxy.
+# Suggested advice: check the connection, disable blockers for this site,
+# reload.
+title:
+Visual Lean is unable to retrieve the WASM snapshots necessary to run.
+Try disabling blockers or getting a more stable connection to continue.
+
+
+[timeout]
+# Lean took longer than 10 minutes to start. Usually a very slow connection or
+# a very slow/throttled device (e.g. Low Power Mode).
+# Suggested advice: reload on a faster connection; keep the tab in front while
+# loading.
+title:
+Visual Lean timed out.
+You'll need a more stable device or connection to continue.
+
+
+[worker-crashed]
+# Lean's background worker stopped without giving a reason, or Lean aborted
+# during start-up with a message we do not recognise as one of the cases above.
+# Often memory-related on phones.
+# Suggested advice: reload; if it repeats, try another browser or device.
+title:
+Visual Lean broke unexpectedly.
+Try reloading. Report the issue if this persists.
+
+
+[unknown]
+# Anything else. The technical details line shows the raw error.
+# Suggested advice: reload; report the technical details if it keeps happening.
+title:
+Visual Lean broke unexpectedly.
+Try reloading. Report the issue if this persists.
+

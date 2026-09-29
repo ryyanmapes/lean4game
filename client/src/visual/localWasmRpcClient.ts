@@ -6,6 +6,14 @@ import type {
 import { getDataBaseUrl } from '../utils/url'
 import { instrumentBrowserProof } from './browserProof'
 import { coreTacticForVisualCommand } from './proofText'
+import {
+  consumePreviousLoadCrash,
+  detectBrowserIncompatibility,
+  LeanLoadError,
+  markLoadSettled,
+  markLoadStarted,
+  simulatedLoadFailure,
+} from './loadFailure'
 
 type WorkerDiagnostic = {
   severity?: string
@@ -53,6 +61,34 @@ const leanLoadingListeners = new Set<(progress: LeanLoadingProgress) => void>()
 function reportLeanLoading(value: number | null, message: string) {
   leanLoadingProgress = { value, message }
   for (const listener of leanLoadingListeners) listener(leanLoadingProgress)
+}
+
+export function getLeanLoadingProgress(): LeanLoadingProgress {
+  return leanLoadingProgress
+}
+
+// Recent worker messages, attached to feedback sent before Lean has loaded.
+// Progress ticks are frequent and uninformative, so only the latest is kept.
+type WorkerLogEntry = { ms: number; type: string; data?: string }
+const WORKER_LOG_LIMIT = 40
+const workerLog: WorkerLogEntry[] = []
+
+function logWorkerMessage(msg: { type?: unknown; data?: unknown; error?: unknown }) {
+  const type = String(msg.type ?? 'unknown')
+  if (type === 'compile_result' || type === 'runtime_memory') return
+  const detail = msg.error ?? msg.data
+  const entry: WorkerLogEntry = {
+    ms: Math.round(performance.now()),
+    type,
+    ...(detail == null ? {} : { data: String(detail).slice(0, 500) }),
+  }
+  if (/_progress$/u.test(type) && workerLog.at(-1)?.type === type) workerLog[workerLog.length - 1] = entry
+  else workerLog.push(entry)
+  if (workerLog.length > WORKER_LOG_LIMIT) workerLog.splice(0, workerLog.length - WORKER_LOG_LIMIT)
+}
+
+export function getLeanWorkerLog(): WorkerLogEntry[] {
+  return workerLog.slice()
 }
 
 export function subscribeLeanLoadingProgress(
@@ -114,6 +150,21 @@ class LocalLeanWorker {
 
   ensureReady(): Promise<void> {
     if (this.readyPromise) return this.readyPromise
+    // Refuse up front, with a specific reason, rather than failing somewhere
+    // inside an 88 MB download. A crash detected from the previous page load is
+    // not retried automatically: on a phone that is out of memory that would
+    // just crash-reload the tab again.
+    const blocked = simulatedLoadFailure()
+      ?? detectBrowserIncompatibility()
+      ?? (consumePreviousLoadCrash()
+        ? new LeanLoadError('tab-crashed', 'The previous attempt to load Lean in this tab did not finish')
+        : null)
+    if (blocked) {
+      this.readyPromise = Promise.reject(blocked)
+      this.readyPromise.catch(() => {})
+      return this.readyPromise
+    }
+    markLoadStarted()
     this.readyPromise = new Promise<void>((resolve, reject) => {
       const worker = new Worker(WORKER_URL)
       this.worker = worker
@@ -121,6 +172,7 @@ class LocalLeanWorker {
 
       worker.onmessage = event => {
         const msg = event.data ?? {}
+        if (msg.type !== 'stdout') logWorkerMessage(msg)
         if (window.Cypress) {
           ;(window as typeof window & { __leanWorkerStatus?: unknown }).__leanWorkerStatus = msg
         }
@@ -210,10 +262,14 @@ class LocalLeanWorker {
         }
       }
       worker.onerror = event => {
+        logWorkerMessage({ type: 'worker_onerror', data: event.message || '(no message)' })
         window.clearTimeout(timeout)
         reject(new Error(event.message || 'Local Lean worker failed'))
       }
     })
+    // On success the marker stays set through the first compile, which is
+    // where Lean imports its environment and memory use peaks.
+    this.readyPromise.catch(markLoadSettled)
     return this.readyPromise
   }
 
@@ -243,6 +299,7 @@ class LocalLeanWorker {
       this.pendingCompile = {
         diagnostics: [],
         resolve: result => {
+          markLoadSettled()
           reportLeanLoading(100, 'Lean is ready')
           resolve(result)
         },

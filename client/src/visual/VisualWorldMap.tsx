@@ -51,6 +51,13 @@ const NLABEL = 8
 const NMAX = 16
 const NSPIRAL = 12
 const MINFONT = 14
+/**
+ * Horizontal span, in layout units, of NNG4's fitted phone-portrait graph:
+ * its 120-unit minimum layout width, compacted to 80%, then fitted to ±30%
+ * around the root world (see applyNng4VisualLayout and the phone bounds fit).
+ * Used as the minimum phone graph width so all games share NNG4's scale.
+ */
+const PHONE_MIN_GRAPH_WIDTH = 120 * 0.8 * 0.6
 
 interface VisualMapPalette {
   background: string
@@ -786,8 +793,16 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const padding = R + 2.1 * r
   const hPadding = isPhonePortraitViewport ? R + 0.55 * r : padding + 80
 
-  const contentDx = bounds ? s * (bounds.x2 - bounds.x1) + 2 * hPadding : null
+  const graphDx = bounds ? s * (bounds.x2 - bounds.x1) : null
+  const contentDx = graphDx != null ? graphDx + 2 * hPadding : null
   const naturalSvgDisplayWidth = contentDx != null ? ds * contentDx : null
+  // Phone portrait scales the viewBox to the screen width, so a narrow graph
+  // (the one-world Elevator Pitch) was drawn several times larger than NNG4.
+  // Never fit less than NNG4's graph width, so worlds, level dots and labels
+  // are the same on-screen size in every game.
+  const phoneExtraViewBoxUnits = isPhonePortraitViewport && graphDx != null
+    ? Math.max(0, s * PHONE_MIN_GRAPH_WIDTH - graphDx)
+    : 0
   // Phone portrait fits the entire graph width into one fixed horizontal span;
   // navigation is vertical-only. Desktop/tablet retain their fill-width view.
   const svgDisplayWidth = contentDx != null && naturalSvgDisplayWidth != null
@@ -800,7 +815,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
     ? (svgDisplayWidth - naturalSvgDisplayWidth) / ds
-    : 0
+    : phoneExtraViewBoxUnits
   const dx = contentDx != null ? contentDx + extraViewBoxUnits : null
   // Shift the drawing inside the fixed-width SVG rather than translating the
   // SVG box itself. A CSS transform centred the root but made the transformed

@@ -9,6 +9,7 @@ import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
+import { ReverseIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
@@ -1021,7 +1022,7 @@ export function TransformationView({
               aria-disabled={isProcessing || !(canUndo ?? rewriteStepCount > 0)}
               className={`tr-ctrl-btn${(canUndo ?? rewriteStepCount > 0) ? ' active-undo' : ''}`}
               aria-label="Undo"
-            >↩</button>
+            ><UndoIcon /></button>
           </div>
 
           {/* Reverse */}
@@ -1032,7 +1033,7 @@ export function TransformationView({
               aria-disabled={isProcessing}
               className={`tr-ctrl-btn${isReverse ? ' active-reverse' : ''}`}
               aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
-            >↕</button>
+            ><ReverseIcon /></button>
           </div>
 
         </div>

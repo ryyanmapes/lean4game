@@ -56,6 +56,34 @@ describe('in-level feedback reports', { testIsolation: true }, () => {
     cy.wait('@feedback')
   })
 
+  it('reports the unloaded state, the shown error and diagnostics when Lean fails to load', () => {
+    cy.intercept('POST', feedbackEndpoint, request => {
+      expect(request.body.mode).to.equal('visual')
+      expect(request.body.world_id).to.equal('Tutorial')
+      expect(request.body.proof_state.state).to.equal('unloaded')
+      expect(request.body.proof_state.shownError.caseId).to.equal('stack-overflow')
+      expect(request.body.proof_state.shownError.text).to.have.length.greaterThan(0)
+      expect(request.body.proof_state.diagnostics).to.have.property('userAgent')
+      expect(request.body.proof_state).to.have.property('loading')
+      request.reply({ statusCode: 204, headers: { 'access-control-allow-origin': '*' } })
+    }).as('feedback')
+
+    cy.visit(`${mountPath}?simulateFailure=stack-overflow#/g/local/NNG4/world/Tutorial/level/1/visual`, {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('telemetryConsent', 'refused')
+        ;(win as HarnessWindow).__LEAN_TELEMETRY_URL__ = 'https://telemetry.test'
+      },
+    })
+    cy.get('[data-testid="load-failure"]', { timeout: LOAD_TIMEOUT })
+      .should('have.attr', 'data-failure-case', 'stack-overflow')
+      .find('.feedback-report-open').click()
+    cy.get('[role="dialog"][aria-label="Send feedback"]').within(() => {
+      cy.get('textarea').type('It never loaded.')
+      cy.contains('button', 'Submit feedback').click()
+    })
+    cy.wait('@feedback')
+  })
+
   it('submits classic proof state with the opted-in anonymous identity', () => {
     cy.intercept('POST', feedbackEndpoint, request => {
       expect(request.body.mode).to.equal('classic')

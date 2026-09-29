@@ -318,6 +318,69 @@
   color: var(--visual-text-primary);
 }
 
+/* Lean could not start: a readable explanation instead of a raw error. */
+.visual-page.visual-load-failure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem max(1rem, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.visual-load-failure-card {
+  width: min(34rem, 100%);
+  margin: auto;
+  padding: 1.75rem 1.5rem;
+  background: var(--visual-surface);
+  border: 1px solid var(--visual-glass-border);
+  border-radius: 1rem;
+}
+.visual-load-failure-text {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--visual-text-primary);
+}
+.visual-load-failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.4rem 0 1.2rem;
+}
+.visual-load-failure-retry {
+  padding: 0.6rem 1.25rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--visual-accent);
+  border: none;
+  border-radius: 9999px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.visual-load-failure-home {
+  color: var(--visual-accent-soft);
+}
+.visual-load-failure-details {
+  font-size: 0.8rem;
+  color: var(--visual-text-secondary);
+}
+.visual-load-failure-details summary {
+  cursor: pointer;
+}
+.visual-load-failure-details pre {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--visual-error-text);
+  background: var(--visual-glass-bg);
+  border-radius: 0.5rem;
+}
+
 /* Animation stage */
 .visual-loading-anim {
   position: relative;
@@ -1639,13 +1702,15 @@
   min-width: 6.6rem;
 }
 
+/* Unavailable, not gone: keep the outline and label so it still reads as a
+   button, just a dimmed one. */
 .visual-header-nav-btn:disabled,
 .visual-header-nav-btn:disabled:hover {
-  color: var(--visual-text-muted);
-  border-color: var(--visual-border-faint);
+  color: var(--visual-text-secondary);
+  border-color: var(--visual-border-subtle);
   background: transparent;
   box-shadow: none;
-  opacity: 0.45;
+  opacity: 0.6;
   cursor: default;
   animation: none;
 }
@@ -1928,8 +1993,20 @@
   border-radius: 9999px;
   color: var(--visual-text-secondary);
   font-size: 1.2rem;
+  line-height: 1;
+  /* Safari gives buttons native padding/appearance; keep the circle exact. */
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
+}
+.visual-page .tr-ctrl-btn .tr-ctrl-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  pointer-events: none;
 }
 .visual-page .tr-ctrl-btn:hover:not(:disabled) {
   background: var(--visual-glass-bg-hover);
@@ -2673,10 +2750,6 @@
     line-height: 1;
   }
 
-  .visual-page.phone-portrait .visual-header-nav-btn:disabled::before {
-    content: "" !important;
-  }
-
   .visual-page.phone-portrait .visual-header-map-btn::before,
   .visual-page.phone-portrait .visual-header-prev-btn::before {
     content: "←";
@@ -3296,11 +3369,11 @@
 
 .visual-header-nav-btn.emphasized:disabled,
 .visual-header-nav-btn.emphasized:disabled:hover {
-  color: var(--visual-text-muted);
-  border-color: var(--visual-border-faint);
+  color: var(--visual-text-secondary);
+  border-color: var(--visual-border-subtle);
   background: transparent;
   box-shadow: none;
-  opacity: 0.45;
+  opacity: 0.6;
   animation: none;
 }
 

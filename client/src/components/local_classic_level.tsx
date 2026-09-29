@@ -35,6 +35,10 @@ import type { GameHint, ProofState } from './infoview/rpc_api'
 import { InventoryPanel } from './inventory/inventory_panel'
 import { ChatPanel } from './level'
 
+import { LoadFailureScreen } from '../visual/LoadFailureScreen'
+import { classifyLoadFailure } from '../visual/loadFailure'
+import { unloadedFeedbackState } from '../visual/loadDiagnostics'
+import type { LoadFailure } from '../visual/loadFailure'
 import '../css/level.css'
 import '../css/infoview.css'
 import '../css/local-classic-level.css'
@@ -260,6 +264,7 @@ export default function LocalClassicLevel() {
   const [checking, setChecking] = React.useState(true)
   const [ready, setReady] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [loadFailure, setLoadFailure] = React.useState<LoadFailure | null>(null)
   const [commandInput, setCommandInput] = React.useState('')
   const [deletedChat, setDeletedChat] = React.useState<GameHint[]>([])
   const [showHelp, setShowHelp] = React.useState<Set<number>>(new Set())
@@ -299,6 +304,7 @@ export default function LocalClassicLevel() {
     setReady(false)
     setChecking(true)
     setError('')
+    setLoadFailure(null)
     if (!game.data) return () => { active = false }
     client.loadProofState(worldId, levelId, {
       moveInitialBindersIntoGoal: levelStartsWithBindersInGoal(
@@ -313,7 +319,9 @@ export default function LocalClassicLevel() {
       telemetryStarted.current = true
       sendLevelStartTelemetry()
     }, reason => {
-      if (active) setError(String(reason))
+      // Without Lean there is no level to show, and `ready` never becomes
+      // true, so explain the failure instead of leaving the loading screen up.
+      if (active) setLoadFailure(classifyLoadFailure(reason))
     }).finally(() => {
       if (active) setChecking(false)
     })
@@ -423,6 +431,14 @@ export default function LocalClassicLevel() {
   const loadingLevelTitle = `${mobile ? '' : 'Level'} ${levelId} / ${loadingWorldSize}` +
     (level.data?.title ? ` : ${level.data.title}` : '')
 
+  if (loadFailure) {
+    return <LoadFailureScreen
+      failure={loadFailure}
+      phonePortrait={mobile}
+      feedback={{ gameId, worldId, levelId, mode: 'classic' }}
+    />
+  }
+
   const contentReady = Boolean(level.data && game.data && ready)
   if (!level.data || !game.data || !ready || telemetryConsent.shouldHold) {
     const loadingProgress = contentReady
@@ -437,6 +453,7 @@ export default function LocalClassicLevel() {
       message={loadingProgress.message}
       progress={loadingProgress.value}
       telemetryConsent={telemetryConsent}
+      feedbackProofState={() => unloadedFeedbackState()}
     />
   }
 

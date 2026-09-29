@@ -5,6 +5,7 @@ import {
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { formatFormulaText } from './expr-engine'
+import { UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 
@@ -508,7 +509,7 @@ export function ConstructionView({
               aria-disabled={busy || !canUndo}
               className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
               aria-label="Undo last fill"
-            >↩</button>
+            ><UndoIcon /></button>
           </div>
 
           {/* Done — replaces the reverse button */}

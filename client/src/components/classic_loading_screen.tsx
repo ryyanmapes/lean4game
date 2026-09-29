@@ -4,7 +4,8 @@ import { faHome, faSun } from '@fortawesome/free-solid-svg-icons'
 import { useNavigate } from 'react-router-dom'
 
 import { GameIdContext } from '../app'
-import { PreferencesContext } from './infoview/context'
+import { PreferencesContext, WorldLevelIdContext } from './infoview/context'
+import { FeedbackReportButton } from './feedback_report'
 import { HopLoadingIndicator } from '../visual/VisualLoadingScreen'
 import { TelemetryConsent, type TelemetryConsentGate } from './telemetry_consent'
 import { AnnotatedLevelTitle } from './annotated_level_title'
@@ -19,6 +20,7 @@ export function ClassicLoadingScreen({
   progress = null,
   showChrome,
   telemetryConsent,
+  feedbackProofState,
 }: {
   worldTitle?: string | null
   levelTitle?: string | null
@@ -26,9 +28,12 @@ export function ClassicLoadingScreen({
   progress?: number | null
   showChrome?: boolean
   telemetryConsent?: TelemetryConsentGate
+  /** Enables the feedback (!) button while the level loads. */
+  feedbackProofState?: () => unknown
 }) {
   const navigate = useNavigate()
   const gameId = React.useContext(GameIdContext)
+  const { worldId, levelId } = React.useContext(WorldLevelIdContext)
   const { isVisualLightMode, setIsVisualLightMode } = React.useContext(PreferencesContext)
   const [delayElapsed, setDelayElapsed] = React.useState(false)
 
@@ -48,6 +53,8 @@ export function ClassicLoadingScreen({
             title="Home" aria-label="Home" onClick={() => navigate(gameMapPath(gameId, 'classic'))}>
             <FontAwesomeIcon icon={faHome} />
           </button>
+          {feedbackProofState && <FeedbackReportButton gameId={gameId} worldId={worldId}
+            levelId={levelId} mode="classic" getProofState={feedbackProofState} />}
           <span className="app-bar-title">{worldTitle ?? ''}</span>
         </div>
         <span className="app-bar-title classic-loading-title">

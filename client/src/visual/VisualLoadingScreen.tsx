@@ -21,6 +21,9 @@ type VisualLoadingScreenProps = {
   onNext?: () => void
   phonePortrait?: boolean
   telemetryConsent?: TelemetryConsentGate
+  /** Enables the header's feedback (!) button while the level loads. */
+  gameId?: string
+  getFeedbackProofState?: () => unknown
 }
 
 export function HopLoadingIndicator({
@@ -78,6 +81,8 @@ export function VisualLoadingScreen({
   onNext = () => {},
   phonePortrait = false,
   telemetryConsent,
+  gameId,
+  getFeedbackProofState,
 }: VisualLoadingScreenProps) {
   const [delayElapsed, setDelayElapsed] = React.useState(false)
   React.useEffect(() => {
@@ -107,6 +112,8 @@ export function VisualLoadingScreen({
           onNext={onNext}
           onWorldMap={onWorldMap ?? (() => {})}
           hideNav={!onWorldMap}
+          gameId={gameId}
+          getFeedbackProofState={getFeedbackProofState}
         />
       )}
       <HopLoadingIndicator message={message} progress={progress} />

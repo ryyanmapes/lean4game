@@ -27,6 +27,7 @@ import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
 import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
+import { ResetIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 import { compareCombiningTheoremNames, THEOREM_BUCKETS, theoremBucket } from './theoremOrdering'
@@ -7424,7 +7425,7 @@ export function VisualCanvas({
                 aria-disabled={isProcessing}
                 className="tr-ctrl-btn active-undo"
                 aria-label="Undo"
-              >↩</button>
+              ><UndoIcon /></button>
               {canvasState.completed && (
                 <button
                   onClick={() => void resetProof()}
@@ -7432,7 +7433,7 @@ export function VisualCanvas({
                   className="tr-ctrl-btn active-reset"
                   aria-label="Reset level"
                   title="Start this level over"
-                >⟲</button>
+                ><ResetIcon /></button>
               )}
             </div>
           )}
