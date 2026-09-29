@@ -25,8 +25,8 @@ on:
         type: boolean
     secrets:
       CAULI_ARTIFACT_TOKEN:
-        description: Token with Actions read access to cauli/lean4
-        required: true
+        description: Unused since the toolchain moved to release assets; kept so existing callers still validate
+        required: false
   workflow_dispatch:
     inputs:
       lean4game_ref:
@@ -58,11 +58,11 @@ permissions:
   contents: read
 
 env:
-  CAULI_LEAN_SHA: 72a8f89f3126d2c149361d1285b000f5e77d7313
-  CAULI_LEAN_RUN_ID: '30858803276'
+  # Same Lean sources as 72a8f89 (only workflow files differ), rebuilt so its
+  # archives could be published as a permanent release.
+  CAULI_LEAN_SHA: c7d18908e7210fdfe388b5d01bfb5179ac79b33e
+  CAULI_LEAN_RELEASE_TAG: single-thread-browser-c7d18908e7-36617670574
   CAULI_LEAN_REPOSITORY: ryyanmapes/lean4
-  CAULI_LEAN_ARTIFACT: build-Linux 32bit
-  CAULI_WASM_ARTIFACT: build-Web Assembly
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
   # Latest mathlib commit preceding the pinned Cauli Lean build. NNG4's normal
   # manifest targets Lean 4.28 and cannot be compiled by this 4.33-pre toolchain.
@@ -92,15 +92,6 @@ jobs:
             ln -s "$GITHUB_WORKSPACE" "$expected_checkout"
           fi
           test -d "$expected_checkout/server"
-
-      - name: Require Cauli artifact token
-        env:
-          CAULI_ARTIFACT_TOKEN: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-        run: |
-          if [[ -z "$CAULI_ARTIFACT_TOKEN" ]]; then
-            echo '::error::Add CAULI_ARTIFACT_TOKEN as a repository Actions secret. It needs read access to public Actions artifacts.'
-            exit 1
-          fi
 
       - name: Check out pinned browser snapshot host
         uses: actions/checkout@v4
@@ -133,32 +124,16 @@ jobs:
           git -C ../VisualTest fetch --depth 1 origin "$VISUALTEST_REF"
           git -C ../VisualTest checkout --detach FETCH_HEAD
 
-      - name: Download matching Cauli 32-bit compiler
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
-          run-id: ${{ env.CAULI_LEAN_RUN_ID }}
-          name: ${{ env.CAULI_LEAN_ARTIFACT }}
-          path: .cauli-toolchain-download
-
-      - name: Download matching Cauli WebAssembly compiler
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
-          run-id: ${{ env.CAULI_LEAN_RUN_ID }}
-          name: ${{ env.CAULI_WASM_ARTIFACT }}
-          path: .cauli-wasm-download
-
-      - name: Download matching Cauli WebAssembly link kit
-        uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ secrets.CAULI_ARTIFACT_TOKEN }}
-          repository: ${{ env.CAULI_LEAN_REPOSITORY }}
-          run-id: ${{ env.CAULI_LEAN_RUN_ID }}
-          name: linkkit-Web Assembly
-          path: .cauli-linkkit-download
+      - name: Download matching Cauli toolchain release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release assets never expire, unlike the Actions artifacts this used
+          # to pin (the link kit's 30-day expiry broke every release).
+          dl() { gh release download "$CAULI_LEAN_RELEASE_TAG" --repo "$CAULI_LEAN_REPOSITORY" --pattern "$1" --dir "$2"; }
+          dl '*linux_32.tar.zst' .cauli-toolchain-download
+          dl '*linux_wasm32.tar.zst' .cauli-wasm-download
+          dl 'linkkit-wasm.tar.zst' .cauli-linkkit-download
 
       - name: Install 32-bit runtime and unpack compiler
         run: |
