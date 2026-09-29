@@ -239,14 +239,16 @@ describe('NNG4 implication and definition display regressions', () => {
     cy.get('.visual-header-prev-btn')
       .should('be.disabled')
       .and('contain.text', 'Previous level')
-      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.lessThan(0.6))
+      // Dimmed so it reads as unavailable, but still clearly a button.
+      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.within(0.5, 0.9))
 
     cy.visit(`${mountPath}#/g/local/NNG4/world/Implication/level/11/visual`)
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     cy.get('.visual-header-next-btn')
       .should('be.disabled')
       .and('contain.text', 'Next level')
-      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.lessThan(0.6))
+      // Dimmed so it reads as unavailable, but still clearly a button.
+      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.within(0.5, 0.9))
   })
 
   it('does not substitute by dragging one equality hypothesis onto another', () => {
