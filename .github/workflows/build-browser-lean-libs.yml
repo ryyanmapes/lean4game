@@ -62,6 +62,8 @@ env:
   # archives could be published as a permanent release.
   CAULI_LEAN_SHA: c7d18908e7210fdfe388b5d01bfb5179ac79b33e
   CAULI_LEAN_RELEASE_TAG: single-thread-browser-c7d18908e7-36617670574
+  # The toolchain run that produced that release; recorded in build-info.json.
+  CAULI_LEAN_RUN_ID: '36617670574'
   CAULI_LEAN_REPOSITORY: ryyanmapes/lean4
   CAULI_BROWSER_HOST_REF: bd59ee42ca75cdc4947b7b101b845b25da594d93
   # Latest mathlib commit preceding the pinned Cauli Lean build. NNG4's normal
