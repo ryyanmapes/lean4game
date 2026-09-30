@@ -58,7 +58,6 @@ const MINFONT = 14
  * Used as the minimum phone graph width so all games share NNG4's scale.
  */
 const PHONE_MIN_GRAPH_WIDTH = 120 * 0.8 * 0.6
-const PHONE_MAP_MAX_ZOOM = 3
 
 interface VisualMapPalette {
   background: string
@@ -595,78 +594,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   const [viewportSize, setViewportSize] = React.useState(getViewportSize)
   const [phoneScrollbarGutter, setPhoneScrollbarGutter] = React.useState(0)
   const isPhonePortraitViewport = viewportSize.width <= 720 && viewportSize.height >= viewportSize.width
-
-  // Two-finger pinch zoom of the phone map. The browser's own pinch zoom would
-  // also scale the fixed header, so the scroll area disables it (touch-action)
-  // and the map is re-sized here instead, anchored under the fingers.
-  const [phoneMapZoom, setPhoneMapZoom] = React.useState(1)
-  const phoneMapZoomRef = React.useRef(1)
-  const pinchAnchorRef = React.useRef<{ x: number; y: number; fx: number; fy: number } | null>(null)
-  React.useEffect(() => {
-    const scrollEl = scrollRef.current
-    if (!scrollEl || !isPhonePortraitViewport) return
-    const distance = (touches: TouchList) =>
-      Math.hypot(touches[0]!.clientX - touches[1]!.clientX, touches[0]!.clientY - touches[1]!.clientY)
-    let pinch: { distance: number; zoom: number } | null = null
-    const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length === 2) pinch = { distance: distance(event.touches), zoom: phoneMapZoomRef.current }
-    }
-    const onTouchMove = (event: TouchEvent) => {
-      if (!pinch || event.touches.length !== 2) return
-      event.preventDefault()
-      const svgEl = svgRef.current
-      if (!svgEl || pinch.distance <= 0) return
-      const next = Math.min(PHONE_MAP_MAX_ZOOM, Math.max(1, pinch.zoom * distance(event.touches) / pinch.distance))
-      const previous = phoneMapZoomRef.current
-      if (Math.abs(next - previous) < 0.005) return
-      const scrollRect = scrollEl.getBoundingClientRect()
-      const svgRect = svgEl.getBoundingClientRect()
-      const fx = (event.touches[0]!.clientX + event.touches[1]!.clientX) / 2
-      const fy = (event.touches[0]!.clientY + event.touches[1]!.clientY) / 2
-      // The map point under the fingers, in the SVG's post-zoom pixels.
-      const ratio = next / previous
-      pinchAnchorRef.current = {
-        x: (fx - svgRect.left) * ratio,
-        y: (fy - svgRect.top) * ratio,
-        fx: fx - scrollRect.left,
-        fy: fy - scrollRect.top,
-      }
-      phoneMapZoomRef.current = next
-      setPhoneMapZoom(next)
-    }
-    const onTouchEnd = (event: TouchEvent) => {
-      if (event.touches.length < 2) pinch = null
-    }
-    // iOS Safari starts its native page zoom from these regardless of
-    // touch-action on some versions.
-    const onGesture = (event: Event) => event.preventDefault()
-    scrollEl.addEventListener('touchstart', onTouchStart, { passive: true })
-    scrollEl.addEventListener('touchmove', onTouchMove, { passive: false })
-    scrollEl.addEventListener('touchend', onTouchEnd)
-    scrollEl.addEventListener('touchcancel', onTouchEnd)
-    scrollEl.addEventListener('gesturestart', onGesture)
-    scrollEl.addEventListener('gesturechange', onGesture)
-    return () => {
-      scrollEl.removeEventListener('touchstart', onTouchStart)
-      scrollEl.removeEventListener('touchmove', onTouchMove)
-      scrollEl.removeEventListener('touchend', onTouchEnd)
-      scrollEl.removeEventListener('touchcancel', onTouchEnd)
-      scrollEl.removeEventListener('gesturestart', onGesture)
-      scrollEl.removeEventListener('gesturechange', onGesture)
-    }
-  // The scroll area only mounts once the game info has loaded.
-  }, [isPhonePortraitViewport, Boolean(gameInfo.data)])
-  React.useLayoutEffect(() => {
-    const anchor = pinchAnchorRef.current
-    const scrollEl = scrollRef.current
-    const svgEl = svgRef.current
-    if (!anchor || !scrollEl || !svgEl) return
-    pinchAnchorRef.current = null
-    const scrollRect = scrollEl.getBoundingClientRect()
-    const svgRect = svgEl.getBoundingClientRect()
-    scrollEl.scrollLeft += svgRect.left + anchor.x - (scrollRect.left + anchor.fx)
-    scrollEl.scrollTop += svgRect.top + anchor.y - (scrollRect.top + anchor.fy)
-  }, [phoneMapZoom])
   React.useEffect(() => {
     const onResize = () => {
       const next = getViewportSize()
@@ -883,7 +810,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       // Account for the map's horizontal padding and the vertical scrollbar.
       // Using the raw viewport width leaves genuine horizontal overflow once
       // both are present on a narrow mobile browser.
-      ? Math.max(0, viewportSize.width - 16) * phoneMapZoom
+      ? Math.max(0, viewportSize.width - 16)
       : Math.max(naturalSvgDisplayWidth, viewportSize.width)
     : null
   const extraViewBoxUnits = (!isPhonePortraitViewport && svgDisplayWidth != null && contentDx != null && naturalSvgDisplayWidth != null)
@@ -1004,11 +931,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         fastExfalso={isVisualFastExfalso}
         onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
       />
-      <div
-        className={`visual-map-scroll${isPhonePortraitViewport && phoneMapZoom > 1 ? ' zoomed' : ''}`}
-        ref={scrollRef}
-        data-testid="visual-world-map"
-      >
+      <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg
           ref={svgRef}
           xmlns="http://www.w3.org/2000/svg"

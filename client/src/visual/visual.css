@@ -3747,18 +3747,9 @@
     padding: 3rem 0.25rem 4rem;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Pinch zoom is handled by VisualWorldMap, which re-sizes the map rather
-       than letting the browser scale the whole page and its header. */
-    touch-action: pan-x pan-y;
+    touch-action: pan-y;
     overscroll-behavior-x: none;
     overscroll-behavior-y: contain;
-  }
-
-  /* Zoomed wider than the screen: scroll sideways, and start the content at
-     the left edge (flex centring would make the left overflow unreachable). */
-  .visual-map-scroll.zoomed {
-    overflow-x: auto;
-    justify-content: flex-start;
   }
 
   .visual-map-page .visual-map-svg {
