@@ -11,27 +11,89 @@ function nextExistsName(usedNames: Set<string>): string {
   return candidate
 }
 
-function expandTopLevelLessOrEqual(displayText: string): string | null {
-  if (!displayText.includes('≤')) return null
+const OPENING_BRACKETS = '([{⟨'
+const CLOSING_BRACKETS = ')]}⟩'
+
+/** Remove parentheses that enclose the whole text, e.g. `((a ≠ b))` → `a ≠ b`,
+ * but leave `(a = b) → (c = d)` alone. */
+function stripEnclosingParens(text: string): string {
+  let result = text.trim()
+  while (result.startsWith('(') && result.endsWith(')')) {
+    let depth = 0
+    for (let index = 0; index < result.length; index += 1) {
+      if (result[index] === '(') depth += 1
+      else if (result[index] === ')') depth -= 1
+      if (depth === 0 && index < result.length - 1) return result
+    }
+    result = result.slice(1, -1).trim()
+  }
+  return result
+}
+
+/** Indices of the characters in `operators` that sit outside every bracket.
+ * Returns null for unbalanced text so callers never guess at its structure. */
+function topLevelOperatorIndices(text: string, operators: string): number[] | null {
+  const indices: number[] = []
   let depth = 0
-  let lessOrEqualIndex = -1
-  for (let index = 0; index < displayText.length; index += 1) {
-    const char = displayText[index]
-    if (char === '(') depth += 1
-    else if (char === ')') {
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!
+    if (OPENING_BRACKETS.includes(char)) depth += 1
+    else if (CLOSING_BRACKETS.includes(char)) {
       depth -= 1
       if (depth < 0) return null
-    } else if (depth === 0 && (char === '→' || char === '∧' || char === '∨')) {
-      return null
-    } else if (depth === 0 && char === '≤') {
-      if (lessOrEqualIndex >= 0) return null
-      lessOrEqualIndex = index
+    } else if (depth === 0 && operators.includes(char)) {
+      indices.push(index)
     }
   }
-  if (depth !== 0 || lessOrEqualIndex < 0) return null
-  const lhs = displayText.slice(0, lessOrEqualIndex).trim()
-  const rhs = displayText.slice(lessOrEqualIndex + 1).trim()
-  if (!lhs || !rhs) return null
+  return depth === 0 ? indices : null
+}
+
+// Everything that binds no tighter than a relation (precedence 50) — the
+// logical connectives, the relations themselves, and binder/argument
+// separators. `->`, `<=`, `!=`, `=>` are caught through their `>`/`=`.
+const LOOSE_OPERATOR_CHARS = '→↔∧∨≠=≤≥<>,:'
+
+/** Split `lhs ⋈ rhs` only when the relation `⋈` is the principal connective
+ * of the whole proposition, i.e. the only top-level operator that binds no
+ * tighter than it. Notations such as `≠` and `≤` are unfolded by splitting the
+ * surface string, so anything looser at the top level means the relation is
+ * just a sub-term and must be left alone. */
+function splitTopLevelRelation(text: string, relation: string): [string, string] | null {
+  const body = stripEnclosingParens(text)
+  if (/^(?:[∀∃¬λ]|fun\b|Exists\b)/u.test(body)) return null
+  const operators = topLevelOperatorIndices(body, LOOSE_OPERATOR_CHARS)
+  if (!operators || operators.length !== 1) return null
+  const index = operators[0]!
+  if (body[index] !== relation) return null
+  const lhs = body.slice(0, index).trim()
+  const rhs = body.slice(index + relation.length).trim()
+  return lhs && rhs ? [lhs, rhs] : null
+}
+
+/** `lhs ≠ rhs` as a whole proposition. `d ≠ 0 → d * b = d * c → b = c` is an
+ * implication whose premise happens to be a disequality, so it must NOT
+ * become `d = 0 → … → b = c → False`. */
+export function splitTopLevelDisequality(text: string): [string, string] | null {
+  return splitTopLevelRelation(text, '≠')
+}
+
+/** `¬` binds everything at precedence ≥ 40, so its scope ends at the first
+ * top-level `∧`/`∨`/`→`/`↔`. Only when there is none does `¬` cover the whole
+ * text and `¬ P` read as `P → False`. */
+export function splitTopLevelNegation(text: string): string | null {
+  const body = stripEnclosingParens(text)
+  if (!body.startsWith('¬')) return null
+  const negated = body.slice(1).trim()
+  if (!negated) return null
+  const connectives = topLevelOperatorIndices(negated, '→↔∧∨')
+  if (!connectives || connectives.length > 0) return null
+  return negated
+}
+
+function expandTopLevelLessOrEqual(displayText: string): string | null {
+  const lessOrEqual = splitTopLevelRelation(displayText, '≤')
+  if (!lessOrEqual) return null
+  const [lhs, rhs] = lessOrEqual
   const identifiers = displayText.match(/[\p{L}][\p{L}\p{N}_']*/gu) ?? []
   const witness = nextExistsName(new Set(identifiers))
   return `∃ ${witness}, ${rhs} = ${lhs} + ${witness}`
@@ -153,10 +215,7 @@ export function contextualizeReductionForms(forms: string[], contextNames: Itera
   for (const form of contextualizedForms) {
     append(form)
 
-    const trimmed = form.trim()
-    if (!trimmed.startsWith('\u00ac')) continue
-
-    const negatedBody = trimmed.slice(1).trim()
+    const negatedBody = splitTopLevelNegation(form)
     if (!negatedBody) continue
 
     const alreadyParenthesized = negatedBody.startsWith('(') && negatedBody.endsWith(')')
@@ -177,7 +236,7 @@ export function selectAtomicReductionForm(
   contextNames: Iterable<string>,
 ): string | null {
   const displayed = displayText.trim()
-  const isNegation = displayed.startsWith('¬') || displayed.includes('≠')
+  const isNegation = splitTopLevelNegation(displayed) !== null || splitTopLevelDisequality(displayed) !== null
   const isLeq = displayed.includes('≤')
   if ((!isNegation && !isLeq) || !forms?.length) return null
 
@@ -203,10 +262,10 @@ export function selectAtomicReductionForm(
  * forms, so theorem tray/copy cards need this small surface-syntax bridge. */
 export function inferAtomicReductionForms(displayText: string): string[] {
   const displayed = displayText.trim()
-  const notEqual = /^(.*?)\s*≠\s*(.*?)$/u.exec(displayed)
+  const notEqual = splitTopLevelDisequality(displayed)
   if (notEqual) {
-    const [, lhs = '', rhs = ''] = notEqual
-    return [`${lhs.trim()} = ${rhs.trim()} → False`]
+    const [lhs, rhs] = notEqual
+    return [`${lhs} = ${rhs} → False`]
   }
 
   const expandedLessOrEqual = expandTopLevelLessOrEqual(displayed)

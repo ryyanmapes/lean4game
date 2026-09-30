@@ -16,7 +16,7 @@ import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
 import type { ConstructionMode } from './ConstructionView'
-import { contextualizeExistsDisplay, contextualizeReductionForms, replaceIdentifier } from './existsDisplay'
+import { contextualizeExistsDisplay, contextualizeReductionForms, replaceIdentifier, splitTopLevelDisequality } from './existsDisplay'
 import { applyEqualityRule, applyTheoremRewrite, exprTreeToNode, formatFormulaText, matchAndCapture, parse, printExpression, substituteVariables } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
@@ -973,19 +973,8 @@ function splitNegationAsImplication(text: string): [string, string] | null {
   const arrow = splitImplicationText(text)
   if (arrow) return arrow
 
-  const normalized = stripOuterParens(text)
-  let depth = 0
-  for (let i = 0; i < normalized.length; i++) {
-    const ch = normalized[i]
-    if (ch === '(') depth++
-    else if (ch === ')') depth--
-    else if (depth === 0 && normalized.startsWith('≠', i)) {
-      const left = normalized.slice(0, i).trim()
-      const right = normalized.slice(i + '≠'.length).trim()
-      if (left && right) return [`${left} = ${right}`, 'False']
-    }
-  }
-  return null
+  const disequality = splitTopLevelDisequality(text)
+  return disequality ? [`${disequality[0]} = ${disequality[1]}`, 'False'] : null
 }
 
 /** Equality hypotheses may still be premises to an implication. What is no
@@ -1104,7 +1093,7 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   if (tactic.name === 'cases') return true
   if (tactic.name === 'symm') {
     const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
-    return parsedHypEquality(card) !== null || typeText.includes('↔') || typeText.includes('≠')
+    return parsedHypEquality(card) !== null || typeText.includes('↔') || splitTopLevelDisequality(typeText) !== null
   }
   // `exfalso` replaces the goal with `False`; it has no meaningful `at h` form.
   if (tactic.name === 'exfalso') return false
@@ -1128,7 +1117,7 @@ function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean 
   if (tactic.name === 'induction' || tactic.name === 'cases') return false
   if (tactic.name === 'symm') {
     const goalText = TaggedText_stripTags(stream.goal.type)
-    return parsedGoalEquality(stream) !== null || goalText.includes('↔') || goalText.includes('≠')
+    return parsedGoalEquality(stream) !== null || goalText.includes('↔') || splitTopLevelDisequality(goalText) !== null
   }
   return true
 }

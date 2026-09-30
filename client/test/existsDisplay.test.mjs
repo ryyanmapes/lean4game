@@ -55,3 +55,31 @@ test('infers atomic forms for static proposition theorem cards', () => {
   )
   assert.deepEqual(inferAtomicReductionForms('a = b'), [])
 })
+
+test('only unfolds ≠ when it is the principal connective', () => {
+  // `d ≠ 0 → d * b = d * c → b = c` is an implication, not a disequality.
+  assert.deepEqual(inferAtomicReductionForms('d ≠ 0 → d * b = d * c → b = c'), [])
+  assert.equal(
+    selectAtomicReductionForm('d ≠ 0 → d * b = d * c → b = c', ['d = 0 → False'], []),
+    null,
+  )
+  assert.deepEqual(inferAtomicReductionForms('a ≠ b ∧ c = d'), [])
+  assert.deepEqual(inferAtomicReductionForms('a ≠ b ↔ c ≠ d'), [])
+  assert.deepEqual(inferAtomicReductionForms('∀ n, n ≠ 0'), [])
+  assert.deepEqual(inferAtomicReductionForms('(a * b ≠ 0)'), ['a * b = 0 → False'])
+  assert.deepEqual(inferAtomicReductionForms('f (a ≠ b) ≠ c'), ['f (a ≠ b) = c → False'])
+})
+
+test('only unfolds ≤ when it is the principal connective', () => {
+  assert.deepEqual(inferAtomicReductionForms('a ≤ b ↔ c = d'), [])
+  assert.deepEqual(inferAtomicReductionForms('∃ n, n ≤ b'), [])
+})
+
+test('¬ only covers the text up to the first top-level connective', () => {
+  // `¬ a = b → c` is `(¬ a = b) → c`, never `(a = b → c) → False`.
+  assert.deepEqual(contextualizeReductionForms(['¬ a = b → c'], []), ['¬ a = b → c'])
+  assert.deepEqual(
+    contextualizeReductionForms(['¬ (a = b → c)'], []),
+    ['¬ (a = b → c)', '(a = b → c) → False'],
+  )
+})

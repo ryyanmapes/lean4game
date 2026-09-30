@@ -36,3 +36,10 @@ test('a disequality hypothesis can be applied to a False goal', () => {
   // It must not become a universal donor: the conclusion is False, nothing else.
   assert.equal(statementCanTargetGoal('a * b ≠ 0', 'b = 0'), false)
 })
+
+test('an implication with a disequality premise keeps its real conclusion', () => {
+  // `d ≠ 0 → d * b = d * c → b = c` concludes `b = c`, not `False`.
+  assert.equal(statementCanTargetGoal('d ≠ 0 → d * b = d * c → b = c', 'b = c'), true)
+  assert.equal(statementCanTargetGoal('d ≠ 0 → d * b = d * c → b = c', 'False'), false)
+  assert.equal(statementCanTargetGoal('a ≠ b ∧ c = d', 'False'), false)
+})

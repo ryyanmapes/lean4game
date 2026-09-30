@@ -1,4 +1,4 @@
-import { alphaNormalizeBinders } from './existsDisplay'
+import { alphaNormalizeBinders, splitTopLevelDisequality } from './existsDisplay'
 import { formatFormulaText, parse } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
 import { forallBinderNamesFromFooter } from './quantifiedStatement'
@@ -46,7 +46,7 @@ function terminalConclusion(statement: string): string {
     // `x ≠ y` is notation for `x = y → False`. Without this the arrow is
     // invisible to the walk above, so a disequality could not be applied to a
     // `False` goal and the drag was silently discarded.
-    if (splitTopLevel(conclusion, '≠')) return 'False'
+    if (splitTopLevelDisequality(conclusion)) return 'False'
     return conclusion
   }
 }
