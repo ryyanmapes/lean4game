@@ -96,6 +96,8 @@ macro "VisualTransformRewriteInfoOnGoal" ident str str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformBackInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
+macro "VisualTransformBackInfoOnHypothesis" "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
 macro "VisualTransformReverseInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformInfoOnGoal" str "show" str : command =>
