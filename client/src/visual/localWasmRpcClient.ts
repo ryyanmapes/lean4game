@@ -307,12 +307,45 @@ class LocalLeanWorker {
       this.worker!.postMessage({ type: 'compile', code, path: '/workspace/VisualLean.lean' })
     })
   }
+
+  /** True once a worker has been started in this page. */
+  get started() {
+    return this.worker !== null
+  }
+
+  /** Free the WASM heap. The page cannot use Lean again without a reload. */
+  terminate() {
+    this.worker?.terminate()
+    this.worker = null
+    const pending = this.pendingCompile
+    this.pendingCompile = null
+    pending?.resolve({ success: false, diagnostics: pending.diagnostics, error: 'Lean worker stopped' })
+  }
 }
 
 // One Lean process for the lifetime of the browser application. Individual
 // game/level clients only own document context; closing a route must never
 // discard the WASM runtime, imported environment, or snapshot.
 const sharedLeanWorker = new LocalLeanWorker()
+
+// Leaving the page (e.g. the map's link back to the landing page) lets Safari
+// keep this document, worker and its >1 GB heap alive in the back/forward
+// cache. Opening the other game then boots a second Lean in a new document and
+// iOS kills the tab for memory. So release Lean whenever the page is hidden
+// for navigation, and reload if the cached page is ever restored.
+let leanStoppedByPagehide = false
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    // Also when the page is not cached: terminating now frees the heap before
+    // the next document starts, rather than whenever the old one is collected.
+    if (!sharedLeanWorker.started) return
+    sharedLeanWorker.terminate()
+    leanStoppedByPagehide = true
+  })
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && leanStoppedByPagehide) window.location.reload()
+  })
+}
 
 export class LocalWasmRpcClient {
   private readonly engine = sharedLeanWorker

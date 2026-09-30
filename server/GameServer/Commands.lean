@@ -334,6 +334,14 @@ elab "VisualTransformBackInfoOnGoal " goalText:str &"show" text:str : command =>
   let info := mkVisualTransformBackInfo (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
 
+/-- Add Visual Lean-only transformation guidance pointing to the Back button,
+shown whenever the player opens Transformation Mode on a *hypothesis* instead of
+the goal (e.g. to steer them back to rewriting the goal). Encoded as a `back`
+info with `target := "hypothesis"`; goal-targeted infos never have that target. -/
+elab "VisualTransformBackInfoOnHypothesis " &"show" text:str : command => do
+  let info := { mkVisualTransformBackInfo none text.getString with target := "hypothesis" }
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
 /-- Add Visual Lean-only transformation guidance pointing to the rewrite-direction
 button, only while the current goal matches the supplied display text. -/
 elab "VisualTransformReverseInfoOnGoal " goalText:str &"show" text:str : command => do

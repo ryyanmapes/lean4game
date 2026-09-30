@@ -157,6 +157,11 @@ export function parseGoalEquality(typeStr: string): { lhsStr: string; rhsStr: st
 
 /** A back-button lesson authored for a reflexive equality describes the state
  * "both sides now match", not just one particular printed normal form. */
+/** Guidance authored with `VisualTransformBackInfoOnHypothesis`. */
+export function isHypothesisTransformInfo(info: VisualTransformInfo): boolean {
+  return info.target === 'hypothesis'
+}
+
 export function transformInfoMatchesGoal(
   info: VisualTransformInfo,
   currentGoalText: string,

@@ -11,7 +11,7 @@ import { HypCard, HypCardPreviewCard } from './HypCard'
 import { GoalCard } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
-import { InstructionGuideArrow, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
+import { InstructionGuideArrow, isHypothesisTransformInfo, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
 import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
@@ -7588,7 +7588,12 @@ export function VisualCanvas({
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           emphasizeItems={emphasizeItems}
-          visualInfos={transformTarget?.kind === 'goal' ? visualTransformInfos : undefined}
+          visualInfos={transformTarget
+            // Hypothesis-only guidance (e.g. "go back and rewrite the goal")
+            // never shows on the goal, and goal guidance never on a hypothesis.
+            ? visualTransformInfos?.filter(info =>
+              isHypothesisTransformInfo(info) === (transformTarget.kind === 'hyp'))
+            : undefined}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
           canUndo={proofSteps.length > 0}
