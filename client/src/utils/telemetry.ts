@@ -22,7 +22,7 @@ type BaseEvent = {
 }
 
 export type TelemetryEvent = BaseEvent & {
-  step_type?: 'command' | 'undo' | 'edit'
+  step_type?: 'command' | 'undo' | 'reset' | 'edit'
   command?: string
   from_line?: number
   removed_lines?: number
@@ -32,10 +32,27 @@ export type TelemetryEvent = BaseEvent & {
   source_attempt_uuid?: string
 }
 
+/** Which build of the game is running: source revisions and build time. The
+ * release build (lean4.js scripts/sync-lean4game-client.mjs) provides it; dev
+ * servers have none. */
+export type GameBuild = Partial<Record<
+  'site' | 'client' | 'runtime' | 'nng4' | 'visualtest' | 'lean' | 'built', string
+>>
+
+const GAME_BUILD: GameBuild | null = (() => {
+  try {
+    const build: unknown = JSON.parse(String(import.meta.env.VITE_GAME_BUILD ?? ''))
+    return build && typeof build === 'object' && !Array.isArray(build) ? build as GameBuild : null
+  } catch {
+    return null
+  }
+})()
+
 type QueuedEvent = TelemetryEvent & {
   event_id: string
   user_uuid: string
   ts: string
+  build?: GameBuild
 }
 
 let flushing = false
@@ -172,6 +189,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
       proof_state: proofState,
       message,
       ts: new Date().toISOString(),
+      ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
     }),
   })
   return response.ok
@@ -211,6 +229,10 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     event_id: event.event_id ?? createTelemetryId(),
     user_uuid,
     ts: new Date().toISOString(),
+    // Sent with every event: the collector records it on the attempt from
+    // whichever event creates that, which is level_start unless the queue
+    // overflowed and dropped it.
+    ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
   }
   if (queued.command) queued.command = queued.command.slice(0, 64 * 1024)
   if (queued.initial_script) queued.initial_script = queued.initial_script.slice(0, 256 * 1024)

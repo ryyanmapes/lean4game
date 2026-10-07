@@ -2334,7 +2334,9 @@ interface VisualCanvasProps {
   skippedLevels?: number[]
   previouslyCompleted?: boolean
   onLevelCompleted?: (proof?: { playScript: string; leanScript: string }) => void
-  onProofStep?: (interactiveLeanCode: string) => void
+  /** Telemetry for every change to `proofSteps`: `command` appends one step,
+   * `undo` removes the last one, `reset` clears them all. */
+  onProofStep?: (interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => void
   onOpenClassic?: (proofBody: string) => void
   resumeState?: VisualProofResumeState | null
   onAutosave?: (state: VisualProofResumeState) => void
@@ -2664,6 +2666,13 @@ export function VisualCanvas({
     setTransformTarget(null)
   }
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
+  // Appending a step and reporting it go together, so the telemetry log replays
+  // to exactly the recorded proof. An interaction that does not become a proof
+  // step must not be reported.
+  const appendProofStep = (step: ProofStepRecord) => {
+    setProofSteps(prev => [...prev, step])
+    onProofStep?.(buildInteractiveProofLine(step.rotation, step.playTactic), 'command')
+  }
   // The proof tree is kept in a stable player-facing order, while `rotate_left`
   // permanently changes Lean's outstanding-goal order. Keep both: using the
   // rendered order for a second action after a graph navigation can silently
@@ -3411,7 +3420,6 @@ export function VisualCanvas({
     })
 
     if (handledByConfirmedGoalCompletion) {
-      onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
       const { nextTree, nextActiveId, nextCanvas } = reconcileProofTreeAfterInteraction(
         proofTree,
         canvasState,
@@ -3426,7 +3434,7 @@ export function VisualCanvas({
 
       setProofTree(nextTree)
       setActiveStreamId(nextActiveId)
-      setProofSteps(prev => [...prev, {
+      appendProofStep({
         command,
         playTactic,
         leanTactic: 'rfl',
@@ -3437,7 +3445,7 @@ export function VisualCanvas({
       activeStreamIdBefore: activeStreamId,
         transformTargetSnapshot: null,
         theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
-      }])
+      })
 
       if (nextCanvas.completed && options?.solvedGoalId) {
         freezeCompletedProof(canvasState, options.solvedGoalId, options.solvedGoalDisplay)
@@ -3534,7 +3542,7 @@ export function VisualCanvas({
     const recordedPlayTactic = options?.playTacticOverride
       ?? backendDerivedTheoremReplay
       ?? playTactic
-    setProofSteps(prev => [...prev, {
+    appendProofStep({
       command,
       playTactic: recordedPlayTactic,
       leanTactic,
@@ -3545,8 +3553,7 @@ export function VisualCanvas({
       activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
-    }])
-    onProofStep?.(buildInteractiveProofLine(rotation, recordedPlayTactic))
+    })
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
 
     // `result.completed` describes the focused Lean script response.  With
@@ -3661,7 +3668,7 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setDisplayCanvasState(cloneCanvasState(restoredCanvas))
     setCanvasState(restoredCanvas)
-    onProofStep?.('undo')
+    onProofStep?.('undo', 'undo')
 
     // Navigate to the mode where the undone step was taken.
     // If it was a rewrite (non-null snapshot), restore transformation mode.
@@ -3743,7 +3750,7 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setDisplayCanvasState(cloneCanvasState(restoredCanvas))
     setCanvasState(restoredCanvas)
-    onProofStep?.('undo')
+    onProofStep?.('reset', 'reset')
     setActiveStreamId(collectActiveStreamIds(restoredTree)[0] ?? null)
     dismissTransformationView()
 
@@ -5014,7 +5021,7 @@ export function VisualCanvas({
       )
     }
 
-    setProofSteps(prev => [...prev, {
+    appendProofStep({
       command,
       playTactic,
       leanTactic,
@@ -5025,8 +5032,7 @@ export function VisualCanvas({
       activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
-    }])
-    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
+    })
 
     setProofTree(nextTree)
     setActiveStreamId(nextActiveId)
@@ -5428,7 +5434,7 @@ export function VisualCanvas({
       deferredCompletion: shouldDeferGoalCompletionUntilClose,
     }
 
-    setProofSteps(prev => [...prev, {
+    appendProofStep({
       command,
       playTactic,
       leanTactic,
@@ -5439,8 +5445,7 @@ export function VisualCanvas({
       activeStreamIdBefore: activeStreamId,
       transformTargetSnapshot: transformTarget,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
-    }])
-    onProofStep?.(buildInteractiveProofLine(rotation, playTactic))
+    })
 
     if (shouldDeferGoalCompletionUntilClose) {
       // When the rewrite auto-completes the proof (e.g. rw [add_zero] closes "0 = 0" via rfl),

@@ -303,7 +303,7 @@ export function VisualProofPage() {
       })
     }
   }, [dispatch, gameId, worldId, levelId, solvingId, telemetryStartedAt])
-  const handleProofStep = useCallback((interactiveLeanCode: string) => {
+  const handleProofStep = useCallback((interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => {
     sendTelemetry({
       event_type: 'proof_step',
       game_id: gameId,
@@ -313,7 +313,7 @@ export function VisualProofPage() {
       mode: 'visual',
       sequence: ++telemetrySequence.current,
       elapsed_ms: Date.now() - telemetryStartedAt,
-      step_type: interactiveLeanCode === 'undo' ? 'undo' : 'command',
+      step_type: stepType,
       command: interactiveLeanCode,
     })
   }, [gameId, worldId, levelId, solvingId, telemetryStartedAt])
