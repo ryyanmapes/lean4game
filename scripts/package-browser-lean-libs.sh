@@ -90,7 +90,7 @@ cat > "$out/build-info.json" <<EOF
   "format": 1,
   "leanGithash": "${CAULI_LEAN_SHA:?}",
   "leanBuildRunId": "${CAULI_LEAN_RUN_ID:?}",
-  "lean4gameRef": "${LEAN4GAME_REF:-unknown}",
+  "lean4gameRef": "$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)",
   "nng4Ref": "$(if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then git -C "$nng4" rev-parse HEAD; else echo null; fi)",
   "visualTestRef": "$(git -C "$visualtest" rev-parse HEAD)",
   "oleanFiles": $olean_count,

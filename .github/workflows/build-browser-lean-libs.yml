@@ -296,7 +296,6 @@ jobs:
       - name: Package browser libraries
         env:
           INCLUDE_NNG4: ${{ inputs.include_nng4 }}
-          LEAN4GAME_REF: ${{ github.sha }}
         run: bash scripts/package-browser-lean-libs.sh browser-lean-libs
 
       - name: Unpack matching WebAssembly compiler
