@@ -3967,6 +3967,30 @@ export function VisualCanvas({
             : paintedCard
       if (card?.id) overId = card.id
     }
+    const hitTestOverId = overId
+    // A release inside the goal card the player can see is a drop on that
+    // goal. Both resolutions above work from ids, and in CI they have
+    // repeatedly named the goal that `symm` had just replaced while the card
+    // under the pointer already read `0 ≠ 1`, so `exact zero_ne_one` was
+    // refused without a word. Only a goal target is corrected by geometry: a
+    // proposition card, the tray and the phone dividers keep their priority,
+    // and a goal whose droppable is disabled (a completed proof) stays inert.
+    const hitTestTestId = overId ? document.getElementById(overId)?.dataset.testid : undefined
+    if (
+      streamInteractionsEnabled
+      && pointerX != null && pointerY != null
+      && hitTestTestId !== 'hyp-card' && hitTestTestId !== 'theorem-copy-card'
+      && overId !== THEOREM_TRAY_ID && !overId?.startsWith(MOBILE_DIVIDER_PREFIX)
+    ) {
+      const goalUnderPointer = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="goal-card"]'))
+        .find(element => {
+          const rect = element.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+            && pointerX >= rect.left && pointerX <= rect.right
+            && pointerY >= rect.top && pointerY <= rect.bottom
+        })
+      if (goalUnderPointer?.id) overId = goalUnderPointer.id
+    }
     setActiveDraggedTheorem(null)
     setActiveDraggedHyp(null)
     setActiveDraggedTheoremSourceId(null)
@@ -3975,18 +3999,24 @@ export function VisualCanvas({
     mobileDragPointerOriginRef.current = null
     latestDragPointerRef.current = null
     stopMobileAutoScroll()
-    const theoremTemplate = active.data.current?.theoremTemplate
-      ? active.data.current.theorem as PropositionTheorem
-      // The lower tray can repack/remount while the preceding interaction is
-      // reconciling. dnd-kit retains the active id but drops the component's
-      // data by pointer-up, so recover the same unlocked theorem just as the
-      // tactic path below does. Without this, `symm` followed by dragging
-      // `zero_ne_one` onto the now-compatible goal is silently discarded.
-      : activeId.startsWith('theorem_template_')
-        ? propositionTheorems.find(theorem =>
-            `theorem_template_${theorem.id}` === activeId,
-          ) ?? null
-        : null
+    const draggedTheoremData = active.data.current?.theoremTemplate
+      ? active.data.current.theorem as PropositionTheorem | undefined
+      : undefined
+    // The lower tray can repack/remount while the preceding interaction is
+    // reconciling. dnd-kit retains the active id but drops the component's
+    // data by pointer-up, so recover the same unlocked theorem just as the
+    // tactic path below does, and failing that the theorem handleDragStart
+    // recorded when the player picked it up. Without this, `symm` followed by
+    // dragging `zero_ne_one` onto the now-compatible goal is silently
+    // discarded.
+    const listedTheorem = !draggedTheoremData && activeId.startsWith('theorem_template_')
+      ? propositionTheorems.find(theorem => `theorem_template_${theorem.id}` === activeId)
+      : undefined
+    const pickedUpTheorem = !draggedTheoremData && !listedTheorem
+      && activeDraggedTheoremSourceId === activeId && activeId.startsWith('theorem_template_')
+      ? activeDraggedTheorem
+      : null
+    const theoremTemplate = draggedTheoremData ?? listedTheorem ?? pickedUpTheorem ?? null
     const activeTactic = active.data.current?.tactic as VisualTactic | undefined
     const tacticTemplate = active.data.current?.visualTactic && activeTactic
       ? activeTactic
@@ -4085,6 +4115,25 @@ export function VisualCanvas({
       sourceTheoremCopy: sourceTheoremCopy?.theorem.theoremName ?? null,
       sourceCard: interactionHypName(sourceCard) ?? null,
       theoremCopyIds: theoremCopiesRef.current.map(copy => copy.id),
+      // Enough state to explain any refusal below from a CI log alone.
+      hitTestOverId: hitTestOverId ?? null,
+      theoremSource: draggedTheoremData ? 'drag-data'
+        : listedTheorem ? 'theorem-list'
+          : pickedUpTheorem ? 'drag-start'
+            : null,
+      goalIds: [...goalIds],
+      goalCards: Array.from(document.querySelectorAll<HTMLElement>('[data-testid="goal-card"]'))
+        .map(element => {
+          const rect = element.getBoundingClientRect()
+          return {
+            id: element.id,
+            text: element.dataset.goalText ?? null,
+            rect: [rect.left, rect.top, rect.width, rect.height].map(Math.round),
+          }
+        }),
+    }
+    const refuseDrop = (reason: string, details: Record<string, unknown> = {}) => {
+      lastDragDebugRef.current = { ...lastDragDebugRef.current, refused: reason, ...details }
     }
 
     // A premise dropped onto a workspace theorem is unambiguously function
@@ -4254,7 +4303,14 @@ export function VisualCanvas({
           if (!targetGoal || !(
             theoremCanTargetGoal(theoremTemplate, targetGoal)
             || Boolean(liveGoalText && theoremCanTargetGoalText(theoremTemplate, liveGoalText))
-          )) return
+          )) {
+            refuseDrop('theorem-does-not-fit-goal', {
+              theorem: theoremTemplate.proposition,
+              targetGoal: targetGoal ? TaggedText_stripTags(targetGoal.goal.type) : null,
+              liveGoalText: liveGoalText ?? null,
+            })
+            return
+          }
           const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyDroppedInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
@@ -4320,7 +4376,10 @@ export function VisualCanvas({
 
       if (overId === THEOREM_TRAY_ID) return
       const startRect = active.rect.current.initial
-      if (!startRect) return
+      if (!startRect) {
+        refuseDrop('theorem-copy-without-start-rect')
+        return
+      }
       const bounds = getCombiningCanvasBounds()
       createTheoremCopy(theoremTemplate, {
         ...clampCanvasPosition(
@@ -4349,7 +4408,10 @@ export function VisualCanvas({
     // If dropped on a different card or a goal, it's an interaction
     if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard) ?? sourceTheoremCopy?.theorem.theoremName
-      if (!sourceName) return
+      if (!sourceName) {
+        refuseDrop('unresolved-source')
+        return
+      }
       const reverse = getIffDirection(activeId) === 'reverse'
 
       if (goalIds.has(overId as string)) {
@@ -4366,7 +4428,13 @@ export function VisualCanvas({
               || Boolean(liveGoalText
                 && hypCanTargetGoalText(sourceCard, liveGoalText, [], fastExfalso))
             ))
-        if (!canTarget) return
+        if (!canTarget) {
+          refuseDrop('statement-does-not-fit-goal', {
+            targetGoal: targetGoal ? TaggedText_stripTags(targetGoal.goal.type) : null,
+            liveGoalText: liveGoalText ?? null,
+          })
+          return
+        }
         // Dropped on a goal card → drag_goal
         // A proof of False dropped on a goal that is not False only reaches
         // here with Fast `exfalso` on. Plain `drag_goal` deliberately refuses

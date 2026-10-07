@@ -1844,6 +1844,9 @@ export class CompletePlaythroughDriver {
     const sourceIdentity = captureDragTargetIdentity(source)
     const targetIdentity = captureDragTargetIdentity(target)
     let missedGesture: unknown
+    // The canvas overwrites its drag record on every gesture; keep the first
+    // one so a repeated refusal reports both, not just the last.
+    let missedGestureDragDebug: unknown = null
     for (let attempt = 0; attempt < 2; attempt += 1) {
       await waitForPlayerIdle(this.win, `${description} to become available`)
       const before = proofSignature(harness(this.win).getProofAudit())
@@ -1890,11 +1893,13 @@ export class CompletePlaythroughDriver {
           && proofSignature(harness(this.win).getProofAudit()) === before
         if (attempt === 0 && noAttemptWasRecorded) {
           missedGesture = error
+          missedGestureDragDebug = harness(this.win).getLastDragDebug()
           continue
         }
         throw new Error(
           `${error instanceof Error ? error.message : String(error)}; ` +
-          `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}`,
+          `dragDebug=${JSON.stringify(harness(this.win).getLastDragDebug())}` +
+          (missedGestureDragDebug ? `; firstAttemptDragDebug=${JSON.stringify(missedGestureDragDebug)}` : ''),
           { cause: error },
         )
       }

@@ -278,10 +278,21 @@ describe('complete Visual Lean NNG4 player playthrough', { testIsolation: false 
       // sibling and back after every split, then explicitly selects the next
       // unfinished branch after completing one.
       cy.viewport(390, 844)
-      if (!applicationStarted || retryState(this.test).current > 0) {
+      const retrying = retryState(this.test).current > 0
+      if (!applicationStarted || retrying) {
         cy.visit(levelUrl(solution), {
           onBeforeLoad(win) {
             win.localStorage.setItem('visual_auto_branch_switch', 'false')
+            // This suite shares one browser session (testIsolation: false), so
+            // a retry would otherwise resume the failed attempt's autosaved
+            // proof and replay the reference solution on top of it: `symm`
+            // twice turned Implication 10 back into `1 ≠ 0`. Retry from the
+            // level's opening position.
+            if (retrying) {
+              win.localStorage.removeItem(
+                `visual-proof-autosave/g/local/NNG4/${solution.world}/${solution.level}`,
+              )
+            }
           },
         })
         applicationStarted = true
