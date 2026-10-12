@@ -5222,13 +5222,14 @@ export function VisualCanvas({
     )
     const rotation = action.rotation
     let command = action.command
-    // Rewrite a displayed comparison with ordinary `rw`. The custom drag_rw
-    // tactic operates on the elaborated relation tree and can descend through
-    // reducible `MyNat.le`; ordinary rw is exactly the canonical level proof
-    // and keeps the proposition available for le_one/succ_le_succ.
+    // drag_rw rewrites exactly the subterm the player chose and keeps `≤`,
+    // `<` and `≠` intact. Ordinary `rw` instead rewrites the first match
+    // anywhere in the statement and every copy of it, so a rule dropped on
+    // one side of `a * t ≤ a * t + d * t` changed both. Only `>` and `≥` still
+    // need it: Lean defines them by swapping the operands of `<` and `≤`, so
+    // drag_rw cannot find their displayed sides.
     if (
-      focusedRelation &&
-      focusedRelation !== '=' &&
+      (focusedRelation === '>' || focusedRelation === '≥') &&
       transformTarget
     ) {
       const rewriteRule = `${isReverse ? '← ' : ''}${hypLabel}`

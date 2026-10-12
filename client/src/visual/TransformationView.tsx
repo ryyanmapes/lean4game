@@ -9,7 +9,7 @@ import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
-import { ReverseIcon, UndoIcon } from './ControlIcons'
+import { RewriteDirectionIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
@@ -30,7 +30,7 @@ export interface EqualityHyp {
   category?: string
 }
 
-export type TransformRelation = '=' | '<' | '>' | '≤' | '≥'
+export type TransformRelation = '=' | '<' | '>' | '≤' | '≥' | '≠'
 
 export interface ParsedTransformTarget {
   lhsStr: string
@@ -127,7 +127,7 @@ export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideA
   )
 }
 
-const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '≥'])
+const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '≥', '≠'])
 
 const PHONE_EXPR_BASE_SCALE = 1.04
 const PHONE_EXPR_MIN_SCALE = 0.58
@@ -1036,9 +1036,9 @@ export function TransformationView({
               ref={reverseButtonRef}
               onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
               aria-disabled={isProcessing}
-              className={`tr-ctrl-btn${isReverse ? ' active-reverse' : ''}`}
+              className={`tr-ctrl-btn tr-direction-btn${isReverse ? ' active-reverse' : ''}`}
               aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
-            ><ReverseIcon /></button>
+            ><RewriteDirectionIcon reverse={isReverse} /></button>
           </div>
 
         </div>

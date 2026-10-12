@@ -61,6 +61,22 @@ test('parseTransformTarget accepts a top-level greater-or-equal comparison', () 
   assert.equal(parsed?.rhsStr, 'y / 2')
 })
 
+test('parseTransformTarget accepts a top-level disequality', () => {
+  const parsed = parseTransformTarget('a * b ≠ 0 + b')
+  assert.equal(parsed?.relation, '≠')
+  assert.equal(parsed?.lhsStr, 'a * b')
+  assert.equal(parsed?.rhsStr, '0 + b')
+})
+
+test('a disequality is not an equality rewrite rule or equality goal', () => {
+  assert.equal(parseGoalEquality('b ≠ 0'), null)
+  assert.equal(parseEqualityHyp('b ≠ 0', 'h', 'hyp-1'), null)
+})
+
+test('parseTransformTarget rejects an implication whose premise is a disequality', () => {
+  assert.equal(parseTransformTarget('d ≠ 0 → d * b = d * c'), null)
+})
+
 test('parseTransformTarget accepts an inequality with absolute values', () => {
   const parsed = parseTransformTarget('|x - x₀| ≤ δ')
   assert.equal(parsed?.relation, '≤')

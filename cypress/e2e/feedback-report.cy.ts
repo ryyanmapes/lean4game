@@ -43,7 +43,13 @@ describe('in-level feedback reports', { testIsolation: true }, () => {
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     cy.get('.visual-header-side').first().within(() => {
       cy.get('.visual-header-map-btn').should('be.visible')
-      cy.get('.feedback-report-open').should('be.visible').click()
+      // A desktop header has room to spell the button out.
+      cy.get('.feedback-report-open').should('be.visible')
+        .and('have.attr', 'aria-label', 'Send feedback')
+      cy.get('.feedback-report-open .feedback-report-label-full').should('be.visible')
+        .and('have.text', 'Feedback')
+      cy.get('.feedback-report-open .feedback-report-label-short').should('not.be.visible')
+      cy.get('.feedback-report-open').click()
     })
     cy.get('[role="dialog"][aria-label="Send feedback"]').should('be.visible').within(() => {
       cy.contains('This form will send a feedback report along with your game state.')
@@ -54,6 +60,20 @@ describe('in-level feedback reports', { testIsolation: true }, () => {
       cy.contains('Feedback sent. Thank you!').should('be.visible')
     })
     cy.wait('@feedback')
+  })
+
+  it('shortens the feedback button to "!" in a phone header', () => {
+    cy.viewport(390, 844)
+    visitLevel('/g/local/NNG4/world/Tutorial/level/1/visual', 'refused')
+    cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.get('.visual-header .feedback-report-open').should('be.visible')
+      .and('have.attr', 'aria-label', 'Send feedback')
+      .then($button => {
+        // Still fits beside the map button without crowding the title.
+        expect($button[0]!.getBoundingClientRect().width).to.be.lessThan(48)
+      })
+    cy.get('.visual-header .feedback-report-label-short').should('be.visible').and('have.text', '!')
+    cy.get('.visual-header .feedback-report-label-full').should('not.be.visible')
   })
 
   it('reports the unloaded state, the shown error and diagnostics when Lean fails to load', () => {

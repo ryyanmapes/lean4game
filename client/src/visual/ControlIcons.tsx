@@ -48,13 +48,31 @@ export function ResetIcon() {
   )
 }
 
-/** Up-down arrow, like ↕. */
-export function ReverseIcon() {
+/** "⇐ / ⇒", with the rewrite direction in use emphasised. Forward rewrites
+ * turn an equation's left side into its right (⇒), as the rule cards print
+ * it; reverse goes the other way (⇐). */
+export function RewriteDirectionIcon({ reverse }: { reverse: boolean }) {
   return (
-    <ControlIcon>
-      <path d="M12 3v18" />
-      <path d="m7 8 5-5 5 5" />
-      <path d="m7 16 5 5 5-5" />
-    </ControlIcon>
+    <svg
+      className="tr-ctrl-icon tr-direction-icon"
+      viewBox="0 0 60 24"
+      width="2.5em"
+      height="1em"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g className={`tr-direction-arrow${reverse ? ' current' : ''}`}>
+        <path d="M9 5 2 12l7 7" />
+        <path d="M5 9h15M5 15h15" />
+      </g>
+      <path className="tr-direction-slash" d="M32.5 3 27.5 21" />
+      <g className={`tr-direction-arrow${reverse ? '' : ' current'}`}>
+        <path d="m51 5 7 7-7 7" />
+        <path d="M40 9h15M40 15h15" />
+      </g>
+    </svg>
   )
 }

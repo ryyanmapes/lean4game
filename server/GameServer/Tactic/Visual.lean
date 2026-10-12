@@ -617,6 +617,9 @@ private def binaryRelationInfo? (target : Expr) : MetaM (Option (Expr × Array E
       let visibleArity? :=
         match headName with
         | ``Eq => some 2
+        -- `a ≠ b` is reducible; unfolding it first would leave `¬(a = b)`,
+        -- which has no sides to select.
+        | ``Ne => some 2
         | ``Iff => some 2
         | ``LT.lt => some 2
         | ``LE.le => some 2
@@ -1090,6 +1093,23 @@ example (x y : Nat) (h : x + 0 ≤ y) : x ≤ y := by
 
 example (x y : Nat) (h : x ≤ y + 0) : x ≤ y := by
   drag_rw_hyp_rhs h [add_zero_local]
+  exact h
+
+-- Rewrite the displayed sides of `≠`, in the goal and in a hypothesis, and
+-- leave the other side alone even where it holds the same subterm.
+example (x : Nat) (h : x + 0 ≠ x + 0 + 0) : True := by
+  drag_rw_hyp_lhs h [add_zero_local]
+  guard_hyp h :ₛ x ≠ x + 0 + 0
+  trivial
+
+example (x : Nat) (h : x ≠ x + 0 + 0) : x + 0 ≠ x + 0 + 0 := by
+  drag_rw_lhs [add_zero_local]
+  guard_target =ₛ x ≠ x + 0 + 0
+  exact h
+
+example (x : Nat) (h : x + 0 ≠ x + 0) : x + 0 ≠ x + 0 + 0 := by
+  drag_rw_rhs_at [add_zero_local] [1]
+  guard_target =ₛ x + 0 ≠ x + 0
   exact h
 
 private def directLeLocal (x y : Nat) : Prop := x ≤ y

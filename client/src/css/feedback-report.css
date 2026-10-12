@@ -20,6 +20,39 @@
   color: #b99cff;
 }
 
+/* The button reads "Feedback" where its bar has room for the word and a
+   compact "!" everywhere else. A host offers that room by declaring a
+   `feedback-slot` container whose width the layout sets, never its content. */
+.feedback-report-label-full { display: none; }
+
+@container feedback-slot (min-width: 15rem) {
+  .feedback-report-open {
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0 0.7rem;
+  }
+  .feedback-report-open .feedback-report-label-full { display: inline; }
+  .feedback-report-open .feedback-report-label-short { display: none; }
+}
+
+/* The classic app bar sizes its sections from their content, so no section can
+   be a size container; the whole viewport is the measure there instead. Below
+   1280px the longest world title ("Advanced Multiplication World") meets the
+   centred level title on the loading screen. */
+@media (min-width: 1280px) {
+  .app-bar-left .feedback-report-open {
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0 0.75rem;
+  }
+  .app-bar-left .feedback-report-open .feedback-report-label-full { display: inline; }
+  .app-bar-left .feedback-report-open .feedback-report-label-short { display: none; }
+}
+
 .feedback-report-dialog {
   background: #172238;
   border: 1px solid #485873;
