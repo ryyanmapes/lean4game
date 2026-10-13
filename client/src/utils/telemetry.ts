@@ -1,10 +1,19 @@
+import { IndexedDbQueueStore, MAX_EVENT_BYTES, MemoryQueueStore, type QueueStore, utf8Bytes } from './telemetryQueue'
+import { FETCH_TIMEOUT_MS, type PostResult, TelemetryScheduler } from './telemetryScheduler'
+
+/** Anonymous gameplay telemetry (doc/telemetry-client.md). Events go into a
+ * durable queue shared by all tabs (telemetryQueue.ts) and are sent by one
+ * scheduler (telemetryScheduler.ts) with batching, backoff and deadlines. */
+
 const CONSENT_KEY = 'telemetryConsent'
 const LEGACY_USER_ID_KEY = 'telemetryUserId'
 const USER_COOKIE = 'lean_game_anonymous_id'
-const QUEUE_KEY = 'telemetryQueueV2'
-const MAX_QUEUED_EVENTS = 500
-const MAX_QUEUE_BYTES = 2 * 1024 * 1024
-const MAX_BATCH_BYTES = 400 * 1024
+/** The localStorage queue of clients before the IndexedDB queue; migrated once. */
+const LEGACY_QUEUE_KEY = 'telemetryQueueV2'
+/** The collector's per-field ceilings (UTF-16 code units). Longer values are
+ * not truncated: a truncated proof would be silently wrong. */
+const MAX_COMMAND_LENGTH = 64 * 1024
+const MAX_SCRIPT_LENGTH = 256 * 1024
 
 export type ConsentState = 'accepted' | 'refused' | 'undecided'
 export type TelemetryMode = 'visual' | 'classic'
@@ -55,10 +64,6 @@ type QueuedEvent = TelemetryEvent & {
   build?: GameBuild
 }
 
-let flushing = false
-let retryDelayMs = 1000
-let retryTimer: number | undefined
-
 export function getConsentState(): ConsentState {
   try {
     const value = localStorage.getItem(CONSENT_KEY)
@@ -74,11 +79,14 @@ export function setConsent(accepted: boolean): void {
       getOrCreateUserId()
       void flushTelemetry()
     } else {
-      localStorage.removeItem(QUEUE_KEY)
+      localStorage.removeItem(LEGACY_QUEUE_KEY)
       localStorage.removeItem(LEGACY_USER_ID_KEY)
       expireCookie(USER_COOKIE)
     }
   } catch {}
+  // Refusal erases every pending event in every store and stops sending,
+  // including requests already in flight (their results are ignored).
+  if (!accepted) void schedulerReady.then(scheduler => scheduler?.reset())
 }
 
 function readCookie(name: string): string | null {
@@ -179,9 +187,12 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
     seen.add(value)
     return value
   }))
+  const controller = new AbortController()
+  const deadline = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   const response = await fetch(`${baseUrl}/v1/feedback`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       report_id: createTelemetryId(),
       ...(userId ? { user_uuid: userId } : {}),
@@ -191,37 +202,79 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
       ts: new Date().toISOString(),
       ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
     }),
-  })
+  }).finally(() => window.clearTimeout(deadline))
   return response.ok
 }
 
-function readQueue(): QueuedEvent[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.slice(-MAX_QUEUED_EVENTS) : []
-  } catch {
-    return []
+async function post(url: string, body: string, { keepalive, signal }: { keepalive: boolean; signal: AbortSignal }): Promise<PostResult> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+    keepalive,
+    signal,
+    credentials: 'omit',
+  })
+  let json: unknown = null
+  if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+    try { json = await response.json() } catch {}
   }
+  // Readable cross-origin because the collector exposes Retry-After (CORS).
+  return { status: response.status, retryAfter: response.headers.get('retry-after'), body: json }
 }
 
-function writeQueue(events: QueuedEvent[]): void {
+/** The shared IndexedDB queue, or a per-tab memory queue without IndexedDB. */
+async function openStore(): Promise<QueueStore<QueuedEvent>> {
   try {
-    const retained = events.slice(-MAX_QUEUED_EVENTS)
-    let encoded = JSON.stringify(retained)
-    while (retained.length > 0 && encoded.length > MAX_QUEUE_BYTES) {
-      retained.shift()
-      encoded = JSON.stringify(retained)
-    }
-    localStorage.setItem(QUEUE_KEY, encoded)
+    if (typeof indexedDB !== 'undefined') return await IndexedDbQueueStore.open<QueuedEvent>()
   } catch {}
+  return new MemoryQueueStore<QueuedEvent>()
 }
 
-function utf8Size(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).byteLength
+/** Move events from the old localStorage queue into the new one, once. */
+async function migrateLegacyQueue(scheduler: TelemetryScheduler<QueuedEvent>): Promise<void> {
+  let legacy: unknown = null
+  try {
+    legacy = JSON.parse(localStorage.getItem(LEGACY_QUEUE_KEY) ?? 'null')
+  } catch {}
+  try { localStorage.removeItem(LEGACY_QUEUE_KEY) } catch {}
+  if (!Array.isArray(legacy) || legacy.length === 0 || getConsentState() !== 'accepted') return
+  const events = legacy.filter((event): event is QueuedEvent =>
+    Boolean(event) && typeof event === 'object' && typeof (event as QueuedEvent).event_id === 'string')
+  if (events.length > 0) await scheduler.enqueue(events)
 }
 
+const schedulerReady: Promise<TelemetryScheduler<QueuedEvent> | null> = typeof window === 'undefined'
+  ? Promise.resolve(null)
+  : (async () => {
+    const scheduler = new TelemetryScheduler<QueuedEvent>({
+      store: await openStore(),
+      post,
+      baseUrl: telemetryBaseUrl,
+      enabled: () => getConsentState() === 'accepted',
+    })
+    try {
+      await migrateLegacyQueue(scheduler)
+    } catch {}
+    window.addEventListener('online', () => scheduler.onOnline())
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') void scheduler.lifecycleFlush()
+    })
+    window.addEventListener('pagehide', () => void scheduler.lifecycleFlush())
+    // Events queued by an earlier visit: send them soon, at a random moment,
+    // so a cohort loading the page together does not send in step.
+    scheduler.schedule(1000 + Math.random() * 4000)
+    return scheduler
+  })().catch(() => null)
+
+function tooLong(value: string | undefined, limit: number): boolean {
+  return typeof value === 'string' && value.length > limit
+}
+
+/** Queue one event. Returns whether it was accepted into the queue: false
+ * without consent or an endpoint, or when the event is too large to send. */
 export function sendTelemetry(event: TelemetryEvent): boolean {
-  const endpoint = telemetryEndpoint()
+  const endpoint = telemetryBaseUrl()
   const user_uuid = getOrCreateUserId()
   if (!endpoint || !user_uuid) return false
   const queued: QueuedEvent = {
@@ -230,63 +283,22 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     user_uuid,
     ts: new Date().toISOString(),
     // Sent with every event: the collector records it on the attempt from
-    // whichever event creates that, which is level_start unless the queue
-    // overflowed and dropped it.
+    // whichever event creates that, which is level_start unless it was lost.
     ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
   }
-  if (queued.command) queued.command = queued.command.slice(0, 64 * 1024)
-  if (queued.initial_script) queued.initial_script = queued.initial_script.slice(0, 256 * 1024)
-  if (queued.play_script) queued.play_script = queued.play_script.slice(0, 256 * 1024)
-  if (queued.lean_script) queued.lean_script = queued.lean_script.slice(0, 256 * 1024)
-  writeQueue([...readQueue(), queued])
-  void flushTelemetry()
-  return true
+  const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
+    tooLong(queued.play_script, MAX_SCRIPT_LENGTH) || tooLong(queued.lean_script, MAX_SCRIPT_LENGTH) ||
+    utf8Bytes(queued) > MAX_EVENT_BYTES
+  void schedulerReady.then(async scheduler => {
+    if (!scheduler) return
+    // Counted (never sent): the collector would reject it as too large.
+    if (oversize) await scheduler.recordOversize()
+    else await scheduler.enqueue([queued])
+  }).catch(() => {})
+  return !oversize
 }
 
 export async function flushTelemetry(): Promise<void> {
-  const endpoint = telemetryEndpoint()
-  if (!endpoint || flushing || getConsentState() !== 'accepted') return
-  const queue = readQueue()
-  if (!queue.length) return
-  flushing = true
-  const batch: QueuedEvent[] = []
-  for (const event of queue.slice(0, 50)) {
-    const candidate = [...batch, event]
-    if (batch.length > 0 && utf8Size({ events: candidate }) > MAX_BATCH_BYTES) break
-    batch.push(event)
-  }
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ events: batch }),
-      keepalive: true,
-    })
-    const sent = new Set(batch.map(event => event.event_id))
-    if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 429)) {
-      // Invalid client events cannot become valid by retrying. Drop that batch;
-      // server/rate-limit failures remain queued.
-      writeQueue(readQueue().filter(event => !sent.has(event.event_id)))
-      retryDelayMs = 1000
-    } else {
-      retryDelayMs = Math.min(retryDelayMs * 2, 60000)
-    }
-  } catch {
-    // Retain events for the next page action or online event.
-    retryDelayMs = Math.min(retryDelayMs * 2, 60000)
-  } finally {
-    flushing = false
-    if (readQueue().length > 0 && navigator.onLine) {
-      if (retryTimer !== undefined) window.clearTimeout(retryTimer)
-      retryTimer = window.setTimeout(() => {
-        retryTimer = undefined
-        void flushTelemetry()
-      }, retryDelayMs)
-    }
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => void flushTelemetry())
-  window.setTimeout(() => void flushTelemetry(), 0)
+  const scheduler = await schedulerReady
+  await scheduler?.flush()
 }

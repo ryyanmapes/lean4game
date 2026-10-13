@@ -87,6 +87,7 @@
     "css-loader": "^6.7.3",
     "cypress": "^14.5.0",
     "cypress-iframe": "^1.0.1",
+    "fake-indexeddb": "6.2.5",
     "file-loader": "^6.2.0",
     "i18next-scanner": "^4.4.0",
     "nodemon": "^3.0.1",
@@ -147,7 +148,8 @@
     "test:prod": "npm run build",
     "test:visual-interaction-to-tactic": "node ./node_modules/typescript/bin/tsc client/src/visual/interactionToTactic.ts --module es2022 --target es2022 --moduleResolution node --outDir tmp-interaction-tests --skipLibCheck --esModuleInterop && node --test client/test/interactionToTactic.test.mjs",
     "test:visual-transformation-view": "node ./node_modules/typescript/bin/tsc client/src/visual/TransformationView.tsx --jsx react --module commonjs --target es2022 --moduleResolution node --outDir tmp-transformation-tests --skipLibCheck --esModuleInterop && node scripts/write-cjs-marker.cjs tmp-transformation-tests && node --test client/test/transformationView.test.mjs",
-    "test:visual-units": "node scripts/run-sequential.cjs test:visual-expr-engine test:visual-stream-reconcile test:visual-quantified-statement test:visual-theorem-ordering test:visual-exists-display test:visual-level-presentation test:visual-goal-application test:visual-proof-text test:visual-adaptive-pagination test:visual-world-progress test:visual-interaction-to-tactic test:visual-transformation-view test:game-progress-storage test:game-routes"
+    "test:visual-units": "node scripts/run-sequential.cjs test:visual-expr-engine test:visual-stream-reconcile test:visual-quantified-statement test:visual-theorem-ordering test:visual-exists-display test:visual-level-presentation test:visual-goal-application test:visual-proof-text test:visual-adaptive-pagination test:visual-world-progress test:visual-interaction-to-tactic test:visual-transformation-view test:game-progress-storage test:game-routes test:telemetry",
+    "test:telemetry": "node ./node_modules/typescript/bin/tsc client/src/utils/telemetryQueue.ts client/src/utils/telemetryScheduler.ts --module commonjs --target es2022 --moduleResolution node --outDir tmp-telemetry-tests --skipLibCheck --esModuleInterop && node scripts/write-cjs-marker.cjs tmp-telemetry-tests && node --test client/test/telemetry.test.mjs"
   },
   "eslintConfig": {
     "extends": [
