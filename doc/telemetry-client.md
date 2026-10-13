@@ -43,6 +43,14 @@ lean4.js repository (`telemetry/docs/protocol.md`).
   IndexedDB where Web Locks are unavailable). Without IndexedDB, each tab uses
   its own memory queue. Events left by the previous localStorage queue
   (`telemetryQueueV2`) are moved into the new queue once.
+- **Build and platform.** Every event and feedback report carries the game
+  `build` record and a `platform`: the browser family (`chrome`, `safari`,
+  `firefox`, `edge`, `brave`, `samsung`, `opera` or `unknown`) and the device
+  type (`mobile` for phones and tablets, otherwise `desktop`), classified once
+  per page load in `telemetryPlatform.ts` from the user agent, client hints and
+  touch support. Only those fixed values are sent, never the user-agent string;
+  the collector stores them in the attempt's and report's `attributes` and
+  drops anything else. The privacy text in `popup/privacy.tsx` says so.
 - **Consent.** Refusing telemetry clears the queue and all its metadata
   (counters, backoff, lease), the legacy localStorage queue and the
   identifier cookie, and abandons in-flight requests: their responses are
@@ -67,4 +75,6 @@ lean4.js repository (`telemetry/docs/protocol.md`).
 batching, prompt completion sends, backoff during outages, both Retry-After
 forms, deadlines, v2 partial results, the v1 fallback, 413 handling,
 keepalive budgets, queue bounds, spread-out reconnects, two tabs sharing the
-queue, consent refusal and health reporting.
+queue, consent refusal and health reporting; `telemetryPlatform.test.mjs`
+checks the classification against real user agents of every supported browser
+on phones, tablets (including iPadOS presenting as a Mac) and computers.

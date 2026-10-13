@@ -1,3 +1,4 @@
+import { detectPlatform, type TelemetryPlatform } from './telemetryPlatform'
 import { IndexedDbQueueStore, MAX_EVENT_BYTES, MemoryQueueStore, type QueueStore, utf8Bytes } from './telemetryQueue'
 import { FETCH_TIMEOUT_MS, type PostResult, TelemetryScheduler } from './telemetryScheduler'
 
@@ -57,11 +58,16 @@ const GAME_BUILD: GameBuild | null = (() => {
   }
 })()
 
+/** Browser family and phone/tablet vs. computer, classified once here; the
+ * user-agent string itself is never sent (telemetryPlatform.ts). */
+const PLATFORM: TelemetryPlatform | null = detectPlatform()
+
 type QueuedEvent = TelemetryEvent & {
   event_id: string
   user_uuid: string
   ts: string
   build?: GameBuild
+  platform?: TelemetryPlatform
 }
 
 export function getConsentState(): ConsentState {
@@ -201,6 +207,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
       message,
       ts: new Date().toISOString(),
       ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
+      ...(PLATFORM ? { platform: PLATFORM } : {}),
     }),
   }).finally(() => window.clearTimeout(deadline))
   return response.ok
@@ -282,9 +289,10 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     event_id: event.event_id ?? createTelemetryId(),
     user_uuid,
     ts: new Date().toISOString(),
-    // Sent with every event: the collector records it on the attempt from
+    // Sent with every event: the collector records them on the attempt from
     // whichever event creates that, which is level_start unless it was lost.
     ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
+    ...(PLATFORM ? { platform: PLATFORM } : {}),
   }
   const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
     tooLong(queued.play_script, MAX_SCRIPT_LENGTH) || tooLong(queued.lean_script, MAX_SCRIPT_LENGTH) ||
