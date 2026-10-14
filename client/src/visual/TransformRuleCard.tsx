@@ -51,7 +51,8 @@ export function EqualityHypCard({
 
   const formattedLhs = formatRuleExpr(lhsStr, lhsNode)
   const formattedRhs = formatRuleExpr(rhsStr, rhsNode)
-  const symbol = isReverse ? `${formattedRhs} ⇒ ${formattedLhs}` : `${formattedLhs} ⇒ ${formattedRhs}`
+  // The sides stay put in both directions; the arrow shows which way the rule rewrites.
+  const symbol = `${formattedLhs} ${isReverse ? '⇐' : '⇒'} ${formattedRhs}`
 
   return (
     <div
