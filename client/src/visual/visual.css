@@ -828,6 +828,13 @@
   border-color: #eab308;
 }
 
+/* The goal card stretches to the width of an info callout below it; keep the
+   goal centred like its atomic form underneath. */
+.visual-page .statement-card.goal .proposition {
+  display: block;
+  text-align: center;
+}
+
 .visual-page .visual-info-callout {
   max-width: min(24rem, calc(100vw - 2rem));
   padding: 0.8rem 0.95rem;
