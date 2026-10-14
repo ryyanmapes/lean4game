@@ -64,8 +64,10 @@ export function FeedbackReportButton({
 
   return <>
     <button type="button" className="feedback-report-open" aria-label="Send feedback"
-      onClick={() => { setStatus('idle'); setOpen(true) }}>
-      !
+      title="Send feedback" onClick={() => { setStatus('idle'); setOpen(true) }}>
+      {/* feedback-report.css picks one label from the room its host bar gives it. */}
+      <span className="feedback-report-label-full" aria-hidden="true">Feedback</span>
+      <span className="feedback-report-label-short" aria-hidden="true">!</span>
     </button>
     {open && createPortal(<div className="feedback-report-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) close()

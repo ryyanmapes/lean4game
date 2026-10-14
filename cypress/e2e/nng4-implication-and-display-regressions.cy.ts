@@ -27,7 +27,12 @@ interface VisualHarness {
     streamId: string
     goalType: string
     hypTypes: Record<string, string>
+    canvasStreamIds: string[]
   }
+  openGoalTransform(): void
+  openHypTransform(hypName: string): void
+  rewriteGoalInTransform(theoremName: string, workingSide?: 'left' | 'right', path?: number[]): Promise<void>
+  rewriteHypInTransform(theoremName: string, workingSide?: 'left' | 'right', path?: number[]): Promise<void>
   getTransformStatus(): unknown
   getLastTransformRewriteDebug(): unknown
 }
@@ -137,6 +142,31 @@ function observeTransformStability(win: Cypress.AUTWindow) {
   })
   observedWindow.__visualStabilityObserver = observer
   inspectDock()
+}
+
+/** One transformation-mode rewrite per Cypress command. The harness closes over
+ * the transformation view as last rendered, so a following rewrite must wait
+ * for the render this one causes. */
+function rewriteInTransform(
+  target: 'goal' | 'hyp',
+  theoremName: string,
+  side: 'left' | 'right',
+  path: number[] = [],
+) {
+  cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+    const harness = (win as HarnessWindow).__visualTestHarness!
+    if (target === 'goal') await harness.rewriteGoalInTransform(theoremName, side, path)
+    else await harness.rewriteHypInTransform(theoremName, side, path)
+  })
+}
+
+/** The goal of the selected stream, which Transformation Mode keeps current
+ * while its own overlay covers the goal card. */
+function expectGoalType(pattern: RegExp) {
+  cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+    expect((win as HarnessWindow).__visualTestHarness?.getCurrentStreamSnapshot().goalType)
+      .to.match(pattern)
+  })
 }
 
 function playImplicationChain(sourceType: string, targetType: string) {
@@ -326,6 +356,79 @@ describe('NNG4 implication and definition display regressions', () => {
         .to.equal(false)
       expect((win as HarnessWindow).__visualUnmeasuredDockWasVisible, 'unmeasured dock is never displayed')
         .to.equal(false)
+    })
+  })
+
+  it('follows symm on a disequality goal after symm at its hypothesis', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvMultiplication/level/2/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b', 'h'])
+      await player.perform('symm at h')
+      await player.perform('symm')
+    })
+    // The card used to keep showing `b ≠ 0` while Lean had moved on to `0 ≠ b`.
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT })
+      .should('have.attr', 'data-goal-text', '0 ≠ b')
+    visualHarness().then(harness => {
+      const snapshot = harness.getCurrentStreamSnapshot()
+      expect(snapshot.goalType).to.equal('0 ≠ b')
+      expect(snapshot.hypTypes.h).to.equal('0 ≠ a * b')
+      expect(snapshot.canvasStreamIds, 'the replaced goal is not kept as a second stream')
+        .to.have.length(1)
+      expect(harness.getProofAudit().coreLines.slice(-2)).to.deep.equal(['symm at h', 'symm'])
+    })
+  })
+
+  it('rewrites only the chosen side of a comparison', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvMultiplication/level/1/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    let witnessEquality = ''
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b', 't', 'h'])
+      await player.perform('cases h with d hd')
+      witnessEquality = Object.entries(
+        (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes,
+      ).find(([, type]) => type.includes('='))?.[0] ?? ''
+      expect(witnessEquality, 'cases exposes the witness equality').not.to.equal('')
+    })
+    visualHarness().then(harness => harness.openGoalTransform())
+    cy.get('.tr-transformation-overlay', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.then(() => rewriteInTransform('goal', witnessEquality, 'right', [1]))
+    expectGoalType(/^a \* t ≤ \(a \+ \w+\) \* t$/u)
+    rewriteInTransform('goal', 'MyNat.add_mul', 'right')
+    expectGoalType(/^a \* t ≤ a \* t \+ \w+ \* t$/u)
+    // `a * t` occurs on both sides. A plain `rw [mul_comm]` turned both into
+    // `t * a`; the player asked for the copy on the right only.
+    rewriteInTransform('goal', 'MyNat.mul_comm', 'right', [1])
+    expectGoalType(/^a \* t ≤ t \* a \+ \w+ \* t$/u)
+    visualHarness().then(harness => {
+      const audit = harness.getProofAudit()
+      expect(audit.interactiveLines.at(-1)).to.match(/^drag_rw_rhs_at \[(?:MyNat\.)?mul_comm\] \[1\]$/u)
+      expect(audit.coreLines.filter(line => line.includes('?')), 'Core tactics are valid').to.deep.equal([])
+    })
+  })
+
+  it('opens Transformation Mode on disequalities and rewrites their sides', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/AdvMultiplication/level/7/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['a', 'b', 'ha', 'hb'])
+    })
+    cy.get('[data-testid="goal-card"]')
+      .should('have.attr', 'data-goal-text', 'a * b ≠ 0')
+      .and('have.class', 'transformable')
+    cy.get('[data-testid="hyp-card"][data-hyp-type="a ≠ 0"]').should('have.class', 'transformable')
+
+    visualHarness().then(harness => harness.openGoalTransform())
+    cy.get('.tr-transformation-overlay', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    rewriteInTransform('goal', 'MyNat.mul_comm', 'left')
+    expectGoalType(/^b \* a ≠ 0$/u)
+    visualHarness().then(harness => {
+      expect(harness.getProofAudit().interactiveLines.at(-1)).to.match(/^drag_rw_lhs \[(?:MyNat\.)?mul_comm\]$/u)
     })
   })
 

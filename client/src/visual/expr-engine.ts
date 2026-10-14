@@ -42,6 +42,7 @@ const BINARY_OPS: Record<string, BinaryOpInfo> = {
   '>=': { op: '≥', precedence: 4, associativity: 'left' },
   '\\geq': { op: '≥', precedence: 4, associativity: 'left' },
   '≥': { op: '≥', precedence: 4, associativity: 'left' },
+  '≠': { op: '≠', precedence: 4, associativity: 'left' },
   '<=': { op: '≤', precedence: 4, associativity: 'left' },
   '\\leq': { op: '≤', precedence: 4, associativity: 'left' },
   '∧': { op: '∧', precedence: 3, associativity: 'left' },
@@ -60,7 +61,7 @@ class Parser {
   private current = 0
 
   constructor(input: string) {
-    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|\\leq|\\geq|<=|>=|->|=>|[\p{L}][\p{L}\p{N}_']*|\d+|[+\-*/=<>≤≥()\[\]∧∨→|]|\S)/gu) || []
+    this.tokens = input.match(/(\\implies|\\land|\\lor|\\to|\\leq|\\geq|<=|>=|->|=>|[\p{L}][\p{L}\p{N}_']*|\d+|[+\-*/=<>≤≥≠()\[\]∧∨→|]|\S)/gu) || []
   }
 
   private peek(): string | null {
@@ -266,7 +267,7 @@ function isArithmeticOp(op: Op): boolean {
 }
 
 function isRelationOp(op: Op): boolean {
-  return op === '=' || op === '<' || op === '>' || op === '≤' || op === '≥'
+  return op === '=' || op === '<' || op === '>' || op === '≤' || op === '≥' || op === '≠'
 }
 
 function needsStructuralParens(child: ExpressionNode, parentOp: Op): boolean {
@@ -335,7 +336,7 @@ function isUnaryMinusStart(text: string, index: number): boolean {
   let cursor = index - 1
   while (cursor >= 0 && text[cursor] === ' ') cursor -= 1
   if (cursor < 0) return true
-  return '([=<>≤≥∧∨→,:+*/ᵢ'.includes(text[cursor] ?? '')
+  return '([=<>≤≥≠∧∨→,:+*/ᵢ'.includes(text[cursor] ?? '')
 }
 
 function skipSpaces(text: string, index: number): number {

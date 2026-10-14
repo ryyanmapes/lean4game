@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { CanvasState, GoalStream, HypCard as HypCardType } from './types'
 import { parse, printExpression, sanitizeLeanDisplayName } from './expr-engine'
-import { replaceIdentifier } from './existsDisplay'
+import { replaceIdentifier, splitTopLevelDisequality } from './existsDisplay'
 import {
   branchLeafStream,
   collectActiveStreamIds,
@@ -104,6 +104,9 @@ function likelyFocusedContinuation(
     !(playTactic?.startsWith('drag_rw_hyp_') ?? false)
   const isHypRewrite = playTactic?.startsWith('drag_rw_hyp_') ?? false
   const isHypSymmetry = /^symm\s+at\s+\S+$/u.test(playTactic ?? '')
+  // `symm` on the goal swaps its sides (`b ≠ 0` becomes `0 ≠ b`) and leaves
+  // the context alone, exactly like a goal rewrite.
+  const isGoalSymmetry = playTactic?.trim() === 'symm'
   const dragGoalApplyGoalType = dragGoalApplyNextGoalType(focusedStream, playTactic)
   const goalBranch = playTactic === 'click_goal_left' || playTactic === 'click_goal_right'
     ? splitDisjunctionTargetForRuntime(goalTypeText(focusedStream))
@@ -118,6 +121,7 @@ function likelyFocusedContinuation(
   const candidateGoalType = goalTypeText(candidate)
   const allowsGoalTypeChangeWithinSameBranch =
     isGoalRewrite ||
+    isGoalSymmetry ||
     (dragGoalApplyGoalType !== null && dragGoalApplyGoalType === candidateGoalType) ||
     (selectedGoalBranchType !== null && selectedGoalBranchType === candidateGoalType)
   const goalTypeMatches = goalTypeText(focusedStream) === candidateGoalType
@@ -288,6 +292,17 @@ function splitImplicationTargetForRuntime(text: string): [string, string] | null
 function splitEqualityTarget(text: string): [string, string] | null {
   return splitTopLevelInfix(text, ' = ')
     ?? splitTopLevelInfix(text, '=')
+}
+
+/** What `symm` turns a proposition into: Lean swaps the sides of `=`, `≠` and
+ * `↔` alike. `↔` is tried before `=` because its sides may be equalities. */
+function swapSymmetricRelation(text: string): string | null {
+  const disequality = splitTopLevelDisequality(text)
+  if (disequality) return `${disequality[1]} ≠ ${disequality[0]}`
+  const iff = splitTopLevelInfix(text, ' ↔ ')
+  if (iff) return `${iff[1]} ↔ ${iff[0]}`
+  const equality = splitEqualityTarget(text)
+  return equality ? `${equality[1]} = ${equality[0]}` : null
 }
 
 function splitLeadingForallTargetForRuntime(
@@ -1104,9 +1119,8 @@ function synthesizeContinuationStream(
     if (targetName) {
       const targetCard = findHypCardByInteractionName(focusedStream, targetName)
       if (!targetCard) return null
-      const equality = splitEqualityTarget(stripTaggedText(targetCard.hyp.type).trim())
-      if (!equality) return null
-      const swappedType = `${equality[1]} = ${equality[0]}`
+      const swappedType = swapSymmetricRelation(stripTaggedText(targetCard.hyp.type).trim())
+      if (!swappedType) return null
       return {
         ...focusedStream,
         hyps: focusedStream.hyps.map(card => card.id === targetCard.id
@@ -1114,9 +1128,8 @@ function synthesizeContinuationStream(
           : card),
       }
     }
-    const equality = splitEqualityTarget(goalDisplayText(focusedStream))
-    if (!equality) return null
-    const swappedType = `${equality[1]} = ${equality[0]}`
+    const swappedType = swapSymmetricRelation(goalDisplayText(focusedStream))
+    if (!swappedType) return null
     return {
       ...focusedStream,
       goal: {

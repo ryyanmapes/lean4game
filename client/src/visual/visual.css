@@ -348,6 +348,7 @@
   align-items: center;
   gap: 1rem;
   margin: 1.4rem 0 1.2rem;
+  container: feedback-slot / inline-size;
 }
 .visual-load-failure-retry {
   padding: 0.6rem 1.25rem;
@@ -1597,6 +1598,12 @@
   gap: 0.5rem;
 }
 
+/* Each side gets an equal share of what the title leaves, so its width never
+   depends on its buttons; the feedback button measures that share. */
+.visual-header-side:not(.right) {
+  container: feedback-slot / inline-size;
+}
+
 .visual-header-center {
   flex: 0 1 auto;
   min-width: 0;
@@ -2016,7 +2023,33 @@
   cursor: default;
 }
 .visual-page .tr-ctrl-btn.active-undo { color: var(--visual-warning); background: var(--visual-warning-bg); }
-.visual-page .tr-ctrl-btn.active-reverse { color: var(--visual-slot-text); background: var(--visual-choice-bg); }
+/* Rewrite direction toggle: a pill reading "⇐ / ⇒" whose current direction is
+   drawn bold in the accent colour and the other one greyed out. Neither
+   direction is the special one, so the button itself looks the same in both. */
+.visual-page .tr-ctrl-btn.tr-direction-btn {
+  width: auto;
+  padding: 0 0.85rem;
+}
+.visual-page .tr-ctrl-btn.tr-direction-btn .tr-direction-icon {
+  width: 3.25rem;
+  height: 1.3rem;
+}
+.visual-page .tr-direction-arrow {
+  stroke: var(--visual-text-muted);
+  stroke-width: 1.8;
+  opacity: 0.55;
+  transition: stroke 0.2s, opacity 0.2s;
+}
+.visual-page .tr-direction-arrow.current {
+  stroke: var(--visual-slot-text);
+  stroke-width: 2.8;
+  opacity: 1;
+}
+.visual-page .tr-direction-slash {
+  stroke: var(--visual-text-muted);
+  stroke-width: 1.8;
+  opacity: 0.7;
+}
 .visual-page .tr-ctrl-btn.reset { color: var(--visual-danger); }
 /* Offered only on a solved level, so it reads as "try it again", not "undo". */
 .visual-page .tr-ctrl-btn.active-reset { color: var(--visual-danger); background: var(--visual-danger-bg); }
@@ -2689,6 +2722,8 @@
   .visual-page.phone-portrait .visual-header-side {
     flex: 0 0 auto;
     min-width: 0;
+    /* Sized by its buttons here, so it cannot be a size container. */
+    container-type: normal;
   }
 
   .visual-page.phone-portrait .visual-header-side.right {
@@ -4253,6 +4288,11 @@
     height: 2.45rem;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-side-controls .tr-ctrl-btn.tr-direction-btn {
+    width: auto;
+    padding: 0 0.7rem;
   }
 
   .visual-page.tr-transformation-overlay .tr-main-area {

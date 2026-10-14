@@ -1455,3 +1455,80 @@ test('symm at a hypothesis stays on the selected branch when the browser reports
     focusedStream.id,
   ])
 })
+
+function disequalityGoalTree(focusedStream) {
+  return {
+    id: 'root-ne',
+    streamId: focusedStream.id,
+    label: null,
+    completed: false,
+    children: [],
+  }
+}
+
+test('symm on a disequality goal follows the swapped goal Lean returns', () => {
+  // Advanced Multiplication 2 after `symm at h`: the goal card kept showing
+  // `b ≠ 0` while Lean had moved on to `0 ≠ b`.
+  const context = () => [
+    hyp('hyp-a', 'a', 'ℕ'),
+    hyp('hyp-b', 'b', 'ℕ'),
+    hyp('hyp-h', 'h', '0 ≠ a * b'),
+  ]
+  const focusedStream = stream('stream-before', 'b ≠ 0', undefined, context())
+  const swappedStream = stream('stream-after', '0 ≠ b', undefined, context())
+
+  const result = reconcileProofTreeAfterInteraction(
+    disequalityGoalTree(focusedStream),
+    { streams: [focusedStream], completed: false },
+    { streams: [swappedStream], completed: false },
+    focusedStream,
+    'symm',
+    false,
+    focusedStream.id,
+    [swappedStream],
+  )
+
+  assert.deepEqual(result.focusedStreams.map(candidate => candidate.id), [swappedStream.id])
+  assert.equal(result.nextActiveId, swappedStream.id)
+  assert.deepEqual(result.nextCanvas.streams.map(candidate => candidate.id), [swappedStream.id])
+  assert.deepEqual(collectLiveStreamIds(result.nextTree), [swappedStream.id])
+})
+
+test('symm swaps a disequality goal even when the browser reports no focused goal', () => {
+  const focusedStream = stream('stream-before', '1 ≠ 0', undefined, [])
+
+  const result = reconcileProofTreeAfterInteraction(
+    disequalityGoalTree(focusedStream),
+    { streams: [focusedStream], completed: false },
+    { streams: [], completed: false },
+    focusedStream,
+    'symm',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(result.focusedStreams[0].goal.type.text, '0 ≠ 1')
+  assert.equal(result.nextCanvas.completed, false)
+})
+
+test('symm at a disequality hypothesis swaps its sides when synthesized', () => {
+  const focusedStream = stream('stream-before', 'b ≠ 0', undefined, [
+    hyp('hyp-b', 'b', 'ℕ'),
+    hyp('hyp-h', 'h', 'a * b ≠ 0'),
+  ])
+
+  const result = reconcileProofTreeAfterInteraction(
+    disequalityGoalTree(focusedStream),
+    { streams: [focusedStream], completed: false },
+    { streams: [], completed: false },
+    focusedStream,
+    'symm at h',
+    false,
+    focusedStream.id,
+  )
+
+  assert.equal(result.focusedStreams.length, 1)
+  assert.equal(hypTypeFor(result.focusedStreams[0], 'h'), '0 ≠ a * b')
+  assert.equal(result.focusedStreams[0].goal.type.text, 'b ≠ 0')
+})
