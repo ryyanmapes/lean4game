@@ -23,6 +23,11 @@ const CASES = [
   ['Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36', {}, 'samsung', 'mobile'],
   // An Android tablet: "Android" without "Mobile" is still a tablet, so mobile.
   ['Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', {}, 'chrome', 'mobile'],
+  // Headless Chrome and Chromium (what Cypress drives) are Chrome; headless Edge stays Edge.
+  ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0.0.0 Safari/537.36', {}, 'chrome', 'desktop'],
+  ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0.0.0 Safari/537.36',
+    { brands: ['Chromium', 'Not(A:Brand'] }, 'chrome', 'desktop'],
+  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0.0.0 Safari/537.36 Edg/130.0.2849.68', {}, 'edge', 'desktop'],
   // Brave presents as Chrome and is recognised by navigator.brave.
   ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', { isBrave: true }, 'brave', 'desktop'],
   // An in-app WebKit view is not Safari.

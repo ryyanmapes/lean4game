@@ -32,13 +32,14 @@ const BRANDS: Array<[RegExp, TelemetryBrowser]> = [
 ]
 
 // User-agent tokens, most specific first: every Chromium browser also says
-// "Chrome", and almost every browser also says "Safari".
+// "Chrome", and almost every browser also says "Safari". Headless Chrome and
+// Chromium say "HeadlessChrome" instead and are still Chrome.
 const TOKENS: Array<[RegExp, TelemetryBrowser]> = [
   [/\bSamsungBrowser\//u, 'samsung'],
   [/\b(?:Edg|EdgA|EdgiOS|Edge)\//u, 'edge'],
   [/\b(?:OPR|OPT|OPiOS|OPX)\/|\bOpera\b/u, 'opera'],
   [/\b(?:Firefox|FxiOS)\//u, 'firefox'],
-  [/\b(?:CriOS|Chrome|Chromium)\//u, 'chrome'],
+  [/\b(?:CriOS|Chrome|HeadlessChrome|Chromium)\//u, 'chrome'],
 ]
 
 export function classifyBrowser(signals: PlatformSignals): TelemetryBrowser {
