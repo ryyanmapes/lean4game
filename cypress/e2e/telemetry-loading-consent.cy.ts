@@ -1,6 +1,7 @@
 const LOAD_TIMEOUT = Number(Cypress.env('VISUAL_TIMEOUT') ?? 600_000)
 const mountPath = Cypress.env('LEAN4GAME_MOUNT') ?? '/lean4game/index.html'
-const endpoint = 'https://telemetry.test/v1/events'
+// The client posts to /v2/events and falls back to /v1/events on older collectors.
+const endpoint = /^https:\/\/telemetry\.test\/v[12]\/events$/
 
 type VisualHarness = {
   runPlayerTactic(command: string): Promise<void>
