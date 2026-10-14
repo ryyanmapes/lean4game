@@ -1,4 +1,5 @@
 import {
+  formatFormulaText,
   matchAndCapture,
   parse,
   printExpression,
@@ -4208,13 +4209,19 @@ export class CompletePlaythroughDriver {
         : await waitFor('current goal', () => currentGoal(this.win))
       await this.dragTactic('symm', target)
       if (!targetName) {
+        let lastSeen = 'no goal card'
         await waitFor('symm goal card to reconcile', () => {
           const goal = currentGoal(this.win)
           if (!goal) return null
-          const goalType = harness(this.win).getCurrentStreamSnapshot().goalType
+          // The card prints the goal as the canvas does (`succ(n)` rather
+          // than Lean's `succ n`), so compare against that rendering.
+          const goalType = formatFormulaText(harness(this.win).getCurrentStreamSnapshot().goalType)
+          lastSeen = `card shows "${cardProposition(goal)}", stream goal is "${goalType}"`
           return this.normalizedProposition(cardProposition(goal)) === this.normalizedProposition(goalType)
             ? true
             : null
+        }).catch((error: Error) => {
+          throw new Error(`${error.message} (${lastSeen})`)
         })
       }
       return
