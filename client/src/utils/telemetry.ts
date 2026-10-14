@@ -48,11 +48,65 @@ const GAME_BUILD: GameBuild | null = (() => {
   }
 })()
 
+/** The kind of browser and device a player is on, deliberately coarse: a
+ * browser family and phone/tablet versus computer, never the user-agent
+ * string itself. */
+export type ClientPlatform = {
+  browser: 'chrome' | 'safari' | 'firefox' | 'edge' | 'brave' | 'samsung' | 'opera' | 'unknown'
+  device: 'mobile' | 'desktop'
+}
+
+/** Classify a user agent. `mobileHint` is `navigator.userAgentData.mobile`
+ * where the browser offers it. iPadOS presents a desktop Safari user agent,
+ * so a touch-capable "Macintosh" counts as mobile. Brave sends Chrome's user
+ * agent unchanged and is told apart only by the `navigator.brave` it adds. */
+export function detectPlatform(
+  userAgent: string,
+  mobileHint?: boolean,
+  maxTouchPoints = 0,
+  isBrave = false,
+): ClientPlatform {
+  // Order matters: Edge, Opera and Samsung Internet also claim to be Chrome,
+  // and every iOS browser (CriOS, FxiOS, EdgiOS) also claims to be Safari.
+  const browser: ClientPlatform['browser'] =
+    isBrave || /\bBrave\//u.test(userAgent) ? 'brave'
+    : /\bEdg(?:e|A|iOS)?\//u.test(userAgent) ? 'edge'
+    : /\b(?:OPR|OPiOS)\/|\bOpera\b/u.test(userAgent) ? 'opera'
+    : /\bSamsungBrowser\//u.test(userAgent) ? 'samsung'
+    : /\b(?:Firefox|FxiOS)\//u.test(userAgent) ? 'firefox'
+    : /\b(?:Headless)?(?:Chrome|CriOS|Chromium)\//u.test(userAgent) ? 'chrome'
+    : /\bVersion\/[\d.]+.*\bSafari\//u.test(userAgent) ? 'safari'
+    : 'unknown'
+  const mobile = /\b(?:Mobi|Android|iPhone|iPad|iPod)/u.test(userAgent)
+    || mobileHint === true
+    || (/\bMacintosh\b/u.test(userAgent) && maxTouchPoints > 1)
+  return { browser, device: mobile ? 'mobile' : 'desktop' }
+}
+
+const CLIENT_PLATFORM: ClientPlatform | null = (() => {
+  try {
+    if (typeof navigator === 'undefined') return null
+    const browserNavigator = navigator as Navigator & {
+      userAgentData?: { mobile?: boolean }
+      brave?: unknown
+    }
+    return detectPlatform(
+      navigator.userAgent,
+      browserNavigator.userAgentData?.mobile,
+      navigator.maxTouchPoints,
+      browserNavigator.brave !== undefined,
+    )
+  } catch {
+    return null
+  }
+})()
+
 type QueuedEvent = TelemetryEvent & {
   event_id: string
   user_uuid: string
   ts: string
   build?: GameBuild
+  platform?: ClientPlatform
 }
 
 let flushing = false
@@ -190,6 +244,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
       message,
       ts: new Date().toISOString(),
       ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
+      ...(CLIENT_PLATFORM ? { platform: CLIENT_PLATFORM } : {}),
     }),
   })
   return response.ok
@@ -229,10 +284,11 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     event_id: event.event_id ?? createTelemetryId(),
     user_uuid,
     ts: new Date().toISOString(),
-    // Sent with every event: the collector records it on the attempt from
+    // Sent with every event: the collector records them on the attempt from
     // whichever event creates that, which is level_start unless the queue
     // overflowed and dropped it.
     ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
+    ...(CLIENT_PLATFORM ? { platform: CLIENT_PLATFORM } : {}),
   }
   if (queued.command) queued.command = queued.command.slice(0, 64 * 1024)
   if (queued.initial_script) queued.initial_script = queued.initial_script.slice(0, 256 * 1024)

@@ -117,7 +117,15 @@ describe('loading-screen telemetry consent', { testIsolation: true }, () => {
       expect(win.document.cookie).to.contain('lean_game_anonymous_id=')
     })
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
-    cy.wait('@telemetry', { timeout: 30_000 })
+    cy.wait('@telemetry', { timeout: 30_000 }).its('request.body.events').should(events => {
+      // Each event names the browser family and device type, never the user agent.
+      for (const event of events) {
+        expect(event.platform).to.deep.equal({
+          browser: ['firefox', 'edge'].includes(Cypress.browser.name) ? Cypress.browser.name : 'chrome',
+          device: 'desktop',
+        })
+      }
+    })
 
     cy.visit(levelUrl(2))
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')

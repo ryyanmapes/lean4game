@@ -36,6 +36,8 @@ describe('in-level feedback reports', { testIsolation: true }, () => {
       expect(request.body).not.to.have.property('user_uuid')
       expect(request.body.proof_state).to.have.property('proofBody')
       expect(request.body.proof_state).to.have.property('canvasState')
+      // Cypress drives Chromium on a computer.
+      expect(request.body.platform).to.deep.equal({ browser: 'chrome', device: 'desktop' })
       request.reply({ statusCode: 204, headers: { 'access-control-allow-origin': '*' } })
     }).as('feedback')
 
