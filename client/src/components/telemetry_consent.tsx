@@ -51,7 +51,7 @@ export function TelemetryConsent({ gate }: { gate: TelemetryConsentGate }) {
       <p className="telemetry-consent-text">
         Visual Lean is an experimental prototype; we are still trying to figure out what works and what doesn't. 
         Anonymous telemetry helps us improve the program for future users.
-        This data is restricted to proof progress, the brand of browser, and the platform being used.
+        This data is restricted to the game version, proof progress, the brand of browser, the platform being used, and an anonymized user ID.
       </p>
       <div className="telemetry-consent-buttons">
         <button
