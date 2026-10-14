@@ -19,9 +19,11 @@ let single_game = (import.meta.env.VITE_LEAN4GAME_SINGLE === "true")
 let single_game_name = (import.meta.env.VITE_LEAN4GAME_SINGLE_NAME === undefined) ? "game" : import.meta.env.VITE_LEAN4GAME_SINGLE_NAME
 // Legacy links carry the route in the hash. Rewrite them to a real path before
 // the router reads the location, so old bookmarks and the handoff URLs written
-// by earlier builds keep working.
+// by earlier builds keep working. A query written before the hash, such as
+// `?simulateFailure=stack-overflow#/g/…`, carries over to the new path.
 if (window.location.hash.startsWith('#/')) {
-  window.history.replaceState(null, '', window.location.hash.slice(1))
+  const route = window.location.hash.slice(1)
+  window.history.replaceState(null, '', route.includes('?') ? route : `${route}${window.location.search}`)
 }
 
 // Which build this is, not where it happens to be routed. The release sub-app
