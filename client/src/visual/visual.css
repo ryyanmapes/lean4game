@@ -828,11 +828,14 @@
   border-color: #eab308;
 }
 
-/* The goal card stretches to the width of an info callout below it; keep the
-   goal centred like its atomic form underneath. */
+/* The goal card stretches to the width of an info callout below it; centre its
+   label, goal and atomic form so they stay aligned, as phone portrait does. */
+.visual-page .statement-card.goal {
+  text-align: center;
+}
+
 .visual-page .statement-card.goal .proposition {
   display: block;
-  text-align: center;
 }
 
 .visual-page .visual-info-callout {
