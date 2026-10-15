@@ -4,6 +4,7 @@ import type {
   ProofState,
 } from '../components/infoview/rpc_api'
 import { getDataBaseUrl } from '../utils/url'
+import { resolveAssetBase, SAME_ORIGIN_ASSET_BASE } from './assetBase'
 import { instrumentBrowserProof } from './browserProof'
 import { coreTacticForVisualCommand } from './proofText'
 import {
@@ -34,17 +35,23 @@ type CompileResult = { success: boolean; diagnostics: WorkerDiagnostic[]; error?
 // browsers from pairing a newly deployed worker with an older WASM binary.
 const WORKER_UI_VERSION = 'single-thread-modules-v1'
 const BROWSER_RUNTIME_VERSION = 'single-thread-modules-v1'
-const MODULE_BUNDLE_URL = `/visual-lean/modules/game-modules.tar.gz?v=${BROWSER_RUNTIME_VERSION}`
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
+// `assetBase` is the same-origin `/visual-lean` or a remote copy (assetBase.ts).
+function moduleBundleUrl(assetBase: string) {
+  return `${assetBase}/modules/game-modules.tar.gz?v=${BROWSER_RUNTIME_VERSION}`
+}
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
 // references that are not ABI-compatible with a separately linked WASM binary.
-const WORKER_URL = `/lean-worker-persistent.worker.js?assetBase=%2Fvisual-lean%2Fruntime&v=${BROWSER_RUNTIME_VERSION}&workerUi=${WORKER_UI_VERSION}${
-  // Headless Chrome's fresh profile has no compiled-code cache and the full
-  // VisualTest environment can exceed a 1.5 GB fixed heap during its first
-  // import. Desktop Cypress has the address space for the release-sized heap.
-  typeof window !== 'undefined' && window.Cypress ? '&memoryMB=2048' : ''
-}`
+// The runtime and module bundle therefore always come from one asset base.
+function workerUrl(assetBase: string) {
+  return `/lean-worker-persistent.worker.js?assetBase=${encodeURIComponent(`${assetBase}/runtime`)}&v=${BROWSER_RUNTIME_VERSION}&workerUi=${WORKER_UI_VERSION}${
+    // Headless Chrome's fresh profile has no compiled-code cache and the full
+    // VisualTest environment can exceed a 1.5 GB fixed heap during its first
+    // import. Desktop Cypress has the address space for the release-sized heap.
+    typeof window !== 'undefined' && window.Cypress ? '&memoryMB=2048' : ''
+  }`
+}
 const WORKER_TIMEOUT_MS = 600_000
 
 export type LeanLoadingProgress = {
@@ -165,8 +172,39 @@ class LocalLeanWorker {
       return this.readyPromise
     }
     markLoadStarted()
-    this.readyPromise = new Promise<void>((resolve, reject) => {
-      const worker = new Worker(WORKER_URL)
+    this.readyPromise = this.start()
+    // On success the marker stays set through the first compile, which is
+    // where Lean imports its environment and memory use peaks.
+    this.readyPromise.catch(markLoadSettled)
+    return this.readyPromise
+  }
+
+  // A remote asset base only saves the static host's bandwidth: every release
+  // still ships the same files on its own origin. So if Lean fails to start
+  // from the remote copy for any reason, start it once more from there.
+  private async start(): Promise<void> {
+    const assetBase = await resolveAssetBase()
+    if (assetBase === SAME_ORIGIN_ASSET_BASE) return this.startWorker(assetBase)
+    try {
+      await this.startWorker(assetBase)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      console.warn(`Lean failed to start from ${assetBase}; retrying from ${SAME_ORIGIN_ASSET_BASE}`, error)
+      logWorkerMessage({ type: 'asset_fallback', data: `${assetBase}: ${detail}` })
+      this.worker?.terminate()
+      this.worker = null
+      this.moduleBundleResolver = null
+      await this.startWorker(SAME_ORIGIN_ASSET_BASE)
+    }
+  }
+
+  private startWorker(assetBase: string): Promise<void> {
+    if (window.Cypress) {
+      const win = window as typeof window & { __leanAssetBases?: string[] }
+      win.__leanAssetBases = [...(win.__leanAssetBases ?? []), assetBase]
+    }
+    return new Promise<void>((resolve, reject) => {
+      const worker = new Worker(workerUrl(assetBase))
       this.worker = worker
       const timeout = window.setTimeout(() => reject(new Error('Local Lean WASM initialization timed out')), WORKER_TIMEOUT_MS)
 
@@ -191,7 +229,7 @@ class LocalLeanWorker {
         }
         else if (msg.type === 'worker_ready') {
           reportLeanLoading(30, 'Downloading Lean modules...')
-          this.loadModuleBundle().then(() => {
+          this.loadModuleBundle(assetBase).then(() => {
             window.clearTimeout(timeout)
             resolve()
           }, error => {
@@ -267,18 +305,14 @@ class LocalLeanWorker {
         reject(new Error(event.message || 'Local Lean worker failed'))
       }
     })
-    // On success the marker stays set through the first compile, which is
-    // where Lean imports its environment and memory use peaks.
-    this.readyPromise.catch(markLoadSettled)
-    return this.readyPromise
   }
 
-  private loadModuleBundle(): Promise<void> {
+  private loadModuleBundle(assetBase: string): Promise<void> {
     return new Promise((resolve, reject) => {
       this.moduleBundleResolver = result => result.success
         ? resolve()
         : reject(new Error(result.error ?? 'Lean module bundle failed to load'))
-      this.worker!.postMessage({ type: 'load_module_bundle', url: MODULE_BUNDLE_URL })
+      this.worker!.postMessage({ type: 'load_module_bundle', url: moduleBundleUrl(assetBase) })
     })
   }
 
