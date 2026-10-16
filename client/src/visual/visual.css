@@ -2119,6 +2119,7 @@
   border-right: 1px solid var(--visual-border-faint);
   color: var(--visual-text-bright);
   font-size: 0.85rem;
+  line-height: 1.2;
   font-weight: 500;
   font-family: var(--font-family), system-ui, sans-serif;
   cursor: pointer;
@@ -3336,9 +3337,12 @@
     width: 2.2rem;
   }
 
+  /* As tall as the combining dock's tabs (1rem padding around a 0.85rem
+     line); the smaller type and side padding leave room for more tabs. */
   .visual-page.phone-portrait.tr-overlay .tr-tab-btn {
-    padding: 0.62rem 0.35rem;
+    padding: 1rem 0.35rem;
     font-size: 0.68rem;
+    line-height: calc(0.85rem * 1.2);
   }
 
   .visual-page.phone-portrait.tr-overlay .tr-rule-card {
