@@ -9,8 +9,10 @@ import ErrorPage from './components/error_page'
 import Welcome from './components/welcome'
 import VisualProofPage from './visual/VisualProofPage'
 import VisualWorldMap from './visual/VisualWorldMap'
+import { installPhoneLandscapeViewport } from './phoneLandscapeViewport'
 import './i18n';
 
+installPhoneLandscapeViewport()
 
 
 // If `VITE_LEAN4GAME_SINGLE` is set to true, then `/` should be redirected to

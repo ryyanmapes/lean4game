@@ -4129,7 +4129,11 @@
   .visual-page.tr-overlay {
     touch-action: none;
   }
+}
 
+/* Short landscape windows. Phones in landscape lay out 640 CSS px tall
+   (phoneLandscapeViewport.ts), so they get the desktop layout, scaled down. */
+@media (orientation: landscape) and (max-height: 500px) {
   .visual-page .statement-card {
     padding: 0.7rem 1rem;
     border-radius: 10px;
