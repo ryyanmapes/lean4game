@@ -1088,9 +1088,18 @@ function isNaturalVariableCard(card: HypCardType): boolean {
   return typeText === 'ℕ' || typeText === 'Nat' || typeText === 'MyNat'
 }
 
+/** `cases` takes a natural number apart (the drop names the predecessor) or
+ * eliminates `False` (no cases, so nothing to name). On a proof of `∨`, `∃`,
+ * `∧` or `≤` it would fill the context with Lean's inaccessible names
+ * (`h._@…_hyg.97`); clicking such a hypothesis splits it with readable names. */
+function casesCanTargetHyp(card: HypCardType): boolean {
+  if (isNaturalVariableCard(card)) return true
+  return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) === 'False'
+}
+
 function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   if (tactic.name === 'induction') return isNaturalVariableCard(card)
-  if (tactic.name === 'cases') return true
+  if (tactic.name === 'cases') return casesCanTargetHyp(card)
   if (tactic.name === 'symm') {
     const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
     return parsedHypEquality(card) !== null || typeText.includes('↔') || splitTopLevelDisequality(typeText) !== null
@@ -1098,19 +1107,6 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   // `exfalso` replaces the goal with `False`; it has no meaningful `at h` form.
   if (tactic.name === 'exfalso') return false
   return true
-}
-
-function tacticShouldHighlightHyp(tactic: VisualTactic, card: HypCardType): boolean {
-  if (tactic.name !== 'cases') return tacticCanTargetHyp(tactic, card)
-  // `cases` splits a number into zero and successor, eliminates `False`, and
-  // takes apart the connectives whose proofs carry a case each. Highlighting
-  // only `False` left the most common target — a natural number variable —
-  // looking like an invalid drop.
-  if (isNaturalVariableCard(card)) return true
-  const typeText = normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
-  if (typeText === 'False') return true
-  const splittableForms = [typeText, ...(card.hyp.reductionForms ?? [])]
-  return splittableForms.some(form => /[∨∧∃↔≤]/u.test(form))
 }
 
 function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean {
@@ -6433,6 +6429,9 @@ export function VisualCanvas({
   async function applyTestDragTacticToHyp(tacticName: string, hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const targetCard = requireHypCard(stream, hypName)
+    // Refuse what the real drop refuses, such as `cases` on a disjunction.
+    const tactic = visualTactics.find(candidate => candidate.name === tacticName)
+    if (tactic && !tacticCanTargetHyp(tactic, targetCard)) return
     const targetPlayName = interactionHypName(targetCard) ?? hypName
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
@@ -6932,7 +6931,7 @@ export function VisualCanvas({
     const isClickable = hasClickAction(clickAction) || isConstructable
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
     const isTacticTarget = activeDraggedTactic
-      ? tacticShouldHighlightHyp(activeDraggedTactic, card)
+      ? tacticCanTargetHyp(activeDraggedTactic, card)
       : false
     const draggedHypCard = activeDragId
       ? displayStream?.hyps.find(candidate => candidate.id === activeDragId)
