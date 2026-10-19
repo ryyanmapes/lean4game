@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { contextualizeReductionForms, inferAtomicReductionForms, selectAtomicReductionForm } from '../../tmp-exists-display-tests/existsDisplay.js'
+import {
+  contextualizeExistsDisplay,
+  contextualizeReductionForms,
+  inferAtomicReductionForms,
+  replaceIdentifier,
+  selectAtomicReductionForm,
+} from '../../tmp-exists-display-tests/existsDisplay.js'
 
 test('adds the implication form below a negated equality', () => {
   assert.deepEqual(
@@ -82,4 +88,27 @@ test('¬ only covers the text up to the first top-level connective', () => {
     contextualizeReductionForms(['¬ (a = b → c)'], []),
     ['¬ (a = b → c)', '(a = b → c) → False'],
   )
+})
+
+test('a shadowed name is not an occurrence of the plain name', () => {
+  assert.equal(replaceIdentifier('c✝ + c = c', 'c', 'x'), 'c✝ + x = x')
+})
+
+test('an ∃ binder named like a hypothesis no longer hides that hypothesis', () => {
+  // AdvMultiplication 1, report of 16 Oct: `≤` unfolds to `∃ c, …` beside a
+  // hypothesis `c`, so Lean prints the hypothesis as `c✝`.
+  const displayed = contextualizeExistsDisplay(
+    { varName: 'c', body: 'a * d + a + (c✝ + c1) = a * d + a + c' },
+    ['a', 'b', 'd', 'c', 'c1', 'h1', 'h2'],
+  )
+  assert.deepEqual(displayed, { varName: 'c2', body: 'a * d + a + (c + c1) = a * d + a + c2' })
+  assert.equal(
+    replaceIdentifier(displayed.body, displayed.varName, '(c + c1)'),
+    'a * d + a + (c + c1) = a * d + a + (c + c1)',
+  )
+})
+
+test('an ∃ binder the server already named apart is shown as sent', () => {
+  const info = { varName: 'c2', body: 'a * d + a + (c + c1) = a * d + a + c2' }
+  assert.equal(contextualizeExistsDisplay(info, ['a', 'b', 'd', 'c', 'c1']), info)
 })
