@@ -9,7 +9,7 @@ import { selectCompleted, levelCompleted, levelEntered } from '../state/progress
 import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { decodeAutosave, writeAutosave } from './autosaveStorage'
-import { VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
+import { buildInteractiveProofLine, VisualCanvas, VISUAL_PROOF_AUTOSAVE_VERSION } from './VisualCanvas'
 import type { VisualProofResumeState } from './VisualCanvas'
 import { VisualHeader } from './VisualHeader'
 import { VisualLoadingScreen } from './VisualLoadingScreen'
@@ -30,6 +30,8 @@ import { useVisualRpcClient } from './VisualRpcProvider'
 import { useLeanLoadingProgress } from './useLeanLoadingProgress'
 import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import { levelStartsWithBindersInGoal } from './initialGoalState'
+import { VisualAttemptLog } from './visualTelemetry'
+import type { VisualGesture } from './visualTelemetry'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'exfalso'])
@@ -248,9 +250,8 @@ function visualTacticActivation(name: string): VisualTactic['activation'] {
 export function VisualProofPage() {
   const gameId = useContext(GameIdContext)
   const { worldId, levelId } = useContext(WorldLevelIdContext)
-  const solvingId = React.useMemo(() => createSolvingId(), [gameId, worldId, levelId])
-  const telemetryStartedAt = React.useMemo(() => Date.now(), [solvingId])
-  const telemetrySequence = useRef(0)
+  // This visit's telemetry; created once the level and any autosave are loaded.
+  const attemptLogRef = useRef<VisualAttemptLog | null>(null)
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const proofPreludeRef = useRef('')
@@ -273,7 +274,7 @@ export function VisualProofPage() {
       levelId,
       proofBody,
       openInEditor: true,
-      sourceAttemptId: solvingId,
+      sourceAttemptId: attemptLogRef.current?.attemptId,
     }))
     // Routes are real paths now, so the handoff token travels in the query
     // string rather than inside a hash fragment.
@@ -282,41 +283,20 @@ export function VisualProofPage() {
       window.location.origin,
     )
     window.open(target.toString(), '_blank', 'noopener,noreferrer')
-  }, [gameId, levelId, solvingId, worldId])
+  }, [gameId, levelId, worldId])
   const previouslyCompleted = useAppSelector(selectCompleted(gameId, worldId, levelId))
   const handleLevelCompleted = useCallback((proof?: { playScript: string; leanScript: string }) => {
     if (levelId > 0) {
       dispatch(levelCompleted({ game: gameId, world: worldId, level: levelId }))
     }
-    if (proof) {
-      sendTelemetry({
-        event_type: 'level_complete',
-        game_id: gameId,
-        world_id: worldId,
-        level_id: levelId,
-        attempt_uuid: solvingId,
-        mode: 'visual',
-        sequence: ++telemetrySequence.current,
-        elapsed_ms: Date.now() - telemetryStartedAt,
-        play_script: proof.playScript,
-        lean_script: proof.leanScript,
-      })
-    }
-  }, [dispatch, gameId, worldId, levelId, solvingId, telemetryStartedAt])
+    if (proof) attemptLogRef.current?.complete(proof)
+  }, [dispatch, gameId, worldId, levelId])
   const handleProofStep = useCallback((interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => {
-    sendTelemetry({
-      event_type: 'proof_step',
-      game_id: gameId,
-      world_id: worldId,
-      level_id: levelId,
-      attempt_uuid: solvingId,
-      mode: 'visual',
-      sequence: ++telemetrySequence.current,
-      elapsed_ms: Date.now() - telemetryStartedAt,
-      step_type: stepType,
-      command: interactiveLeanCode,
-    })
-  }, [gameId, worldId, levelId, solvingId, telemetryStartedAt])
+    attemptLogRef.current?.step(stepType, interactiveLeanCode)
+  }, [])
+  const handleGesture = useCallback((gesture: VisualGesture) => {
+    attemptLogRef.current?.gesture(gesture)
+  }, [])
   const [canvasState, setCanvasState] = useState<CanvasState | null>(null)
   const [resumeState, setResumeState] = useState<VisualProofResumeState | null>(null)
   const [error, setError] = useState<LoadFailure | null>(null)
@@ -385,22 +365,9 @@ export function VisualProofPage() {
       window.removeEventListener('orientationchange', updatePhonePortrait)
     }
   }, [])
-  const startEventSentRef = useRef<string | null>(null)
   const sendLevelStartTelemetry = useCallback(() => {
-    const startKey = `${gameId}/${worldId}/${levelId}`
-    if (startEventSentRef.current === startKey) return
-    const queued = sendTelemetry({
-      event_type: 'level_start',
-      game_id: gameId,
-      world_id: worldId,
-      level_id: levelId,
-      attempt_uuid: solvingId,
-      mode: 'visual',
-      sequence: telemetrySequence.current,
-      elapsed_ms: Date.now() - telemetryStartedAt,
-    })
-    if (queued) startEventSentRef.current = startKey
-  }, [gameId, levelId, solvingId, telemetryStartedAt, worldId])
+    attemptLogRef.current?.start()
+  }, [])
 
   useEffect(() => {
     // Reset so VisualCanvas unmounts and remounts fresh for the new level
@@ -408,6 +375,7 @@ export function VisualProofPage() {
     setResumeState(null)
     proofPreludeRef.current = ''
     setError(null)
+    attemptLogRef.current = null
     if (!worldId || !levelId) return
 
     let active = true
@@ -472,6 +440,16 @@ export function VisualProofPage() {
             }
           }
           if (!active) return
+          attemptLogRef.current = new VisualAttemptLog({
+            gameId,
+            worldId,
+            levelId,
+            restoredCommands: validatedResume?.proofSteps.map(step =>
+              buildInteractiveProofLine(step.rotation, step.playTactic)) ?? [],
+            restoredSolved: Boolean(validatedResume?.canvasState.completed),
+            send: sendTelemetry,
+            createId: createSolvingId,
+          })
           setResumeState(validatedResume)
           setCanvasState(initialCanvas)
           sendLevelStartTelemetry()
@@ -494,7 +472,7 @@ export function VisualProofPage() {
     return () => {
       active = false
     }
-  }, [disposeClient, gameId, getClient, worldId, levelId, sendLevelStartTelemetry, solvingId, telemetryStartedAt])
+  }, [disposeClient, gameId, getClient, worldId, levelId, sendLevelStartTelemetry])
 
   // Callback passed to VisualCanvas: sends an updated proof body to Lean and
   // returns the new ProofState, or null on Lean error.
@@ -768,6 +746,7 @@ export function VisualProofPage() {
       previouslyCompleted={previouslyCompleted}
       onLevelCompleted={handleLevelCompleted}
       onProofStep={handleProofStep}
+      onGesture={handleGesture}
       onOpenClassic={handleOpenClassic}
       resumeState={resumeState}
       onAutosave={handleAutosave}

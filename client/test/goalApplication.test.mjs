@@ -43,3 +43,19 @@ test('an implication with a disequality premise keeps its real conclusion', () =
   assert.equal(statementCanTargetGoal('d ≠ 0 → d * b = d * c → b = c', 'False'), false)
   assert.equal(statementCanTargetGoal('a ≠ b ∧ c = d', 'False'), false)
 })
+
+test('refuses a theorem when the goal cannot determine one of its values', () => {
+  // LessOrEqual 8: `add_right_cancel` dropped on `d2 + 1 = d + 1` matched
+  // `a = b` but left `n` unknown: `⊢ d2 + 1 + ?n = d + 1 + ?n` and `⊢ ℕ`.
+  assert.equal(statementCanTargetGoal('a + n = b + n → a = b', 'd2 + 1 = d + 1', '∀ (a b n : ℕ)'), false)
+  assert.equal(statementCanTargetGoal('0 ≠ succ a', 'False', '∀ (a : ℕ)'), false)
+  assert.equal(statementCanTargetGoal('a + n = b + n ↔ a = b', 'x = y', '∀ (a b n : ℕ)'), false)
+  // Every value occurs in the matched part, so Lean learns all of them.
+  assert.equal(statementCanTargetGoal('a = b → a + n = b + n', 'x + 1 = y + 1', '∀ (a b n : ℕ)'), true)
+  assert.equal(statementCanTargetGoal('0 ≠ succ a', '0 ≠ succ (x + y)', '∀ (a : ℕ)'), true)
+})
+
+test('a proof binder in the footer becomes a goal of its own, not an unknown', () => {
+  assert.equal(statementCanTargetGoal('a * b = a * c → b = c', 'x = 1', '∀ (a b c : ℕ) (ha : a ≠ 0)'), false)
+  assert.equal(statementCanTargetGoal('b = c', 'x = 1', '∀ (b c : ℕ) (ha : b ≠ 0)'), true)
+})

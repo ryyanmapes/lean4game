@@ -1335,17 +1335,19 @@ private def isReflexiveEqualityImplication (e : Expr) : MetaM Bool := do
 
 /-- If `e` is (or unfolds to) `@Exists α (fun x => body)`, return the bound variable name and
     a pretty-printed body string.  Uses default-transparency `whnf` so that definitions like
-    `Nat.le` (which is `∃ k, n + k = m` in NNG4) are unfolded even if not `@[reducible]`. -/
+    `Nat.le` (which is `∃ k, n + k = m` in NNG4) are unfolded even if not `@[reducible]`.
+    The bound variable is renamed when a hypothesis has its name (`unusedBinderName`), so the
+    body shows every hypothesis by its own name instead of as `c✝`. -/
 private def tryExistsInfoFromExpr (e : Expr) : MetaM (Option ExistsInfo) := do
   match e.consumeMData with
   | .app (.app (.const ``Exists _) _) pred =>
-      Meta.lambdaTelescope pred fun fvars body => do
-        match fvars[0]? with
-        | none => return none
-        | some fvar =>
-            let varName := (← fvar.fvarId!.getDecl).userName.toString
-            let bodyStr := (← ppExpr body).pretty
-            return some { varName, body := bodyStr }
+      match pred.consumeMData with
+      | .lam binderName binderType body _ =>
+          let varName ← unusedBinderName binderName
+          withLocalDeclD varName binderType fun fvar => do
+            let bodyStr := (← ppExpr (body.instantiate1 fvar)).pretty
+            return some { varName := varName.toString, body := bodyStr }
+      | _ => return none
   | _ => return none
 
 def tryExistsInfo (e : Expr) : MetaM (Option ExistsInfo) := do

@@ -1,3 +1,4 @@
+import { proofStateJson } from './feedbackJson'
 import { detectPlatform, type TelemetryPlatform } from './telemetryPlatform'
 import { IndexedDbQueueStore, MAX_EVENT_BYTES, MemoryQueueStore, type QueueStore, utf8Bytes } from './telemetryQueue'
 import { FETCH_TIMEOUT_MS, type PostResult, TelemetryScheduler } from './telemetryScheduler'
@@ -32,8 +33,14 @@ type BaseEvent = {
 }
 
 export type TelemetryEvent = BaseEvent & {
-  step_type?: 'command' | 'undo' | 'reset' | 'edit'
+  /** `rejected` and `view` record visual gestures that left the proof
+   * unchanged (a refused gesture, a mode switch); replays skip them. */
+  step_type?: 'command' | 'undo' | 'reset' | 'edit' | 'rejected' | 'view'
   command?: string
+  /** `rejected` only: why, e.g. `lean-error`, `busy`, `statement-does-not-fit-goal`. */
+  reason?: string
+  /** `rejected` only: Lean's error message. */
+  error?: string
   from_line?: number
   removed_lines?: number
   initial_script?: string
@@ -185,14 +192,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
   const message = report.message.trim()
   if (!baseUrl || !message || message.length > 1000) return false
   const userId = getConsentState() === 'accepted' ? getOrCreateUserId() : null
-  const seen = new WeakSet<object>()
-  const proofState = JSON.parse(JSON.stringify(report.proof_state, (_key, value: unknown) => {
-    if (typeof value === 'bigint') return value.toString()
-    if (typeof value !== 'object' || value === null) return value
-    if (seen.has(value)) return '[Circular]'
-    seen.add(value)
-    return value
-  }))
+  const proofState = JSON.parse(proofStateJson(report.proof_state))
   const controller = new AbortController()
   const deadline = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   const response = await fetch(`${baseUrl}/v1/feedback`, {
@@ -294,7 +294,8 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
     ...(PLATFORM ? { platform: PLATFORM } : {}),
   }
-  const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
+  const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.error, MAX_COMMAND_LENGTH) ||
+    tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
     tooLong(queued.play_script, MAX_SCRIPT_LENGTH) || tooLong(queued.lean_script, MAX_SCRIPT_LENGTH) ||
     utf8Bytes(queued) > MAX_EVENT_BYTES
   void schedulerReady.then(async scheduler => {

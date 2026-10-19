@@ -230,6 +230,19 @@ export function forallBinderNamesFromFooter(footer?: string): string[] {
     .filter((name): name is string => name !== undefined)
 }
 
+/** The footer's binders that stand for values (`a : ℕ`) rather than proofs
+ * (`h : a ≠ 0`). Applying the theorem must determine every value; a proof
+ * binder simply becomes a goal of its own. */
+export function forallValueBinderNamesFromFooter(footer?: string): string[] {
+  return parseForallFooterBinders(footer)
+    .filter(binder => {
+      const colonIdx = binder.text.indexOf(':')
+      return colonIdx === -1 || !isPropositionBinderType(binder.text.slice(colonIdx + 1, -1).trim())
+    })
+    .map(binder => binder.name)
+    .filter((name): name is string => name !== undefined)
+}
+
 /** Build a theorem application using named values inferred by matching its
  * displayed premise. Named arguments work for both explicit and implicit
  * binders and avoid shifting the dragged proof into the first value slot. */

@@ -1,7 +1,7 @@
 import { alphaNormalizeBinders, splitTopLevelDisequality } from './existsDisplay'
 import { formatFormulaText, parse } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
-import { forallBinderNamesFromFooter } from './quantifiedStatement'
+import { forallBinderNamesFromFooter, forallValueBinderNamesFromFooter } from './quantifiedStatement'
 
 function splitTopLevel(text: string, operator: string): [string, string] | null {
   let depth = 0
@@ -91,9 +91,21 @@ function formulaMatchesGoal(patternText: string, goalText: string, wildcards: Re
   }
 }
 
+/** Whether every one of `variables` occurs in `pattern`. */
+function mentionsAll(pattern: string, variables: readonly string[]): boolean {
+  const identifiers = new Set(pattern.match(/[\p{L}_][\p{L}\p{N}_']*/gu) ?? [])
+  return variables.every(name => identifiers.has(name))
+}
+
 /** Whether dropping a statement card on a goal can elaborate as `exact`,
  * `apply`, or one direction of an iff. Only explicitly quantified binders are
- * wildcards; local context variables must continue to match literally. */
+ * wildcards; local context variables must continue to match literally.
+ *
+ * Lean learns a quantified value only by unifying the part that matched with
+ * the goal. A value missing from that part is left unknown and shows up as
+ * `?n` in the next goal plus a bare `ℕ` goal (`add_right_cancel`, which ends
+ * in `a = b` but also takes `n`, matches every equation), so such a drop is
+ * refused. */
 export function statementCanTargetGoal(
   statement: string,
   goal: string,
@@ -105,13 +117,13 @@ export function statementCanTargetGoal(
   if (normalizedStatement === 'False') return normalizedGoal === 'False'
 
   const wildcards = new Set(forallBinderNamesFromFooter(forallFooter))
-  if (formulaMatchesGoal(normalizedStatement, normalizedGoal, wildcards)) return true
+  const values = forallValueBinderNamesFromFooter(forallFooter)
+  const matches = (pattern: string) =>
+    mentionsAll(pattern, values) && formulaMatchesGoal(pattern, normalizedGoal, wildcards)
+  if (matches(normalizedStatement)) return true
 
   const iff = splitTopLevel(normalizedStatement, '↔')
-  if (iff && (
-    formulaMatchesGoal(iff[0], normalizedGoal, wildcards) ||
-    formulaMatchesGoal(iff[1], normalizedGoal, wildcards)
-  )) return true
+  if (iff && (matches(iff[0]) || matches(iff[1]))) return true
 
-  return formulaMatchesGoal(terminalConclusion(normalizedStatement), normalizedGoal, wildcards)
+  return matches(terminalConclusion(normalizedStatement))
 }

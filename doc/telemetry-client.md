@@ -55,6 +55,18 @@ lean4.js repository (`telemetry/docs/protocol.md`).
   (counters, backoff, lease), the legacy localStorage queue and the
   identifier cookie, and abandons in-flight requests: their responses are
   ignored and nothing is re-queued. Nothing is sent without consent.
+- **Visual attempts** (`client/src/visual/visualTelemetry.ts`). An attempt
+  ends at its completion: undoing or resetting after solving starts a new
+  attempt whose `level_start` carries the solved proof as `initial_script` (a
+  JSON array of the recorded commands) and the completed attempt as
+  `source_attempt_uuid`. A level reopened on a restored proof starts from that
+  proof the same way, and a canvas restored already solved is not reported as
+  a completion. Gestures that leave the proof unchanged are `proof_step`s too:
+  `rejected` (refused by the canvas or by Lean, with a `reason` and Lean's
+  `error`) and `view` (into or out of Transformation or Construction Mode).
+- **Feedback.** A report's `proof_state` is serialized with only true cycles
+  cut (`client/src/utils/feedbackJson.ts`): an object shared by two parts of
+  the state keeps its contents in both.
 
 ## Rollout
 
@@ -67,6 +79,9 @@ lean4.js repository (`telemetry/docs/protocol.md`).
 3. This client still works against a collector without `/v2` (it falls back
    to `/v1`), so the order matters only for per-event results and health
    reporting.
+4. The `rejected` and `view` step types need the collector release with
+   migration 011. Deploy it first: an older collector refuses those events
+   (`invalid_step`), and the client drops and counts them.
 
 ## Tests
 

@@ -1073,10 +1073,12 @@ function synthesizeContinuationStream(
   if (!playTactic) return null
   const existsIntro = /^refine\s+Exists\.intro\s+\((.+)\)\s+\?_$/u.exec(playTactic.trim())
   if (existsIntro && focusedStream.existsInfo) {
+    const witness = existsIntro[1]!.trim()
     const nextGoalType = replaceIdentifier(
       focusedStream.existsInfo.body,
       focusedStream.existsInfo.varName,
-      existsIntro[1]!.trim(),
+      // `a + c` substituted bare into `x + c` would read as `x + a + c`.
+      /^[\p{L}\p{N}_'.]+$/u.test(witness) ? witness : `(${witness})`,
     )
     return {
       ...focusedStream,

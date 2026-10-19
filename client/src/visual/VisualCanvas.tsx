@@ -60,6 +60,7 @@ import {
   stripCasePrefixes,
 } from './proofText'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
+import type { VisualGesture } from './visualTelemetry'
 import { PreferencesContext } from '../components/infoview/context'
 
 export { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
@@ -1088,9 +1089,18 @@ function isNaturalVariableCard(card: HypCardType): boolean {
   return typeText === 'ℕ' || typeText === 'Nat' || typeText === 'MyNat'
 }
 
+/** `cases` takes a natural number apart (the drop names the predecessor) or
+ * eliminates `False` (no cases, so nothing to name). On a proof of `∨`, `∃`,
+ * `∧` or `≤` it would fill the context with Lean's inaccessible names
+ * (`h._@…_hyg.97`); clicking such a hypothesis splits it with readable names. */
+function casesCanTargetHyp(card: HypCardType): boolean {
+  if (isNaturalVariableCard(card)) return true
+  return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) === 'False'
+}
+
 function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   if (tactic.name === 'induction') return isNaturalVariableCard(card)
-  if (tactic.name === 'cases') return true
+  if (tactic.name === 'cases') return casesCanTargetHyp(card)
   if (tactic.name === 'symm') {
     const typeText = card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)
     return parsedHypEquality(card) !== null || typeText.includes('↔') || splitTopLevelDisequality(typeText) !== null
@@ -1098,19 +1108,6 @@ function tacticCanTargetHyp(tactic: VisualTactic, card: HypCardType): boolean {
   // `exfalso` replaces the goal with `False`; it has no meaningful `at h` form.
   if (tactic.name === 'exfalso') return false
   return true
-}
-
-function tacticShouldHighlightHyp(tactic: VisualTactic, card: HypCardType): boolean {
-  if (tactic.name !== 'cases') return tacticCanTargetHyp(tactic, card)
-  // `cases` splits a number into zero and successor, eliminates `False`, and
-  // takes apart the connectives whose proofs carry a case each. Highlighting
-  // only `False` left the most common target — a natural number variable —
-  // looking like an invalid drop.
-  if (isNaturalVariableCard(card)) return true
-  const typeText = normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type))
-  if (typeText === 'False') return true
-  const splittableForms = [typeText, ...(card.hyp.reductionForms ?? [])]
-  return splittableForms.some(form => /[∨∧∃↔≤]/u.test(form))
 }
 
 function tacticCanTargetGoal(tactic: VisualTactic, stream: GoalStream): boolean {
@@ -1953,7 +1950,8 @@ function buildStructuredLeanProof(steps: ProofStepRecord[]): string {
   return buildStructuredProof(steps, 'lean')
 }
 
-function buildInteractiveProofLine(rotation: string | null, playTactic: string): string {
+/** A proof step as telemetry records it (VisualProofPage, visualTelemetry.ts). */
+export function buildInteractiveProofLine(rotation: string | null, playTactic: string): string {
   return rotation ? `${rotation}\n${playTactic}` : playTactic
 }
 
@@ -2337,6 +2335,9 @@ interface VisualCanvasProps {
   /** Telemetry for every change to `proofSteps`: `command` appends one step,
    * `undo` removes the last one, `reset` clears them all. */
   onProofStep?: (interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => void
+  /** A gesture that left the proof unchanged: refused by the canvas or by
+   * Lean, or a switch into or out of Transformation/Construction Mode. */
+  onGesture?: (gesture: VisualGesture) => void
   onOpenClassic?: (proofBody: string) => void
   resumeState?: VisualProofResumeState | null
   onAutosave?: (state: VisualProofResumeState) => void
@@ -2599,7 +2600,7 @@ export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
+  onLevelCompleted, onProofStep, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
     React.useContext(PreferencesContext)
@@ -3309,13 +3310,20 @@ export function VisualCanvas({
   }
 
   async function applyInteraction(playTactic: string, sourceCardId: string, options?: InteractionOptions): Promise<boolean> {
+    const attemptedPlayTactic = options?.playTacticOverride ?? playTactic
     if (isProcessingRef.current) {
-      if (!options?.queueIfBusy) return false
+      if (!options?.queueIfBusy) {
+        onGesture?.({ kind: 'rejected', command: attemptedPlayTactic, reason: 'busy' })
+        return false
+      }
       const deadline = Date.now() + 120_000
       while (isProcessingRef.current && Date.now() < deadline) {
         await new Promise<void>(resolve => window.setTimeout(resolve, 25))
       }
-      if (isProcessingRef.current) return false
+      if (isProcessingRef.current) {
+        onGesture?.({ kind: 'rejected', command: attemptedPlayTactic, reason: 'busy' })
+        return false
+      }
       // Re-enter through the latest render so stream/card lookup uses the
       // state produced by the interaction that was ahead of this drop.
       const latestApplyInteraction = applyInteractionRef.current
@@ -3334,7 +3342,10 @@ export function VisualCanvas({
           ? currentStream
           : canvasState.streams.find(stream => stream.id === focusedStreamId) ?? null)
       : null
-    if (!focusedStream) return false
+    if (!focusedStream) {
+      onGesture?.({ kind: 'rejected', command: attemptedPlayTactic, reason: 'no-goal' })
+      return false
+    }
     pendingMobileInsertionRef.current = options?.mobileInsertAfter
       ? {
           anchorKey: options.mobileInsertAfter,
@@ -3457,6 +3468,12 @@ export function VisualCanvas({
     }
 
     if (result === null) {
+      onGesture?.({
+        kind: 'rejected',
+        command: attemptedPlayTactic,
+        reason: 'lean-error',
+        ...(leanError ? { error: leanError } : {}),
+      })
       pendingMobileInsertionRef.current = null
       if (options?.placementHint) {
         clearPositionOverride(options.placementHint.hypId)
@@ -4132,8 +4149,10 @@ export function VisualCanvas({
           }
         }),
     }
-    const refuseDrop = (reason: string, details: Record<string, unknown> = {}) => {
+    /** `command` names the refused gesture in play-tactic notation. */
+    const refuseDrop = (reason: string, command: string, details: Record<string, unknown> = {}) => {
       lastDragDebugRef.current = { ...lastDragDebugRef.current, refused: reason, ...details }
+      onGesture?.({ kind: 'rejected', command, reason })
     }
 
     // A premise dropped onto a workspace theorem is unambiguously function
@@ -4290,6 +4309,17 @@ export function VisualCanvas({
           placementHint,
           targetStreamId: targetStream.id,
         })
+        return
+      }
+      if (targetGoalStream) {
+        refuseDrop('tactic-cannot-target-goal', tacticTemplate.name)
+      } else if (targetName) {
+        refuseDrop(
+          'tactic-cannot-target-hyp',
+          tacticTemplate.name === 'cases' || tacticTemplate.name === 'induction'
+            ? `${tacticTemplate.name} ${targetName}`
+            : interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name, targetHypName: targetName }),
+        )
       }
       return
     }
@@ -4300,18 +4330,18 @@ export function VisualCanvas({
         if (goalIds.has(overId as string)) {
           const targetGoal = interactionStreams.find(stream => stream.id === overId)
           const liveGoalText = renderedGoalText(overId as string)
+          const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           if (!targetGoal || !(
             theoremCanTargetGoal(theoremTemplate, targetGoal)
             || Boolean(liveGoalText && theoremCanTargetGoalText(theoremTemplate, liveGoalText))
           )) {
-            refuseDrop('theorem-does-not-fit-goal', {
+            refuseDrop('theorem-does-not-fit-goal', playTactic, {
               theorem: theoremTemplate.proposition,
               targetGoal: targetGoal ? TaggedText_stripTags(targetGoal.goal.type) : null,
               liveGoalText: liveGoalText ?? null,
             })
             return
           }
-          const playTactic = interactionToPlayTactic({ type: 'drag_goal', hypName: theoremTemplate.theoremName, reverse })
           applyDroppedInteraction(playTactic, activeId, {
             solvedGoalId: overId as string,
             targetStreamId: overId as string,
@@ -4377,7 +4407,7 @@ export function VisualCanvas({
       if (overId === THEOREM_TRAY_ID) return
       const startRect = active.rect.current.initial
       if (!startRect) {
-        refuseDrop('theorem-copy-without-start-rect')
+        refuseDrop('theorem-copy-without-start-rect', `copy_theorem ${theoremTemplate.theoremName}`)
         return
       }
       const bounds = getCombiningCanvasBounds()
@@ -4409,7 +4439,7 @@ export function VisualCanvas({
     if (overId && overId !== active.id && overId !== THEOREM_TRAY_ID) {
       const sourceName = interactionHypName(sourceCard) ?? sourceTheoremCopy?.theorem.theoremName
       if (!sourceName) {
-        refuseDrop('unresolved-source')
+        refuseDrop('unresolved-source', `drop ${activeId}`)
         return
       }
       const reverse = getIffDirection(activeId) === 'reverse'
@@ -4429,7 +4459,7 @@ export function VisualCanvas({
                 && hypCanTargetGoalText(sourceCard, liveGoalText, [], fastExfalso))
             ))
         if (!canTarget) {
-          refuseDrop('statement-does-not-fit-goal', {
+          refuseDrop('statement-does-not-fit-goal', interactionToPlayTactic({ type: 'drag_goal', hypName: sourceName, reverse }), {
             targetGoal: targetGoal ? TaggedText_stripTags(targetGoal.goal.type) : null,
             liveGoalText: liveGoalText ?? null,
           })
@@ -4640,6 +4670,7 @@ export function VisualCanvas({
       sourceId: card.id,
       prompt,
     })
+    onGesture?.({ kind: 'view', command: `construct ${sourceRef}` })
     return true
   }
 
@@ -4663,6 +4694,7 @@ export function VisualCanvas({
       sourceId,
       prompt,
     })
+    onGesture?.({ kind: 'view', command: `construct ${theorem.theoremName}` })
     return true
   }
 
@@ -4836,10 +4868,15 @@ export function VisualCanvas({
   }
 
   function handleHypTransformDoubleClick(streamId: string, cardId: string) {
-    if (isProcessing || canvasState.completed) return
+    if (canvasState.completed) return
     const stream = canvasState.streams.find(candidate => candidate.id === streamId)
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
+    const hypRef = interactionHypName(card) ?? (card.hyp.names[0] ?? '?')
+    if (isProcessing) {
+      onGesture?.({ kind: 'rejected', command: `transform ${hypRef}`, reason: 'busy' })
+      return
+    }
     if (!hypIsTransformable(card, comparisonTransformEnabled)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
@@ -4852,23 +4889,33 @@ export function VisualCanvas({
       streamId: stream.id,
       hypId: card.id,
       hypName: card.hyp.names[0] ?? '?',
-      hypRef: interactionHypName(card) ?? (card.hyp.names[0] ?? '?'),
+      hypRef,
     })
+    onGesture?.({ kind: 'view', command: `transform ${hypRef}` })
   }
 
   // ── TransformationView callbacks ────────────────────────────────────────────
 
   function handleGoalConstructionClick(streamId: string) {
-    if (isProcessing || canvasState.completed) return
+    if (canvasState.completed) return
+    if (isProcessing) {
+      onGesture?.({ kind: 'rejected', command: 'construct goal', reason: 'busy' })
+      return
+    }
     const stream = canvasState.streams.find(s => s.id === streamId)
     if (!stream || !goalIsConstructable(stream)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
     setConstructionTarget({ kind: 'exists_goal', streamId })
+    onGesture?.({ kind: 'view', command: 'construct goal' })
   }
 
   function handleGoalTransformDoubleClick(streamId: string) {
-    if (isProcessing || canvasState.completed) return
+    if (canvasState.completed) return
+    if (isProcessing) {
+      onGesture?.({ kind: 'rejected', command: 'transform goal', reason: 'busy' })
+      return
+    }
     const stream = canvasState.streams.find(s => s.id === streamId)
     if (!stream) return
     if (!goalIsTransformable(stream, comparisonTransformEnabled)) return
@@ -4879,6 +4926,7 @@ export function VisualCanvas({
     setTransformWorkingSide('right')
     setTransformationVersion(0)
     setTransformTarget({ kind: 'goal', streamId })
+    onGesture?.({ kind: 'view', command: 'transform goal' })
   }
 
   function handleTheoremCopyConstructionClick(copyId: string, streamId?: string) {
@@ -6433,6 +6481,9 @@ export function VisualCanvas({
   async function applyTestDragTacticToHyp(tacticName: string, hypName: string) {
     const stream = requireInteractiveCurrentStream()
     const targetCard = requireHypCard(stream, hypName)
+    // Refuse what the real drop refuses, such as `cases` on a disjunction.
+    const tactic = visualTactics.find(candidate => candidate.name === tacticName)
+    if (tactic && !tacticCanTargetHyp(tactic, targetCard)) return
     const targetPlayName = interactionHypName(targetCard) ?? hypName
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
@@ -6932,7 +6983,7 @@ export function VisualCanvas({
     const isClickable = hasClickAction(clickAction) || isConstructable
     const isTransformable = hypIsTransformable(card, comparisonTransformEnabled)
     const isTacticTarget = activeDraggedTactic
-      ? tacticShouldHighlightHyp(activeDraggedTactic, card)
+      ? tacticCanTargetHyp(activeDraggedTactic, card)
       : false
     const draggedHypCard = activeDragId
       ? displayStream?.hyps.find(candidate => candidate.id === activeDragId)
@@ -7617,7 +7668,10 @@ export function VisualCanvas({
           mode={constructionProps.mode}
           isPhonePortrait={isPhonePortrait}
           onApply={handleConstructionApply}
-          onClose={closeConstructionView}
+          onClose={() => {
+            onGesture?.({ kind: 'view', command: 'close' })
+            closeConstructionView()
+          }}
           isProcessing={isProcessing}
           headerSlot={
             <VisualHeader
@@ -7660,13 +7714,22 @@ export function VisualCanvas({
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
           canUndo={proofSteps.length > 0}
-          onClose={closeTransformationView}
+          onClose={() => {
+            onGesture?.({ kind: 'view', command: 'close' })
+            closeTransformationView()
+          }}
           rewriteStepCount={transformationVersion}
           isPhonePortrait={isPhonePortrait}
           isReverse={isTransformReverse}
-          onIsReverseChange={setIsTransformReverse}
+          onIsReverseChange={reverse => {
+            onGesture?.({ kind: 'view', command: `direction ${reverse ? 'reverse' : 'forward'}` })
+            setIsTransformReverse(reverse)
+          }}
           workingSide={transformWorkingSide}
-          onWorkingSideChange={setTransformWorkingSide}
+          onWorkingSideChange={side => {
+            onGesture?.({ kind: 'view', command: `side ${side}` })
+            setTransformWorkingSide(side)
+          }}
           selectedTab={transformSelectedTab}
           onSelectedTabChange={setTransformSelectedTab}
           pageIndexByTab={transformPageIndexByTab}

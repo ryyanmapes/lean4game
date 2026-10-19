@@ -1,4 +1,6 @@
-const IDENTIFIER_CHAR_CLASS = "[\\p{L}\\p{N}_']"
+// `✝` (and `†`) mark a name Lean has shadowed: `c✝` is a different variable
+// from `c`, so the marker must count as part of the identifier.
+const IDENTIFIER_CHAR_CLASS = "[\\p{L}\\p{N}_'✝†]"
 
 function nextExistsName(usedNames: Set<string>): string {
   let suffix = 1
@@ -177,9 +179,13 @@ export function contextualizeExistsDisplay(
   contextNames: Iterable<string>,
 ): ExistsDisplayInfo {
   const freshVarName = chooseFreshExistsVarName(info.varName, contextNames)
+  if (freshVarName === info.varName) return info
+  // A bound variable named like a hypothesis made Lean print that hypothesis
+  // as `c✝`. Once the bound variable is renamed, nothing shadows it any more.
+  const renamedBody = replaceIdentifier(info.body, info.varName, freshVarName)
   return {
     varName: freshVarName,
-    body: replaceIdentifier(info.body, info.varName, freshVarName),
+    body: replaceIdentifier(renamedBody, `${info.varName}✝`, info.varName),
   }
 }
 

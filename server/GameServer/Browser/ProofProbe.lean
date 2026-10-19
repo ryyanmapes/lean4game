@@ -69,13 +69,16 @@ private def existsJson? (e : Expr) : MetaM (Option Json) := do
   let e <- whnf (<- instantiateMVars e)
   match e.consumeMData with
   | .app (.app (.const ``Exists _) _) pred =>
-      lambdaTelescope pred fun fvars body => do
-        let some fvar := fvars[0]? | return none
-        let decl <- fvar.fvarId!.getDecl
-        return some <| Json.mkObj [
-          ("varName", toJson decl.userName.toString),
-          ("body", toJson (<- ppExpr body).pretty)
-        ]
+      match pred.consumeMData with
+      | .lam binderName binderType body _ =>
+          -- A binder named like a hypothesis would print that hypothesis as `c✝`.
+          let varName <- unusedBinderName binderName
+          withLocalDeclD varName binderType fun fvar => do
+            return some <| Json.mkObj [
+              ("varName", toJson varName.toString),
+              ("body", toJson (<- ppExpr (body.instantiate1 fvar)).pretty)
+            ]
+      | _ => return none
   | _ => return none
 
 private def reductionForms (e : Expr) : MetaM (Array String) := do

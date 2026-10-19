@@ -104,3 +104,17 @@ def clickGoalKind? (target : Expr) : MetaM (Option ClickGoalKind) := do
             pure <| some .introProp
           else
             pure none
+
+/-- The name to open a goal's `∃` binder under: its own name, or `c1`, `c2`, …
+when a hypothesis already has it. Opening `∃ c, …` as `c` next to a hypothesis
+`c` shadows that hypothesis, and Lean then prints it as `c✝` in the body that
+the player is asked to prove. -/
+def unusedBinderName (binderName : Name) : MetaM Name := do
+  let base := binderName.eraseMacroScopes
+  let lctx ← getLCtx
+  let mut idx := 0
+  let mut candidate := base
+  while lctx.findFromUserName? candidate |>.isSome do
+    idx := idx + 1
+    candidate := Name.mkSimple s!"{base}{idx}"
+  pure candidate
