@@ -33,8 +33,14 @@ type BaseEvent = {
 }
 
 export type TelemetryEvent = BaseEvent & {
-  step_type?: 'command' | 'undo' | 'reset' | 'edit'
+  /** `rejected` and `view` record visual gestures that left the proof
+   * unchanged (a refused gesture, a mode switch); replays skip them. */
+  step_type?: 'command' | 'undo' | 'reset' | 'edit' | 'rejected' | 'view'
   command?: string
+  /** `rejected` only: why, e.g. `lean-error`, `busy`, `statement-does-not-fit-goal`. */
+  reason?: string
+  /** `rejected` only: Lean's error message. */
+  error?: string
   from_line?: number
   removed_lines?: number
   initial_script?: string
@@ -288,7 +294,8 @@ export function sendTelemetry(event: TelemetryEvent): boolean {
     ...(GAME_BUILD ? { build: GAME_BUILD } : {}),
     ...(PLATFORM ? { platform: PLATFORM } : {}),
   }
-  const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
+  const oversize = tooLong(queued.command, MAX_COMMAND_LENGTH) || tooLong(queued.error, MAX_COMMAND_LENGTH) ||
+    tooLong(queued.initial_script, MAX_SCRIPT_LENGTH) ||
     tooLong(queued.play_script, MAX_SCRIPT_LENGTH) || tooLong(queued.lean_script, MAX_SCRIPT_LENGTH) ||
     utf8Bytes(queued) > MAX_EVENT_BYTES
   void schedulerReady.then(async scheduler => {
