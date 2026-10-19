@@ -1,3 +1,4 @@
+import { proofStateJson } from './feedbackJson'
 import { detectPlatform, type TelemetryPlatform } from './telemetryPlatform'
 import { IndexedDbQueueStore, MAX_EVENT_BYTES, MemoryQueueStore, type QueueStore, utf8Bytes } from './telemetryQueue'
 import { FETCH_TIMEOUT_MS, type PostResult, TelemetryScheduler } from './telemetryScheduler'
@@ -185,14 +186,7 @@ export async function submitFeedbackReport(report: FeedbackReport): Promise<bool
   const message = report.message.trim()
   if (!baseUrl || !message || message.length > 1000) return false
   const userId = getConsentState() === 'accepted' ? getOrCreateUserId() : null
-  const seen = new WeakSet<object>()
-  const proofState = JSON.parse(JSON.stringify(report.proof_state, (_key, value: unknown) => {
-    if (typeof value === 'bigint') return value.toString()
-    if (typeof value !== 'object' || value === null) return value
-    if (seen.has(value)) return '[Circular]'
-    seen.add(value)
-    return value
-  }))
+  const proofState = JSON.parse(proofStateJson(report.proof_state))
   const controller = new AbortController()
   const deadline = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   const response = await fetch(`${baseUrl}/v1/feedback`, {
