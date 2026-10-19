@@ -45,10 +45,12 @@ const BINARY_OPS: Record<string, BinaryOpInfo> = {
   '≠': { op: '≠', precedence: 4, associativity: 'left' },
   '<=': { op: '≤', precedence: 4, associativity: 'left' },
   '\\leq': { op: '≤', precedence: 4, associativity: 'left' },
-  '∧': { op: '∧', precedence: 3, associativity: 'left' },
-  '\\land': { op: '∧', precedence: 3, associativity: 'left' },
-  '∨': { op: '∨', precedence: 2, associativity: 'left' },
-  '\\lor': { op: '∨', precedence: 2, associativity: 'left' },
+  // Lean's `∧` and `∨` are right-associative: it prints `a ∨ (b ∨ c)` as
+  // `a ∨ b ∨ c`, and reading that left to right would draw a different term.
+  '∧': { op: '∧', precedence: 3, associativity: 'right' },
+  '\\land': { op: '∧', precedence: 3, associativity: 'right' },
+  '∨': { op: '∨', precedence: 2, associativity: 'right' },
+  '\\lor': { op: '∨', precedence: 2, associativity: 'right' },
   '→': { op: '→', precedence: 1, associativity: 'right' },
   '->': { op: '→', precedence: 1, associativity: 'right' },
   '=>': { op: '→', precedence: 1, associativity: 'right' },

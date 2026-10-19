@@ -138,12 +138,18 @@ test('omits arithmetic parentheses when PEMDAS already settles the grouping', ()
   assert.equal(formatFormulaText('A * B + C'), 'A * B + C')
 })
 
+// Lean's ∧ and ∨ are right-associative: it prints `A ∨ (B ∨ C)` as `A ∨ B ∨ C`.
 test('keeps conjunction associativity explicit', () => {
-  assert.equal(formatFormulaText(`A ${AND} B ${AND} C`), `(A ${AND} B) ${AND} C`)
+  assert.equal(formatFormulaText(`A ${AND} B ${AND} C`), `A ${AND} (B ${AND} C)`)
+  assert.equal(formatFormulaText(`(A ${AND} B) ${AND} C`), `(A ${AND} B) ${AND} C`)
 })
 
 test('keeps disjunction associativity explicit', () => {
-  assert.equal(formatFormulaText(`A ${OR} B ${OR} C`), `(A ${OR} B) ${OR} C`)
+  assert.equal(formatFormulaText(`A ${OR} B ${OR} C`), `A ${OR} (B ${OR} C)`)
+  assert.equal(formatFormulaText(`(A ${OR} B) ${OR} C`), `(A ${OR} B) ${OR} C`)
+  const parsed = parse(`a ${OR} b ${OR} c`)
+  assert.equal(parsed.left.name, 'a')
+  assert.equal(parsed.right.op, OR)
 })
 
 test('parenthesizes logical subexpressions even when precedence would suffice', () => {
@@ -151,7 +157,7 @@ test('parenthesizes logical subexpressions even when precedence would suffice', 
 })
 
 test('omits precedence parentheses around equality expressions inside disjunctions', () => {
-  assert.equal(formatFormulaText(`x = 0 ${OR} x = 1 ${OR} x = 2`), `(x = 0 ${OR} x = 1) ${OR} x = 2`)
+  assert.equal(formatFormulaText(`x = 0 ${OR} x = 1 ${OR} x = 2`), `x = 0 ${OR} (x = 1 ${OR} x = 2)`)
 })
 
 test('keeps implication associativity explicit', () => {
