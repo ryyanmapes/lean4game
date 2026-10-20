@@ -1,7 +1,57 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { computeVisualProgressFrontier } from '../../tmp-visual-world-progress-tests/visualWorldProgress.js'
+import { computeVisualProgressFrontier, isVisualLevelUnlocked } from '../../tmp-visual-world-progress-tests/visualWorldProgress.js'
+
+test('a level opens once every level before it is done, and a solved level always opens', () => {
+  // Addition 2 was solved before levels were locked, skipping ahead.
+  const completed = new Set(['Tutorial/1', 'Addition/2'])
+  const frontier = computeVisualProgressFrontier({
+    worldIds: ['Tutorial', 'Addition'],
+    edges: [['Tutorial', 'Addition']],
+    worldSizes: { Tutorial: 3, Addition: 2 },
+    skippedLevels: {},
+    isCompleted: (world, level) => completed.has(`${world}/${level}`),
+  })
+
+  assert.deepEqual(frontier.unlockedWorlds, { Tutorial: true, Addition: false })
+  const unlocked = (world, level) => isVisualLevelUnlocked(frontier, world, level)
+  assert.deepEqual([1, 2, 3].map(level => unlocked('Tutorial', level)), [true, true, false])
+  assert.deepEqual([1, 2].map(level => unlocked('Addition', level)), [false, true])
+  assert.equal(unlocked('Unknown', 1), false)
+})
+
+test('skipped and completion-neutral levels do not hold back the levels after them', () => {
+  const input = {
+    worldIds: ['Power'],
+    edges: [],
+    worldSizes: { Power: 4 },
+    skippedLevels: { Power: [2] },
+    completionNeutralLevels: { Power: [3] },
+  }
+
+  const fresh = computeVisualProgressFrontier({ ...input, isCompleted: () => false })
+  assert.deepEqual([1, 3, 4].map(level => isVisualLevelUnlocked(fresh, 'Power', level)), [true, false, false])
+
+  const afterFirst = computeVisualProgressFrontier({ ...input, isCompleted: (_world, level) => level === 1 })
+  assert.deepEqual([1, 3, 4].map(level => isVisualLevelUnlocked(afterFirst, 'Power', level)), [true, true, true])
+})
+
+test('a world unlocks when every world leading to it is done', () => {
+  const edges = [['Tutorial', 'Addition'], ['Addition', 'Implication'], ['Tutorial', 'Implication']]
+  const input = {
+    worldIds: ['Tutorial', 'Addition', 'Implication'],
+    edges,
+    worldSizes: { Tutorial: 1, Addition: 1, Implication: 2 },
+    skippedLevels: {},
+  }
+
+  const tutorialDone = computeVisualProgressFrontier({ ...input, isCompleted: world => world === 'Tutorial' })
+  assert.equal(isVisualLevelUnlocked(tutorialDone, 'Implication', 1), false)
+
+  const bothDone = computeVisualProgressFrontier({ ...input, isCompleted: world => world !== 'Implication' })
+  assert.deepEqual([1, 2].map(level => isVisualLevelUnlocked(bothDone, 'Implication', level)), [true, false])
+})
 
 test('skipped opening levels do not unlock several raw levels at once', () => {
   const result = computeVisualProgressFrontier({

@@ -9,6 +9,7 @@ import {
     setIsVisualLightMode as setIsVisualLightModePreferences,
     setIsVisualAutoBranchSwitching as setIsVisualAutoBranchSwitchingPreferences,
     setIsVisualFastExfalso as setIsVisualFastExfalsoPreferences,
+    setIsVisualOpenAnyLevel as setIsVisualOpenAnyLevelPreferences,
     getWindowDimensions,
     AUTO_SWITCH_THRESHOLD
 } from "../preferences";
@@ -36,6 +37,8 @@ const UsePreferences = () => {
     const setIsVisualAutoBranchSwitching = (enabled: boolean) => dispatch(setIsVisualAutoBranchSwitchingPreferences(enabled))
     const isVisualFastExfalso = useAppSelector((state) => state.preferences.isVisualFastExfalso);
     const setIsVisualFastExfalso = (enabled: boolean) => dispatch(setIsVisualFastExfalsoPreferences(enabled))
+    const isVisualOpenAnyLevel = useAppSelector((state) => state.preferences.isVisualOpenAnyLevel);
+    const setIsVisualOpenAnyLevel = (enabled: boolean) => dispatch(setIsVisualOpenAnyLevelPreferences(enabled))
 
     const automaticallyAdjustLayout = () => {
         const {width} = getWindowDimensions()
@@ -62,6 +65,7 @@ const UsePreferences = () => {
         isVisualLightMode,
         isVisualAutoBranchSwitching,
         isVisualFastExfalso,
+        isVisualOpenAnyLevel,
         setLayout,
         setIsSavePreferences,
         setLanguage,
@@ -69,6 +73,7 @@ const UsePreferences = () => {
         setIsVisualLightMode,
         setIsVisualAutoBranchSwitching,
         setIsVisualFastExfalso,
+        setIsVisualOpenAnyLevel,
     }
 }
 

@@ -14,6 +14,8 @@ export interface VisualProgressFrontier {
   /** Completion paint used by the map; neutral levels become done once opened. */
   mapCompletedLevels: Record<string, boolean[]>
   completedWorlds: Record<string, boolean>
+  /** No world leading here is unfinished, so its levels can be played. */
+  unlockedWorlds: Record<string, boolean>
   nextLevels: Record<string, number | null>
   frontierWorlds: string[]
   highlightedLevels: Record<string, number>
@@ -67,16 +69,14 @@ export function computeVisualProgressFrontier({
   const incompleteWorlds = new Set(worldIds.filter(worldId =>
     nextLevels[worldId] !== null,
   ))
-  const blockedByIncompletePredecessor = new Set<string>()
+  const unlockedWorlds: Record<string, boolean> = Object.fromEntries(worldIds.map(worldId => [worldId, true]))
   for (const edge of edges) {
     const [source, target] = edge
-    if (source && target && incompleteWorlds.has(source) && incompleteWorlds.has(target)) {
-      blockedByIncompletePredecessor.add(target)
-    }
+    if (source && target && incompleteWorlds.has(source)) unlockedWorlds[target] = false
   }
 
   const frontierWorlds = worldIds.filter(worldId =>
-    incompleteWorlds.has(worldId) && !blockedByIncompletePredecessor.has(worldId),
+    incompleteWorlds.has(worldId) && unlockedWorlds[worldId],
   )
   const highlightedLevels: Record<string, number> = {}
   for (const worldId of frontierWorlds) {
@@ -89,8 +89,24 @@ export function computeVisualProgressFrontier({
     actualCompletedLevels,
     mapCompletedLevels,
     completedWorlds,
+    unlockedWorlds,
     nextLevels,
     frontierWorlds,
     highlightedLevels,
   }
+}
+
+/** Whether the player may open a level: one they have finished (or, for a
+ * level that doesn't count towards completion, opened), or one in an unlocked
+ * world with no unfinished level before it. Opening a later level would skip
+ * the level that teaches the gesture it needs. */
+export function isVisualLevelUnlocked(
+  frontier: VisualProgressFrontier,
+  worldId: string,
+  level: number,
+): boolean {
+  if (frontier.mapCompletedLevels[worldId]?.[level]) return true
+  if (!frontier.unlockedWorlds[worldId]) return false
+  const nextLevel = frontier.nextLevels[worldId]
+  return nextLevel === null || level <= nextLevel
 }

@@ -2302,6 +2302,16 @@ function synthesizeHypRewriteContinuation(
   }
 }
 
+/** The proof a reset cleared, kept so Undo can bring it back. */
+interface ResetUndoEntry {
+  proofSteps: ProofStepRecord[]
+  proofTree: ProofStreamTreeNode
+  activeStreamId: string | null
+  canvasState: CanvasState
+  displayCanvasState: CanvasState
+  theoremCopies: PropositionTheoremCopy[]
+}
+
 interface VisualCanvasProps {
   gameId: string
   initialState: CanvasState
@@ -2323,6 +2333,8 @@ interface VisualCanvasProps {
   /** Re-check an exact full classic proof body without adding the visual prelude. */
   onValidateProof?: (proofBody: string) => Promise<ProofState | null>
   onNextLevel?: () => void
+  /** The next level exists, but the player hasn't unlocked it yet. */
+  nextLevelLocked?: boolean
   onPreviousLevel?: () => void
   onWorldMap?: () => void
   levelTitle?: string | null
@@ -2335,6 +2347,9 @@ interface VisualCanvasProps {
   /** Telemetry for every change to `proofSteps`: `command` appends one step,
    * `undo` removes the last one, `reset` clears them all. */
   onProofStep?: (interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => void
+  /** Telemetry for undoing a reset, which brings back the proof the reset
+   * cleared: `commands` has one entry per restored step. */
+  onResetUndone?: (commands: string[], solved: boolean) => void
   /** A gesture that left the proof unchanged: refused by the canvas or by
    * Lean, or a switch into or out of Transformation/Construction Mode. */
   onGesture?: (gesture: VisualGesture) => void
@@ -2599,8 +2614,8 @@ function TheoremTray({
 export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
-  displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
+  displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
+  onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
     React.useContext(PreferencesContext)
@@ -2674,6 +2689,10 @@ export function VisualCanvas({
     setProofSteps(prev => [...prev, step])
     onProofStep?.(buildInteractiveProofLine(step.rotation, step.playTactic), 'command')
   }
+  // Each reset's cleared proof, newest last. Undo with no steps left brings
+  // back the newest one, so a reset is never a dead end.
+  const [resetHistory, setResetHistory] = useState<ResetUndoEntry[]>([])
+  const canUndo = proofSteps.length > 0 || resetHistory.length > 0
   // The proof tree is kept in a stable player-facing order, while `rotate_left`
   // permanently changes Lean's outstanding-goal order. Keep both: using the
   // rendered order for a second action after a graph navigation can silently
@@ -3618,7 +3637,7 @@ export function VisualCanvas({
   }
 
   async function undoLastStepUnlocked(): Promise<boolean> {
-    if (proofSteps.length === 0) return false
+    if (!canUndo) return false
     if (isProcessingRef.current) {
       // The transformation overlay can finish its own rewrite bookkeeping one
       // render before the canvas clears its imperative processing guard. An
@@ -3641,6 +3660,7 @@ export function VisualCanvas({
         return latestUndoLastStep()
       }
     }
+    if (proofSteps.length === 0) return undoResetUnlocked()
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
@@ -3735,10 +3755,47 @@ export function VisualCanvas({
     return true
   }
 
+  /** Bring back the proof the newest reset cleared, exactly as it stood. */
+  async function undoResetUnlocked(): Promise<boolean> {
+    const cleared = resetHistory.at(-1)
+    if (!cleared) return false
+    setGoalChoiceMenu(null)
+    closeReductionTooltip()
+    setPendingTransformSync(null)
+    updateProcessingState(true)
+
+    const result = await onInteraction(serializeProofCommands(cleared.proofSteps.map(step => step.command)))
+    if (result === null) {
+      pendingMobileInsertionRef.current = null
+      updateProcessingState(false)
+      return false
+    }
+    leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
+
+    setResetHistory(prev => prev.slice(0, -1))
+    setTheoremCopies(cloneTheoremCopies(cleared.theoremCopies))
+    setProofSteps(cleared.proofSteps)
+    setProofTree(cloneProofTree(cleared.proofTree))
+    // As when a solved proof is restored on reopening the level: green, but
+    // without replaying the solve animation.
+    setSolvedGoalId(null)
+    setDisplayCanvasState(cloneCanvasState(cleared.displayCanvasState))
+    setCanvasState(cloneCanvasState(cleared.canvasState))
+    setActiveStreamId(cleared.activeStreamId)
+    onResetUndone?.(
+      cleared.proofSteps.map(step => buildInteractiveProofLine(step.rotation, step.playTactic)),
+      cleared.canvasState.completed,
+    )
+    dismissTransformationView()
+
+    updateProcessingState(false)
+    return true
+  }
+
   /**
-   * Return the level to its opening position in one action. A completed proof
-   * is often worth replaying a different way, and stepping back through a long
-   * solution one undo at a time is not that offer.
+   * Return the level to its opening position in one action. Stepping back
+   * through a long proof one undo at a time is no way to start over, and Undo
+   * can still bring the cleared proof back.
    */
   async function resetProof(): Promise<boolean> {
     if (proofSteps.length === 0 || isProcessingRef.current) return false
@@ -3755,6 +3812,14 @@ export function VisualCanvas({
     }
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
+    setResetHistory(prev => [...prev, {
+      proofSteps,
+      proofTree: cloneProofTree(proofTree),
+      activeStreamId,
+      canvasState: cloneCanvasState(canvasState),
+      displayCanvasState: cloneCanvasState(displayCanvasState),
+      theoremCopies: cloneTheoremCopies(theoremCopies),
+    }])
     const restoredTree = cloneProofTree(initialProofTreeRef.current)
     const restoredCanvas = cloneCanvasState(initialState)
     // The first recorded step remembers the tray exactly as the level opened,
@@ -7214,6 +7279,7 @@ export function VisualCanvas({
             levelTitle={levelTitle}
             hasPrev={!!onPreviousLevel}
             hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
+            nextLocked={nextLevelLocked}
             isCompleted={canvasState.completed}
             previouslyCompleted={previouslyCompleted ?? false}
             onPrev={onPreviousLevel ?? (() => {})}
@@ -7527,30 +7593,28 @@ export function VisualCanvas({
               </React.Fragment>
             ))}
           </div>
-          {proofSteps.length > 0 && (
-            <div
-              className="tr-controls"
-              style={{
-                bottom: `calc(${isPhonePortrait ? '0.65rem' : '2rem'} + ${trayHeight}px)`,
-              }}
-            >
-              <button
-                onClick={() => void undoLastStep()}
-                aria-disabled={isProcessing}
-                className="tr-ctrl-btn active-undo"
-                aria-label="Undo"
-              ><UndoIcon /></button>
-              {canvasState.completed && (
-                <button
-                  onClick={() => void resetProof()}
-                  aria-disabled={isProcessing}
-                  className="tr-ctrl-btn active-reset"
-                  aria-label="Reset level"
-                  title="Start this level over"
-                ><ResetIcon /></button>
-              )}
-            </div>
-          )}
+          <div
+            className="tr-controls"
+            style={{
+              bottom: `calc(${isPhonePortrait ? '0.65rem' : '2rem'} + ${trayHeight}px)`,
+            }}
+          >
+            <button
+              onClick={() => void resetProof()}
+              disabled={proofSteps.length === 0}
+              aria-disabled={isProcessing || proofSteps.length === 0}
+              className={`tr-ctrl-btn${proofSteps.length > 0 ? ' active-reset' : ''}`}
+              aria-label="Reset level"
+              title="Start this level over"
+            ><ResetIcon /></button>
+            <button
+              onClick={() => void undoLastStep()}
+              disabled={!canUndo}
+              aria-disabled={isProcessing || !canUndo}
+              className={`tr-ctrl-btn${canUndo ? ' active-undo' : ''}`}
+              aria-label="Undo"
+            ><UndoIcon /></button>
+          </div>
           {isPhonePortrait && (
             <section
               className={`mobile-side-page mobile-proof-page${mobilePage === 'proof' ? ' open' : ''}`}
@@ -7713,7 +7777,7 @@ export function VisualCanvas({
             : undefined}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
-          canUndo={proofSteps.length > 0}
+          canUndo={canUndo}
           onClose={() => {
             onGesture?.({ kind: 'view', command: 'close' })
             closeTransformationView()

@@ -108,6 +108,16 @@ export class VisualAttemptLog {
     else attempt.commands = []
   }
 
+  /** The player undid a reset, bringing back the proof it cleared. The
+   * collector replays `undo` as removing one step, which can't express that,
+   * so a new attempt starts from the restored proof and names this one as its
+   * source. A proof that comes back solved is not a new completion. */
+  resetUndone(commands: string[], solved: boolean): void {
+    const previous = this.attempt
+    this.attempt = this.newAttempt(commands, previous.id, solved)
+    this.start()
+  }
+
   /** The proof was solved. Reported once per attempt, never for a restored
    * solved canvas the player has not changed. */
   complete(proof: { playScript: string; leanScript: string }): void {

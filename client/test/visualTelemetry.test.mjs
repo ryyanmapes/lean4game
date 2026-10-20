@@ -78,6 +78,43 @@ test('resetting after a solve starts a new attempt too', () => {
   )
 })
 
+test('undoing a reset starts a new attempt from the proof the reset cleared', () => {
+  const { log, events } = harness()
+  log.start()
+  log.step('command', 'intro h')
+  log.step('command', 'exact h')
+  log.step('reset', 'reset')
+  log.resetUndone(['intro h', 'exact h'], false)
+  log.step('command', 'click_goal')
+  log.complete(SOLVED)
+  assert.deepEqual(
+    events.filter(event => event.attempt_uuid === 'attempt-2').map(event => [event.event_type, event.step_type, event.sequence]),
+    [['level_start', undefined, 0], ['proof_step', 'command', 1], ['level_complete', undefined, 2]],
+  )
+  const restart = events.find(event => event.attempt_uuid === 'attempt-2')
+  assert.equal(restart.initial_script, JSON.stringify(['intro h', 'exact h']))
+  assert.equal(restart.source_attempt_uuid, 'attempt-1')
+})
+
+test('a solved proof brought back by undoing a reset is not a new completion', () => {
+  const { log, events } = harness()
+  log.start()
+  log.step('command', 'click_goal')
+  log.complete(SOLVED)
+  log.step('reset', 'reset')
+  log.resetUndone(['click_goal'], true)
+  log.complete(SOLVED)
+  assert.deepEqual(events.map(event => [event.event_type, event.attempt_uuid]), [
+    ['level_start', 'attempt-1'],
+    ['proof_step', 'attempt-1'],
+    ['level_complete', 'attempt-1'],
+    ['level_start', 'attempt-2'],
+    ['proof_step', 'attempt-2'],
+    ['level_start', 'attempt-3'],
+  ])
+  assert.equal(events.at(-1).source_attempt_uuid, 'attempt-2')
+})
+
 test('re-opening a solved level is not a completion', () => {
   const { log, events } = harness({ restoredCommands: ['click_goal'], restoredSolved: true })
   log.start()
