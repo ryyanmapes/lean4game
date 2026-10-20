@@ -294,6 +294,9 @@ export function VisualProofPage() {
   const handleProofStep = useCallback((interactiveLeanCode: string, stepType: 'command' | 'undo' | 'reset') => {
     attemptLogRef.current?.step(stepType, interactiveLeanCode)
   }, [])
+  const handleResetUndone = useCallback((commands: string[], solved: boolean) => {
+    attemptLogRef.current?.resetUndone(commands, solved)
+  }, [])
   const handleGesture = useCallback((gesture: VisualGesture) => {
     attemptLogRef.current?.gesture(gesture)
   }, [])
@@ -748,6 +751,7 @@ export function VisualProofPage() {
       previouslyCompleted={previouslyCompleted}
       onLevelCompleted={handleLevelCompleted}
       onProofStep={handleProofStep}
+      onResetUndone={handleResetUndone}
       onGesture={handleGesture}
       onOpenClassic={handleOpenClassic}
       resumeState={resumeState}

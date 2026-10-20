@@ -2061,7 +2061,7 @@
   opacity: 0.7;
 }
 .visual-page .tr-ctrl-btn.reset { color: var(--visual-danger); }
-/* Offered only on a solved level, so it reads as "try it again", not "undo". */
+/* Red, so starting over reads differently from the amber step-back Undo. */
 .visual-page .tr-ctrl-btn.active-reset { color: var(--visual-danger); background: var(--visual-danger-bg); }
 
 .visual-page.tr-transformation-overlay .tr-controls {
