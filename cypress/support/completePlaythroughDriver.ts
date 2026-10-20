@@ -1768,12 +1768,13 @@ export class CompletePlaythroughDriver {
       // React replaces the tab button while switching panes. Query and retry
       // the current enabled control just as a player would after an ignored
       // click, instead of retaining a detached node.
-      const current = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn'))
-        .find(button => button.textContent?.trim() === tab)
+      // Theorem category tabs (All, ℕ, ...) share the class; skip them.
+      const kindTabs = Array.from(dock.querySelectorAll<HTMLButtonElement>('.tr-tab-btn:not([data-theorem-category])'))
+      const current = kindTabs.find(button => button.textContent?.trim() === tab)
       if (current?.classList.contains('active')) return current
       // When a level exposes only one tray kind, the tab strip is omitted and
       // that sole pane is already active.
-      if (dock.querySelectorAll('.tr-tab-btn').length === 0) return dock
+      if (kindTabs.length === 0) return dock
       if (current && !current.disabled) click(current)
       return null
     }, 5_000)
