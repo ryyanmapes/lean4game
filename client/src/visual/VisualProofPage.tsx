@@ -519,7 +519,7 @@ export function VisualProofPage() {
       fetchJsonWithRetry<{
         title?: string | null
         lemmas?: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }>
-        tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }>
+        tactics?: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean; disabled?: boolean }>
         visualEmphasize?: string[]
         visualTactics?: string[]
         visualGoalInfos?: VisualGoalInfo[]
@@ -553,7 +553,7 @@ export function VisualProofPage() {
         if (rawWorldTitle) setWorldTitle(rawWorldTitle.replace(/\s*World\s*$/i, '').trim())
         const lemmas: Array<{ name: string; displayName: string; category?: string; locked: boolean; hidden: boolean; disabled?: boolean; world?: string | null; level?: number | null; declIndex?: number | null }> =
           levelData.lemmas ?? []
-        const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean }> =
+        const tactics: Array<{ name: string; displayName: string; locked: boolean; hidden: boolean; disabled?: boolean }> =
           levelData.tactics ?? []
 
         // Compute topological world rank from game graph edges (Kahn's BFS).
@@ -584,6 +584,8 @@ export function VisualProofPage() {
               displayName: existing?.displayName || name,
               locked: false,
               hidden: false,
+              // A level's DisabledTactic still applies to a visual unlock.
+              disabled: existing?.disabled,
             })
           }
           return [...byName.values()]
@@ -607,7 +609,7 @@ export function VisualProofPage() {
             || x.displayName.localeCompare(y.displayName)
           )
         const availableTactics = tacticsWithVisualUnlocks
-          .filter(t => !t.locked && !t.hidden && SUPPORTED_VISUAL_TACTICS.has(t.name))
+          .filter(t => !t.locked && !t.hidden && !t.disabled && SUPPORTED_VISUAL_TACTICS.has(t.name))
           .map(tactic => ({
             id: tactic.name,
             name: tactic.name,
