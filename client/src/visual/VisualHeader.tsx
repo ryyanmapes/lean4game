@@ -9,6 +9,7 @@ interface VisualHeaderProps {
   displayLevelId?: number
   levelTitle?: string | null
   hasPrev: boolean
+  /** False on the last level of a world, where Next becomes a World Map button. */
   hasNext: boolean
   isCompleted: boolean
   previouslyCompleted: boolean
@@ -51,7 +52,6 @@ export function VisualHeader({
     entryRef.current = { key: entryKey, completed: previouslyCompleted }
   }
   const completedOnEntry = entryRef.current.completed
-  const emphasizeMap = isCompleted && !hasNext
   const shownLevelId = displayLevelId ?? levelId
   const plainTitle = levelTitle ? plainLevelTitle(levelTitle) : ''
   const levelLabel = (worldTitle ?? worldId)
@@ -64,7 +64,7 @@ export function VisualHeader({
       <div className="visual-header-side">
         {!hideNav && <>
           <button
-            className={`visual-header-nav-btn visual-header-map-btn${emphasizeMap ? ' emphasized' : ''}`}
+            className="visual-header-nav-btn visual-header-map-btn"
             onClick={onWorldMap}
           >
             ← Back to map
@@ -92,16 +92,25 @@ export function VisualHeader({
             ← Previous level
           </button>
         )}
-        {!hideNav && (
+        {!hideNav && (hasNext ? (
           <button
             className={`visual-header-nav-btn visual-header-next-btn${isCompleted ? ' emphasized' : ''}`}
             onClick={onNext}
-            disabled={!hasNext}
-            aria-label={hasNext ? 'Next level' : 'No next level'}
+            aria-label="Next level"
           >
             Next level →
           </button>
-        )}
+        ) : (
+          // A world's last level continues to the map, as classic play's Home
+          // button does. On phones it keeps the Next arrow.
+          <button
+            className={`visual-header-nav-btn visual-header-next-btn${isCompleted ? ' emphasized' : ''}`}
+            onClick={onWorldMap}
+            aria-label="World map"
+          >
+            World Map →
+          </button>
+        ))}
       </div>
     </div>
   )
