@@ -87,7 +87,8 @@ describe('Visual Lean mobile layout', () => {
     cy.get('.visual-header-prev-btn')
       .should('be.disabled')
       .and('have.text', '')
-    cy.get('.visual-header-next-btn').should('not.be.disabled')
+    // Tutorial 2 stays locked until Tutorial 1 is solved.
+    cy.get('.visual-header-next-btn').should('be.disabled')
   })
 
   leanIt('points the Addition 1 induction guide below the n hypothesis', () => {

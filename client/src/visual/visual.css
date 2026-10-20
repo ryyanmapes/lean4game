@@ -3829,6 +3829,11 @@
   cursor: pointer;
 }
 
+/* A locked level or world still shows its name, but doesn't open. */
+.visual-map-link.locked {
+  cursor: default;
+}
+
 /* Level / world link colour overrides for dark theme */
 .visual-map-page .level .level-title {
   color: var(--visual-text-on-accent);

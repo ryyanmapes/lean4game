@@ -34,6 +34,7 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
     isVisualLightMode,
     isVisualAutoBranchSwitching,
     isVisualFastExfalso,
+    isVisualOpenAnyLevel,
     setLayout,
     setIsSavePreferences,
     setLanguage,
@@ -41,6 +42,7 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
     setIsVisualLightMode,
     setIsVisualAutoBranchSwitching,
     setIsVisualFastExfalso,
+    setIsVisualOpenAnyLevel,
   } = UsePreferences()
 
   React.useEffect(() => {
@@ -82,6 +84,7 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
             isVisualLightMode,
             isVisualAutoBranchSwitching,
             isVisualFastExfalso,
+            isVisualOpenAnyLevel,
             setLayout,
             setIsSavePreferences,
             setLanguage,
@@ -89,6 +92,7 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
             setIsVisualLightMode,
             setIsVisualAutoBranchSwitching,
             setIsVisualFastExfalso,
+            setIsVisualOpenAnyLevel,
           }}>
             <VisualRpcProvider>
               <React.Suspense>

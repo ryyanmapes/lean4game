@@ -3,9 +3,11 @@ import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { useEffect, useState, useCallback, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GameIdContext } from '../app'
-import { WorldLevelIdContext } from '../components/infoview/context'
+import { PreferencesContext, WorldLevelIdContext } from '../components/infoview/context'
 import { useAppSelector, useAppDispatch } from '../hooks'
-import { selectCompleted, levelCompleted, levelEntered } from '../state/progress'
+import { useRetryUntilData } from '../hooks/useRetryUntilData'
+import { useGetGameInfoQuery } from '../state/api'
+import { selectCompleted, selectEntered, levelCompleted, levelEntered } from '../state/progress'
 import { createSolvingId, sendTelemetry } from '../utils/telemetry'
 import { proofStateToCanvas } from './leanToCanvas'
 import { decodeAutosave, writeAutosave } from './autosaveStorage'
@@ -32,6 +34,7 @@ import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import { levelStartsWithBindersInGoal } from './initialGoalState'
 import { VisualAttemptLog } from './visualTelemetry'
 import type { VisualGesture } from './visualTelemetry'
+import { computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'exfalso'])
@@ -316,11 +319,34 @@ export function VisualProofPage() {
   const [visualHypGoalInfos, setVisualHypGoalInfos] = useState<VisualHypGoalInfo[]>([])
   const [visualProofGraphInfos, setVisualProofGraphInfos] = useState<VisualProofGraphInfo[]>([])
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
-  const handleNextLevel = useCallback(() => {
+  const nextLevelId = (() => {
     let next = levelId + 1
     while (skippedLevels.includes(next) && (worldSize == null || next <= worldSize)) next++
-    navigate(`/${gameId}/world/${worldId}/level/${next}/visual`)
-  }, [navigate, gameId, worldId, levelId, skippedLevels, worldSize])
+    return next
+  })()
+  const handleNextLevel = useCallback(() => {
+    navigate(`/${gameId}/world/${worldId}/level/${nextLevelId}/visual`)
+  }, [navigate, gameId, worldId, nextLevelId])
+  // Next opens only a level the map would open, so players can't skip the
+  // level that teaches a gesture; "Open Any Level" lifts the lock.
+  const { isVisualOpenAnyLevel } = useContext(PreferencesContext)
+  const gameInfo = useGetGameInfoQuery({ game: gameId })
+  useRetryUntilData(gameInfo)
+  const nextLevelLocked = useAppSelector(state => {
+    if (isVisualOpenAnyLevel) return false
+    const { worlds, worldSize: worldSizes, skippedLevels: skipped, completionNeutralLevels } = gameInfo.data ?? {}
+    if (!worlds || !worldSizes) return true
+    const frontier = computeVisualProgressFrontier({
+      worldIds: Object.keys(worlds.nodes),
+      edges: worlds.edges,
+      worldSizes,
+      skippedLevels: skipped ?? {},
+      completionNeutralLevels: completionNeutralLevels ?? {},
+      isCompleted: (world, level) => selectCompleted(gameId, world, level)(state),
+      isEntered: (world, level) => selectEntered(gameId, world, level)(state),
+    })
+    return !isVisualLevelUnlocked(frontier, worldId, nextLevelId)
+  })
   const handlePreviousLevel = useCallback(() => {
     let prev = levelId - 1
     while (skippedLevels.includes(prev) && prev >= 1) prev--
@@ -713,6 +739,7 @@ export function VisualProofPage() {
       onWorldMap={handleWorldMap}
       hasPrev={hasPrev}
       hasNext={hasNext}
+      nextLocked={nextLevelLocked}
       previouslyCompleted={previouslyCompleted ?? false}
       onPrev={levelId > 1 ? handlePreviousLevel : () => {}}
       onNext={handleNextLevel}
@@ -742,6 +769,7 @@ export function VisualProofPage() {
       onInteraction={handleInteraction}
       onValidateProof={handleProofValidation}
       onNextLevel={handleNextLevel}
+      nextLevelLocked={nextLevelLocked}
       onPreviousLevel={hasPrev ? handlePreviousLevel : undefined}
       onWorldMap={handleWorldMap}
       levelTitle={levelTitle}

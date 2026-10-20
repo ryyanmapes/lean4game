@@ -271,6 +271,11 @@ describe('NNG4 implication and definition display regressions', () => {
       .and('contain.text', 'Previous level')
       // Dimmed so it reads as unavailable, but still clearly a button.
       .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.within(0.5, 0.9))
+    // Implication 2 stays locked until this level is solved.
+    cy.get('.visual-header-next-btn')
+      .should('be.disabled')
+      .and('contain.text', 'Next level')
+      .then($button => expect(Number.parseFloat(getComputedStyle($button[0]!).opacity)).to.be.within(0.5, 0.9))
   })
 
   it('turns Next into a World Map button on the last level of a world', () => {

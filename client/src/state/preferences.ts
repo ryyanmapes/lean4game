@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference } from "./local_storage";
+import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference, loadVisualOpenAnyLevelPreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -10,6 +10,8 @@ export interface PreferencesState {
   isVisualLightMode: boolean;
   isVisualAutoBranchSwitching: boolean;
   isVisualFastExfalso: boolean;
+  /** Let the visual map and Next button open levels the player hasn't unlocked. */
+  isVisualOpenAnyLevel: boolean;
 }
 
 export function getWindowDimensions() {
@@ -27,11 +29,13 @@ const defaultPreferencesState: PreferencesState = {
   isVisualLightMode: false,
   isVisualAutoBranchSwitching: false,
   isVisualFastExfalso: false,
+  isVisualOpenAnyLevel: false,
 }
 
 const savedPreferences = loadPreferences()
 const savedVisualAutoBranchSwitching = loadVisualAutoBranchSwitchPreference()
 const savedVisualFastExfalso = loadVisualFastExfalsoPreference()
+const savedVisualOpenAnyLevel = loadVisualOpenAnyLevelPreference()
 
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
@@ -42,6 +46,7 @@ const initialState: PreferencesState = {
   isVisualLightMode: false,
   isVisualAutoBranchSwitching: savedVisualAutoBranchSwitching ?? savedPreferences?.isVisualAutoBranchSwitching ?? defaultPreferencesState.isVisualAutoBranchSwitching,
   isVisualFastExfalso: savedVisualFastExfalso ?? savedPreferences?.isVisualFastExfalso ?? defaultPreferencesState.isVisualFastExfalso,
+  isVisualOpenAnyLevel: savedVisualOpenAnyLevel ?? savedPreferences?.isVisualOpenAnyLevel ?? defaultPreferencesState.isVisualOpenAnyLevel,
 }
 
 export const preferencesSlice = createSlice({
@@ -69,6 +74,9 @@ export const preferencesSlice = createSlice({
     setIsVisualFastExfalso: (state, action) => {
       state.isVisualFastExfalso = action.payload;
     },
+    setIsVisualOpenAnyLevel: (state, action) => {
+      state.isVisualOpenAnyLevel = action.payload;
+    },
   },
 });
 
@@ -80,4 +88,5 @@ export const {
   setIsVisualLightMode,
   setIsVisualAutoBranchSwitching,
   setIsVisualFastExfalso,
+  setIsVisualOpenAnyLevel,
 } = preferencesSlice.actions;

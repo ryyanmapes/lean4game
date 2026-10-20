@@ -1,6 +1,7 @@
 /**
  * @fileOverview Visual-mode world map.
- * All levels are always clickable and route to the /visual level page.
+ * Unlocked levels route to the /visual level page; locked ones only show their
+ * name, unless the "Open Any Level" setting is on.
  */
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -15,6 +16,7 @@ import {
   faCircleInfo,
   faDownload,
   faEraser,
+  faLockOpen,
   faUpload,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons'
@@ -37,7 +39,7 @@ import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
-import { computeVisualProgressFrontier } from './visualWorldProgress'
+import { computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
 import { getConsentState, setConsent } from '../utils/telemetry'
 import './visual.css'
 
@@ -139,7 +141,7 @@ function handleMapLinkKeyDown(
 
 type MapLevelMode = 'classic' | 'visual'
 
-function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, worldSize, palette, levelMode, title }: {
+function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, completed, started, unlocked, locked, worldSize, palette, levelMode, title }: {
   world: string
   level: number
   /** Display index after Visual Lean-only skipped levels are removed. */
@@ -149,7 +151,10 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   position: cytoscape.Position
   completed: boolean
   started: boolean
+  /** The level to play next, outlined as the player's frontier. */
   unlocked: boolean
+  /** The player can't open the level yet. */
+  locked: boolean
   worldSize: number
   palette: VisualMapPalette
   levelMode: MapLevelMode
@@ -160,7 +165,8 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   // Keep title modifier emojis, but do not expand them into parenthetical
   // explanations inside the compact map tooltip.
   const levelLabel = plainLevelTitle(title ?? `Level ${displayLevel}`)
-  const { tooltip, triggerProps } = useMapLevelTooltip(levelLabel)
+  // Locked levels stay focusable so their names can still be read.
+  const { tooltip, triggerProps } = useMapLevelTooltip(locked ? `${levelLabel} (locked)` : levelLabel)
   const N = Math.max(worldSize, NMIN)
   const beta = 2 * Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
   let R = 1.1 * r / Math.sin(beta / 2)
@@ -185,15 +191,17 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
         : palette.lockedLevel
   const stroke = !completed && !started && unlocked ? palette.unlockedLevelOutline : 'none'
   const to = `/${gameId}/world/${world}/level/${level}${levelMode === 'visual' ? '/visual' : ''}`
+  const open = () => { if (!locked) navigate(to) }
   return (<>
     <g
-      className="level visual-map-link"
+      className={`level visual-map-link${locked ? ' locked' : ''}`}
       data-map-completed={completed ? 'true' : 'false'}
       role="link"
       tabIndex={0}
-      aria-label={`Open ${world} level ${displayLevel}: ${levelLabel}`}
-      onClick={() => navigate(to)}
-      onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
+      aria-label={`Open ${world} level ${displayLevel}: ${levelLabel}${locked ? ' (locked)' : ''}`}
+      aria-disabled={locked ? 'true' : undefined}
+      onClick={open}
+      onKeyDown={(event) => handleMapLinkKeyDown(event, open)}
       {...triggerProps}
     >
       <circle
@@ -369,12 +377,14 @@ function hasUnfinishedVisualAutosave(gameId: string, worldId: string, levelId: n
   }
 }
 
-function VisualWorldIcon({ world, title, position, completedLevels, nextLevel, worldSize, palette, levelMode }: {
+function VisualWorldIcon({ world, title, position, completedLevels, nextLevel, locked, worldSize, palette, levelMode }: {
   world: string
   title: string
   position: cytoscape.Position
   completedLevels: boolean[]
   nextLevel: number | null
+  /** The level the world opens on is locked. */
+  locked: boolean
   worldSize: number
   palette: VisualMapPalette
   levelMode: MapLevelMode
@@ -393,16 +403,18 @@ function VisualWorldIcon({ world, title, position, completedLevels, nextLevel, w
   const fill = completed ? palette.completedWorld : unlocked ? palette.unlockedWorld : palette.lockedWorld
   const labelBg = completed ? palette.completedLabel : unlocked ? palette.unlockedLabel : palette.lockedLabel
   const to = `/${gameId}/world/${world}/level/${targetLevel}${levelMode === 'visual' ? '/visual' : ''}`
+  const open = () => { if (!locked) navigate(to) }
 
   return (
     <g
-      className="visual-map-link"
+      className={`visual-map-link${locked ? ' locked' : ''}`}
       data-world-id={world}
       role="link"
       tabIndex={0}
-      aria-label={`Open ${title || world}`}
-      onClick={() => navigate(to)}
-      onKeyDown={(event) => handleMapLinkKeyDown(event, () => navigate(to))}
+      aria-label={`Open ${title || world}${locked ? ' (locked)' : ''}`}
+      aria-disabled={locked ? 'true' : undefined}
+      onClick={open}
+      onKeyDown={(event) => handleMapLinkKeyDown(event, open)}
     >
       <circle className="world-circle" cx={s * position.x} cy={s * position.y} r={R} fill={fill} />
       <foreignObject
@@ -460,12 +472,16 @@ function VisualMapAppBar({
   onToggleAutoBranchSwitching,
   fastExfalso,
   onToggleFastExfalso,
+  openAnyLevel,
+  onToggleOpenAnyLevel,
 }: {
   gameTitle: string
   autoBranchSwitching: boolean
   onToggleAutoBranchSwitching: () => void
   fastExfalso: boolean
   onToggleFastExfalso: () => void
+  openAnyLevel: boolean
+  onToggleOpenAnyLevel: () => void
 }) {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -532,6 +548,17 @@ function VisualMapAppBar({
           <span>{t('Fast exfalso')}</span>
           <span className="visual-map-toggle-state" aria-hidden="true">{fastExfalso ? 'On' : 'Off'}</span>
         </button>
+        <button
+          type="button"
+          className={`visual-map-menu-toggle${openAnyLevel ? ' active' : ''}`}
+          aria-pressed={openAnyLevel}
+          onClick={onToggleOpenAnyLevel}
+          title="Open levels and worlds before finishing the ones that lead to them"
+        >
+          <FontAwesomeIcon icon={toIconProp(faLockOpen)} />
+          <span>{t('Open Any Level')}</span>
+          <span className="visual-map-toggle-state" aria-hidden="true">{openAnyLevel ? 'On' : 'Off'}</span>
+        </button>
         <button onClick={() => { setPopup(PopupType.upload); closeMenu() }}>
           <FontAwesomeIcon icon={toIconProp(faUpload)} />&nbsp;{t('Import')}
         </button>
@@ -555,6 +582,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     setIsVisualAutoBranchSwitching,
     isVisualFastExfalso,
     setIsVisualFastExfalso,
+    isVisualOpenAnyLevel,
+    setIsVisualOpenAnyLevel,
   } = React.useContext(PreferencesContext)
   const gameInfo = useGetGameInfoQuery({ game: gameId })
   useRetryUntilData(gameInfo)
@@ -719,6 +748,9 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       )
     }
 
+    const isLocked = (worldId: string, level: number) =>
+      !isVisualOpenAnyLevel && !isVisualLevelUnlocked(progressFrontier, worldId, level)
+
     for (const worldId in nodes) {
       // Hide worlds where every level is skipped.
       if (visibleCount(worldId) === 0) continue
@@ -732,6 +764,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
           position={position}
           completedLevels={completed[worldId]}
           nextLevel={progressFrontier.nextLevels[worldId]}
+          locked={isLocked(worldId, progressFrontier.nextLevels[worldId] ?? 1)}
           worldSize={visibleCount(worldId)}
           palette={mapPalette}
           levelMode={levelMode}
@@ -753,6 +786,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
             started={started[worldId][i]}
             unlocked={progressFrontier.highlightedLevels[worldId] === i ||
               ((completionNeutralLevels?.[worldId]?.includes(i) ?? false) && completed[worldId][i - 1])}
+            locked={isLocked(worldId, i)}
             worldSize={visibleCount(worldId)}
             palette={mapPalette}
             levelMode={levelMode}
@@ -930,6 +964,8 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
         fastExfalso={isVisualFastExfalso}
         onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
+        openAnyLevel={isVisualOpenAnyLevel}
+        onToggleOpenAnyLevel={() => setIsVisualOpenAnyLevel(!isVisualOpenAnyLevel)}
       />
       <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg

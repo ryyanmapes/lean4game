@@ -5,6 +5,7 @@
 const KEY = "game_progress";
 const VISUAL_AUTO_BRANCH_SWITCH_KEY = "visual_auto_branch_switch";
 const VISUAL_FAST_EXFALSO_KEY = "visual_fast_exfalso";
+const VISUAL_OPEN_ANY_LEVEL_KEY = "visual_open_any_level";
 
 /** Load from browser storage */
 export function loadState() {
@@ -123,6 +124,25 @@ export function loadVisualFastExfalsoPreference() {
 export function saveVisualFastExfalsoPreference(enabled: boolean) {
   try {
     localStorage.setItem(VISUAL_FAST_EXFALSO_KEY, JSON.stringify(enabled))
+  } catch (_error) {
+    // Ignore unavailable storage.
+  }
+}
+
+export function loadVisualOpenAnyLevelPreference() {
+  try {
+    const value = localStorage.getItem(VISUAL_OPEN_ANY_LEVEL_KEY)
+    if (value === null) return undefined
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'boolean' ? parsed : undefined
+  } catch (_error) {
+    return undefined
+  }
+}
+
+export function saveVisualOpenAnyLevelPreference(enabled: boolean) {
+  try {
+    localStorage.setItem(VISUAL_OPEN_ANY_LEVEL_KEY, JSON.stringify(enabled))
   } catch (_error) {
     // Ignore unavailable storage.
   }

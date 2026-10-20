@@ -16,6 +16,7 @@ type VisualLoadingScreenProps = {
   onWorldMap?: () => void
   hasPrev?: boolean
   hasNext?: boolean
+  nextLocked?: boolean
   previouslyCompleted?: boolean
   onPrev?: () => void
   onNext?: () => void
@@ -76,6 +77,7 @@ export function VisualLoadingScreen({
   onWorldMap,
   hasPrev = false,
   hasNext = false,
+  nextLocked = false,
   previouslyCompleted = false,
   onPrev = () => {},
   onNext = () => {},
@@ -106,6 +108,7 @@ export function VisualLoadingScreen({
           levelTitle={levelTitle}
           hasPrev={hasPrev}
           hasNext={hasNext}
+          nextLocked={nextLocked}
           isCompleted={false}
           previouslyCompleted={previouslyCompleted}
           onPrev={onPrev}

@@ -2333,6 +2333,8 @@ interface VisualCanvasProps {
   /** Re-check an exact full classic proof body without adding the visual prelude. */
   onValidateProof?: (proofBody: string) => Promise<ProofState | null>
   onNextLevel?: () => void
+  /** The next level exists, but the player hasn't unlocked it yet. */
+  nextLevelLocked?: boolean
   onPreviousLevel?: () => void
   onWorldMap?: () => void
   levelTitle?: string | null
@@ -2612,7 +2614,7 @@ function TheoremTray({
 export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
-  displayLevelId, onInteraction, onNextLevel, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
+  displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
@@ -7277,6 +7279,7 @@ export function VisualCanvas({
             levelTitle={levelTitle}
             hasPrev={!!onPreviousLevel}
             hasNext={(() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()}
+            nextLocked={nextLevelLocked}
             isCompleted={canvasState.completed}
             previouslyCompleted={previouslyCompleted ?? false}
             onPrev={onPreviousLevel ?? (() => {})}

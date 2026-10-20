@@ -11,6 +11,8 @@ interface VisualHeaderProps {
   hasPrev: boolean
   /** False on the last level of a world, where Next becomes a World Map button. */
   hasNext: boolean
+  /** The next level exists, but the player hasn't unlocked it yet. */
+  nextLocked?: boolean
   isCompleted: boolean
   previouslyCompleted: boolean
   onPrev: () => void
@@ -30,6 +32,7 @@ export function VisualHeader({
   levelTitle,
   hasPrev,
   hasNext,
+  nextLocked = false,
   isCompleted,
   previouslyCompleted,
   onPrev,
@@ -96,7 +99,9 @@ export function VisualHeader({
           <button
             className={`visual-header-nav-btn visual-header-next-btn${isCompleted ? ' emphasized' : ''}`}
             onClick={onNext}
-            aria-label="Next level"
+            disabled={nextLocked}
+            aria-label={nextLocked ? 'Next level (locked until this level is solved)' : 'Next level'}
+            title={nextLocked ? 'Solve this level to unlock the next one' : undefined}
           >
             Next level →
           </button>
