@@ -240,7 +240,7 @@ describe('local NNG4 release maps', () => {
         source: '',
         target: '',
         goal: '(y + 1) * 5 = (y + 1) * 5',
-        text: "Now that both sides of the equality match, return to Combining Mode with the 'back' button, then click the goal once to apply 'rfl' and finish the level.",
+        text: "Now that both sides of the equality match, return to Combining Mode with the 'back' button, then {pc: click | mobile: tap} the goal once to apply 'rfl' and finish the level.",
       })
       expect(response.body.visualGoalInfos).to.deep.include({
         position: 'below',
@@ -248,7 +248,7 @@ describe('local NNG4 release maps', () => {
         goal: '(y + 1) * 5 = (y + 1) * 5',
         requireHypType: null,
         excludeHypType: null,
-        text: "Click once to apply 'rfl' and finish the level.",
+        text: "{pc: Click | mobile: Tap} once to apply 'rfl' and finish the level.",
       })
     })
 
@@ -259,7 +259,7 @@ describe('local NNG4 release maps', () => {
         goal: '∃ a, a + a = a',
         requireHypType: null,
         excludeHypType: null,
-        text: 'Click there-exists goals to specialize them with a particular constructed example',
+        text: '{pc: Click | mobile: Tap} there-exists goals to specialize them with a particular constructed example',
       })
       expect(JSON.stringify(response.body)).not.to.match(/double-click[^"\n]*(?:there-exists|existential)/iu)
     })

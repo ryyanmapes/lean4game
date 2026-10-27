@@ -1,12 +1,12 @@
 import type { VisualGoalInfo } from './types'
 
-const USE_GOAL_TEXT = 'Click there-exists goals to enter Construction Mode.'
+const USE_GOAL_TEXT = '{pc: Click | mobile: Tap} there-exists goals to enter Construction Mode.'
 const IMPLICATION_THREE_TEXT =
   'Try solving this level both by dragging h1 onto h2, and dragging h2 onto the goal.'
 const SYMM_TEXT = 'The `symm` tactic can be used to swap the sides of any equality.'
 const OR_TEXT =
-  "Click an 'or' hypothesis to split into two branches, one where each side is assumed. " +
-  "Click an 'or' goal to specifify which side must be true. Be careful not to dead end " +
+  "{pc: Click | mobile: Tap} an 'or' hypothesis to split into two branches, one where each side is assumed. " +
+  "{pc: Click | mobile: Tap} an 'or' goal to specify which side must be true. Be careful not to dead end " +
   'yourself by specifying the goal too early!'
 const INDUCTION_TEXT =
   "Induct after ONLY 'x' is introduced to get a more general inductive hypothesis."
@@ -17,6 +17,19 @@ const CASES_TEXT =
   'a hypothesis of type `False` vacuously solves *any* goal!'
 const LE_TEN_HINT_TEXT = "Hint: \n[Click to reveal: Don't forget about the `cases` tactic!]"
 const LE_TOTAL_CORRECT_INDUCTION = 'induction-generalizing-y'
+
+/** How the player points: a mouse or trackpad (`pc`), or a finger (`mobile`). */
+export type HintInput = 'pc' | 'mobile'
+
+const INPUT_VARIANT = /\{pc:([^{}|]*)\|\s*mobile:([^{}]*)\}/gu
+
+/** Hints word a gesture for each input, as in
+ * `{pc: Double-click | mobile: Double-tap} the goal`. Either side can be
+ * empty, for advice that only applies to one input. */
+export function hintTextForInput(text: string, input: HintInput): string {
+  return text.replace(INPUT_VARIANT, (_match, pc: string, mobile: string) =>
+    (input === 'pc' ? pc : mobile).trim())
+}
 
 function isNng4Game(gameId: string): boolean {
   const parts = gameId.split('/').filter(Boolean)

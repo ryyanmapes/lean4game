@@ -191,6 +191,9 @@ elab "VisualUnlockTactic" args:ident* : command => do
 
 syntax visualBool := &"true" <|> &"false"
 
+-- The text of every `Visual…Info` command below can word a gesture for each
+-- input, as in `"{pc: Double-click | mobile: Double-tap} the goal"`; the client
+-- shows the side that matches how the player points (visual/levelPresentation.ts).
 def mkVisualGoalInfo (position : String) (arrow : Bool) (goal : Option String) (text : String)
     (requireHypType : Option String := none) (excludeHypType : Option String := none) :
     VisualGoalInfo :=

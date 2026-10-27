@@ -69,8 +69,13 @@ export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideA
   const dx = arrow.end.x - arrow.start.x
   const dy = arrow.end.y - arrow.start.y
   const len = Math.sqrt(dx * dx + dy * dy) || 1
-  const startPad = arrow.startPadding ?? 44
-  const endPad = arrow.endPadding ?? 64
+  // Trim the ends, but never past each other: an arrow shorter than its trims
+  // would flip and point back the way it came. Leave room for the head.
+  const wantedStartPad = arrow.startPadding ?? 44
+  const wantedEndPad = arrow.endPadding ?? 64
+  const trimScale = Math.min(1, Math.max(0, len - 22) / ((wantedStartPad + wantedEndPad) || 1))
+  const startPad = wantedStartPad * trimScale
+  const endPad = wantedEndPad * trimScale
   const start = {
     x: arrow.start.x + (dx / len) * startPad,
     y: arrow.start.y + (dy / len) * startPad,
@@ -289,10 +294,17 @@ export function TransformationView({
   const backInfoRef = useRef<HTMLDivElement>(null)
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
+  const rewriteInfoRef = useRef<HTMLDivElement>(null)
   const suppressRuleClickRef = useRef(false)
   const undoInFlightRef = useRef(false)
   const [isExprOverflowing, setIsExprOverflowing] = useState(false)
   const [phoneExprScale, setPhoneExprScale] = useState<number | null>(null)
+  // How far the phone layout moves the expression down from the middle of the
+  // main area, into the band between the side label and the lessons below.
+  const [phoneExprShift, setPhoneExprShift] = useState(0)
+  const phoneExprShiftRef = useRef(0)
+  phoneExprShiftRef.current = phoneExprShift
+  const [phoneRewriteArrow, setPhoneRewriteArrow] = useState<GuideArrow | null>(null)
   const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
   const [backArrow, setBackArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
   const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
@@ -515,6 +527,7 @@ export function TransformationView({
   useLayoutEffect(() => {
     if (!isPhonePortrait) {
       setPhoneExprScale(prev => prev == null ? prev : null)
+      setPhoneExprShift(prev => prev === 0 ? prev : 0)
       return
     }
 
@@ -530,11 +543,24 @@ export function TransformationView({
         const mainRect = main.getBoundingClientRect()
         if (exprRect.width <= 0 || exprRect.height <= 0 || mainRect.width <= 0 || mainRect.height <= 0) return
 
+        // The band the expression may use: below the side label and its swap
+        // button, above the lessons and controls along the bottom, leaving a
+        // rewrite lesson room for its arrow up to the target.
+        const gap = 12
+        const sideGroupBottom = staticGroupRef.current?.getBoundingClientRect().bottom ?? mainRect.top
+        const bandTop = Math.max(mainRect.top + parseFloat(getComputedStyle(main).paddingTop), sideGroupBottom + gap)
+        const belowTops = Array.from(main.parentElement?.querySelectorAll<HTMLElement>(
+          '.tr-controls .tr-ctrl-btn, .tr-side-controls .tr-ctrl-btn, .transform-info',
+        ) ?? [])
+          .map(element => element.getBoundingClientRect().top)
+          .filter(top => top > bandTop)
+        const bandBottom = Math.min(mainRect.bottom, ...belowTops) - (rewriteGuide ? 40 : gap)
+
         const currentScale = phoneExprScale ?? PHONE_EXPR_BASE_SCALE
         const unscaledWidth = exprRect.width / currentScale
         const unscaledHeight = exprRect.height / currentScale
         const availableWidth = Math.max(120, mainRect.width - 24)
-        const availableHeight = Math.max(120, mainRect.height - 192)
+        const availableHeight = Math.max(40, bandBottom - bandTop)
         const fitScale = Math.min(
           PHONE_EXPR_BASE_SCALE,
           availableWidth / unscaledWidth,
@@ -542,6 +568,10 @@ export function TransformationView({
         )
         const nextScale = Math.max(PHONE_EXPR_MIN_SCALE, Number(fitScale.toFixed(3)))
         setPhoneExprScale(prev => (prev != null && Math.abs(prev - nextScale) < 0.01) ? prev : nextScale)
+        // Scaling keeps the centre, so only the current shift moves it.
+        const naturalCenter = (exprRect.top + exprRect.bottom) / 2 - phoneExprShiftRef.current
+        const nextShift = Math.round((bandTop + bandBottom) / 2 - naturalCenter)
+        setPhoneExprShift(prev => Math.abs(prev - nextShift) < 1 ? prev : nextShift)
       })
     }
 
@@ -564,7 +594,8 @@ export function TransformationView({
       window.removeEventListener('resize', updateScale)
       observer.disconnect()
     }
-  }, [isPhonePortrait, phoneExprScale, workingSide, workingExpr, ruleDockHeight])
+  }, [isPhonePortrait, phoneExprScale, workingSide, workingExpr, ruleDockHeight,
+    sideInfo, backInfo, generalInfo, reverseInfo, rewriteGuide])
 
   const cssEscape = (value: string) => {
     const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
@@ -658,9 +689,17 @@ export function TransformationView({
           const targetRect = targetEl.getBoundingClientRect()
           const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
+          if (isPhonePortrait) {
+            // CSS places the lesson in the controls' row with the others; its
+            // arrow runs from the lesson's top edge up to the bottom of the
+            // term to rewrite once the lesson is laid out (phoneRewriteArrow).
+            const targetBottom = { x: end.x, y: targetRect.bottom }
+            nextRewriteGuide = { info, style: {}, arrow: { start: targetBottom, end: targetBottom } }
+            break
+          }
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
           const viewportW = window.innerWidth
-          const guideWidth = isPhonePortrait ? Math.min(360, viewportW - 32) : 360
+          const guideWidth = 360
           const margin = 34
           const lineLeft = Math.min(sourceRect.left, targetRect.left)
           const lineRight = Math.max(sourceRect.right, targetRect.right)
@@ -671,37 +710,18 @@ export function TransformationView({
           // Prefer whichever side has more room. If neither side has clearance,
           // clamp to the viewport edge with the most space.
           const preferLeft = fitsLeft && (!fitsRight || lineLeft > viewportW - lineRight)
-          const left = isPhonePortrait
-            ? (viewportW - guideWidth) / 2
-            : preferLeft
-              ? Math.max(16, leftPos)
-              : Math.min(viewportW - guideWidth - 16, rightPos)
-          const controlsTop = [
-            mainAreaRef.current?.parentElement?.querySelector<HTMLElement>('.tr-controls')?.getBoundingClientRect().top,
-            mainAreaRef.current?.parentElement?.querySelector<HTMLElement>('.tr-side-controls')?.getBoundingClientRect().top,
-            ruleDockRef.current?.getBoundingClientRect().top,
-          ].filter((value): value is number => value != null)
-          const phoneTop = Math.min(
-            midpoint.y,
-            (controlsTop.length ? Math.min(...controlsTop) : window.innerHeight) - 78,
-          )
+          const left = preferLeft
+            ? Math.max(16, leftPos)
+            : Math.min(viewportW - guideWidth - 16, rightPos)
           nextRewriteGuide = {
             info,
             style: {
               left,
-              top: isPhonePortrait ? phoneTop : midpoint.y,
+              top: midpoint.y,
               transform: 'translateY(-50%)',
               width: guideWidth,
             },
-            arrow: isPhonePortrait
-              ? {
-                  start: { x: viewportW / 2, y: phoneTop - 64 },
-                  end,
-                  startPadding: 4,
-                  endPadding: 46,
-                  arc: 'none',
-                }
-              : { start, end, startPadding: 48, endPadding: 60 },
+            arrow: { start, end, startPadding: 48, endPadding: 60 },
           }
           break
         }
@@ -716,7 +736,28 @@ export function TransformationView({
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
     }
-  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait])
+  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
+    phoneExprScale, phoneExprShift])
+
+  useLayoutEffect(() => {
+    const lesson = rewriteInfoRef.current
+    if (!isPhonePortrait || !rewriteGuide || !lesson) {
+      setPhoneRewriteArrow(null)
+      return
+    }
+    const lessonRect = lesson.getBoundingClientRect()
+    const target = rewriteGuide.arrow.end
+    setPhoneRewriteArrow({
+      start: {
+        x: Math.min(Math.max(target.x, lessonRect.left + 24), lessonRect.right - 24),
+        y: lessonRect.top,
+      },
+      end: target,
+      startPadding: 6,
+      endPadding: 6,
+      arc: 'none',
+    })
+  }, [isPhonePortrait, rewriteGuide])
 
   useEffect(() => {
     if (!activeId) return
@@ -951,6 +992,7 @@ export function TransformationView({
         ...(style ?? {}),
         '--tr-rule-dock-height': `${ruleDockHeight}px`,
         '--tr-expression-scale': phoneExprScale != null ? String(phoneExprScale) : undefined,
+        '--tr-expression-shift': `${phoneExprShift}px`,
       } as React.CSSProperties}
     >
       {headerSlot}
@@ -970,10 +1012,7 @@ export function TransformationView({
         {isProcessing && <div className="tr-processing" />}
 
         {/* Main expression area */}
-        <div
-          className={`tr-main-area${reverseInfo || rewriteInfos.length > 0 ? ' has-transform-guide' : ''}`}
-          ref={mainAreaRef}
-        >
+        <div className="tr-main-area" ref={mainAreaRef}>
           {/* Static side label + swap button */}
           <div ref={staticGroupRef} className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}${isExprOverflowing ? ' pinned-top' : ''}`}>
             <span className="tr-static-label">
@@ -1016,6 +1055,12 @@ export function TransformationView({
           {reverseInfo && (
             <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info reverse-info">
               <VisualInfoText text={reverseInfo.text} />
+            </div>
+          )}
+
+          {isPhonePortrait && rewriteGuide && (
+            <div ref={rewriteInfoRef} className="visual-info-callout transform-info rewrite-info">
+              <VisualInfoText text={rewriteGuide.info.text} />
             </div>
           )}
 
@@ -1142,7 +1187,8 @@ export function TransformationView({
           endPadding: isPhonePortrait ? 20 : 42,
           arc: isPhonePortrait ? 'none' : 'up',
         }} />}
-        {rewriteGuide && (
+        {phoneRewriteArrow && <InstructionGuideArrow arrow={phoneRewriteArrow} />}
+        {rewriteGuide && !isPhonePortrait && (
           <>
             <InstructionGuideArrow arrow={rewriteGuide.arrow} />
             <div className="visual-info-callout transform-info rewrite-info" style={rewriteGuide.style}>

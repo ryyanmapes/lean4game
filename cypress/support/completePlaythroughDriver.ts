@@ -1912,7 +1912,7 @@ export class CompletePlaythroughDriver {
     throw missedGesture
   }
 
-  private async dragTactic(name: string, target: HTMLElement) {
+  async dragTactic(name: string, target: HTMLElement) {
     await this.dragAndWait(await this.tactic(name), target, `${name} drag to update the proof`)
   }
 

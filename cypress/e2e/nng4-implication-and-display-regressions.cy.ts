@@ -27,6 +27,7 @@ interface VisualHarness {
     streamId: string
     goalType: string
     hypTypes: Record<string, string>
+    hypPlayTactics: Record<string, string | null>
     canvasStreamIds: string[]
   }
   openGoalTransform(): void
@@ -533,6 +534,63 @@ describe('NNG4 implication and definition display regressions', () => {
     })
   })
 
+  it('splits an existential hypothesis with cases exactly as clicking it does', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/4/visual`)
+    cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const player = new CompletePlaythroughDriver(win)
+      await player.prepareInitialBinders(['x', 'y', 'z', 'hxy', 'hyz'], 'cases hxy with a ha')
+    })
+    let hxyName = ''
+    let clickTactic = ''
+    cy.window().should(win => {
+      const snapshot = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot()
+      hxyName = Object.entries(snapshot.hypTypes).find(([, type]) => type === 'x ≤ y')?.[0] ?? ''
+      clickTactic = snapshot.hypPlayTactics[hxyName] ?? ''
+      expect(clickTactic, 'clicking x ≤ y introduces its witness').to.match(/^click_prop \S+$/u)
+    })
+
+    const pointer = { pointerId: 39, pointerType: 'mouse', isPrimary: true, button: 0 }
+    cy.contains('.tr-tab-btn', 'Tactics').click()
+    cy.get('[data-tactic-name="cases"]').then($card => {
+      const rect = $card[0]!.getBoundingClientRect()
+      cy.wrap($card).trigger('pointerdown', {
+        ...pointer,
+        buttons: 1,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        force: true,
+      })
+      cy.get('body').trigger('pointermove', {
+        ...pointer,
+        buttons: 1,
+        clientX: rect.left + rect.width / 2 + 12,
+        clientY: rect.top + rect.height / 2 + 12,
+        force: true,
+      })
+    })
+    cy.get('[data-testid="hyp-card"][data-hyp-type="x ≤ y"]').should('have.class', 'potential-drop-target')
+    cy.get('body').trigger('pointerup', { ...pointer, buttons: 0, force: true })
+
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: LOAD_TIMEOUT }, async win => {
+      const target = win.document.querySelector<HTMLElement>('[data-testid="hyp-card"][data-hyp-type="x ≤ y"]')
+      expect(target, 'the x ≤ y card').to.exist
+      await new CompletePlaythroughDriver(win).dragTactic('cases', target!)
+    })
+    cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
+      const harness = (win as HarnessWindow).__visualTestHarness!
+      const audit = harness.getProofAudit()
+      expect(audit.processing, 'Lean has answered').to.equal(false)
+      expect(audit.interactiveLines.at(-1), 'the drop performs the click on x ≤ y').to.equal(clickTactic)
+      expect(audit.coreLines.at(-1), 'witness and condition get readable names')
+        .to.match(new RegExp(`^rcases ${hxyName} with ⟨\\w+, \\w+⟩$`, 'u'))
+      const hypTypes = harness.getCurrentStreamSnapshot().hypTypes
+      expect(hypTypes, 'x ≤ y is taken apart').not.to.have.property(hxyName)
+      expect(Object.values(hypTypes), 'its condition is a hypothesis')
+        .to.satisfy((types: string[]) => types.some(type => /^y = x \+ \w+$/u.test(type)))
+    })
+  })
+
   it('reveals the Less-or-Equal hint on a new line', () => {
     cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
     cy.get('.visual-info-reveal-button', { timeout: LOAD_TIMEOUT }).click()
@@ -689,8 +747,8 @@ describe('NNG4 implication and definition display regressions', () => {
     )
     cy.get('.goal-info.below').should($info => {
       const style = getComputedStyle($info[0]!)
-      expect(style.scrollbarWidth, 'lesson scrollbar is visibly styled').to.equal('thin')
-      expect(style.scrollbarGutter, 'lesson layout reserves stable room for its scrollbar').to.contain('stable')
+      expect(style.scrollbarWidth, 'lessons show no scrollbar').to.equal('none')
+      expect(style.scrollbarGutter, 'lessons reserve no room for one').to.equal('auto')
     })
 
     openAndExpect(
@@ -1162,5 +1220,38 @@ describe('NNG4 implication and definition display regressions', () => {
       expect(Object.keys(snapshot.hypTypes), 'only the first binder was introduced').to.deep.equal(['x'])
     })
     cy.get('.tr-transformation-overlay, .tr-construction-overlay').should('not.exist')
+  })
+})
+
+describe('NNG4 lesson wording on touch screens', () => {
+  // Touch emulation makes the primary pointer coarse with no hover, as on a
+  // phone or tablet, whatever the window size.
+  const setTouchInput = (enabled: boolean) => Cypress.automation('remote:debugger:protocol', {
+    command: 'Emulation.setTouchEmulationEnabled',
+    params: enabled ? { enabled, maxTouchPoints: 5 } : { enabled },
+  })
+  beforeEach(function () {
+    if (
+      requestedRegressions.length > 0
+      && !requestedRegressions.some(regression => this.currentTest.title.includes(regression))
+    ) this.skip()
+    cy.on('uncaught:exception', () => false)
+    cy.clearLocalStorage()
+    cy.then(() => setTouchInput(true))
+  })
+  afterEach(() => {
+    cy.then(() => setTouchInput(false))
+  })
+
+  it('says tap instead of click, and switches back when a mouse takes over', () => {
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/1/visual`)
+    cy.contains('.goal-info.below', 'Tap there-exists goals to enter Construction Mode.', { timeout: LOAD_TIMEOUT })
+      .should('be.visible')
+      .and('not.contain.text', 'pc:')
+    cy.visit(`${mountPath}#/g/local/NNG4/world/LessOrEqual/level/10/visual`)
+    cy.get('.goal-info.below .visual-info-reveal-button', { timeout: LOAD_TIMEOUT })
+      .should('have.text', 'Tap to reveal')
+    cy.then(() => setTouchInput(false))
+    cy.get('.goal-info.below .visual-info-reveal-button').should('have.text', 'Click to reveal')
   })
 })

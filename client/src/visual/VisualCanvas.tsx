@@ -1089,12 +1089,28 @@ function isNaturalVariableCard(card: HypCardType): boolean {
   return typeText === 'ℕ' || typeText === 'Nat' || typeText === 'MyNat'
 }
 
-/** `cases` takes a natural number apart (the drop names the predecessor) or
- * eliminates `False` (no cases, so nothing to name). On a proof of `∨`, `∃`,
- * `∧` or `≤` it would fill the context with Lean's inaccessible names
- * (`h._@…_hyg.97`); clicking such a hypothesis splits it with readable names. */
+// The tooltip Lean gives the click that takes a proof of `∃` apart
+// (RpcHandlers.lean and Browser/ProofProbe.lean); `≤` unfolds to one too.
+const EXISTENTIAL_CLICK_TOOLTIP = 'Click to introduce witness and condition'
+
+/** `cases` on an existential does exactly what clicking it does, so the
+ * witness and its condition get the same readable names. */
+function existentialClickAction(card: HypCardType): (ClickAction & { playTactic: string }) | null {
+  const clickAction = card.hyp.clickAction
+  const playTactic = clickAction?.playTactic
+  return playTactic && clickAction?.tooltip === EXISTENTIAL_CLICK_TOOLTIP
+    ? { ...clickAction, playTactic }
+    : null
+}
+
+/** `cases` takes a natural number apart (the drop names the predecessor),
+ * eliminates `False` (no cases, so nothing to name), or splits an existential
+ * the way clicking it does. On a proof of `∨` or `∧` it would fill the context
+ * with Lean's inaccessible names (`h._@…_hyg.97`); clicking such a hypothesis
+ * splits it with readable names. */
 function casesCanTargetHyp(card: HypCardType): boolean {
   if (isNaturalVariableCard(card)) return true
+  if (existentialClickAction(card)) return true
   return normalizeFormulaText(card.hyp.typeBody ?? TaggedText_stripTags(card.hyp.type)) === 'False'
 }
 
@@ -4337,6 +4353,17 @@ export function VisualCanvas({
           return
         }
         if (tacticTemplate.name === 'cases') {
+          const existentialClick = existentialClickAction(targetCard)
+          if (existentialClick) {
+            // Exactly what clicking the hypothesis does (handleHypClick).
+            applyDroppedInteraction(existentialClick.playTactic, activeId, {
+              streamSplit: existentialClick.streamSplit,
+              targetStreamId: targetStream.id,
+              mobileInsertAfter: isMobileTheoremCard(targetCard) ? hypMobileKey(targetCard) : undefined,
+              mobileInsertPlacement: existentialClick.streamSplit ? 'replace' : 'after',
+            })
+            return
+          }
           const playTactic = interactionToPlayTactic({
             type: 'drag_cases',
             hypName: targetName,
@@ -6568,6 +6595,14 @@ export function VisualCanvas({
     }
 
     if (tacticName === 'cases') {
+      const existentialClick = existentialClickAction(targetCard)
+      if (existentialClick) {
+        await latestApplyInteraction(existentialClick.playTactic, `visual_tactic_${tacticName}`, {
+          streamSplit: existentialClick.streamSplit,
+          targetStreamId: stream.id,
+        })
+        return
+      }
       const playTactic = interactionToPlayTactic({
         type: 'drag_cases',
         hypName: targetPlayName,

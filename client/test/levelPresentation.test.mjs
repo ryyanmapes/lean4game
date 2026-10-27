@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   goalInfosForLevel,
   goalInfoVisibleAfterTactics,
+  hintTextForInput,
   NNG4_VISUAL_LESSON_TEXT,
 } from '../../tmp-level-presentation-tests/visual/levelPresentation.js'
 
@@ -66,4 +67,24 @@ test('the induction reminder only disappears for the general induction and retur
     false,
   )
   assert.equal(goalInfoVisibleAfterTactics(info, ['click_goal']), true)
+})
+
+test('words gestures for a mouse on PC and a finger on mobile', () => {
+  const text = '{pc: Double-click | mobile: Double-tap} the goal.\nSwap by ' +
+    '{pc: clicking this button (or by right-clicking the menu) | mobile: tapping this button}.'
+  assert.equal(
+    hintTextForInput(text, 'pc'),
+    'Double-click the goal.\nSwap by clicking this button (or by right-clicking the menu).',
+  )
+  assert.equal(hintTextForInput(text, 'mobile'), 'Double-tap the goal.\nSwap by tapping this button.')
+  assert.equal(hintTextForInput('Drag h onto the goal. {pc: Or press Enter. | mobile:}', 'mobile'), 'Drag h onto the goal. ')
+  assert.equal(hintTextForInput('The set {x | x = 0} stays as written.', 'mobile'), 'The set {x | x = 0} stays as written.')
+})
+
+test('every NNG4 lesson that mentions clicking has a mobile wording', () => {
+  for (const text of Object.values(NNG4_VISUAL_LESSON_TEXT)) {
+    // `[Click to reveal: …]` is markup; the button it becomes says "Tap" on mobile.
+    const shown = hintTextForInput(text, 'mobile').replace('[Click to reveal:', '[')
+    assert.doesNotMatch(shown, /click/iu, text)
+  }
 })
