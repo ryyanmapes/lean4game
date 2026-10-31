@@ -5,12 +5,12 @@ describe('local NNG4 release maps', () => {
     cy.contains('h1', 'Visual Lean').should('be.visible')
     cy.contains('An experimental graphical user interface for writing Lean code.').should('be.visible')
     cy.contains('Lean verification runs locally on both desktop and mobile through WASM.').should('be.visible')
-    cy.get('a.destination[href="/visualNNG"]')
-      .should('contain.text', 'Start here: The Visual Natural Numbers Game')
-      .and('contain.text', 'Prove the fundamental properties of arithmetic from scratch!')
     cy.get('a.destination[href="/pitch"]')
-      .should('contain.text', 'Elevator Pitch')
+      .should('contain.text', 'Start here: Elevator Pitch')
       .and('contain.text', "Take a brief tour of Visual Lean's three modes.")
+    cy.get('a.destination[href="/visualNNG"]')
+      .should('contain.text', 'The Visual Natural Numbers Game')
+      .and('contain.text', 'Prove the fundamental properties of arithmetic from scratch!')
     cy.get('a.destination[href="/classicNNG"]')
       .should('contain.text', 'The Natural Numbers Game Classic')
     cy.contains(/Real Numbers Game/iu).should('not.exist')
@@ -27,7 +27,7 @@ describe('local NNG4 release maps', () => {
     // the path is unchanged and no hash appeared.
     for (const [shortPath, heading] of [
       ['/visualNNG', 'The Natural Numbers Video Game'],
-      ['/pitch', 'Visual Test'],
+      ['/pitch', 'Elevator Pitch'],
     ] as const) {
       cy.visit(shortPath)
       cy.contains(heading, { timeout: 30_000 }).should('be.visible')
