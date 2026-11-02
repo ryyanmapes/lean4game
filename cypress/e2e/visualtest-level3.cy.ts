@@ -371,7 +371,6 @@ describe('VisualTest Level 3', () => {
       ])
     })
 
-    cy.get('.proof-sidebar-tab').click()
     cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
     cy.contains('.proof-sidebar-mode-btn', 'Core').click()
     cy.get('.proof-sidebar-step').should('have.length', 7)

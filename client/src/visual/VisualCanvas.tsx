@@ -2772,8 +2772,10 @@ export function VisualCanvas({
   )
   const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
   const [trayHeight, setTrayHeight] = useState(0)
+  // New players start with the proof sidebar open; phone portrait never
+  // renders it, so the default only shows on wider screens.
   const [showProofSidebar, setShowProofSidebar] = useState<boolean>(() => {
-    try { return localStorage.getItem('visual-proof-sidebar-open') === 'true' } catch { return false }
+    try { return localStorage.getItem('visual-proof-sidebar-open') !== 'false' } catch { return true }
   })
   const [sideViewMode, setSideViewMode] = useState<'lean' | 'play'>(() => {
     try { return (localStorage.getItem('visual-proof-view-mode') as 'lean' | 'play') || 'lean' } catch { return 'lean' }

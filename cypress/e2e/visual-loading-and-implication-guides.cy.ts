@@ -83,7 +83,7 @@ describe('Visual loading progress and Implication guidance', () => {
     cy.get('[data-testid="visual-proof-page"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
     cy.contains(
       '.hyp-info',
-      'You can enter hypotheses in Transformation Mode by double-clicking them.',
+      'You can enter hypotheses in Rewrite Mode by double-clicking them.',
     ).should('be.visible')
 
     cy.get('[data-hyp-name="h"]').then($hyp => {
@@ -117,7 +117,7 @@ describe('Visual loading progress and Implication guidance', () => {
 
     cy.contains(
       '.hyp-info',
-      'You can enter hypotheses in Transformation Mode by double-clicking them.',
+      'You can enter hypotheses in Rewrite Mode by double-clicking them.',
     ).should('not.exist')
   })
 

@@ -633,7 +633,8 @@ describe('NNG4 implication and definition display regressions', () => {
       await player.perform(`exact ${falseCard!.dataset.hypName}`)
     })
 
-    cy.get('.proof-sidebar-tab').click()
+    // A new player's proof tab starts open on wide screens.
+    cy.get('.proof-sidebar').should('have.class', 'open')
     cy.get('.proof-sidebar-step-num').first().should($number => {
       expect(getComputedStyle($number[0]!).userSelect, 'proof line numbers are not selectable').to.equal('none')
     })
@@ -1092,7 +1093,7 @@ describe('NNG4 implication and definition display regressions', () => {
       .and('match', /x\s*\+\s*0\s*=\s*x\s*\+\s*0/u)
     performPlayerGestures(['rfl'])
 
-    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar').should('have.class', 'open')
     cy.get('.proof-sidebar-copy-btn').should('not.exist')
     cy.get('.proof-sidebar-classic-btn').should('not.exist')
     cy.get('[data-testid="proof-actions-toggle"]').click()

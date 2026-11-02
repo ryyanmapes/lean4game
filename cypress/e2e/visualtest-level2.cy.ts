@@ -198,7 +198,6 @@ describe('VisualTest Level 2', () => {
       expect(entries.at(-1)?.succeeded).to.equal(true)
     })
 
-    cy.get('.proof-sidebar-tab').click()
     cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
     cy.contains('.proof-sidebar-mode-btn', 'Core').click()
     cy.get('.proof-sidebar-step').should('have.length', 1)
@@ -235,7 +234,7 @@ describe('VisualTest Level 2', () => {
     clickGoal()
     streamLabelShouldBe(1, 2)
 
-    cy.get('.proof-sidebar-tab').click()
+    cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
     cy.contains('.proof-sidebar-mode-btn', 'Interactive').click()
     cy.get('.proof-sidebar-step-text').then(linesBeforeBrowse => {
       expect([...linesBeforeBrowse].map(line => line.textContent?.trim())).not.to.include('rotate_left')
@@ -394,7 +393,6 @@ describe('VisualTest Level 2', () => {
       expect(entries.every(entry => entry.succeeded === true)).to.equal(true)
     })
 
-    cy.get('.proof-sidebar-tab').click()
     cy.get('.proof-sidebar.open', { timeout: 60000 }).should('be.visible')
     cy.contains('.proof-sidebar-mode-btn', 'Core').click()
     cy.get('.proof-sidebar-step.unknown').should('not.exist')

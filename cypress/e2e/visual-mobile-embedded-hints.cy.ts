@@ -304,7 +304,7 @@ describe('Visual Lean lessons in a phone in-app browser', () => {
         visitLevel('Tutorial', 2)
         expectReadableHint(
           '.goal-info',
-          'Double-tap the goal equality to enter Transformation Mode.',
+          'Double-tap the goal equality to enter Rewrite Mode.',
           COMBINING_OBSTACLES,
         )
 

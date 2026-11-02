@@ -134,7 +134,6 @@ describe('NNG4 LessOrEqual level 3 transformation mode', () => {
   })
 
   it('keeps the construction undo button inset from the left border when the proof tab is open', () => {
-    cy.get('.proof-sidebar-tab').click()
     cy.get('.proof-sidebar').should('have.class', 'open')
 
     goalCard().should('have.class', 'constructable').click()
