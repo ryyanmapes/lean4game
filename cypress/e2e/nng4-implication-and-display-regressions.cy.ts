@@ -1075,7 +1075,9 @@ describe('NNG4 implication and definition display regressions', () => {
       ).to.equal(false)
     })
     cy.get('.tr-transformation-overlay .tr-expr-wrapper').should('contain.text', 'x').and('contain.text', '0')
-    cy.get('.tr-transformation-overlay .tr-static-label').should('contain.text', '=').and('contain.text', 'x + 0')
+    cy.get('.tr-transformation-overlay .tr-relation-op').should('have.text', '=')
+    cy.get('.tr-transformation-overlay .tr-expr-wrapper > .tr-expression-node').last()
+      .should('have.attr', 'data-expr-text', 'x + 0')
 
     cy.window().should(win => {
       const coreLines = (win as HarnessWindow).__visualTestHarness?.getProofAudit().coreLines ?? []

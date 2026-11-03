@@ -130,7 +130,6 @@ describe('Visual Lean mobile layout', () => {
 
   leanIt('keeps the Tutorial 2 rewrite guide clear of mobile controls and the theorem tray', () => {
     openGoalTransformation('Tutorial', 2)
-    cy.get('.tr-swap-btn').click()
     cy.get('.transform-info.rewrite-info', { timeout: 60_000 }).should('exist')
     cy.get('body').should($body => {
       // Cypress's visibility heuristic treats this fixed, pointer-events-none

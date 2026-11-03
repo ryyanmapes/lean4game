@@ -848,6 +848,34 @@ function resolveRemountedDragTarget(
   return resolved
 }
 
+/** The part of an expression term a drag aims at: its own operator or text
+ * (see finishPointerDrag), or the whole term when it has neither. */
+function rewriteDropPart(term: HTMLElement) {
+  return Array.from(term.children).find(child =>
+    child.matches('.tr-op, .tr-node-content')) as HTMLElement | undefined ?? term
+}
+
+/** Rewrite Mode shows the whole relation on one row that scrolls sideways,
+ * and only the row's visible part accepts a drop. */
+function rewriteTermOutOfView(term: HTMLElement) {
+  const scroller = term.closest<HTMLElement>('.tr-expr-scroller')
+  if (!scroller) return false
+  const row = scroller.getBoundingClientRect()
+  const part = rewriteDropPart(term).getBoundingClientRect()
+  return part.left < row.left || part.right > row.right
+}
+
+/** Scroll the row to a term before pointer-down, as a player would: scrolling
+ * after a drag begins moves dnd-kit's measured collision rectangles. */
+async function scrollRewriteTermIntoView(term: HTMLElement) {
+  const scroller = term.closest<HTMLElement>('.tr-expr-scroller')
+  if (!scroller || !rewriteTermOutOfView(term)) return
+  const row = scroller.getBoundingClientRect()
+  const part = rewriteDropPart(term).getBoundingClientRect()
+  scroller.scrollLeft += (part.left + part.width / 2) - (row.left + row.width / 2)
+  await sleep(POLL_MS)
+}
+
 function isWithinViewport(element: HTMLElement) {
   const rect = element.getBoundingClientRect()
   const view = element.ownerDocument.defaultView
@@ -1430,8 +1458,7 @@ export class CompletePlaythroughDriver {
     })
   }
 
-  /** Perform a rewrite after selecting the same side a player would with the
-   * transformation view's arrow button. */
+  /** Perform a rewrite on terms of one side of the relation only. */
   async performRewriteOnSide(command: string, side: 'left' | 'right', keepOpen = false) {
     this.preferredRewriteSide = side
     this.keepTransformationOpen = keepOpen
@@ -3344,29 +3371,10 @@ export class CompletePlaythroughDriver {
     throw new Error(`Could not find rewrite rule ${name}`)
   }
 
-  private rewriteSide(overlay: HTMLElement): 'left' | 'right' {
-    const group = overlay.querySelector<HTMLElement>('.tr-static-group')
-    return group?.classList.contains('static-right') ? 'left' : 'right'
-  }
-
-  private async selectRewriteSide(overlay: HTMLElement, requestedSide: 'left' | 'right') {
-    let lastClickAt = 0
-    await waitFor(`rewrite ${requestedSide} side`, () => {
-      if (this.rewriteSide(overlay) === requestedSide) return true
-      const button = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
-      if (
-        button &&
-        button.getAttribute('aria-disabled') !== 'true' &&
-        !overlay.querySelector('.tr-processing') &&
-        Date.now() - lastClickAt >= 250
-      ) {
-        // Re-query on every retry: React can replace this control while the
-        // preceding rewrite result settles, invalidating a one-shot click.
-        click(button)
-        lastClickAt = Date.now()
-      }
-      return null
-    })
+  /** The term holding one side of the relation in Rewrite Mode's row. */
+  private rewriteSideRoot(overlay: HTMLElement, side: 'left' | 'right'): HTMLElement | null {
+    const sides = overlay.querySelectorAll<HTMLElement>('.tr-expr-wrapper > .tr-expression-node')
+    return (side === 'left' ? sides[0] : sides[sides.length - 1]) ?? null
   }
 
   private async selectRewriteDirection(overlay: HTMLElement, reverse: boolean) {
@@ -3396,72 +3404,70 @@ export class CompletePlaythroughDriver {
   ): Promise<boolean> {
     const overlay = await waitFor('transformation view', () =>
       this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
-    await waitFor('rewrite controls to become interactive', () => {
-      const swap = overlay.querySelector<HTMLButtonElement>('.tr-swap-btn')
-      return !overlay.querySelector('.tr-processing') && swap?.getAttribute('aria-disabled') !== 'true'
-        ? true
-        : null
-    })
+    await waitFor('rewrite controls to become interactive', () =>
+      overlay.querySelector('.tr-processing') ? null : true)
     await this.selectRewriteDirection(overlay, rule.reverse)
 
-    // Lean's `rw` searches a relation from left to right. Visual mode edits one
-    // side at a time, so explicitly reproduce that search order instead of
-    // inheriting whichever side the preceding player gesture happened to
-    // leave selected. This matters when the same theorem matches both sides:
-    // choosing the right first can make a later rewrite in the same command
-    // impossible even though the original Lean tactic is valid.
-    const requestedSides: Array<'left' | 'right'> = this.preferredRewriteSide
-      ? [this.preferredRewriteSide]
-      : ['left', 'right']
-    let remainingOccurrence = occurrence
-
-    for (const requestedSide of requestedSides) {
-      await this.selectRewriteSide(overlay, requestedSide)
-
-      const card = await this.transformRule(rule.name)
-      const session = await beginPointerDrag(card)
+    // Both sides of the relation share one row, in document order from left
+    // to right. That is the order Lean's `rw` searches and `nth_rewrite`
+    // numbers occurrences in, so a target's index in the row is its
+    // occurrence. performRewriteOnSide limits the targets to one side.
+    const side = this.preferredRewriteSide
+    const inSide = (element: HTMLElement) =>
+      !side || (this.rewriteSideRoot(overlay, side)?.contains(element) ?? false)
+    const highlightedTargets = async (card: HTMLElement) => {
       let targets: HTMLElement[] = []
       const targetDeadline = Date.now() + 1_000
       while (Date.now() < targetDeadline) {
         targets = visible(overlay.querySelectorAll<HTMLElement>('.tr-expression-node.potential-target'))
-          .filter(target => matchesPartiallyAppliedRule(target, card, rule.args))
+          .filter(target => inSide(target) && matchesPartiallyAppliedRule(target, card, rule.args))
         if (targets.length > 0) break
         await sleep(POLL_MS)
       }
-      const targetIndex = remainingOccurrence === null ? 0 : remainingOccurrence - 1
-      const target = targets[targetIndex]
-      if (target) {
-        const before = proofSignature(harness(this.win).getProofAudit())
-        const selectedStreamBefore = selectedStreamSignature(this.win)
-        const previousAttempts = playLog(this.win).length
-        await session.finish(target)
-        await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
-        await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
-        await waitForSelectedStreamChange(
-          this.win,
-          selectedStreamBefore,
-          `${rule.name} rewrite`,
-        )
-        return true
-      }
+      return targets
+    }
+    const targetIndex = occurrence === null ? 0 : occurrence - 1
+
+    let card = await this.transformRule(rule.name)
+    let session = await beginPointerDrag(card)
+    let targets = await highlightedTargets(card)
+    let target = targets[targetIndex]
+    if (target && rewriteTermOutOfView(target)) {
+      // Targets only light up during a drag, but the row must not scroll
+      // during one: let go, scroll to the term, and drag again.
       session.cancel()
+      await scrollRewriteTermIntoView(target)
+      card = await this.transformRule(rule.name)
+      session = await beginPointerDrag(card)
+      targets = await highlightedTargets(card)
+      target = targets[targetIndex]
+    }
+    if (target) {
+      const before = proofSignature(harness(this.win).getProofAudit())
+      const selectedStreamBefore = selectedStreamSignature(this.win)
+      const previousAttempts = playLog(this.win).length
+      await session.finish(target)
+      await waitForPlayAttempt(this.win, previousAttempts, `${rule.name} rewrite drag`)
+      await waitForProofChange(this.win, before, `${rule.name} rewrite result`)
+      await waitForSelectedStreamChange(
+        this.win,
+        selectedStreamBefore,
+        `${rule.name} rewrite`,
+      )
+      return true
+    }
+    session.cancel()
 
-      // `nth_rewrite` numbers occurrences across both sides of the relation,
-      // not independently within each visual side.
-      if (remainingOccurrence !== null && targets.length > 0) {
-        remainingOccurrence -= targets.length
-        continue
-      }
-
-      // A partially applied theorem must never fall back to arbitrary nodes:
-      // doing so discards the explicit argument and can make symmetric rules
-      // such as commutativity oscillate forever.
-      if (rule.args.length > 0) continue
-
+    // A missing occurrence and a partially applied theorem must never fall
+    // back to arbitrary nodes: doing so discards the explicit argument and can
+    // make symmetric rules such as commutativity oscillate forever.
+    const mayTryEveryTerm = rule.args.length === 0 && (occurrence === null || targets.length === 0)
+    if (mayTryEveryTerm) {
       const expressionNodes = visible(
         overlay.querySelectorAll<HTMLElement>('.tr-expr-wrapper .tr-expression-node'),
-      )
+      ).filter(inSide)
       for (const expressionNode of expressionNodes) {
+        await scrollRewriteTermIntoView(expressionNode)
         const fallbackCard = await this.transformRule(rule.name)
         const before = proofSignature(harness(this.win).getProofAudit())
         if (await dragChangedProof(this.win, fallbackCard, expressionNode, before)) return true
@@ -3599,12 +3605,6 @@ export class CompletePlaythroughDriver {
         }
       }
       await this.openTransform(target)
-      const preferredSide = this.preferredRewriteSide
-      if (target === 'goal' && preferredSide) {
-        const overlay = await waitFor('transformation view', () =>
-          this.win.document.querySelector<HTMLElement>('.tr-transformation-overlay'))
-        await this.selectRewriteSide(overlay, preferredSide)
-      }
       if (parsed.repeat) {
         let changed = true
         let repetitions = 0

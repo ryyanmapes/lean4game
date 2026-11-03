@@ -161,7 +161,7 @@ describe('NNG4 Addition 1 induction transform mode', () => {
     }).dblclick()
 
     cy.get('.tr-back-btn', { timeout: 60000 }).should('be.visible')
-    cy.get('.tr-swap-btn').click()
+    // Both sides are on one row; only the left side's `0 + 0` matches.
     cy.get('[data-rule-label="add_zero"]', { timeout: 60000 })
       .trigger('mouseover')
     cy.get('.tr-expression-node.potential-target', { timeout: 60000 }).should('have.length', 1)

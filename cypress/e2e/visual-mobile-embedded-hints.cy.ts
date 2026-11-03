@@ -131,7 +131,6 @@ function expectExpressionClear() {
     const expression = $expression.get(0)!
     const rect = expression.getBoundingClientRect()
     for (const selector of [
-      '.tr-static-group',
       '.tr-back-btn',
       '.tr-ctrl-btn',
       '.transform-info',
@@ -269,7 +268,6 @@ const COMBINING_OBSTACLES = [
 const TRANSFORMATION_OBSTACLES = [
   '.visual-header',
   '.tr-back-btn',
-  '.tr-static-group',
   '.tr-expr-wrapper',
   '.tr-controls .tr-ctrl-btn',
   '.tr-side-controls .tr-ctrl-btn',
@@ -311,19 +309,11 @@ describe('Visual Lean lessons in a phone in-app browser', () => {
         cy.get('[data-testid="goal-card"]').dblclick()
         cy.get('.tr-transformation-overlay', { timeout: 60_000 }).should('be.visible')
         cy.get('.tr-rule-dock[data-layout-ready="true"]', { timeout: 60_000 }).should('exist')
-        expectReadableHint(
-          '.transform-info',
-          'Tap this arrow to edit the left-hand side of the goal equality.',
-          TRANSFORMATION_OBSTACLES,
-        )
-        expectArrowPointsAt('.tr-swap-btn')
-        expectExpressionClear()
-        expectTabsClearOfBottomEdge()
-
-        tap('.tr-swap-btn')
+        // Both sides are on one row, so the rewrite lesson shows straight away.
         expectReadableHint('.transform-info', 'to plug in', TRANSFORMATION_OBSTACLES)
         expectArrowPointsAt('.tr-main-area [data-expr-text="y"]')
         expectExpressionClear()
+        expectTabsClearOfBottomEdge()
         expectNoFocusRing()
 
         cy.window().then(win => new CompletePlaythroughDriver(win).performRewriteOnSide('rw [h]', 'left', true))
