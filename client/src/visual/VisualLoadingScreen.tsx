@@ -8,7 +8,7 @@ type VisualLoadingScreenProps = {
   worldId?: string
   worldTitle?: string
   levelId?: number
-  displayLevelId?: number
+  displayLevelId?: number | string
   levelTitle?: string | null
   message?: string
   progress?: number | null

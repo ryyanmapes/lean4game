@@ -1,9 +1,17 @@
+/** Where a path-map bonus world (`VisualBonusOf`) branches off. */
+export interface BonusAnchor {
+  world: string
+  level: number
+}
+
 export interface VisualProgressInput {
   worldIds: string[]
   edges: string[][]
   worldSizes: Record<string, number>
   skippedLevels: Record<string, number[]>
   completionNeutralLevels?: Record<string, number[]>
+  /** Bonus worlds unlock once their anchor level is done, whatever the edges say. */
+  bonusAnchors?: Record<string, BonusAnchor>
   isCompleted: (world: string, level: number) => boolean
   isEntered?: (world: string, level: number) => boolean
 }
@@ -30,6 +38,7 @@ export function computeVisualProgressFrontier({
   worldSizes,
   skippedLevels,
   completionNeutralLevels = {},
+  bonusAnchors = {},
   isCompleted,
   isEntered = () => false,
 }: VisualProgressInput): VisualProgressFrontier {
@@ -72,7 +81,12 @@ export function computeVisualProgressFrontier({
   const unlockedWorlds: Record<string, boolean> = Object.fromEntries(worldIds.map(worldId => [worldId, true]))
   for (const edge of edges) {
     const [source, target] = edge
-    if (source && target && incompleteWorlds.has(source)) unlockedWorlds[target] = false
+    if (!source || !target || bonusAnchors[target]) continue
+    if (incompleteWorlds.has(source)) unlockedWorlds[target] = false
+  }
+  for (const [worldId, anchor] of Object.entries(bonusAnchors)) {
+    if (!(worldId in unlockedWorlds)) continue
+    unlockedWorlds[worldId] = completedLevels[anchor.world]?.[anchor.level] ?? false
   }
 
   const frontierWorlds = worldIds.filter(worldId =>
@@ -94,6 +108,17 @@ export function computeVisualProgressFrontier({
     frontierWorlds,
     highlightedLevels,
   }
+}
+
+/** The bonus anchors of a game's worlds, keyed by bonus world. */
+export function bonusAnchorsOf(
+  nodes: Record<string, { visualBonusOf?: BonusAnchor }> | undefined | null,
+): Record<string, BonusAnchor> {
+  const anchors: Record<string, BonusAnchor> = {}
+  for (const [worldId, node] of Object.entries(nodes ?? {})) {
+    if (node.visualBonusOf) anchors[worldId] = node.visualBonusOf
+  }
+  return anchors
 }
 
 /** Whether the player may open a level: one they have finished (or, for a

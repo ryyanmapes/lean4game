@@ -569,8 +569,29 @@ export function expressionsEqual(n1: ExpressionNode, n2: ExpressionNode): boolea
   return false
 }
 
-export function matchesPattern(expr: ExpressionNode, pattern: ExpressionNode): boolean {
-  return matchAndCapture(expr, pattern) !== null
+/** Whether `expr` is an instance of `pattern`. Without `wildcards` every pattern
+ * variable matches any term (theorem cards); with them, only those names do and
+ * the rest must appear as they are (a `∀` hypothesis's free variables). */
+export function matchesPattern(
+  expr: ExpressionNode,
+  pattern: ExpressionNode,
+  wildcards?: ReadonlySet<string>,
+): boolean {
+  return matchAndCapture(expr, pattern, {}, wildcards) !== null
+}
+
+/** Ids of the nodes matching `predicate`, in reading order: a term comes before
+ * the terms inside it, and left before right. This is the order in which Lean's
+ * `rw` looks for the first instance of a rule. */
+export function firstMatchingNodeId(
+  roots: readonly ExpressionNode[],
+  predicate: (node: ExpressionNode) => boolean,
+): string | null {
+  for (const root of roots) {
+    const [first] = findMatchingNodeIds(root, predicate)
+    if (first !== undefined) return first
+  }
+  return null
 }
 
 export function findNodeById(root: ExpressionNode, id: string): ExpressionNode | null {
@@ -672,15 +693,21 @@ function applyEqualityRuleAt(
 
 /**
  * Match `expr` against `pattern`, capturing variable bindings.
- * Variables in `pattern` are wildcards that match any subexpression.
+ * Variables in `pattern` are wildcards that match any subexpression; when
+ * `wildcards` is given, only the variables it names are, and any other variable
+ * only matches itself.
  * Returns null if the pattern does not structurally match `expr`.
  */
 export function matchAndCapture(
   expr: ExpressionNode,
   pattern: ExpressionNode,
   bindings: Record<string, ExpressionNode> = {},
+  wildcards?: ReadonlySet<string>,
 ): Record<string, ExpressionNode> | null {
   if (pattern.type === 'variable') {
+    if (wildcards && !wildcards.has(pattern.name)) {
+      return expr.type === 'variable' && expr.name === pattern.name ? bindings : null
+    }
     const existing = bindings[pattern.name]
     if (existing !== undefined) {
       // Same variable seen again — must bind to the same expression.
@@ -693,13 +720,13 @@ export function matchAndCapture(
   }
   if (pattern.type === 'app') {
     if (expr.type !== 'app' || expr.func !== pattern.func) return null
-    return matchAndCapture(expr.arg, pattern.arg, bindings)
+    return matchAndCapture(expr.arg, pattern.arg, bindings, wildcards)
   }
   if (pattern.type === 'binary') {
     if (expr.type !== 'binary' || expr.op !== pattern.op) return null
-    const leftBindings = matchAndCapture(expr.left, pattern.left, bindings)
+    const leftBindings = matchAndCapture(expr.left, pattern.left, bindings, wildcards)
     if (leftBindings === null) return null
-    return matchAndCapture(expr.right, pattern.right, leftBindings)
+    return matchAndCapture(expr.right, pattern.right, leftBindings, wildcards)
   }
   return null
 }
@@ -739,10 +766,11 @@ export function applyTheoremRewrite(
   lhsPattern: ExpressionNode,
   rhsPattern: ExpressionNode,
   isReverse: boolean,
+  wildcards?: ReadonlySet<string>,
 ): ExpressionNode {
   const fromPattern = isReverse ? rhsPattern : lhsPattern
   const toTemplate = isReverse ? lhsPattern : rhsPattern
-  return applyTheoremRewriteAt(root, targetId, fromPattern, toTemplate)
+  return applyTheoremRewriteAt(root, targetId, fromPattern, toTemplate, wildcards)
 }
 
 function applyTheoremRewriteAt(
@@ -750,20 +778,21 @@ function applyTheoremRewriteAt(
   targetId: string,
   fromPattern: ExpressionNode,
   toTemplate: ExpressionNode,
+  wildcards?: ReadonlySet<string>,
 ): ExpressionNode {
   if (root.id === targetId) {
-    const bindings = matchAndCapture(root, fromPattern)
+    const bindings = matchAndCapture(root, fromPattern, {}, wildcards)
     if (bindings !== null) return substituteVariables(toTemplate, bindings)
     return root
   }
   if (root.type === 'binary') {
-    const newLeft = applyTheoremRewriteAt(root.left, targetId, fromPattern, toTemplate)
-    const newRight = applyTheoremRewriteAt(root.right, targetId, fromPattern, toTemplate)
+    const newLeft = applyTheoremRewriteAt(root.left, targetId, fromPattern, toTemplate, wildcards)
+    const newRight = applyTheoremRewriteAt(root.right, targetId, fromPattern, toTemplate, wildcards)
     if (newLeft === root.left && newRight === root.right) return root
     return { ...root, left: newLeft, right: newRight }
   }
   if (root.type === 'app') {
-    const newArg = applyTheoremRewriteAt(root.arg, targetId, fromPattern, toTemplate)
+    const newArg = applyTheoremRewriteAt(root.arg, targetId, fromPattern, toTemplate, wildcards)
     if (newArg === root.arg) return root
     return { ...root, arg: newArg }
   }

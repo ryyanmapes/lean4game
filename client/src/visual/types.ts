@@ -68,7 +68,7 @@ export interface VisualGoalInfo {
 }
 
 export interface VisualTransformInfo {
-  kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'info'
+  kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'info' | 'check'
   side?: 'left' | 'right' | null
   source?: string
   target?: string
@@ -95,6 +95,8 @@ export interface VisualHypGoalInfo {
 
 export interface VisualProofGraphInfo {
   goal?: string | null
+  /** Left of the proof-stream graph (the default) or below it. */
+  position?: 'left' | 'below'
   text: string
 }
 

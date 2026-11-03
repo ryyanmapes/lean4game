@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef, useMemo } fr
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, pointerWithin } from '@dnd-kit/core'
 import type { CollisionDetection } from '@dnd-kit/core'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
-import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findMatchingNodeIds, findDisambiguatingRewritePath, findNodeById } from './expr-engine'
+import { parse, printExpression, formatFormulaText, applyEqualityRule, applyTheoremRewrite, expressionsEqual, deepCloneWithNewIds, matchesPattern, findMatchingNodeIds, findDisambiguatingRewritePath, findNodeById, sanitizeLeanDisplayName } from './expr-engine'
+import { ruleClickTargetId, ruleMatchesNode, ruleMatching } from './ruleMatching'
 import type { ExpressionNode } from './expr-types'
 import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
@@ -28,6 +29,8 @@ export interface EqualityHyp {
   rhs: ExpressionNode
   /** NNG4 inventory category (e.g. "+", "*", "^", "≤", "012", "Peano"). Absent for hyp cards. */
   category?: string
+  /** The `∀ …` binders of a quantified rule, shown under the card. */
+  forallFooter?: string
 }
 
 export type TransformRelation = '=' | '<' | '>' | '≤' | '≥' | '≠'
@@ -241,6 +244,18 @@ interface Props {
   /** Names of equality-rewriting theorems to highlight with a soft glow. */
   emphasizeItems?: string[]
   visualInfos?: VisualTransformInfo[]
+  /** Rewrite Mode is the whole level: no Back button, and a check mark above the
+   *  relation closes the goal once both sides match (`VisualRewriteOnly`). */
+  rewriteOnly?: boolean
+  /** Hide the rewrite-direction button; every rule rewrites left to right. */
+  hideRewriteDirection?: boolean
+  /** Labels of rule cards whose `∀ …` footer is highlighted. */
+  emphasizeForall?: string[]
+  /** Called when the player clicks the check mark; resolves to whether Lean
+   *  accepted the closing `rfl`. */
+  onCheck?: () => Promise<boolean>
+  /** The level is solved: the check mark is shown green. */
+  completed?: boolean
 }
 
 function printLeanExpression(node: ExpressionNode): string {
@@ -255,6 +270,7 @@ export function TransformationView({
   onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
   isPhonePortrait = false, emphasizeItems, visualInfos = [],
+  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall, onCheck, completed = false,
 }: Props) {
   const instanceIdRef = useRef(++transformationViewInstanceCounter)
   const initialLhs = useCallback(() => {
@@ -269,6 +285,17 @@ export function TransformationView({
   const [lhs, setLhs] = useState<ExpressionNode>(initialLhs)
   const [rhs, setRhs] = useState<ExpressionNode>(initialRhs)
   const [history, setHistory] = useState<{ lhs: ExpressionNode; rhs: ExpressionNode }[]>([])
+  // A Rewrite-only level never leaves this view, so an undo or reset can change
+  // Lean's goal under it without going through the local history. Follow Lean.
+  const leanGoalKey = `${goalLhsNode ? printExpression(goalLhsNode) : goalLhsStr} ${relation} ${goalRhsNode ? printExpression(goalRhsNode) : goalRhsStr}`
+  const syncedLeanGoalKeyRef = useRef(leanGoalKey)
+  useEffect(() => {
+    if (syncedLeanGoalKeyRef.current === leanGoalKey) return
+    syncedLeanGoalKeyRef.current = leanGoalKey
+    if (!rewriteOnly) return
+    setLhs(initialLhs())
+    setRhs(initialRhs())
+  }, [initialLhs, initialRhs, leanGoalKey, rewriteOnly])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null)
   const [arrowEnd, setArrowEnd] = useState<{ x: number; y: number } | null>(null)
@@ -295,6 +322,11 @@ export function TransformationView({
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
   const rewriteInfoRef = useRef<HTMLDivElement>(null)
+  const relationRef = useRef<HTMLSpanElement>(null)
+  const checkButtonRef = useRef<HTMLButtonElement>(null)
+  const checkInfoRef = useRef<HTMLDivElement>(null)
+  const [checkPosition, setCheckPosition] = useState<{ left: number; top: number } | null>(null)
+  const [checkArrow, setCheckArrow] = useState<GuideArrow | null>(null)
   const suppressRuleClickRef = useRef(false)
   const undoInFlightRef = useRef(false)
   // The whole relation is one row; when it is wider than the screen it
@@ -570,9 +602,17 @@ export function TransformationView({
       transformInfoMatchesGoal(info, currentGoalText, relation, currentSidesMatch)),
     [currentGoalText, currentSidesMatch, relation, visualInfos],
   )
-  const backInfo = activeVisualInfos.find(info => info.kind === 'back' && info.text)
+  // A Rewrite-only level has no Back button to point at.
+  const backInfo = rewriteOnly ? undefined : activeVisualInfos.find(info => info.kind === 'back' && info.text)
   const generalInfo = activeVisualInfos.find(info => info.kind === 'info' && info.text)
-  const reverseInfo = activeVisualInfos.find(info => info.kind === 'reverse' && info.text)
+  const reverseInfo = hideRewriteDirection
+    ? undefined
+    : activeVisualInfos.find(info => info.kind === 'reverse' && info.text)
+  // The check mark closes a Rewrite-only level once both sides are the same.
+  const showCheck = rewriteOnly && (currentSidesMatch || completed)
+  const checkInfo = showCheck && !completed
+    ? activeVisualInfos.find(info => info.kind === 'check' && info.text)
+    : undefined
   const rewriteInfos = useMemo(
     () => activeVisualInfos.filter(info => info.kind === 'rewrite' && info.text),
     [activeVisualInfos],
@@ -722,7 +762,10 @@ export function TransformationView({
           const source = info.source?.trim()
           const target = info.target?.trim()
           if (!source || !target) continue
+          // Lessons name the Lean hypothesis; its card may show the name the way
+          // Visual Lean displays it (`h_1` as `h1`).
           const sourceEl = page.querySelector<HTMLElement>(`[data-rule-label="${cssEscape(source)}"]`)
+            ?? page.querySelector<HTMLElement>(`[data-rule-label="${cssEscape(sanitizeLeanDisplayName(source))}"]`)
           const targetEls = Array.from(mainAreaRef.current?.querySelectorAll<HTMLElement>(`[data-expr-text="${cssEscape(target)}"]`) ?? [])
           const targetEl = targetEls
             .sort((a, b) => {
@@ -735,6 +778,12 @@ export function TransformationView({
           const targetRect = targetEl.getBoundingClientRect()
           const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
+          if (rewriteOnly) {
+            // The lesson sits with the others at the top of the page; the
+            // arrow runs from the rule card to the term on every screen.
+            nextRewriteGuide = { info, style: {}, arrow: { start, end, startPadding: 48, endPadding: 60 } }
+            break
+          }
           if (isPhonePortrait) {
             // CSS places the lesson in the controls' row with the others; its
             // arrow runs from the lesson's top edge up to the bottom of the
@@ -788,11 +837,60 @@ export function TransformationView({
       window.removeEventListener('transitionend', updateGuides, true)
     }
   }, [backInfo, reverseInfo, rewriteInfos, lhs, rhs, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
-    phoneExprScale, phoneExprShift])
+    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo])
+
+  // The check mark floats just above the relation sign, wherever the row has
+  // scrolled; its lesson's arrow runs from the lesson down to it.
+  useLayoutEffect(() => {
+    if (!showCheck) {
+      setCheckPosition(null)
+      setCheckArrow(null)
+      return
+    }
+    const update = () => {
+      const overlay = overlayRef.current
+      const relationEl = relationRef.current
+      if (!overlay || !relationEl) return
+      const overlayRect = overlay.getBoundingClientRect()
+      const relationRect = relationEl.getBoundingClientRect()
+      const left = relationRect.left + relationRect.width / 2 - overlayRect.left
+      const top = relationRect.top - overlayRect.top - 6
+      setCheckPosition(prev =>
+        prev && Math.abs(prev.left - left) < 0.5 && Math.abs(prev.top - top) < 0.5 ? prev : { left, top })
+      const lesson = checkInfoRef.current
+      const button = checkButtonRef.current
+      if (lesson && button) {
+        const lessonRect = lesson.getBoundingClientRect()
+        const buttonRect = button.getBoundingClientRect()
+        setCheckArrow({
+          start: { x: lessonRect.left + lessonRect.width / 2, y: lessonRect.bottom },
+          end: { x: buttonRect.left + buttonRect.width / 2, y: buttonRect.top + buttonRect.height / 2 },
+          startPadding: 8,
+          endPadding: 30,
+          arc: 'none',
+        })
+      } else {
+        setCheckArrow(null)
+      }
+    }
+    update()
+    // The button is placed from the relation's position, so measure again once
+    // it has been laid out to aim the arrow at it.
+    const rafId = window.requestAnimationFrame(update)
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('transitionend', update, true)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('transitionend', update, true)
+    }
+  }, [showCheck, checkInfo, checkPosition, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
 
   useLayoutEffect(() => {
     const lesson = rewriteInfoRef.current
-    if (!isPhonePortrait || !rewriteGuide || !lesson) {
+    if (!isPhonePortrait || rewriteOnly || !rewriteGuide || !lesson) {
       setPhoneRewriteArrow(null)
       return
     }
@@ -808,7 +906,7 @@ export function TransformationView({
       endPadding: 6,
       arc: 'none',
     })
-  }, [isPhonePortrait, rewriteGuide])
+  }, [isPhonePortrait, rewriteGuide, rewriteOnly])
 
   useEffect(() => {
     if (!activeId) return
@@ -831,17 +929,19 @@ export function TransformationView({
     return null
   }
 
-  const highlightHyp = getEqualityHypForId(activeId) ?? getEqualityHypForId(hoveredId)
+  const highlightId = getEqualityHypForId(activeId) ? activeId : hoveredId
+  const highlightHyp = getEqualityHypForId(highlightId)
   const highlightFrom = highlightHyp ? (isReverse ? highlightHyp.rhs : highlightHyp.lhs) : null
-  // Theorem hyps use pattern matching (their variables are generic wildcards);
-  // hypothesis hyps use exact matching (their terms are the real Lean expressions).
-  const highlightIsThm = (activeId ?? hoveredId)?.startsWith('thm_') ?? false
+  // Theorems and ∀ hypotheses match by pattern (their bound variables match any
+  // term); other hypotheses match exactly (their terms are the real Lean ones).
+  const highlightMatching = useMemo(
+    () => highlightId && highlightHyp ? ruleMatching(highlightId, highlightHyp) : { isPattern: false },
+    [highlightHyp, highlightId],
+  )
   const isValidDropTarget = useCallback((node: ExpressionNode) => {
     if (!highlightFrom) return false
-    return highlightIsThm
-      ? matchesPattern(node, highlightFrom)
-      : expressionsEqual(node, highlightFrom)
-  }, [highlightFrom, highlightIsThm])
+    return ruleMatchesNode(node, highlightFrom, highlightMatching)
+  }, [highlightFrom, highlightMatching])
   const customIsValidDropTarget = highlightFrom ? isValidDropTarget : undefined
 
   // Nested expression nodes are all droppable, so a pointer can be "within" both an
@@ -890,13 +990,16 @@ export function TransformationView({
   }
 
   const applyRewriteAtTarget = async (draggedId: string, targetId: string) => {
+    // A solved Rewrite-only level keeps its finished relation on screen.
+    if (completed) return false
     const hyp = getEqualityHypForId(draggedId)
     if (!hyp) return false
 
     // Pre-check: does the target node structurally match the rewrite pattern?
-    // Theorem hyps use wildcard matching; hypothesis hyps use exact matching.
+    // Theorems and ∀ hypotheses match by pattern; other hypotheses exactly.
     const from = isReverse ? hyp.rhs : hyp.lhs
-    const isThm = draggedId.startsWith('thm_')
+    const matching = ruleMatching(draggedId, hyp)
+    const isThm = matching.isPattern
     // Both sides are on screen; the drop target says which one is rewritten.
     const leftTarget = findNodeById(lhs, targetId)
     const workingSide: 'left' | 'right' = leftTarget ? 'left' : 'right'
@@ -904,7 +1007,7 @@ export function TransformationView({
     const targetNode = leftTarget ?? findNodeById(rhs, targetId)
     if (!targetNode) return false
     const patternMatches = isThm
-      ? matchesPattern(targetNode, from)
+      ? matchesPattern(targetNode, from, matching.wildcards)
       : printExpression(applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)) !== printExpression(workingExpr)
     if (!patternMatches) return false
 
@@ -918,7 +1021,7 @@ export function TransformationView({
       : findDisambiguatingRewritePath(
           workingExpr,
           targetId,
-          node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
+          node => ruleMatchesNode(node, from, matching),
         )
     // rw_nth counts matches across the complete relation from left to right,
     // not merely within the side that contains the target.
@@ -927,7 +1030,7 @@ export function TransformationView({
     const occurrenceMatcher = (node: ExpressionNode) =>
       isThm && isReverse && from.type === 'variable'
         ? expressionsEqual(node, targetNode)
-        : isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
+        : ruleMatchesNode(node, from, matching)
     const leftMatches = findMatchingNodeIds(lhs, occurrenceMatcher)
     const sideMatches = workingSide === 'left'
       ? leftMatches
@@ -947,7 +1050,7 @@ export function TransformationView({
     // update only the rewritten expression after Lean accepts the action.
     setIsProcessing(true)
     const rewrittenExpr = isThm
-      ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
+      ? applyTheoremRewrite(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse, matching.wildcards)
       : applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)
     const expectedGoal = workingSide === 'right'
       ? {
@@ -988,18 +1091,31 @@ export function TransformationView({
     return true
   }
 
+  // A click rewrites the first term the rule can rewrite, reading left to right.
   const handleRuleClick = async (draggedId: string) => {
-    if (isProcessing || suppressRuleClickRef.current) return
+    if (isProcessing || suppressRuleClickRef.current || completed) return
     const hyp = getEqualityHypForId(draggedId)
     if (!hyp) return
 
     const from = isReverse ? hyp.rhs : hyp.lhs
-    const isThm = draggedId.startsWith('thm_')
-    const matches = (node: ExpressionNode) => isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
-    const matchingTargetIds = [...findMatchingNodeIds(lhs, matches), ...findMatchingNodeIds(rhs, matches)]
-    if (matchingTargetIds.length !== 1) return
+    const targetId = ruleClickTargetId(lhs, rhs, from, ruleMatching(draggedId, hyp))
+    if (!targetId) return
 
-    await applyRewriteAtTarget(draggedId, matchingTargetIds[0]!)
+    await applyRewriteAtTarget(draggedId, targetId)
+  }
+
+  const handleCheck = async () => {
+    if (!onCheck || isProcessing || completed || !currentSidesMatch) return
+    setIsProcessing(true)
+    let accepted = false
+    try {
+      accepted = await onCheck()
+    } finally {
+      setIsProcessing(false)
+    }
+    // Undo steps back through the closing `rfl` as through a rewrite, so record
+    // it with the unchanged relation.
+    if (accepted) setHistory(prev => [...prev, { lhs, rhs }])
   }
 
   const releaseSuppressedRuleClick = () => {
@@ -1064,10 +1180,12 @@ export function TransformationView({
         onDragEnd={handleDragEnd}
         onDragCancel={releaseSuppressedRuleClick}
       >
-        {/* Back button */}
-        <button ref={backButtonRef} className="tr-back-btn" onClick={() => { if (!isProcessing) onClose() }} aria-disabled={isProcessing}>
-          ← Back
-        </button>
+        {/* Back button; a Rewrite-only level has nowhere to go back to */}
+        {!rewriteOnly && (
+          <button ref={backButtonRef} className="tr-back-btn" onClick={() => { if (!isProcessing) onClose() }} aria-disabled={isProcessing}>
+            ← Back
+          </button>
+        )}
 
         {/* Processing overlay */}
         {isProcessing && <div className="tr-processing" />}
@@ -1085,7 +1203,7 @@ export function TransformationView({
                 isActive={!!activeId && !isProcessing}
                 customIsValidDropTarget={customIsValidDropTarget}
               />
-              <span className="tr-op tr-relation-op">{relation}</span>
+              <span ref={relationRef} className="tr-op tr-relation-op">{relation}</span>
               <ExprRenderer
                 node={rhs}
                 isActive={!!activeId && !isProcessing}
@@ -1094,19 +1212,47 @@ export function TransformationView({
             </div>
           </div>
 
-          {generalInfo && (
-            <div className="visual-info-callout transform-info side-info">
-              <VisualInfoText text={generalInfo.text} />
+          {/* A Rewrite-only level stacks its lessons at the top of the page. */}
+          {rewriteOnly ? (
+            <div className="tr-top-lessons" data-testid="rewrite-lessons">
+              {generalInfo && (
+                <div className="visual-info-callout transform-info top-info">
+                  <VisualInfoText text={generalInfo.text} />
+                </div>
+              )}
+              {rewriteGuide && (
+                <div ref={rewriteInfoRef} className="visual-info-callout transform-info top-info top-info-rewrite">
+                  <VisualInfoText text={rewriteGuide.info.text} />
+                </div>
+              )}
+              {reverseInfo && (
+                <div ref={reverseInfoRef} className="visual-info-callout transform-info top-info top-info-reverse">
+                  <VisualInfoText text={reverseInfo.text} />
+                </div>
+              )}
+              {checkInfo && (
+                <div ref={checkInfoRef} className="visual-info-callout transform-info top-info check-info">
+                  <VisualInfoText text={checkInfo.text} />
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              {generalInfo && (
+                <div className="visual-info-callout transform-info side-info">
+                  <VisualInfoText text={generalInfo.text} />
+                </div>
+              )}
+
+              {reverseInfo && (
+                <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info reverse-info">
+                  <VisualInfoText text={reverseInfo.text} />
+                </div>
+              )}
+            </>
           )}
 
-          {reverseInfo && (
-            <div ref={reverseInfoRef} className="visual-info-callout transform-info side-info reverse-info">
-              <VisualInfoText text={reverseInfo.text} />
-            </div>
-          )}
-
-          {isPhonePortrait && rewriteGuide && (
+          {isPhonePortrait && !rewriteOnly && rewriteGuide && (
             <div ref={rewriteInfoRef} className="visual-info-callout transform-info rewrite-info">
               <VisualInfoText text={rewriteGuide.info.text} />
             </div>
@@ -1124,17 +1270,34 @@ export function TransformationView({
           </div>
 
           {/* Reverse */}
-          <div className="tr-side-controls">
-            <button
-              ref={reverseButtonRef}
-              onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
-              aria-disabled={isProcessing}
-              className={`tr-ctrl-btn tr-direction-btn${isReverse ? ' active-reverse' : ''}`}
-              aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
-            ><RewriteDirectionIcon reverse={isReverse} /></button>
-          </div>
+          {!hideRewriteDirection && (
+            <div className="tr-side-controls">
+              <button
+                ref={reverseButtonRef}
+                onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
+                aria-disabled={isProcessing}
+                className={`tr-ctrl-btn tr-direction-btn${isReverse ? ' active-reverse' : ''}`}
+                aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
+              ><RewriteDirectionIcon reverse={isReverse} /></button>
+            </div>
+          )}
 
         </div>
+
+        {/* Check mark: closes a Rewrite-only level once both sides match */}
+        {showCheck && (
+          <button
+            ref={checkButtonRef}
+            type="button"
+            className={`tr-check-btn${completed ? ' completed' : ''}`}
+            data-testid="rewrite-check"
+            style={checkPosition ?? { visibility: 'hidden' }}
+            onClick={() => void handleCheck()}
+            disabled={completed}
+            aria-disabled={isProcessing || completed}
+            aria-label={completed ? 'Proof complete' : 'Both sides match: complete the proof'}
+          >✓</button>
+        )}
 
         {/* Scrollbar for a relation wider than the screen */}
         {isExprOverflowing && (
@@ -1164,7 +1327,7 @@ export function TransformationView({
           data-layout-ready={dockPresentationReady ? 'true' : 'false'}
           aria-busy={!dockPresentationReady}
           style={{ visibility: dockPresentationReady ? 'visible' : 'hidden' }}
-          onContextMenu={e => { e.preventDefault(); if (!isProcessing) onIsReverseChange(!isReverse) }}
+          onContextMenu={e => { e.preventDefault(); if (!isProcessing && !hideRewriteDirection) onIsReverseChange(!isReverse) }}
         >
           {/* Cards row */}
           <div className="tr-dock-cards">
@@ -1193,7 +1356,9 @@ export function TransformationView({
                         rhsStr={rule.rhsStr}
                         lhsNode={rule.lhs}
                         rhsNode={rule.rhs}
-                        forallFooter={(rule as EqualityHyp & { forallFooter?: string }).forallFooter}
+                        forallFooter={rule.forallFooter}
+                        forallEmphasized={emphasizeForall?.some(name =>
+                          name === rule.label || sanitizeLeanDisplayName(name) === rule.label) ?? false}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         emphasized={isEmphasizedRule(rule)}
@@ -1263,7 +1428,8 @@ export function TransformationView({
           arc: isPhonePortrait ? 'none' : 'up',
         }} />}
         {phoneRewriteArrow && <InstructionGuideArrow arrow={phoneRewriteArrow} />}
-        {rewriteGuide && !isPhonePortrait && (
+        {rewriteGuide && rewriteOnly && <InstructionGuideArrow arrow={rewriteGuide.arrow} />}
+        {rewriteGuide && !isPhonePortrait && !rewriteOnly && (
           <>
             <InstructionGuideArrow arrow={rewriteGuide.arrow} />
             <div className="visual-info-callout transform-info rewrite-info" style={rewriteGuide.style}>
@@ -1271,6 +1437,7 @@ export function TransformationView({
             </div>
           </>
         )}
+        {checkInfo && checkArrow && <InstructionGuideArrow arrow={checkArrow} className="check-guide-arrow" />}
 
         <DragOverlay dropAnimation={null}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--visual-accent-soft)', opacity: 0 }} />

@@ -34,7 +34,7 @@ import { useTelemetryConsentGate } from '../components/telemetry_consent'
 import { levelStartsWithBindersInGoal } from './initialGoalState'
 import { VisualAttemptLog } from './visualTelemetry'
 import type { VisualGesture } from './visualTelemetry'
-import { computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
+import { bonusAnchorsOf, computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
 import './visual.css'
 
 const SUPPORTED_VISUAL_TACTICS = new Set(['symm', 'induction', 'cases', 'positivity', 'exfalso'])
@@ -100,6 +100,13 @@ function discardVisualProofAutosave(gameId: string, worldId: string, levelId: nu
 
 function delay(ms: number) {
   return new Promise<void>(resolve => window.setTimeout(resolve, ms))
+}
+
+const DEFAULT_LEVEL_PRESENTATION = {
+  levelNumber: undefined,
+  rewriteOnly: false,
+  hideRewriteDirection: false,
+  emphasizeForall: [] as string[],
 }
 
 function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
@@ -318,6 +325,12 @@ export function VisualProofPage() {
   const [visualTacticHypInfos, setVisualTacticHypInfos] = useState<VisualTacticHypInfo[]>([])
   const [visualHypGoalInfos, setVisualHypGoalInfos] = useState<VisualHypGoalInfo[]>([])
   const [visualProofGraphInfos, setVisualProofGraphInfos] = useState<VisualProofGraphInfo[]>([])
+  const [levelPresentation, setLevelPresentation] = useState<{
+    levelNumber?: string
+    rewriteOnly: boolean
+    hideRewriteDirection: boolean
+    emphasizeForall: string[]
+  }>(DEFAULT_LEVEL_PRESENTATION)
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
   const nextLevelId = (() => {
     let next = levelId + 1
@@ -342,6 +355,7 @@ export function VisualProofPage() {
       worldSizes,
       skippedLevels: skipped ?? {},
       completionNeutralLevels: completionNeutralLevels ?? {},
+      bonusAnchors: bonusAnchorsOf(worlds.nodes),
       isCompleted: (world, level) => selectCompleted(gameId, world, level)(state),
       isEntered: (world, level) => selectEntered(gameId, world, level)(state),
     })
@@ -540,6 +554,7 @@ export function VisualProofPage() {
     setVisualTacticHypInfos([])
     setVisualHypGoalInfos([])
     setVisualProofGraphInfos([])
+    setLevelPresentation(DEFAULT_LEVEL_PRESENTATION)
     if (!worldId || !levelId) return
     let active = true
     const baseUrl = getDataBaseUrl().replace(/\/$/, '')
@@ -556,6 +571,11 @@ export function VisualProofPage() {
         visualTacticHypInfos?: VisualTacticHypInfo[]
         visualHypGoalInfos?: VisualHypGoalInfo[]
         visualProofGraphInfos?: VisualProofGraphInfo[]
+        visualLevelNumber?: string | null
+        visualTextLevel?: boolean
+        visualRewriteOnly?: boolean
+        visualHideRewriteDirection?: boolean
+        visualEmphasizeForall?: string[]
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
@@ -576,6 +596,17 @@ export function VisualProofPage() {
         if (levelData.visualTacticHypInfos?.length) setVisualTacticHypInfos(levelData.visualTacticHypInfos)
         if (levelData.visualHypGoalInfos?.length) setVisualHypGoalInfos(levelData.visualHypGoalInfos)
         if (levelData.visualProofGraphInfos?.length) setVisualProofGraphInfos(levelData.visualProofGraphInfos)
+        setLevelPresentation({
+          levelNumber: levelData.visualLevelNumber ?? undefined,
+          rewriteOnly: levelData.visualRewriteOnly ?? false,
+          hideRewriteDirection: levelData.visualHideRewriteDirection ?? false,
+          emphasizeForall: levelData.visualEmphasizeForall ?? [],
+        })
+        // A text-only level is read on the world map, not played here.
+        if (levelData.visualTextLevel) {
+          navigate(`${gameMapPath(gameId, 'visual')}?text=${encodeURIComponent(`${worldId}/${levelId}`)}`, { replace: true })
+          return
+        }
         if (gameData?.worldSize?.[worldId]) setWorldSize(gameData.worldSize[worldId])
         if (gameData?.skippedLevels?.[worldId]) setSkippedLevels(gameData.skippedLevels[worldId])
         const rawWorldTitle = gameData?.worlds?.nodes?.[worldId]?.title
@@ -699,7 +730,7 @@ export function VisualProofPage() {
       })
 
     return () => { active = false }
-  }, [gameId, worldId, levelId])
+  }, [gameId, navigate, worldId, levelId])
 
   useEffect(() => {
     if (canvasState && presentationReady && telemetryConsent.consentState === 'accepted') {
@@ -718,7 +749,7 @@ export function VisualProofPage() {
   // Skip-aware prev/next: find closest non-skipped neighbour.
   const hasPrev = (() => { let p = levelId - 1; while (skippedLevels.includes(p) && p >= 1) p--; return p >= 1 })()
   const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
-  const displayLevelId = visualDisplayLevelId(levelId, skippedLevels)
+  const displayLevelId = levelPresentation.levelNumber ?? visualDisplayLevelId(levelId, skippedLevels)
 
   const contentReady = Boolean(canvasState && presentationReady)
   if (!canvasState || !presentationReady || telemetryConsent.shouldHold) {
@@ -763,6 +794,9 @@ export function VisualProofPage() {
       visualTacticHypInfos={visualTacticHypInfos}
       visualHypGoalInfos={visualHypGoalInfos}
       visualProofGraphInfos={visualProofGraphInfos}
+      rewriteOnly={levelPresentation.rewriteOnly}
+      hideRewriteDirection={levelPresentation.hideRewriteDirection}
+      emphasizeForall={levelPresentation.emphasizeForall}
       worldId={worldId}
       levelId={levelId}
       displayLevelId={displayLevelId}

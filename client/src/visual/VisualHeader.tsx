@@ -6,7 +6,8 @@ interface VisualHeaderProps {
   worldId?: string
   worldTitle?: string
   levelId: number
-  displayLevelId?: number
+  /** The level's display number, or its `VisualLevelNumber` label. */
+  displayLevelId?: number | string
   levelTitle?: string | null
   hasPrev: boolean
   /** False on the last level of a world, where Next becomes a World Map button. */

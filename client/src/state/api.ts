@@ -18,11 +18,27 @@ export interface GameTile {
   image: string
 }
 
+/** A world of the game graph, with its Visual Lean path-map settings. */
+export interface VisualWorldNode {
+  id: string,
+  title: string,
+  introduction: string,
+  image: string,
+  /** Bonus branch off this level of another world (`VisualBonusOf`). */
+  visualBonusOf?: { world: string, level: number },
+  /** Named path colour (`VisualWorldColor`). */
+  visualColor?: string,
+  /** Map column: 0 is the centre, negative is left (`VisualMapColumn`). */
+  visualMapColumn?: number,
+  /** Not part of any named world: grey and unlabelled (`VisualSharedPath`). */
+  visualSharedPath?: boolean,
+}
+
 export interface GameInfo {
   title: null|string,
   introduction: null|string,
   info: null|string,
-  worlds: null|{nodes: {[id:string]: {id: string, title: string, introduction: string, image: string}}, edges: string[][]},
+  worlds: null|{nodes: {[id:string]: VisualWorldNode}, edges: string[][]},
   worldSize: null|{[key: string]: number},
   skippedLevels?: {[key: string]: number[]},
   completionNeutralLevels?: {[key: string]: number[]},
@@ -33,6 +49,8 @@ export interface GameInfo {
   settings: {
     unbundleHyps: boolean,
   } | undefined
+  /** Visual Lean draws the world map as paths of individual levels (`VisualPathMap`). */
+  visualPathMap?: boolean
 }
 
 export interface InventoryTile {
@@ -67,10 +85,18 @@ export interface LevelInfo {
   image: null|string,
   completionNeutral?: boolean,
   visualGoalInfos?: Array<{ position: 'above' | 'below'; arrow: boolean; goal?: string | null; text: string }>,
-  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>,
+  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'info' | 'check'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>,
   visualTacticHypInfos?: Array<{ tactic: string; hyp: string; goal?: string | null; text: string }>,
   visualHypGoalInfos?: Array<{ hyp: string; goal?: string | null; text: string }>,
   visualProofGraphInfos?: Array<{ goal?: string | null; text: string }>
+  /** Text-only level: the path map shows its introduction in a dialog (`VisualTextLevel`). */
+  visualTextLevel?: boolean,
+  /** Opens in Rewrite Mode on the goal and stays there (`VisualRewriteOnly`). */
+  visualRewriteOnly?: boolean,
+  /** Hide Rewrite Mode's rewrite-direction button (`VisualHideRewriteDirection`). */
+  visualHideRewriteDirection?: boolean,
+  /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
+  visualEmphasizeForall?: string[],
 }
 
 /** Used to display the inventory on the welcome page */

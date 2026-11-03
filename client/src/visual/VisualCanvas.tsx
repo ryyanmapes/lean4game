@@ -2344,8 +2344,16 @@ interface VisualCanvasProps {
   visualProofGraphInfos?: VisualProofGraphInfo[]
   worldId: string
   levelId: number
-  /** Display index after Visual Lean-only skipped levels are removed. */
-  displayLevelId?: number
+  /** Display label: the index after Visual Lean-only skipped levels are
+   *  removed, or the level's `VisualLevelNumber`. */
+  displayLevelId?: number | string
+  /** The level is played in Rewrite Mode on the goal and never leaves it
+   *  (`VisualRewriteOnly`). */
+  rewriteOnly?: boolean
+  /** Hide Rewrite Mode's rewrite-direction button (`VisualHideRewriteDirection`). */
+  hideRewriteDirection?: boolean
+  /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
+  emphasizeForall?: string[]
   onInteraction: (proofBody: string) => Promise<ProofState | null>
   /** Re-check an exact full classic proof body without adding the visual prelude. */
   onValidateProof?: (proofBody: string) => Promise<ProofState | null>
@@ -2632,7 +2640,8 @@ export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
-  onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = ''
+  onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = '',
+  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall,
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
     React.useContext(PreferencesContext)
@@ -5766,6 +5775,8 @@ export function VisualCanvas({
 
   const transformingStream = transformTarget
     ? canvasState.streams.find(s => s.id === transformTarget.streamId)
+      // A solved Rewrite-only level reopened later keeps showing its last goal.
+      ?? (rewriteOnly ? displayCanvasState.streams.find(s => s.id === transformTarget.streamId) : undefined)
     : null
 
   const computedTransformProps: TransformViewPresentation | null = (() => {
@@ -5884,6 +5895,30 @@ export function VisualCanvas({
   }
   const transformProps = computedTransformProps
     ?? lastTransformPropsRef.current
+
+  // A Rewrite-only level is played in Rewrite Mode on the goal: open it on load
+  // and again whenever an undo or reset returns to the canvas. A reflexive goal
+  // still opens, so its check mark can close it.
+  useEffect(() => {
+    if (!rewriteOnly || transformTarget || constructionTarget) return
+    const stream = canvasState.streams.find(candidate => candidate.id === activeStreamId)
+      ?? canvasState.streams[0]
+      ?? displayCanvasState.streams[0]
+    if (!stream) return
+    if (stream.equalityTree == null && parsedGoalTarget(stream, comparisonTransformEnabled) === null) return
+    setIsTransformReverse(false)
+    setTransformTarget({ kind: 'goal', streamId: stream.id })
+  }, [activeStreamId, canvasState.streams, comparisonTransformEnabled, constructionTarget,
+    displayCanvasState.streams, rewriteOnly, transformTarget])
+
+  /** The check mark of a Rewrite-only level: close the matching goal with rfl. */
+  const handleRewriteCheck = async (): Promise<boolean> => {
+    if (!transformingStream || isProcessing || canvasState.completed) return false
+    return applyInteraction('click_goal', transformingStream.id, {
+      solvedGoalId: transformingStream.id,
+      targetStreamId: transformingStream.id,
+    })
+  }
 
   // ── Build ConstructionView props ─────────────────────────────────────────────
 
@@ -7033,11 +7068,14 @@ export function VisualCanvas({
   }
 
   function renderProofGraphContent() {
+    // Lessons sit left of the graph unless authored below it.
+    const leftInfos = activeProofGraphInfos.filter(info => info.position !== 'below')
+    const belowInfos = activeProofGraphInfos.filter(info => info.position === 'below')
     return (
       <div className="proof-tree-with-info">
-        {activeProofGraphInfos.length > 0 && (
+        {leftInfos.length > 0 && (
           <div className="proof-graph-info-stack">
-            {activeProofGraphInfos.map((info, index) => (
+            {leftInfos.map((info, index) => (
               <div key={index} className="visual-info-callout proof-graph-info">
                 <VisualInfoText text={info.text} />
               </div>
@@ -7077,6 +7115,15 @@ export function VisualCanvas({
               >
                 &gt;
               </button>
+            </div>
+          )}
+          {belowInfos.length > 0 && (
+            <div className="proof-graph-info-stack below">
+              {belowInfos.map((info, index) => (
+                <div key={index} className="visual-info-callout proof-graph-info">
+                  <VisualInfoText text={info.text} />
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -7388,53 +7435,7 @@ export function VisualCanvas({
 
           {proofGraphVisible && !isPhonePortrait && (
             <div className="proof-tree-panel" ref={proofTreePanelRef}>
-              <div className="proof-tree-with-info">
-                {activeProofGraphInfos.length > 0 && (
-                  <div className="proof-graph-info-stack">
-                    {activeProofGraphInfos.map((info, index) => (
-                      <div key={index} className="visual-info-callout proof-graph-info">
-                        <VisualInfoText text={info.text} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="proof-tree-main">
-                  <ProofStreamGraph
-                    tree={proofTree}
-                    currentStreamId={currentStream?.id ?? null}
-                    onNavigate={navigateToStream}
-                  />
-                  {currentStream && (
-                    <div className="stream-navigator" data-testid="stream-navigator">
-                      <button
-                        className={`stream-nav-btn${hasIncompleteStreamLeft ? ' toward-incomplete' : ''}`}
-                        data-testid="stream-nav-prev"
-                        onClick={goLeft}
-                        disabled={currentStreamIndex <= 0}
-                      >
-                        &lt;
-                      </button>
-                      <div
-                        className="stream-label"
-                        data-testid="stream-nav-label"
-                        data-current-stream-index={String(currentStreamIndex + 1)}
-                        data-total-streams={String(activeStreamIds.length)}
-                        data-current-stream-id={currentStream.id}
-                      >
-                        Stream {currentStreamIndex + 1} of {activeStreamIds.length}
-                      </div>
-                      <button
-                        className={`stream-nav-btn${hasIncompleteStreamRight ? ' toward-incomplete' : ''}`}
-                        data-testid="stream-nav-next"
-                        onClick={goRight}
-                        disabled={currentStreamIndex === -1 || currentStreamIndex >= activeStreamIds.length - 1}
-                      >
-                        &gt;
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+              {renderProofGraphContent()}
             </div>
           )}
 
@@ -7817,6 +7818,11 @@ export function VisualCanvas({
             ? visualTransformInfos?.filter(info =>
               isHypothesisTransformInfo(info) === (transformTarget.kind === 'hyp'))
             : undefined}
+          rewriteOnly={rewriteOnly}
+          hideRewriteDirection={hideRewriteDirection}
+          emphasizeForall={emphasizeForall}
+          onCheck={rewriteOnly ? handleRewriteCheck : undefined}
+          completed={canvasState.completed}
           onRewrite={handleRewrite}
           onUndo={undoLastStep}
           canUndo={canUndo}
@@ -7846,14 +7852,28 @@ export function VisualCanvas({
               levelId={levelId}
               displayLevelId={displayLevelId}
               levelTitle={levelTitle}
-              hasPrev={levelId > 1}
-              hasNext={worldSize == null || levelId < worldSize}
+              hasPrev={rewriteOnly ? !!onPreviousLevel : levelId > 1}
+              hasNext={rewriteOnly
+                ? (() => { let n = levelId + 1; while ((skippedLevels ?? []).includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
+                : worldSize == null || levelId < worldSize}
+              nextLocked={nextLevelLocked}
               isCompleted={canvasState.completed}
               previouslyCompleted={previouslyCompleted ?? false}
               onPrev={onPreviousLevel ?? (() => {})}
               onNext={onNextLevel ?? (() => {})}
               onWorldMap={onWorldMap ?? (() => {})}
-              hideNav
+              // A Rewrite-only level is never left for the canvas, so its
+              // Rewrite Mode header carries the level navigation.
+              hideNav={!rewriteOnly}
+              gameId={rewriteOnly ? gameId : undefined}
+              getFeedbackProofState={rewriteOnly
+                ? () => ({
+                    proofBody: serializeProofCommands(proofSteps.map(step => step.command)),
+                    coreProofBody: buildStructuredLeanProof(proofSteps),
+                    canvasState,
+                    activeStreamId,
+                  })
+                : undefined}
             />
           }
         />

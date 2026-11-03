@@ -299,6 +299,8 @@ deriving Inhabited, Repr, ToJson, FromJson
 
 structure VisualProofGraphInfo where
   goal : Option String := none
+  /-- `left` of the proof-stream graph (older metadata) or `below` it. -/
+  position : String := "left"
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
@@ -361,6 +363,16 @@ structure GameLevel where
   visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   /-- Visual Lean instructional callouts attached to the proof-stream graph. -/
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
+  /-- When true, Visual Lean treats this level as text only: the path-style world map
+  shows its introduction in a dialog, and closing the dialog completes the level. -/
+  visualTextLevel : Bool := false
+  /-- When true, Visual Lean opens this level in Rewrite Mode on the goal and keeps it
+  there; a check-mark button closes the goal once both sides match. -/
+  visualRewriteOnly : Bool := false
+  /-- When true, Visual Lean hides Rewrite Mode's rewrite-direction button. -/
+  visualHideRewriteDirection : Bool := false
+  /-- Rule cards whose `∀ …` footer Visual Lean highlights in Rewrite Mode. -/
+  visualEmphasizeForall : Array Name := #[]
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -396,6 +408,10 @@ structure LevelInfo where
   visualTacticHypInfos : Array VisualTacticHypInfo := #[]
   visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
+  visualTextLevel : Bool := false
+  visualRewriteOnly : Bool := false
+  visualHideRewriteDirection : Bool := false
+  visualEmphasizeForall : Array String := #[]
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -439,6 +455,10 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     visualTacticHypInfos := lvl.visualTacticHypInfos
     visualHypGoalInfos := lvl.visualHypGoalInfos
     visualProofGraphInfos := lvl.visualProofGraphInfos
+    visualTextLevel := lvl.visualTextLevel
+    visualRewriteOnly := lvl.visualRewriteOnly
+    visualHideRewriteDirection := lvl.visualHideRewriteDirection
+    visualEmphasizeForall := lvl.visualEmphasizeForall.map (·.toString)
   }
 
 /-! ## World -/
@@ -457,14 +477,35 @@ structure World where
   levels: HashMap Nat GameLevel := default
   /-- The introduction image of the world. -/
   image: String := default
+  /-- Visual Lean path map: this world is a bonus branch sprouting from the given
+  level of another world. It unlocks once that level is done and gates nothing. -/
+  visualBonusOf? : Option (Name × Nat) := none
+  /-- Visual Lean path map: named colour of this world's path. -/
+  visualColor? : Option String := none
+  /-- Visual Lean path map: column of this world's path (0 = centre, negative = left). -/
+  visualMapColumn? : Option Int := none
+  /-- Visual Lean path map: this section isn't part of any named world. It is drawn
+  in the shared grey and gets no title label. -/
+  visualSharedPath : Bool := false
 deriving Inhabited
 
 instance : ToJson World := ⟨
-  fun world => Json.mkObj [
+  fun world => Json.mkObj <| [
     ("name", toJson world.name),
     ("title", world.title),
     ("introduction", world.introduction),
-    ("image", world.image)]
+    ("image", world.image)] ++
+    (match world.visualBonusOf? with
+      | some (source, level) =>
+        [("visualBonusOf", Json.mkObj [("world", toJson source), ("level", toJson level)])]
+      | none => []) ++
+    (match world.visualColor? with
+      | some color => [("visualColor", toJson color)]
+      | none => []) ++
+    (match world.visualMapColumn? with
+      | some column => [("visualMapColumn", toJson column)]
+      | none => []) ++
+    (if world.visualSharedPath then [("visualSharedPath", toJson true)] else [])
 ⟩
 
 /-! ## Game -/
@@ -527,6 +568,9 @@ structure Game where
   image : String := default
   /-- Settings to individualise the game's UI. -/
   settings : Game.Settings := default
+  /-- When true, Visual Lean draws the world map as paths of individual levels
+  (see `VisualPathMap`) instead of worlds with orbiting level dots. -/
+  visualPathMap : Bool := false
 deriving Inhabited, ToJson, FromJson
 
 def getGameJson (game : «Game») : Json := Id.run do
@@ -566,7 +610,13 @@ def GameLevel.merge (_old : GameLevel) (new : GameLevel) : GameLevel :=
 
 def World.merge (old : World) (new : World) : World :=
 { new with
-  levels := HashMap.merge old.levels new.levels GameLevel.merge}
+  levels := HashMap.merge old.levels new.levels GameLevel.merge
+  -- Level modules carry the world without its world-level settings, so keep
+  -- settings that were made in another module.
+  visualBonusOf? := new.visualBonusOf? <|> old.visualBonusOf?
+  visualColor? := new.visualColor? <|> old.visualColor?
+  visualMapColumn? := new.visualMapColumn? <|> old.visualMapColumn?
+  visualSharedPath := new.visualSharedPath || old.visualSharedPath }
 
 def Game.merge (old : Game) (new : Game) : Game :=
 { new with

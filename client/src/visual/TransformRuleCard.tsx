@@ -12,6 +12,8 @@ interface EqualityHypCardProps {
   lhsNode?: ExpressionNode
   rhsNode?: ExpressionNode
   forallFooter?: string
+  /** Highlight the `∀ …` footer (`VisualEmphasizeForall`). */
+  forallEmphasized?: boolean
   isReverse: boolean
   isFailing?: boolean
   emphasized?: boolean
@@ -37,6 +39,7 @@ export function EqualityHypCard({
   lhsNode,
   rhsNode,
   forallFooter,
+  forallEmphasized = false,
   isReverse,
   isFailing = false,
   emphasized = false,
@@ -73,7 +76,11 @@ export function EqualityHypCard({
       <div className="tr-symbol">
         <OverflowMarquee>{symbol}</OverflowMarquee>
       </div>
-      {forallFooter && <div className="tr-forall-footer">{formatRuleExpr(forallFooter)}</div>}
+      {forallFooter && (
+        <div className={`tr-forall-footer${forallEmphasized ? ' visual-forall-emphasize' : ''}`}>
+          {formatRuleExpr(forallFooter)}
+        </div>
+      )}
     </div>
   )
 }

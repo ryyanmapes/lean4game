@@ -4446,3 +4446,187 @@
 .iff-op.iff-reverse .iff-arrow {
   color: #ec4899;
 }
+
+/* ── Rewrite-only levels (VisualRewriteOnly) ──────────────────────────────
+   The level is played in Rewrite Mode: lessons stack at the top of the page,
+   and a check mark above the relation sign closes the goal once both sides
+   match. */
+.visual-page .tr-top-lessons {
+  position: fixed;
+  top: calc(52px + 1rem);
+  left: calc(var(--proof-sidebar-width, 0px) + (100vw - var(--proof-sidebar-width, 0px)) / 2);
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  width: max-content;
+  max-width: min(36rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.visual-page .tr-top-lessons .transform-info.top-info {
+  position: static;
+  transform: none;
+  max-width: 100%;
+  text-align: center;
+}
+
+.visual-page .tr-check-btn {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 40;
+  width: 2.6rem;
+  height: 2.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid var(--visual-success-border);
+  border-radius: 9999px;
+  background: var(--visual-glass-bg);
+  color: var(--visual-success);
+  box-shadow: 0 0 12px var(--visual-success-glow);
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  animation: tr-check-appear 0.25s ease-out;
+}
+
+.visual-page .tr-check-btn:hover:not(:disabled) {
+  background: var(--visual-success-bg-strong);
+}
+
+.visual-page .tr-check-btn.completed {
+  border-color: var(--visual-stream-complete);
+  background: var(--visual-stream-complete);
+  color: #fff;
+  cursor: default;
+}
+
+@keyframes tr-check-appear {
+  from { opacity: 0; transform: translate(-50%, -70%) scale(0.6); }
+  to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+.visual-page .visual-instruction-arrow.check-guide-arrow {
+  z-index: 96;
+}
+
+/* VisualEmphasizeForall: the highlighted `∀ …` part of a rule card. */
+.visual-page .tr-forall-footer.visual-forall-emphasize {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.22);
+  box-shadow: 0 0 8px 1px rgba(167, 139, 250, 0.45);
+  color: var(--visual-text-bright, var(--text-primary));
+  font-weight: 700;
+}
+
+/* ── Path-style world map (VisualPathMap) ─────────────────────────────────
+   Every level is a node on its world's path; colours come from VisualPathMap. */
+.visual-path-map-svg {
+  display: block;
+  flex: none;
+  height: auto;
+  overflow: visible;
+}
+
+.visual-path-map-svg .path-map-level:focus {
+  outline: none;
+}
+
+.visual-path-map-svg .path-map-level:focus-visible circle {
+  filter: drop-shadow(0 0 6px var(--visual-accent-glow));
+}
+
+.visual-path-map-svg .path-map-level:not(.locked):hover circle {
+  filter: brightness(1.12);
+}
+
+.visual-path-map-svg .path-map-level-label {
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  pointer-events: none;
+  user-select: none;
+}
+
+.visual-path-map-svg .path-map-world-label {
+  font-family: var(--font-family), system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A text-only level opens over the map; closing it completes the level. */
+.path-map-text-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.path-map-text-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 2rem);
+  padding: 1.5rem 1.6rem 1.25rem;
+  border: 1px solid var(--visual-glass-border);
+  border-radius: 14px;
+  background: var(--visual-surface-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 18px 48px var(--visual-shadow-strong);
+}
+
+.path-map-text-body {
+  overflow-y: auto;
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+.path-map-text-body .markdown p:first-child {
+  margin-top: 0;
+}
+
+.path-map-text-close {
+  align-self: flex-end;
+  padding: 0.55rem 1.3rem;
+  border: none;
+  border-radius: 9px;
+  background: var(--visual-accent);
+  color: var(--visual-text-on-accent);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.path-map-text-close:hover {
+  background: var(--visual-accent-strong);
+}
+
+/* VisualProofGraphInfoBelow: lessons under the proof-stream graph, right-aligned
+   with it so they stay on screen. */
+.visual-page .proof-graph-info-stack.below {
+  align-self: flex-end;
+  margin-top: 0.35rem;
+  max-width: min(20rem, calc(100vw - 9rem));
+  pointer-events: auto;
+}

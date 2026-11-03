@@ -116,6 +116,25 @@ macro "VisualProofGraphInfo" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualProofGraphInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
+macro "VisualProofGraphInfoBelow" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTextLevel" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualRewriteOnly" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualHideRewriteDirection" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualEmphasizeForall" ident : command => `(command| set_option linter.unusedVariables false)
+macro "VisualPathMap" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualBonusOf" ident num : command => `(command| set_option linter.unusedVariables false)
+macro "VisualWorldColor" ident : command => `(command| set_option linter.unusedVariables false)
+syntax visualMapColumnArg := ("-")? num
+macro "VisualMapColumn" visualMapColumnArg : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualSharedPath" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualTransformText" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTransformCheckInfo" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTransformCheckInfoOnGoal" str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
 
 macro "TheoremTab" str : command => `(command| set_option linter.unusedVariables false)
 

@@ -39,7 +39,8 @@ import { downloadProgress } from '../components/popup/erase'
 import { useRetryUntilData } from '../hooks/useRetryUntilData'
 import { useTranslation } from 'react-i18next'
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
-import { computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
+import { bonusAnchorsOf, computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
+import { VisualPathMap } from './VisualPathMap'
 import { getConsentState, setConsent } from '../utils/telemetry'
 import './visual.css'
 
@@ -690,6 +691,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       worldSizes: worldSize,
       skippedLevels: skippedLevels ?? {},
       completionNeutralLevels: completionNeutralLevels ?? {},
+      bonusAnchors: bonusAnchorsOf(worlds.nodes),
       isCompleted: (worldId, level) => selectCompleted(gameId, worldId, level)(store.getState()),
       isEntered: (worldId, level) => selectEntered(gameId, worldId, level)(store.getState()),
     })
@@ -956,17 +958,35 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
     )
   }
 
+  const appBar = (
+    <VisualMapAppBar
+      gameTitle={getVisualMapGameTitle(gameId, title)}
+      autoBranchSwitching={isVisualAutoBranchSwitching}
+      onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
+      fastExfalso={isVisualFastExfalso}
+      onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
+      openAnyLevel={isVisualOpenAnyLevel}
+      onToggleOpenAnyLevel={() => setIsVisualOpenAnyLevel(!isVisualOpenAnyLevel)}
+    />
+  )
+
+  // Games built as paths of individual levels draw their own map.
+  if (gameInfo.data.visualPathMap) {
+    return (
+      <div className="visual-page visual-map-page">
+        {appBar}
+        <VisualPathMap
+          gameInfo={gameInfo.data}
+          isLightMode={isVisualLightMode}
+          openAnyLevel={isVisualOpenAnyLevel}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="visual-page visual-map-page">
-      <VisualMapAppBar
-        gameTitle={getVisualMapGameTitle(gameId, title)}
-        autoBranchSwitching={isVisualAutoBranchSwitching}
-        onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
-        fastExfalso={isVisualFastExfalso}
-        onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
-        openAnyLevel={isVisualOpenAnyLevel}
-        onToggleOpenAnyLevel={() => setIsVisualOpenAnyLevel(!isVisualOpenAnyLevel)}
-      />
+      {appBar}
       <div className="visual-map-scroll" ref={scrollRef} data-testid="visual-world-map">
         <svg
           ref={svgRef}

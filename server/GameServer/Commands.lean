@@ -189,6 +189,73 @@ elab "VisualUnlockTactic" args:ident* : command => do
     lvl with visualTacticUnlocks := lvl.visualTacticUnlocks ++ args.map (·.getId)
   }
 
+/-- Make this a text-only level. On a path-style world map (`VisualPathMap`), opening it
+shows its `Introduction` in a dialog over the map, and closing the dialog completes it.
+The level still needs a `Statement` (e.g. `Statement : True := by trivial`) so the
+classic interface can play it. -/
+elab "VisualTextLevel" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualTextLevel := true }
+
+/-- Open this level in Rewrite Mode on the goal and keep it there: there is no Back
+button. Once both sides of the goal are the same, a check-mark button above the
+relation sign closes the goal with `rfl`. -/
+elab "VisualRewriteOnly" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualRewriteOnly := true }
+
+/-- Hide Rewrite Mode's rewrite-direction button in this level, so every rule is used
+left to right. -/
+elab "VisualHideRewriteDirection" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualHideRewriteDirection := true }
+
+/-- Highlight the `∀ …` part of a rule card in Rewrite Mode. Example:
+`VisualEmphasizeForall add_comm` -/
+elab "VisualEmphasizeForall" name:ident : command => do
+  modifyCurLevel fun lvl => pure { lvl with
+    visualEmphasizeForall := lvl.visualEmphasizeForall.push name.getId }
+
+/-- Draw the Visual Lean world map as paths of individual levels instead of worlds with
+orbiting level dots. Each world is a column of its levels; worlds join along their
+dependencies. Use it in the game file, before `MakeGame`. See also `VisualBonusOf`,
+`VisualWorldColor`, `VisualMapColumn` and `VisualSharedPath`. -/
+elab "VisualPathMap" : command => do
+  modifyCurGame fun game => pure { game with visualPathMap := true }
+
+/-- Path map: make the current world a bonus branch off level `level` of world `source`.
+It unlocks once that level is done, is drawn beside that world's path in its colour,
+and is not needed to continue. Use it in the world file. Example: `VisualBonusOf Rewrite 3` -/
+elab "VisualBonusOf" source:ident level:num : command => do
+  modifyCurWorld fun world => pure { world with
+    visualBonusOf? := some (source.getId, level.getNat) }
+
+/-- Path map: colour of the current world's path, one of `purple`, `blue`, `sky`,
+`teal`, `green`, `amber`, `orange`, `red` and `pink`. Worlds without one get a colour
+in map order. Use it in the world file. Example: `VisualWorldColor amber` -/
+elab "VisualWorldColor" color:ident : command => do
+  let name := color.getId.toString
+  let known := ["purple", "blue", "sky", "teal", "green", "amber", "orange", "red", "pink"]
+  unless known.contains name do
+    throwErrorAt color m!"Unknown colour `{name}`; expected one of {known}"
+  modifyCurWorld fun world => pure { world with visualColor? := some name }
+
+syntax visualMapColumnArg := ("-")? num
+
+/-- Path map: column of the current world's path, `0` for the centre, negative numbers to
+the left and positive ones to the right. Without it, a world continues in the column of
+the world it follows, and worlds that split off one world spread out around it.
+Use it in the world file. Example: `VisualMapColumn -1` -/
+elab "VisualMapColumn" column:visualMapColumnArg : command => do
+  let value : Int ← match column with
+    | `(visualMapColumnArg| - $n:num) => pure (-(n.getNat : Int))
+    | `(visualMapColumnArg| $n:num) => pure (n.getNat : Int)
+    | _ => throwUnsupportedSyntax
+  modifyCurWorld fun world => pure { world with visualMapColumn? := some value }
+
+/-- Path map: the current world isn't part of any named world, such as an opening text
+level before the paths split. It is drawn in the shared grey and gets no title label.
+Use it in the world file. -/
+elab "VisualSharedPath" : command => do
+  modifyCurWorld fun world => pure { world with visualSharedPath := true }
+
 syntax visualBool := &"true" <|> &"false"
 
 -- The text of every `Visual…Info` command below can word a gesture for each
@@ -219,6 +286,10 @@ def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
 def mkVisualTransformGeneralInfo (goal : Option String) (text : String) :
     VisualTransformInfo :=
   { kind := "info", goal := goal, text := text }
+
+def mkVisualTransformCheckInfo (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "check", goal := goal, text := text }
 
 def mkVisualTacticHypInfo (tactic hyp : String) (goal : Option String) (text : String) :
     VisualTacticHypInfo :=
@@ -359,6 +430,25 @@ elab "VisualTransformInfoOnGoal " goalText:str &"show" text:str : command => do
   let info := mkVisualTransformGeneralInfo (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
 
+/-- Add Visual Lean-only instructional text to Rewrite Mode, without an arrow, for the
+whole level. Use `VisualTransformInfoOnGoal` to show it only for one goal. (Not named
+`VisualTransformInfo`: that would make the structure of that name a keyword.) -/
+elab "VisualTransformText " text:str : command => do
+  let info := mkVisualTransformGeneralInfo none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- In a `VisualRewriteOnly` level, add Visual Lean-only guidance pointing to the
+check-mark button. The button, and so this text, only appears once both sides match. -/
+elab "VisualTransformCheckInfo " text:str : command => do
+  let info := mkVisualTransformCheckInfo none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- In a `VisualRewriteOnly` level, add Visual Lean-only guidance pointing to the
+check-mark button, only while the current goal matches the supplied display text. -/
+elab "VisualTransformCheckInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformCheckInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
 /-- Add Visual Lean-only guidance linking a tactic card to a hypothesis card.
 Usage: `VisualTacticHypInfo induction n "message"`. -/
 elab "VisualTacticHypInfo " tactic:ident hyp:ident text:str : command => do
@@ -393,6 +483,11 @@ elab "VisualHypInfoOnHyp " hyp:ident hypType:str &"show" text:str : command => d
 Usage: `VisualProofGraphInfo "message"`. -/
 elab "VisualProofGraphInfo " text:str : command => do
   let info := mkVisualProofGraphInfo none text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualProofGraphInfos := lvl.visualProofGraphInfos.push info }
+
+/-- Like `VisualProofGraphInfo`, but below the proof-stream graph instead of to its left. -/
+elab "VisualProofGraphInfoBelow " text:str : command => do
+  let info := { mkVisualProofGraphInfo none text.getString with position := "below" }
   modifyCurLevel fun lvl => pure { lvl with visualProofGraphInfos := lvl.visualProofGraphInfos.push info }
 
 /-- Add Visual Lean-only instructional text to the left of the proof-stream graph,
@@ -823,6 +918,18 @@ elab "Dependency" s:Parser.dependency : command => do
 /-- Build the game. This command will precompute various things about the game, such as which
 tactics are available in each level etc. -/
 elab "MakeGame" : command => do
+  -- A path-map bonus world (`VisualBonusOf`) depends on the world it branches off.
+  for (worldId, world) in (← getCurGame).worlds.nodes.toArray do
+    let some (source, level) := world.visualBonusOf? | continue
+    match (← getCurGame).worlds.nodes.get? source with
+    | none => logError m!"World `{worldId}` is a bonus of world `{source}`, which does not exist"
+    | some sourceWorld =>
+      unless sourceWorld.levels.contains level do
+        logError m!"World `{worldId}` is a bonus of level {level} of world `{source}`, which has no such level"
+      modifyCurGame fun game =>
+        if game.worlds.edges.contains (source, worldId) then pure game
+        else pure {game with worlds := {game.worlds with edges := game.worlds.edges.push (source, worldId)}}
+
   let game ← getCurGame
 
   let env ← getEnv
