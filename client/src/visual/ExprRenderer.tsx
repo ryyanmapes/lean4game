@@ -19,6 +19,7 @@ export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props)
   const classes = [
     'tr-expression-node',
     node.type === 'binary' ? 'binary' : '',
+    node.type === 'constant' || node.type === 'variable' ? 'leaf' : '',
     isPotentialTarget ? 'potential-target' : '',
     showHover && isPotentialTarget ? 'droppable-hover' : '',
     showHover && !isPotentialTarget ? 'droppable-invalid' : '',

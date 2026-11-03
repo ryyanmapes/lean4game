@@ -62,6 +62,7 @@ import {
 import { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 import type { VisualGesture } from './visualTelemetry'
 import { PreferencesContext } from '../components/infoview/context'
+import { isPhoneLandscapeViewport } from '../phoneLandscapeViewport'
 
 export { VISUAL_PROOF_AUTOSAVE_VERSION } from './visualAutosave'
 
@@ -2642,6 +2643,7 @@ export function VisualCanvas({
   const [goalStackHeight, setGoalStackHeight] = useState(0)
   const [layoutVersion, setLayoutVersion] = useState(0)
   const [isPhonePortrait, setIsPhonePortrait] = useState(() => isPhonePortraitViewport())
+  const [isPhoneLandscape, setIsPhoneLandscape] = useState(() => isPhoneLandscapeViewport())
   const [mobilePage, setMobilePage] = useState<MobilePage>('main')
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
@@ -2688,7 +2690,6 @@ export function VisualCanvas({
   const [constructionTarget, setConstructionTarget] = useState<ConstructionTarget | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
-  const [transformWorkingSide, setTransformWorkingSide] = useState<'left' | 'right'>('right')
   const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
@@ -2772,11 +2773,16 @@ export function VisualCanvas({
   )
   const [trayPageIndexByTab, setTrayPageIndexByTab] = useState<Record<TrayTab, number>>({ tactics: 0, theorems: 0 })
   const [trayHeight, setTrayHeight] = useState(0)
-  // New players start with the proof sidebar open; phone portrait never
-  // renders it, so the default only shows on wider screens.
-  const [showProofSidebar, setShowProofSidebar] = useState<boolean>(() => {
-    try { return localStorage.getItem('visual-proof-sidebar-open') !== 'false' } catch { return true }
+  // Until a player opens or closes the proof sidebar themselves, it starts open
+  // except on a phone in landscape, where it would take much of the canvas.
+  // Phone portrait never renders it.
+  const [proofSidebarChoice, setProofSidebarChoice] = useState<boolean | null>(() => {
+    try {
+      const stored = localStorage.getItem('visual-proof-sidebar-open')
+      return stored === null ? null : stored === 'true'
+    } catch { return null }
   })
+  const showProofSidebar = proofSidebarChoice ?? !isPhoneLandscape
   const [sideViewMode, setSideViewMode] = useState<'lean' | 'play'>(() => {
     try { return (localStorage.getItem('visual-proof-view-mode') as 'lean' | 'play') || 'lean' } catch { return 'lean' }
   })
@@ -2867,6 +2873,7 @@ export function VisualCanvas({
     const handleResize = () => {
       setLayoutVersion(version => version + 1)
       setIsPhonePortrait(isPhonePortraitViewport())
+      setIsPhoneLandscape(isPhoneLandscapeViewport())
     }
     window.addEventListener('resize', handleResize)
 
@@ -4976,7 +4983,6 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
-    setTransformWorkingSide('right')
     setTransformationVersion(0)
     setTransformTarget({
       kind: 'hyp',
@@ -5017,7 +5023,6 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
-    setTransformWorkingSide('right')
     setTransformationVersion(0)
     setTransformTarget({ kind: 'goal', streamId })
     onGesture?.({ kind: 'view', command: 'transform goal' })
@@ -6937,7 +6942,7 @@ export function VisualCanvas({
   } as React.CSSProperties
 
   function setProofSidebarOpen(next: boolean) {
-    setShowProofSidebar(next)
+    setProofSidebarChoice(next)
     try { localStorage.setItem('visual-proof-sidebar-open', String(next)) } catch {}
   }
 
@@ -7825,11 +7830,6 @@ export function VisualCanvas({
           onIsReverseChange={reverse => {
             onGesture?.({ kind: 'view', command: `direction ${reverse ? 'reverse' : 'forward'}` })
             setIsTransformReverse(reverse)
-          }}
-          workingSide={transformWorkingSide}
-          onWorkingSideChange={side => {
-            onGesture?.({ kind: 'view', command: `side ${side}` })
-            setTransformWorkingSide(side)
           }}
           selectedTab={transformSelectedTab}
           onSelectedTabChange={setTransformSelectedTab}

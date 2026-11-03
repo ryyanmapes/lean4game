@@ -1865,58 +1865,74 @@
   padding-top: 4rem;
 }
 
-/* Static side label + swap button: absolutely pinned to left or right, no animation */
-.visual-page .tr-static-group {
-  position: absolute;
-  left: 3rem;
-  top: 50%;
-  transform: translateY(-50%);
+/* The whole relation on one row. Scaling the font rather than transforming
+   the row keeps its laid-out width real, so a row wider than the screen
+   scrolls sideways (see .tr-expr-scrollbar for the visible scrollbar). */
+.visual-page .tr-expr-scroller {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1.25rem 0;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  /* A text selection dragged past the edge would scroll the row mid-drag. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.visual-page .tr-expr-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.visual-page .tr-expr-wrapper {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.5rem;
-}
-.visual-page .tr-static-group.static-right {
-  left: auto;
-  right: 3rem;
-}
-.visual-page .tr-static-group.pinned-top {
-  top: calc(52px + 0.6rem + 3.5rem);
-  transform: none;
+  align-items: center;
+  width: max-content;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  font-size: calc(var(--tr-expression-scale, 1.5) * 1rem);
 }
 
-.visual-page .tr-static-label {
-  font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
-  font-size: 2rem;
-  color: var(--visual-text-bright);
-  white-space: nowrap;
-  pointer-events: none;
+.visual-page .tr-op.tr-relation-op {
+  font-size: 1.45em;
+  margin: 0 0.3em;
 }
 
-/* Swap-side button: ← arrow beneath the static label, matches its width */
-.visual-page .tr-swap-btn {
+/* Scrollbar for a relation wider than the screen, just above the rule dock.
+   Drawn rather than native: phones hide native scrollbars until they move. */
+.visual-page .tr-expr-scrollbar {
+  position: relative;
+  flex-shrink: 0;
+  height: 0.85rem;
+  width: calc(100% - var(--proof-sidebar-width, 0px) - 1.5rem);
+  margin: 0 0.75rem 0.45rem calc(var(--proof-sidebar-width, 0px) + 0.75rem);
+  border-radius: 9999px;
   background: var(--visual-glass-bg);
   border: 1px solid var(--visual-glass-border);
-  border-radius: 8px;
-  color: var(--visual-text-secondary);
-  font-size: 1.1rem;
-  padding: 0.5rem 0;
   cursor: pointer;
-  touch-action: manipulation;
-  transition: background 0.15s, color 0.15s;
+  touch-action: none;
+  z-index: 20;
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.visual-page .tr-swap-btn:hover:not(:disabled) {
-  background: var(--visual-glass-bg-hover);
-  color: var(--visual-text-bright);
+.visual-page .tr-expr-scrollbar-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2rem;
+  border-radius: 9999px;
+  background: var(--visual-text-secondary);
+  opacity: 0.7;
+  transition: opacity 0.15s;
 }
-.visual-page .tr-swap-btn:disabled {
-  opacity: 0.25;
-  cursor: default;
+.visual-page .tr-expr-scrollbar:hover .tr-expr-scrollbar-thumb,
+.visual-page .tr-expr-scrollbar:active .tr-expr-scrollbar-thumb {
+  opacity: 1;
 }
-
-/* Working expression — scaled up like prototype */
-.visual-page .tr-expr-wrapper {
-  transform: scale(var(--tr-expression-scale, 1.5));
+@media (hover: none) {
+  .visual-page .tr-expr-scrollbar {
+    height: 1.1rem;
+  }
 }
 
 .visual-page .transform-info {
@@ -1930,6 +1946,18 @@
   top: calc(50% + 5rem);
   transform: translateX(-50%);
   text-align: center;
+}
+
+/* Beside the Back button; TransformationView sets left, top and max-width
+   relative to the overlay. Absolute, like the phone layout (see .phone-portrait). */
+.visual-page .transform-info.back-info {
+  position: absolute;
+  width: max-content;
+}
+
+/* Over the header, where Back sits on short landscape screens. */
+.visual-page .visual-instruction-arrow.back-guide-arrow {
+  z-index: 96;
 }
 
 .visual-page .transform-info.rewrite-info {
@@ -2327,12 +2355,13 @@
 }
 
 /* ── Expression nodes ── */
+/* Sized in em so .tr-expr-wrapper's font size scales the whole row. */
 .visual-page .tr-expression-node {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 0.4rem;
+  gap: 0.35em;
+  padding: 0.3em 0.38em;
+  border-radius: 0.4em;
   border: 1px solid var(--visual-glass-border);
   background: var(--visual-expression-bg);
   transition: box-shadow 0.15s, background 0.15s;
@@ -2340,6 +2369,14 @@
 .visual-page .tr-expression-node.binary {
   background: var(--visual-expression-bg-strong);
   border-color: var(--visual-glass-border);
+}
+/* A constant or variable is a single box, lighter than the boxes around it. */
+.visual-page .tr-expression-node.leaf {
+  padding: 0.08em 0.18em;
+  background: var(--visual-glass-bg-hover);
+}
+.visual-page .tr-expression-node.leaf > .tr-node-content {
+  padding-block: 0.12em;
 }
 .visual-page .tr-expression-node.potential-target {
   box-shadow: 0 0 0 2px var(--visual-info-ring);
@@ -2359,19 +2396,21 @@
 .visual-page .tr-op {
   color: var(--visual-accent-soft);
   font-weight: bold;
-  font-size: 1.25rem;
-  margin: 0 0.25rem;
+  font-size: 1.25em;
+  margin: 0 0.12em;
   font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
 }
 
 .visual-page .tr-node-content {
-  font-size: 1.125rem;
+  font-size: 1.125em;
   font-weight: 500;
-  padding: 0.25rem 0.5rem;
-  background: var(--visual-glass-bg-hover);
-  border-radius: 0.25rem;
+  padding: 0.2em 0.36em;
   font-family: 'Cambria Math', 'Latin Modern Math', Georgia, serif;
   color: var(--text-primary);
+}
+/* Function names and brackets are labels inside their box, not boxes. */
+.visual-page .tr-expression-node:not(.leaf) > .tr-node-content {
+  padding-inline: 0;
 }
 
 /* ── Connection arrow SVG overlay ── */
@@ -3370,31 +3409,20 @@
     padding: 0.5rem 0.75rem;
   }
 
-  .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group {
-    top: calc(52px + 3rem);
-    transform: none;
+  /* TransformationView fits the expression into the band between the back
+     button and the lessons and controls below it, shifting it into place. */
+  .visual-page.phone-portrait.tr-transformation-overlay .tr-expr-scroller {
+    transform: translateY(var(--tr-expression-shift, 0px));
   }
 
-  .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group:not(.static-right) {
-    left: calc(env(safe-area-inset-left, 0px) + 0.75rem);
-  }
-
-  .visual-page.phone-portrait.tr-transformation-overlay .tr-static-group.static-right {
-    right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
-  }
-
-  .visual-page.phone-portrait.tr-transformation-overlay .tr-static-label {
-    font-size: 1rem;
-    line-height: 1.15;
-    max-width: min(16rem, calc(100vw - 1.5rem));
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  /* TransformationView fits the expression into the band between the side
-     label and the lessons and controls below it, shifting it into place. */
   .visual-page.phone-portrait.tr-transformation-overlay .tr-expr-wrapper {
-    transform: translateY(var(--tr-expression-shift, 0px)) scale(var(--tr-expression-scale, 1.04));
+    padding: 0 0.75rem;
+    font-size: calc(var(--tr-expression-scale, 1.04) * 1rem);
+  }
+
+  .visual-page.phone-portrait.tr-overlay .tr-expr-scrollbar {
+    width: calc(100% - 1.5rem);
+    margin-left: 0.75rem;
   }
 
   /* Compact controls, as far from the dock as from the edges, leave the
@@ -3438,6 +3466,12 @@
     font-size: 0.84rem;
     line-height: 1.3;
     text-align: center;
+  }
+
+  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.back-info {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.84rem;
+    line-height: 1.3;
   }
 
   .visual-page.phone-portrait.tr-transformation-overlay .transform-info.reverse-info {
@@ -4293,30 +4327,16 @@
     padding-top: 3.25rem;
   }
 
-  .visual-page .tr-static-group {
-    left: calc(env(safe-area-inset-left, 0px) + 1rem);
-    top: calc(50% - 1rem);
-  }
-
-  .visual-page .tr-static-group.static-right {
-    right: calc(env(safe-area-inset-right, 0px) + 1rem);
-    top: calc(50% - 1rem);
-  }
-
-  .visual-page .tr-static-group.pinned-top {
-    top: calc(52px + 3.35rem);
-  }
-
-  .visual-page .tr-static-label {
-    font-size: 0.92rem;
-    line-height: 1.2;
-    max-width: min(11rem, calc(50vw - 4rem));
-    white-space: normal;
-    word-break: break-word;
-  }
-
   .visual-page .tr-expr-wrapper {
-    transform: scale(var(--tr-expression-scale, 1.02));
+    font-size: calc(var(--tr-expression-scale, 1.02) * 1rem);
+  }
+
+  .visual-page .tr-expr-scroller {
+    padding: 0.75rem 0;
+  }
+
+  .visual-page .tr-expr-scrollbar {
+    margin-bottom: 0.3rem;
   }
 
   .visual-page .tr-controls,
@@ -4374,34 +4394,19 @@
     padding: 0 0.7rem;
   }
 
+  /* The row starts just under the header, clear of Undo and the direction
+     toggle along the bottom of this short area. */
   .visual-page.tr-transformation-overlay .tr-main-area {
     padding-top: 3.3rem;
-  }
-
-  .visual-page.tr-transformation-overlay .tr-static-group {
-    top: calc(50% - 0.35rem);
-  }
-
-  .visual-page.tr-transformation-overlay .tr-static-group:not(.static-right) {
-    left: calc(env(safe-area-inset-left, 0px) + 3.25rem);
-  }
-
-  .visual-page.tr-transformation-overlay .tr-static-group.static-right {
-    right: calc(env(safe-area-inset-right, 0px) + 0.75rem);
-  }
-
-  .visual-page.tr-transformation-overlay .tr-static-group.pinned-top {
-    top: calc(52px + 4.2rem);
-  }
-
-  .visual-page.tr-transformation-overlay .tr-static-label {
-    font-size: 0.78rem;
-    line-height: 1.15;
-    max-width: min(9rem, calc(38vw - 1.5rem));
+    align-items: flex-start;
   }
 
   .visual-page.tr-transformation-overlay .tr-expr-wrapper {
-    transform: scale(var(--tr-expression-scale, 0.95));
+    padding: 0 2.25rem;
+  }
+
+  .visual-page.tr-transformation-overlay .tr-expr-wrapper {
+    font-size: calc(var(--tr-expression-scale, 0.95) * 1rem);
   }
 
   .proof-sidebar-tab {

@@ -136,6 +136,8 @@ const TRANSFORM_RELATIONS = new Set<TransformRelation>(['=', '<', '>', '≤', '�
 
 const PHONE_EXPR_BASE_SCALE = 1.04
 const PHONE_EXPR_MIN_SCALE = 0.58
+/** Phones shrink a wide relation no further than this to avoid scrolling it. */
+const PHONE_EXPR_WIDTH_FLOOR_SCALE = 0.8
 
 export function parseTransformTarget(typeStr: string): ParsedTransformTarget | null {
   try {
@@ -225,9 +227,6 @@ interface Props {
   /** Controlled reverse mode — lifted to parent so it survives target changes. */
   isReverse: boolean
   onIsReverseChange: (v: boolean) => void
-  /** Controlled working side — lifted to parent so it survives target changes. */
-  workingSide: 'left' | 'right'
-  onWorkingSideChange: (v: 'left' | 'right') => void
   /** Controlled selected tab — lifted to parent so it survives target changes. */
   selectedTab: string
   onSelectedTabChange: (v: string) => void
@@ -253,7 +252,7 @@ function printLeanExpression(node: ExpressionNode): string {
 
 export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
-  onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange, workingSide, onWorkingSideChange,
+  onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
   isPhonePortrait = false, emphasizeItems, visualInfos = [],
 }: Props) {
@@ -286,18 +285,21 @@ export function TransformationView({
   const hasPresentedReadyDockRef = useRef(false)
   const pageRef = useRef<HTMLDivElement>(null)
   const mainAreaRef = useRef<HTMLDivElement>(null)
+  const exprScrollerRef = useRef<HTMLDivElement>(null)
   const exprWrapperRef = useRef<HTMLDivElement>(null)
-  const staticGroupRef = useRef<HTMLDivElement>(null)
+  const scrollTrackRef = useRef<HTMLDivElement>(null)
+  const scrollThumbDragRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number } | null>(null)
   const ruleDockRef = useRef<HTMLDivElement>(null)
-  const sideInfoRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   const backButtonRef = useRef<HTMLButtonElement>(null)
-  const backInfoRef = useRef<HTMLDivElement>(null)
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
   const rewriteInfoRef = useRef<HTMLDivElement>(null)
   const suppressRuleClickRef = useRef(false)
   const undoInFlightRef = useRef(false)
-  const [isExprOverflowing, setIsExprOverflowing] = useState(false)
+  // The whole relation is one row; when it is wider than the screen it
+  // scrolls sideways under a scrollbar drawn just above the rule dock.
+  const [exprScroll, setExprScroll] = useState({ left: 0, width: 0, viewport: 0 })
   const [phoneExprScale, setPhoneExprScale] = useState<number | null>(null)
   // How far the phone layout moves the expression down from the middle of the
   // main area, into the band between the side label and the lessons below.
@@ -305,8 +307,7 @@ export function TransformationView({
   const phoneExprShiftRef = useRef(0)
   phoneExprShiftRef.current = phoneExprShift
   const [phoneRewriteArrow, setPhoneRewriteArrow] = useState<GuideArrow | null>(null)
-  const [sideArrow, setSideArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
-  const [backArrow, setBackArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
+  const [backGuide, setBackGuide] = useState<{ style: React.CSSProperties; arrow: GuideArrow } | null>(null)
   const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
   const [rewriteGuide, setRewriteGuide] = useState<{
     info: VisualTransformInfo
@@ -323,18 +324,77 @@ export function TransformationView({
   }, [])
 
   useLayoutEffect(() => {
-    const main = mainAreaRef.current
+    const scroller = exprScrollerRef.current
     const expr = exprWrapperRef.current
-    const sg = staticGroupRef.current
-    if (!main || !expr || !sg) return
-    const exprVisualW = expr.getBoundingClientRect().width
-    const mainW = main.getBoundingClientRect().width
-    const sgW = sg.getBoundingClientRect().width
-    const sideMargin = (mainW - exprVisualW) / 2
-    // Trigger when label doesn't fit: sideMargin < sgW + right:3rem(48px) + 16px breathing room
-    const next = mainW > 0 && sideMargin < sgW + 64
-    setIsExprOverflowing(prev => prev === next ? prev : next)
-  })
+    if (!scroller || !expr) return
+    const update = () => {
+      const next = { left: scroller.scrollLeft, width: scroller.scrollWidth, viewport: scroller.clientWidth }
+      setExprScroll(prev =>
+        Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.width - next.width) < 0.5 &&
+        Math.abs(prev.viewport - next.viewport) < 0.5 ? prev : next)
+    }
+    update()
+    scroller.addEventListener('scroll', update, { passive: true })
+    if (typeof ResizeObserver === 'undefined') {
+      return () => scroller.removeEventListener('scroll', update)
+    }
+    const observer = new ResizeObserver(update)
+    observer.observe(scroller)
+    observer.observe(expr)
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      observer.disconnect()
+    }
+  }, [])
+
+  const exprScrollRange = Math.max(0, exprScroll.width - exprScroll.viewport)
+  const isExprOverflowing = exprScrollRange > 1
+  const scrollThumbFraction = isExprOverflowing ? exprScroll.viewport / exprScroll.width : 1
+  const scrollThumbPosition = isExprOverflowing ? exprScroll.left / exprScrollRange : 0
+
+  /** Pixels of expression scroll per pixel of thumb travel along the track. */
+  const scrollPerTrackPixel = () => {
+    const track = scrollTrackRef.current
+    if (!track) return 0
+    const trackWidth = track.getBoundingClientRect().width
+    const thumbTravel = trackWidth * (1 - scrollThumbFraction)
+    return thumbTravel > 0 ? exprScrollRange / thumbTravel : 0
+  }
+
+  const handleScrollTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const scroller = exprScrollerRef.current
+    const track = scrollTrackRef.current
+    if (!scroller || !track || !isExprOverflowing) return
+    e.preventDefault()
+    const trackRect = track.getBoundingClientRect()
+    const thumbWidth = trackRect.width * scrollThumbFraction
+    const thumbLeft = trackRect.left + (trackRect.width - thumbWidth) * scrollThumbPosition
+    if (e.clientX < thumbLeft || e.clientX > thumbLeft + thumbWidth) {
+      // Pressing the track away from the thumb centres the thumb there.
+      const centred = (e.clientX - trackRect.left - thumbWidth / 2) / Math.max(1, trackRect.width - thumbWidth)
+      scroller.scrollLeft = Math.min(1, Math.max(0, centred)) * exprScrollRange
+    }
+    track.setPointerCapture(e.pointerId)
+    scrollThumbDragRef.current = { pointerId: e.pointerId, startX: e.clientX, startScrollLeft: scroller.scrollLeft }
+  }
+
+  const handleScrollTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = scrollThumbDragRef.current
+    const scroller = exprScrollerRef.current
+    if (!drag || drag.pointerId !== e.pointerId || !scroller) return
+    scroller.scrollLeft = drag.startScrollLeft + (e.clientX - drag.startX) * scrollPerTrackPixel()
+  }
+
+  const handleScrollTrackPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (scrollThumbDragRef.current?.pointerId === e.pointerId) scrollThumbDragRef.current = null
+  }
+
+  // A mouse wheel has no sideways axis; let it scroll a wide relation.
+  const handleExprWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const scroller = exprScrollerRef.current
+    if (!scroller || !isExprOverflowing || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return
+    scroller.scrollLeft += e.deltaY
+  }
 
   // Flat ordered list: hypotheses first (backend order), then theorems (backend order)
   const allRules = useMemo(() => [
@@ -503,18 +563,12 @@ export function TransformationView({
   const emphOnPrevPage = !emphVisibleNow && emphIndexesInTab.some(i => i < pageRange.start)
   const emphOnNextPage = !emphVisibleNow && emphIndexesInTab.some(i => i >= pageRange.end)
 
-  const workingExpr = workingSide === 'right' ? rhs : lhs
-  const rawStaticStr = workingSide === 'right' ? goalLhsStr : goalRhsStr
-  const staticStr = formatFormulaText(rawStaticStr)
   const currentGoalText = formatFormulaText(`${printExpression(lhs)} ${relation} ${printExpression(rhs)}`)
   const currentSidesMatch = relation === '=' && expressionsEqual(lhs, rhs)
   const activeVisualInfos = useMemo(
     () => visualInfos.filter(info =>
       transformInfoMatchesGoal(info, currentGoalText, relation, currentSidesMatch)),
     [currentGoalText, currentSidesMatch, relation, visualInfos],
-  )
-  const sideInfo = activeVisualInfos.find(info =>
-    info.kind === 'side' && (info.side === 'left' || info.side === 'right') && info.side !== workingSide
   )
   const backInfo = activeVisualInfos.find(info => info.kind === 'back' && info.text)
   const generalInfo = activeVisualInfos.find(info => info.kind === 'info' && info.text)
@@ -533,29 +587,33 @@ export function TransformationView({
 
     const main = mainAreaRef.current
     const expr = exprWrapperRef.current
-    if (!main || !expr) return
+    const scroller = exprScrollerRef.current
+    if (!main || !expr || !scroller) return
 
     let rafId: number | null = null
     const updateScale = () => {
       if (rafId != null) window.cancelAnimationFrame(rafId)
       rafId = window.requestAnimationFrame(() => {
         const exprRect = expr.getBoundingClientRect()
+        const scrollerRect = scroller.getBoundingClientRect()
         const mainRect = main.getBoundingClientRect()
         if (exprRect.width <= 0 || exprRect.height <= 0 || mainRect.width <= 0 || mainRect.height <= 0) return
 
-        // The band the expression may use: below the side label and its swap
-        // button, above the lessons and controls along the bottom, leaving a
-        // rewrite lesson room for its arrow up to the target.
+        // The band the expression may use: below the back button, above the
+        // controls along the bottom. Lessons come and go and are left out, so
+        // they never move the expression; the bottom ones sit well below it.
         const gap = 12
-        const sideGroupBottom = staticGroupRef.current?.getBoundingClientRect().bottom ?? mainRect.top
-        const bandTop = Math.max(mainRect.top + parseFloat(getComputedStyle(main).paddingTop), sideGroupBottom + gap)
-        const belowTops = Array.from(main.parentElement?.querySelectorAll<HTMLElement>(
-          '.tr-controls .tr-ctrl-btn, .tr-side-controls .tr-ctrl-btn, .transform-info',
-        ) ?? [])
+        const bandTop = mainRect.top + parseFloat(getComputedStyle(main).paddingTop)
+        const belowTops = Array.from(main.querySelectorAll<HTMLElement>(
+          '.tr-controls .tr-ctrl-btn, .tr-side-controls .tr-ctrl-btn',
+        ))
           .map(element => element.getBoundingClientRect().top)
           .filter(top => top > bandTop)
-        const bandBottom = Math.min(mainRect.bottom, ...belowTops) - (rewriteGuide ? 40 : gap)
+        const bandBottom = Math.min(mainRect.bottom, ...belowTops) - gap
 
+        // Font-size scaling changes layout size, so the expression's own width
+        // is its scaled width. Shrink towards the width floor to keep a short
+        // relation on screen; anything wider than that scrolls sideways.
         const currentScale = phoneExprScale ?? PHONE_EXPR_BASE_SCALE
         const unscaledWidth = exprRect.width / currentScale
         const unscaledHeight = exprRect.height / currentScale
@@ -563,13 +621,13 @@ export function TransformationView({
         const availableHeight = Math.max(40, bandBottom - bandTop)
         const fitScale = Math.min(
           PHONE_EXPR_BASE_SCALE,
-          availableWidth / unscaledWidth,
+          Math.max(PHONE_EXPR_WIDTH_FLOOR_SCALE, availableWidth / unscaledWidth),
           availableHeight / unscaledHeight,
         )
         const nextScale = Math.max(PHONE_EXPR_MIN_SCALE, Number(fitScale.toFixed(3)))
         setPhoneExprScale(prev => (prev != null && Math.abs(prev - nextScale) < 0.01) ? prev : nextScale)
-        // Scaling keeps the centre, so only the current shift moves it.
-        const naturalCenter = (exprRect.top + exprRect.bottom) / 2 - phoneExprShiftRef.current
+        // The shift moves the whole scroller; scaling keeps its centre.
+        const naturalCenter = (scrollerRect.top + scrollerRect.bottom) / 2 - phoneExprShiftRef.current
         const nextShift = Math.round((bandTop + bandBottom) / 2 - naturalCenter)
         setPhoneExprShift(prev => Math.abs(prev - nextShift) < 1 ? prev : nextShift)
       })
@@ -594,8 +652,7 @@ export function TransformationView({
       window.removeEventListener('resize', updateScale)
       observer.disconnect()
     }
-  }, [isPhonePortrait, phoneExprScale, workingSide, workingExpr, ruleDockHeight,
-    sideInfo, backInfo, generalInfo, reverseInfo, rewriteGuide])
+  }, [isPhonePortrait, phoneExprScale, lhs, rhs, ruleDockHeight])
 
   const cssEscape = (value: string) => {
     const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
@@ -604,41 +661,30 @@ export function TransformationView({
 
   useLayoutEffect(() => {
     const updateGuides = () => {
-      if (sideInfo && sideInfoRef.current) {
-        const infoRect = sideInfoRef.current.getBoundingClientRect()
-        const swapRect = mainAreaRef.current?.querySelector<HTMLElement>('.tr-swap-btn')?.getBoundingClientRect()
-        const swapCenter = swapRect ? {
-          x: swapRect.left + swapRect.width / 2,
-          y: swapRect.top + swapRect.height / 2,
-        } : null
-        const infoCenterX = infoRect.left + infoRect.width / 2
-        const startsFromLeft = swapCenter != null && swapCenter.x < infoCenterX
-        setSideArrow(swapRect ? {
-          start: {
-            x: startsFromLeft ? infoRect.left : infoRect.right,
-            y: infoRect.top + infoRect.height / 2,
-          },
-          end: swapCenter!,
-        } : null)
-      } else {
-        setSideArrow(null)
-      }
-
-      if (backInfo && backInfoRef.current && backButtonRef.current) {
-        const infoRect = backInfoRef.current.getBoundingClientRect()
+      // The back lesson sits just right of the Back button, level with its
+      // top, with a short arrow across to it.
+      const overlay = overlayRef.current
+      if (backInfo && backButtonRef.current && overlay) {
         const backRect = backButtonRef.current.getBoundingClientRect()
-        setBackArrow({
-          start: {
-            x: infoRect.left,
-            y: infoRect.top + infoRect.height / 2,
+        const overlayRect = overlay.getBoundingClientRect()
+        const left = backRect.right + (isPhonePortrait ? 40 : 52)
+        const centreY = backRect.top + backRect.height / 2
+        setBackGuide({
+          style: {
+            left: left - overlayRect.left,
+            top: backRect.top - overlayRect.top,
+            maxWidth: Math.max(160, Math.min(360, overlayRect.right - left - 12)),
           },
-          end: {
-            x: backRect.left + backRect.width / 2,
-            y: backRect.top + backRect.height / 2,
+          arrow: {
+            start: { x: left, y: centreY },
+            end: { x: backRect.right, y: centreY },
+            startPadding: 6,
+            endPadding: 6,
+            arc: 'none',
           },
         })
       } else {
-        setBackArrow(null)
+        setBackGuide(null)
       }
 
       if (reverseInfo && reverseInfoRef.current && reverseButtonRef.current) {
@@ -699,19 +745,21 @@ export function TransformationView({
           }
           const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
           const viewportW = window.innerWidth
+          // The open proof sidebar covers the left of the window.
+          const minLeft = (mainAreaRef.current?.getBoundingClientRect().left ?? 0) + 16
           const guideWidth = 360
           const margin = 34
           const lineLeft = Math.min(sourceRect.left, targetRect.left)
           const lineRight = Math.max(sourceRect.right, targetRect.right)
           const leftPos = lineLeft - guideWidth - margin
           const rightPos = lineRight + margin
-          const fitsLeft = leftPos >= 16
+          const fitsLeft = leftPos >= minLeft
           const fitsRight = rightPos + guideWidth <= viewportW - 16
           // Prefer whichever side has more room. If neither side has clearance,
           // clamp to the viewport edge with the most space.
-          const preferLeft = fitsLeft && (!fitsRight || lineLeft > viewportW - lineRight)
+          const preferLeft = fitsLeft && (!fitsRight || lineLeft - minLeft > viewportW - lineRight)
           const left = preferLeft
-            ? Math.max(16, leftPos)
+            ? Math.max(minLeft, leftPos)
             : Math.min(viewportW - guideWidth - 16, rightPos)
           nextRewriteGuide = {
             info,
@@ -732,11 +780,14 @@ export function TransformationView({
     updateGuides()
     window.addEventListener('resize', updateGuides)
     window.addEventListener('scroll', updateGuides, true)
+    // Opening or closing the proof sidebar slides the Back button and the row.
+    window.addEventListener('transitionend', updateGuides, true)
     return () => {
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
+      window.removeEventListener('transitionend', updateGuides, true)
     }
-  }, [sideInfo, backInfo, reverseInfo, rewriteInfos, workingExpr, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
+  }, [backInfo, reverseInfo, rewriteInfos, lhs, rhs, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
     phoneExprScale, phoneExprShift])
 
   useLayoutEffect(() => {
@@ -797,6 +848,14 @@ export function TransformationView({
   // inner target and its ancestors. Prefer the deepest matching node; otherwise fall
   // back to the deepest hovered node for invalid-drop feedback.
   const collisionDetection = useCallback<CollisionDetection>((args) => {
+    // Terms scrolled out of the row keep their rects; only the visible part
+    // of the row accepts a drop.
+    const visibleRow = exprScrollerRef.current?.getBoundingClientRect()
+    const pointer = args.pointerCoordinates
+    if (visibleRow && pointer && (
+      pointer.x < visibleRow.left || pointer.x > visibleRow.right ||
+      pointer.y < visibleRow.top || pointer.y > visibleRow.bottom
+    )) return []
     const collisions = pointerWithin(args)
     if (collisions.length <= 1) return collisions
 
@@ -838,7 +897,11 @@ export function TransformationView({
     // Theorem hyps use wildcard matching; hypothesis hyps use exact matching.
     const from = isReverse ? hyp.rhs : hyp.lhs
     const isThm = draggedId.startsWith('thm_')
-    const targetNode = findNodeById(workingExpr, targetId)
+    // Both sides are on screen; the drop target says which one is rewritten.
+    const leftTarget = findNodeById(lhs, targetId)
+    const workingSide: 'left' | 'right' = leftTarget ? 'left' : 'right'
+    const workingExpr = workingSide === 'left' ? lhs : rhs
+    const targetNode = leftTarget ?? findNodeById(rhs, targetId)
     if (!targetNode) return false
     const patternMatches = isThm
       ? matchesPattern(targetNode, from)
@@ -858,7 +921,7 @@ export function TransformationView({
           node => isThm ? matchesPattern(node, from) : expressionsEqual(node, from),
         )
     // rw_nth counts matches across the complete relation from left to right,
-    // not merely within the side currently enlarged in Transformation Mode.
+    // not merely within the side that contains the target.
     // For a reverse variable theorem, count the concrete selected expression
     // because the displayed core rule supplies that theorem argument.
     const occurrenceMatcher = (node: ExpressionNode) =>
@@ -932,9 +995,8 @@ export function TransformationView({
 
     const from = isReverse ? hyp.rhs : hyp.lhs
     const isThm = draggedId.startsWith('thm_')
-    const matchingTargetIds = findMatchingNodeIds(workingExpr, node =>
-      isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
-    )
+    const matches = (node: ExpressionNode) => isThm ? matchesPattern(node, from) : expressionsEqual(node, from)
+    const matchingTargetIds = [...findMatchingNodeIds(lhs, matches), ...findMatchingNodeIds(rhs, matches)]
     if (matchingTargetIds.length !== 1) return
 
     await applyRewriteAtTarget(draggedId, matchingTargetIds[0]!)
@@ -978,14 +1040,9 @@ export function TransformationView({
     }
   }
 
-  const handleSwap = () => {
-    if (isProcessing) return
-    onWorkingSideChange(workingSide === 'right' ? 'left' : 'right')
-    setHistory([])
-  }
-
   return (
     <div
+      ref={overlayRef}
       className={`visual-page tr-overlay tr-transformation-overlay${isPhonePortrait ? ' phone-portrait' : ''}`}
       data-transform-instance={instanceIdRef.current}
       style={{
@@ -999,6 +1056,10 @@ export function TransformationView({
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
+        // Auto-scroll would slide the row whenever a card nears a term in the
+        // outer fifth of the screen, moving a different term under the pointer.
+        // The scrollbar and swipes move the row instead.
+        autoScroll={false}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={releaseSuppressedRuleClick}
@@ -1013,38 +1074,25 @@ export function TransformationView({
 
         {/* Main expression area */}
         <div className="tr-main-area" ref={mainAreaRef}>
-          {/* Static side label + swap button */}
-          <div ref={staticGroupRef} className={`tr-static-group${workingSide === 'left' ? ' static-right' : ''}${isExprOverflowing ? ' pinned-top' : ''}`}>
-            <span className="tr-static-label">
-              {workingSide === 'left' ? `${relation} ${staticStr}` : `${staticStr} ${relation}`}
-            </span>
-            <button
-              className="tr-swap-btn"
-              onClick={handleSwap}
-              aria-disabled={isProcessing}
-              aria-label="Edit this side instead"
-            >{workingSide === 'left' ? '→' : '←'}</button>
-          </div>
-
-          <div className="tr-expr-wrapper" ref={exprWrapperRef}>
-            <ExprRenderer
-              node={workingExpr}
-              isActive={!!activeId && !isProcessing}
-              customIsValidDropTarget={customIsValidDropTarget}
-            />
-          </div>
-
-          {sideInfo && (
-            <div ref={sideInfoRef} className="visual-info-callout transform-info side-info">
-              <VisualInfoText text={sideInfo.text} />
+          <div
+            className={`tr-expr-scroller${isExprOverflowing ? ' overflowing' : ''}`}
+            ref={exprScrollerRef}
+            onWheel={handleExprWheel}
+          >
+            <div className="tr-expr-wrapper" ref={exprWrapperRef}>
+              <ExprRenderer
+                node={lhs}
+                isActive={!!activeId && !isProcessing}
+                customIsValidDropTarget={customIsValidDropTarget}
+              />
+              <span className="tr-op tr-relation-op">{relation}</span>
+              <ExprRenderer
+                node={rhs}
+                isActive={!!activeId && !isProcessing}
+                customIsValidDropTarget={customIsValidDropTarget}
+              />
             </div>
-          )}
-
-          {backInfo && (
-            <div ref={backInfoRef} className="visual-info-callout transform-info side-info">
-              <VisualInfoText text={backInfo.text} />
-            </div>
-          )}
+          </div>
 
           {generalInfo && (
             <div className="visual-info-callout transform-info side-info">
@@ -1087,6 +1135,27 @@ export function TransformationView({
           </div>
 
         </div>
+
+        {/* Scrollbar for a relation wider than the screen */}
+        {isExprOverflowing && (
+          <div
+            className="tr-expr-scrollbar"
+            ref={scrollTrackRef}
+            data-testid="rewrite-scrollbar"
+            onPointerDown={handleScrollTrackPointerDown}
+            onPointerMove={handleScrollTrackPointerMove}
+            onPointerUp={handleScrollTrackPointerEnd}
+            onPointerCancel={handleScrollTrackPointerEnd}
+          >
+            <div
+              className="tr-expr-scrollbar-thumb"
+              style={{
+                width: `${scrollThumbFraction * 100}%`,
+                left: `${(1 - scrollThumbFraction) * scrollThumbPosition * 100}%`,
+              }}
+            />
+          </div>
+        )}
 
         {/* Rule dock */}
         <div
@@ -1174,8 +1243,14 @@ export function TransformationView({
         {activeId && arrowStart && arrowEnd && (
           <ConnectionArrow start={arrowStart} end={arrowEnd} />
         )}
-        {sideArrow && <InstructionGuideArrow arrow={sideArrow} />}
-        {backArrow && <InstructionGuideArrow arrow={{ ...backArrow, startPadding: 28, endPadding: 42 }} />}
+        {backInfo && backGuide && (
+          <>
+            <InstructionGuideArrow arrow={backGuide.arrow} className="back-guide-arrow" />
+            <div className="visual-info-callout transform-info back-info" style={backGuide.style}>
+              <VisualInfoText text={backInfo.text} />
+            </div>
+          </>
+        )}
         {reverseArrow && <InstructionGuideArrow arrow={{
           ...reverseArrow,
           startPadding: isPhonePortrait ? 6 : 28,

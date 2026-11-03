@@ -14,12 +14,18 @@ function isLandscape(): boolean {
   return type ? type.startsWith('landscape') : window.matchMedia('(orientation: landscape)').matches
 }
 
-/** 1 except on a phone in landscape. Uses the screen, not the window, so
- *  browser bars showing and hiding never rescale the page. */
+/** A phone (not a tablet) held in landscape. Uses the screen, not the window,
+ *  so browser bars showing and hiding never change the answer. */
+export function isPhoneLandscapeViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  if (!window.matchMedia('(hover: none) and (pointer: coarse)').matches) return false
+  return Math.min(screen.width, screen.height) <= PHONE_MAX_SHORT_SIDE && isLandscape()
+}
+
+/** 1 except on a phone in landscape. */
 function phoneLandscapeScale(): number {
-  if (!window.matchMedia('(hover: none) and (pointer: coarse)').matches) return 1
+  if (!isPhoneLandscapeViewport()) return 1
   const shortSide = Math.min(screen.width, screen.height)
-  if (shortSide > PHONE_MAX_SHORT_SIDE || !isLandscape()) return 1
   return Math.min(1, Math.round(shortSide / PHONE_LANDSCAPE_LAYOUT_HEIGHT * 100) / 100)
 }
 
