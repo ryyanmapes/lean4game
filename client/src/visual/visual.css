@@ -2342,6 +2342,27 @@
   background: var(--visual-info-bg);
 }
 .visual-page .tr-eq-card h3 { color: var(--visual-info); }
+.visual-page .tr-axiom-card {
+  border-color: #c084fc;
+  background: rgba(192, 132, 252, 0.14);
+}
+.visual-page .tr-axiom-card h3 { color: #c084fc; }
+
+/* A variable named `frac1over2` (formulaDisplay.tsx). */
+.formula-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  font-size: 0.72em;
+  line-height: 1.1;
+}
+.formula-fraction > :first-child {
+  align-self: stretch;
+  text-align: center;
+  border-bottom: 1.5px solid currentColor;
+  padding: 0 0.15em;
+}
 
 /* Theorem cards — green tint */
 .visual-page .tr-theorem-card {

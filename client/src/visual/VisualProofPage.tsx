@@ -107,6 +107,7 @@ const DEFAULT_LEVEL_PRESENTATION = {
   rewriteOnly: false,
   hideRewriteDirection: false,
   emphasizeForall: [] as string[],
+  mulDot: false,
 }
 
 function visualDisplayLevelId(levelId: number, skippedLevels: number[]) {
@@ -330,6 +331,7 @@ export function VisualProofPage() {
     rewriteOnly: boolean
     hideRewriteDirection: boolean
     emphasizeForall: string[]
+    mulDot: boolean
   }>(DEFAULT_LEVEL_PRESENTATION)
   // Declared after skippedLevels/worldSize to avoid temporal dead zone in deps arrays.
   const nextLevelId = (() => {
@@ -576,6 +578,7 @@ export function VisualProofPage() {
         visualRewriteOnly?: boolean
         visualHideRewriteDirection?: boolean
         visualEmphasizeForall?: string[]
+        visualMulDot?: boolean
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
       fetchJsonWithRetry<{ worlds?: { edges?: string[][]; nodes?: { [key: string]: { title?: string } } }; worldSize?: { [key: string]: number }; skippedLevels?: { [key: string]: number[] } }>(`${baseUrl}/${gameId}/game.json`),
     ]).then(async ([levelData, gameData]) => {
@@ -601,6 +604,7 @@ export function VisualProofPage() {
           rewriteOnly: levelData.visualRewriteOnly ?? false,
           hideRewriteDirection: levelData.visualHideRewriteDirection ?? false,
           emphasizeForall: levelData.visualEmphasizeForall ?? [],
+          mulDot: levelData.visualMulDot ?? false,
         })
         // A text-only level is read on the world map, not played here.
         if (levelData.visualTextLevel) {
@@ -797,6 +801,8 @@ export function VisualProofPage() {
       rewriteOnly={levelPresentation.rewriteOnly}
       hideRewriteDirection={levelPresentation.hideRewriteDirection}
       emphasizeForall={levelPresentation.emphasizeForall}
+      mulDot={levelPresentation.mulDot}
+      gameFastExfalso={gameInfo.data?.visualFastExfalso ?? false}
       worldId={worldId}
       levelId={levelId}
       displayLevelId={displayLevelId}

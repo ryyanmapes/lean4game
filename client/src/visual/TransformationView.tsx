@@ -18,6 +18,9 @@ import { compareTheoremNames } from './theoremOrdering'
 
 let transformationViewInstanceCounter = 0
 
+/** Theorems in this inventory category are shown in the axiom colour. */
+const AXIOM_CATEGORY = 'Axioms'
+
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
   label: string    // hypothesis name (e.g. "h") or theorem displayName
@@ -1359,6 +1362,7 @@ export function TransformationView({
                         forallFooter={rule.forallFooter}
                         forallEmphasized={emphasizeForall?.some(name =>
                           name === rule.label || sanitizeLeanDisplayName(name) === rule.label) ?? false}
+                        axiom={rule.category === AXIOM_CATEGORY}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         emphasized={isEmphasizedRule(rule)}

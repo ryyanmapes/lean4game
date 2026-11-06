@@ -2,6 +2,7 @@ import * as React from 'react'
 import type { ExpressionNode } from './expr-types'
 import { useDroppable } from '@dnd-kit/core'
 import { printExpression } from './expr-engine'
+import { displayOperator, MulDotContext, renderFormulaText } from './formulaDisplay'
 
 interface Props {
   node: ExpressionNode
@@ -11,6 +12,7 @@ interface Props {
 
 export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props) {
   const { isOver, setNodeRef } = useDroppable({ id: node.id, data: { node } })
+  const mulDot = React.useContext(MulDotContext)
 
   const isPotentialTarget = customIsValidDropTarget ? customIsValidDropTarget(node) : false
 
@@ -43,7 +45,7 @@ export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props)
               customIsValidDropTarget={customIsValidDropTarget}
             />
           </div>
-          <span className="tr-op">{node.op}</span>
+          <span className="tr-op">{displayOperator(node.op, mulDot)}</span>
           <div className="tr-child">
             <ExprRenderer
               node={node.right}
@@ -78,7 +80,7 @@ export function ExprRenderer({ node, isActive, customIsValidDropTarget }: Props)
         </>
       ) : (
         <span className="tr-node-content">
-          {node.type === 'constant' ? node.value : node.name}
+          {node.type === 'constant' ? node.value : renderFormulaText(node.name)}
         </span>
       )}
     </div>

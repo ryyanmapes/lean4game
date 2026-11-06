@@ -32,6 +32,8 @@ export interface VisualWorldNode {
   visualMapColumn?: number,
   /** Not part of any named world: grey and unlabelled (`VisualSharedPath`). */
   visualSharedPath?: boolean,
+  /** Carries on another world's path: its colour, no label (`VisualContinues`). */
+  visualContinues?: string,
 }
 
 export interface GameInfo {
@@ -51,6 +53,8 @@ export interface GameInfo {
   } | undefined
   /** Visual Lean draws the world map as paths of individual levels (`VisualPathMap`). */
   visualPathMap?: boolean
+  /** A proof of `False` closes any goal in this game (`VisualFastExfalso`). */
+  visualFastExfalso?: boolean
 }
 
 export interface InventoryTile {
@@ -97,6 +101,10 @@ export interface LevelInfo {
   visualHideRewriteDirection?: boolean,
   /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
   visualEmphasizeForall?: string[],
+  /** Draw the level's node larger on the path map (`VisualBossLevel`). */
+  visualBossLevel?: boolean,
+  /** Write multiplication as `·` in Rewrite Mode (`VisualMulDot`). */
+  visualMulDot?: boolean,
 }
 
 /** Used to display the inventory on the welcome page */

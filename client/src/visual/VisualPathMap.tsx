@@ -20,6 +20,8 @@ import { plainLevelTitle } from '../components/annotated_level_title'
 import { Markdown } from '../components/markdown'
 import {
   computePathMapLayout,
+  PATH_MAP_BOSS_NODE_RADIUS,
+  PATH_MAP_CORNER_RADIUS,
   PATH_MAP_NODE_RADIUS,
   roundedPathData,
   type PathMapNode,
@@ -52,7 +54,6 @@ const LIGHT_THEME: PathMapTheme = { background: '#f8fafc', shadow: '#cbd5e1', lo
 
 const PATH_OUTER_WIDTH = 16
 const PATH_INNER_WIDTH = 10
-const PATH_CORNER_RADIUS = 26
 const MAP_PADDING = 48
 
 interface LevelMeta {
@@ -60,6 +61,7 @@ interface LevelMeta {
   /** `VisualLevelNumber` label shown in the node. */
   label?: string
   textLevel: boolean
+  boss: boolean
   introduction?: string
 }
 
@@ -83,13 +85,15 @@ function useLevelMeta(gameId: string, worldSize: Record<string, number> | null |
             introduction?: string | null
             visualLevelNumber?: string | null
             visualTextLevel?: boolean
+            visualBossLevel?: boolean
           } | null) => [`${world}:${level}`, {
             title: data?.title ?? undefined,
             label: data?.visualLevelNumber ?? undefined,
             textLevel: Boolean(data?.visualTextLevel),
+            boss: Boolean(data?.visualBossLevel),
             introduction: data?.introduction ?? undefined,
           }] as const)
-          .catch(() => [`${world}:${level}`, { textLevel: false }] as const)
+          .catch(() => [`${world}:${level}`, { textLevel: false, boss: false }] as const)
       }))
     void Promise.all(requests).then(entries => {
       if (!controller.signal.aborted) setMeta(Object.fromEntries(entries))
@@ -115,6 +119,7 @@ function PathMapLevel({ node, meta, state, theme, onOpen }: {
   const stroke = state === 'completed' ? color.edge : state === 'frontier' ? color.fill : theme.shadow
   const fill = state === 'completed' ? color.fill : theme.background
   const textColor = state === 'completed' ? '#ffffff' : state === 'frontier' ? color.fill : theme.lockedText
+  const radius = meta?.boss ? PATH_MAP_BOSS_NODE_RADIUS : PATH_MAP_NODE_RADIUS
   return (<>
     <g
       className={`path-map-level visual-map-link${onOpen ? '' : ' locked'}`}
@@ -123,6 +128,7 @@ function PathMapLevel({ node, meta, state, theme, onOpen }: {
       data-level={node.level}
       data-state={state}
       data-text-level={meta?.textLevel ? 'true' : undefined}
+      data-boss={meta?.boss ? 'true' : undefined}
       role="link"
       tabIndex={0}
       aria-label={`${meta?.textLevel ? 'Read' : 'Open'} ${title}${onOpen ? '' : ' (locked)'}`}
@@ -139,7 +145,7 @@ function PathMapLevel({ node, meta, state, theme, onOpen }: {
       <circle
         cx={node.x}
         cy={node.y}
-        r={state === 'frontier' ? PATH_MAP_NODE_RADIUS - 3.5 : PATH_MAP_NODE_RADIUS - 1.5}
+        r={state === 'frontier' ? radius - 3.5 : radius - 1.5}
         fill={fill}
         stroke={stroke}
         strokeWidth={state === 'frontier' ? 7 : 3}
@@ -213,8 +219,8 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   }, [])
 
   const nodesById = gameInfo.worlds?.nodes
-  // Phones fit the whole map to the screen width: narrower columns, and world
-  // titles above their columns rather than beside them, keep levels tappable.
+  // Phones fit the whole map to the screen width: narrower columns keep levels
+  // tappable.
   const compact = viewportWidth <= 720
   const layout = React.useMemo(() => computePathMapLayout({
     worlds: Object.fromEntries(Object.entries(nodesById ?? {}).map(([world, node]) => [world, {
@@ -223,11 +229,12 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
       color: node.visualColor,
       column: node.visualMapColumn,
       shared: node.visualSharedPath,
+      continues: node.visualContinues,
     }])),
     edges: gameInfo.worlds?.edges ?? [],
     worldSize: gameInfo.worldSize ?? {},
     skippedLevels: gameInfo.skippedLevels,
-  }, compact ? { columnWidth: 112, labelPlacement: 'above' } : {}),
+  }, compact ? { columnWidth: 88 } : {}),
   [compact, gameInfo.skippedLevels, gameInfo.worldSize, gameInfo.worlds?.edges, nodesById])
 
   const frontier = computeVisualProgressFrontier({
@@ -302,7 +309,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   const segments = layout.segments.map(segment => ({
     ...segment,
     lit: isDone(segment.source.world, segment.source.level),
-    data: roundedPathData(segment.points, PATH_CORNER_RADIUS),
+    data: roundedPathData(segment.points, PATH_MAP_CORNER_RADIUS),
   })).sort((a, b) => Number(a.lit) - Number(b.lit))
 
   return (
@@ -343,7 +350,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
             x={label.x}
             y={label.y}
             dy="0.35em"
-            textAnchor={label.anchor}
+            textAnchor="middle"
             fill={worldColor(label.color).fill}
           >{label.text}</text>
         ))}

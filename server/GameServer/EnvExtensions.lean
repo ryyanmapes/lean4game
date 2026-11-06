@@ -373,6 +373,10 @@ structure GameLevel where
   visualHideRewriteDirection : Bool := false
   /-- Rule cards whose `∀ …` footer Visual Lean highlights in Rewrite Mode. -/
   visualEmphasizeForall : Array Name := #[]
+  /-- When true, the path-style world map draws this level's node larger. -/
+  visualBossLevel : Bool := false
+  /-- When true, Visual Lean writes multiplication as `·` in Rewrite Mode. -/
+  visualMulDot : Bool := false
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -412,6 +416,8 @@ structure LevelInfo where
   visualRewriteOnly : Bool := false
   visualHideRewriteDirection : Bool := false
   visualEmphasizeForall : Array String := #[]
+  visualBossLevel : Bool := false
+  visualMulDot : Bool := false
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -459,6 +465,8 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     visualRewriteOnly := lvl.visualRewriteOnly
     visualHideRewriteDirection := lvl.visualHideRewriteDirection
     visualEmphasizeForall := lvl.visualEmphasizeForall.map (·.toString)
+    visualBossLevel := lvl.visualBossLevel
+    visualMulDot := lvl.visualMulDot
   }
 
 /-! ## World -/
@@ -487,6 +495,9 @@ structure World where
   /-- Visual Lean path map: this section isn't part of any named world. It is drawn
   in the shared grey and gets no title label. -/
   visualSharedPath : Bool := false
+  /-- Visual Lean path map: this world carries on the path of another world, in its
+  colour and without a title label of its own. -/
+  visualContinues? : Option Name := none
 deriving Inhabited
 
 instance : ToJson World := ⟨
@@ -505,7 +516,10 @@ instance : ToJson World := ⟨
     (match world.visualMapColumn? with
       | some column => [("visualMapColumn", toJson column)]
       | none => []) ++
-    (if world.visualSharedPath then [("visualSharedPath", toJson true)] else [])
+    (if world.visualSharedPath then [("visualSharedPath", toJson true)] else []) ++
+    (match world.visualContinues? with
+      | some source => [("visualContinues", toJson source)]
+      | none => [])
 ⟩
 
 /-! ## Game -/
@@ -571,6 +585,9 @@ structure Game where
   /-- When true, Visual Lean draws the world map as paths of individual levels
   (see `VisualPathMap`) instead of worlds with orbiting level dots. -/
   visualPathMap : Bool := false
+  /-- When true, Visual Lean lets a proof of `False` close any goal, as the Fast `exfalso`
+  setting does, whatever that setting says. -/
+  visualFastExfalso : Bool := false
 deriving Inhabited, ToJson, FromJson
 
 def getGameJson (game : «Game») : Json := Id.run do
@@ -616,7 +633,8 @@ def World.merge (old : World) (new : World) : World :=
   visualBonusOf? := new.visualBonusOf? <|> old.visualBonusOf?
   visualColor? := new.visualColor? <|> old.visualColor?
   visualMapColumn? := new.visualMapColumn? <|> old.visualMapColumn?
-  visualSharedPath := new.visualSharedPath || old.visualSharedPath }
+  visualSharedPath := new.visualSharedPath || old.visualSharedPath
+  visualContinues? := new.visualContinues? <|> old.visualContinues? }
 
 def Game.merge (old : Game) (new : Game) : Game :=
 { new with

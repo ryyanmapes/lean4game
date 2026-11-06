@@ -473,6 +473,7 @@ function VisualMapAppBar({
   onToggleAutoBranchSwitching,
   fastExfalso,
   onToggleFastExfalso,
+  fastExfalsoFixedByGame,
   openAnyLevel,
   onToggleOpenAnyLevel,
 }: {
@@ -481,6 +482,8 @@ function VisualMapAppBar({
   onToggleAutoBranchSwitching: () => void
   fastExfalso: boolean
   onToggleFastExfalso: () => void
+  /** The game always has it on (`VisualFastExfalso`), so there's nothing to set. */
+  fastExfalsoFixedByGame: boolean
   openAnyLevel: boolean
   onToggleOpenAnyLevel: () => void
 }) {
@@ -538,17 +541,19 @@ function VisualMapAppBar({
           <span>{t('Auto branch switching')}</span>
           <span className="visual-map-toggle-state" aria-hidden="true">{autoBranchSwitching ? 'On' : 'Off'}</span>
         </button>
-        <button
-          type="button"
-          className={`visual-map-menu-toggle${fastExfalso ? ' active' : ''}`}
-          aria-pressed={fastExfalso}
-          onClick={onToggleFastExfalso}
-          title="Dropping a False proof on any goal closes it through exfalso"
-        >
-          <FontAwesomeIcon icon={toIconProp(faBolt)} />
-          <span>{t('Fast exfalso')}</span>
-          <span className="visual-map-toggle-state" aria-hidden="true">{fastExfalso ? 'On' : 'Off'}</span>
-        </button>
+        {!fastExfalsoFixedByGame && (
+          <button
+            type="button"
+            className={`visual-map-menu-toggle${fastExfalso ? ' active' : ''}`}
+            aria-pressed={fastExfalso}
+            onClick={onToggleFastExfalso}
+            title="Dropping a False proof on any goal closes it through exfalso"
+          >
+            <FontAwesomeIcon icon={toIconProp(faBolt)} />
+            <span>{t('Fast exfalso')}</span>
+            <span className="visual-map-toggle-state" aria-hidden="true">{fastExfalso ? 'On' : 'Off'}</span>
+          </button>
+        )}
         <button
           type="button"
           className={`visual-map-menu-toggle${openAnyLevel ? ' active' : ''}`}
@@ -965,6 +970,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       onToggleAutoBranchSwitching={() => setIsVisualAutoBranchSwitching(!isVisualAutoBranchSwitching)}
       fastExfalso={isVisualFastExfalso}
       onToggleFastExfalso={() => setIsVisualFastExfalso(!isVisualFastExfalso)}
+      fastExfalsoFixedByGame={gameInfo.data?.visualFastExfalso ?? false}
       openAnyLevel={isVisualOpenAnyLevel}
       onToggleOpenAnyLevel={() => setIsVisualOpenAnyLevel(!isVisualOpenAnyLevel)}
     />

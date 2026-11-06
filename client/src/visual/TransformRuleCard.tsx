@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { formatFormulaText, parse, printDisplayExpression } from './expr-engine'
 import type { ExpressionNode } from './expr-types'
+import { MulDotContext, renderFormulaText } from './formulaDisplay'
 import { OverflowMarquee } from './OverflowMarquee'
 
 interface EqualityHypCardProps {
@@ -14,6 +15,8 @@ interface EqualityHypCardProps {
   forallFooter?: string
   /** Highlight the `∀ …` footer (`VisualEmphasizeForall`). */
   forallEmphasized?: boolean
+  /** Shown in the axiom colour. */
+  axiom?: boolean
   isReverse: boolean
   isFailing?: boolean
   emphasized?: boolean
@@ -40,6 +43,7 @@ export function EqualityHypCard({
   rhsNode,
   forallFooter,
   forallEmphasized = false,
+  axiom = false,
   isReverse,
   isFailing = false,
   emphasized = false,
@@ -52,6 +56,7 @@ export function EqualityHypCard({
     data: { equalityHyp: true },
   })
 
+  const mulDot = React.useContext(MulDotContext)
   const formattedLhs = formatRuleExpr(lhsStr, lhsNode)
   const formattedRhs = formatRuleExpr(rhsStr, rhsNode)
   // The sides stay put in both directions; the arrow shows which way the rule rewrites.
@@ -63,6 +68,7 @@ export function EqualityHypCard({
       id={dragId}
       data-rule-id={dragId}
       data-rule-label={label}
+      data-rule-axiom={axiom ? 'true' : undefined}
       data-rule-source={isReverse ? rhsStr : lhsStr}
       data-rule-target={isReverse ? lhsStr : rhsStr}
       {...listeners}
@@ -70,11 +76,11 @@ export function EqualityHypCard({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`tr-rule-card tr-eq-card${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
+      className={`tr-rule-card tr-eq-card${axiom ? ' tr-axiom-card' : ''}${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
     >
-      <h3>{label}</h3>
+      <h3>{renderFormulaText(label)}</h3>
       <div className="tr-symbol">
-        <OverflowMarquee>{symbol}</OverflowMarquee>
+        <OverflowMarquee>{renderFormulaText(symbol, mulDot)}</OverflowMarquee>
       </div>
       {forallFooter && (
         <div className={`tr-forall-footer${forallEmphasized ? ' visual-forall-emphasize' : ''}`}>

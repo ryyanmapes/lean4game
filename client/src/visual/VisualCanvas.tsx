@@ -45,6 +45,7 @@ import {
 import { inferLocalTheoremPremiseApplication, reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 import { goalInfoVisibleAfterTactics } from './levelPresentation'
+import { MulDotContext } from './formulaDisplay'
 import {
   buildStructuredProof,
   commandForGoalAction,
@@ -489,6 +490,22 @@ function phonePortraitGridSnap(canvas: CanvasState, goalStackHeight: number): Ca
     return changed ? { ...stream, hyps: newHyps } : stream
   })
   return changed ? { ...canvas, streams } : canvas
+}
+
+/** React can run an updater many times for one update: while an earlier,
+ * lower-priority update waits, it replays the later ones on every render. An
+ * updater that builds a new object each run would change the state on every
+ * render, and anything depending on that state can then loop until React hits
+ * its update-depth limit. This keeps one result for as long as the input stays
+ * the same. */
+function stableUpdater<T>(update: (previous: T) => T): (previous: T) => T {
+  let last: { input: T; output: T } | null = null
+  return previous => {
+    if (!last || last.input !== previous) {
+      last = { input: previous, output: update(previous) }
+    }
+    return last.output
+  }
 }
 
 function resolveCanvasStateCollisions(
@@ -2354,6 +2371,10 @@ interface VisualCanvasProps {
   hideRewriteDirection?: boolean
   /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
   emphasizeForall?: string[]
+  /** Write multiplication as `·` in Rewrite Mode (`VisualMulDot`). */
+  mulDot?: boolean
+  /** A proof of `False` closes any goal in this game (`VisualFastExfalso`). */
+  gameFastExfalso?: boolean
   onInteraction: (proofBody: string) => Promise<ProofState | null>
   /** Re-check an exact full classic proof body without adding the visual prelude. */
   onValidateProof?: (proofBody: string) => Promise<ProofState | null>
@@ -2641,10 +2662,11 @@ export function VisualCanvas({
   visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
   displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = '',
-  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall,
+  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall, mulDot = false, gameFastExfalso = false,
 }: VisualCanvasProps) {
-  const { isVisualAutoBranchSwitching, isVisualFastExfalso: fastExfalso } =
+  const { isVisualAutoBranchSwitching, isVisualFastExfalso } =
     React.useContext(PreferencesContext)
+  const fastExfalso = isVisualFastExfalso || gameFastExfalso
   const combiningCanvasRef = useRef<HTMLDivElement>(null)
   const proofTreePanelRef = useRef<HTMLDivElement>(null)
   const goalsContainerRef = useRef<HTMLDivElement>(null)
@@ -3023,11 +3045,12 @@ export function VisualCanvas({
 
   useLayoutEffect(() => {
     if (isPhonePortrait) {
-      setCanvasState(prev => phonePortraitGridSnap(prev, goalStackHeight))
+      setCanvasState(stableUpdater(prev => phonePortraitGridSnap(prev, goalStackHeight)))
       return
     }
     const canvasBounds = getCombiningCanvasBounds()
-    setCanvasState(prev => resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait }))
+    setCanvasState(stableUpdater(prev =>
+      resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait })))
   }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
 
   useLayoutEffect(() => {
@@ -7802,6 +7825,7 @@ export function VisualCanvas({
 
       {/* Transformation overlay — outside the canvas DndContext to avoid nesting */}
       {transformProps && (
+        <MulDotContext.Provider value={mulDot}>
         <TransformationView
           style={visualPageStyle}
           relation={transformProps.relation}
@@ -7877,6 +7901,7 @@ export function VisualCanvas({
             />
           }
         />
+        </MulDotContext.Provider>
       )}
 
     </>

@@ -213,6 +213,20 @@ elab "VisualEmphasizeForall" name:ident : command => do
   modifyCurLevel fun lvl => pure { lvl with
     visualEmphasizeForall := lvl.visualEmphasizeForall.push name.getId }
 
+/-- Draw this level's node larger on the path-style world map, as for a boss level. -/
+elab "VisualBossLevel" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualBossLevel := true }
+
+/-- Write multiplication as `·` instead of `*` in this level's Rewrite Mode. -/
+elab "VisualMulDot" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualMulDot := true }
+
+/-- Let a proof of `False` close any goal in Visual Lean, with no `exfalso` step, as the
+Fast `exfalso` setting does for players who switch it on. Use it in the game file, before
+`MakeGame`. -/
+elab "VisualFastExfalso" : command => do
+  modifyCurGame fun game => pure { game with visualFastExfalso := true }
+
 /-- Draw the Visual Lean world map as paths of individual levels instead of worlds with
 orbiting level dots. Each world is a column of its levels; worlds join along their
 dependencies. Use it in the game file, before `MakeGame`. See also `VisualBonusOf`,
@@ -255,6 +269,13 @@ level before the paths split. It is drawn in the shared grey and gets no title l
 Use it in the world file. -/
 elab "VisualSharedPath" : command => do
   modifyCurWorld fun world => pure { world with visualSharedPath := true }
+
+/-- Path map: the current world carries on the path of world `source` under the same name,
+for when a world needs splitting so that other paths can join or leave it partway. It is
+drawn in that world's colour with no title label of its own. It doesn't add a dependency.
+Use it in the world file. Example: `VisualContinues Induction` -/
+elab "VisualContinues" source:ident : command => do
+  modifyCurWorld fun world => pure { world with visualContinues? := some source.getId }
 
 syntax visualBool := &"true" <|> &"false"
 
@@ -918,6 +939,10 @@ elab "Dependency" s:Parser.dependency : command => do
 /-- Build the game. This command will precompute various things about the game, such as which
 tactics are available in each level etc. -/
 elab "MakeGame" : command => do
+  for (worldId, world) in (← getCurGame).worlds.nodes.toArray do
+    let some source := world.visualContinues? | continue
+    unless (← getCurGame).worlds.nodes.contains source do
+      logError m!"World `{worldId}` continues world `{source}`, which does not exist"
   -- A path-map bonus world (`VisualBonusOf`) depends on the world it branches off.
   for (worldId, world) in (← getCurGame).worlds.nodes.toArray do
     let some (source, level) := world.visualBonusOf? | continue
