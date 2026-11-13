@@ -37,8 +37,36 @@ const WORKER_UI_VERSION = 'single-thread-modules-v1'
 const BROWSER_RUNTIME_VERSION = 'single-thread-modules-v1'
 const PROOF_STATE_MARKER = '__VISUAL_LEAN_STATE_V1__'
 // `assetBase` is the same-origin `/visual-lean` or a remote copy (assetBase.ts).
-function moduleBundleUrl(assetBase: string) {
-  return `${assetBase}/modules/game-modules.tar.gz?v=${BROWSER_RUNTIME_VERSION}`
+function moduleBundleUrl(assetBase: string, bundle: string) {
+  return `${assetBase}/modules/${bundle}?v=${BROWSER_RUNTIME_VERSION}`
+}
+
+/** Where a game's levels are checked: the module bundle holding every module
+ * its facade imports, the facade, and the namespace its levels are declared
+ * in. Every game shares the one runtime (lean.wasm). NNVG's browser build is
+ * package NNVG with modules NNVG.* (scripts/retarget-nnvg-browser-runtime.mjs),
+ * in a bundle of its own; VisualTest needs nothing beyond NNG4's. */
+interface BrowserGameRuntime {
+  bundle: string
+  facade: string
+  namespace: string | null
+}
+
+export function browserGameRuntime(gameId: string): BrowserGameRuntime {
+  const repositoryName = gameId.split('/').at(-1)?.toLowerCase()
+  if (repositoryName === 'nnvg') {
+    return { bundle: 'nnvg/game-modules.tar.gz', facade: 'NNVG.Browser.Runtime', namespace: 'MyNat' }
+  }
+  // Lean4Game's exported `descrFormat` contains the statement itself, but not
+  // the namespace surrounding the authored level. Every NNG4 level is
+  // declared in `MyNat`; restoring that context is what makes unqualified
+  // names such as `succ`, `zero_add`, and `add_assoc` resolve exactly as they
+  // do in the original game sources.
+  return {
+    bundle: 'game-modules.tar.gz',
+    facade: 'Game.Browser.Runtime',
+    namespace: repositoryName === 'nng4' ? 'MyNat' : null,
+  }
 }
 // This purpose-linked runtime and the snapshot are produced by the same build.
 // Keeping them paired is required because Lean snapshots contain function-table
@@ -154,9 +182,19 @@ class LocalLeanWorker {
   private snapshotResolver: ((result: { success: boolean; error?: string }) => void) | null = null
   private moduleBundleResolver: ((result: { success: boolean; error?: string }) => void) | null = null
   private operationQueue: Promise<void> = Promise.resolve()
+  /** The module bundle this worker was started with. */
+  private bundle: string | null = null
 
-  ensureReady(): Promise<void> {
-    if (this.readyPromise) return this.readyPromise
+  ensureReady(bundle: string): Promise<void> {
+    if (this.readyPromise && this.bundle === bundle) return this.readyPromise
+    if (this.readyPromise) {
+      // Another game's level: start a Lean of its own rather than import a
+      // second environment beside the first, which a phone's heap can't hold.
+      // Compiles are queued, so none is running here.
+      this.terminate()
+      this.readyPromise = null
+    }
+    this.bundle = bundle
     // Refuse up front, with a specific reason, rather than failing somewhere
     // inside an 88 MB download. A crash detected from the previous page load is
     // not retried automatically: on a phone that is out of memory that would
@@ -312,21 +350,21 @@ class LocalLeanWorker {
       this.moduleBundleResolver = result => result.success
         ? resolve()
         : reject(new Error(result.error ?? 'Lean module bundle failed to load'))
-      this.worker!.postMessage({ type: 'load_module_bundle', url: moduleBundleUrl(assetBase) })
+      this.worker!.postMessage({ type: 'load_module_bundle', url: moduleBundleUrl(assetBase, this.bundle!) })
     })
   }
 
-  compile(code: string): Promise<CompileResult> {
+  compile(code: string, bundle: string): Promise<CompileResult> {
     const operation = this.operationQueue.then(
-      () => this.compileNow(code),
-      () => this.compileNow(code),
+      () => this.compileNow(code, bundle),
+      () => this.compileNow(code, bundle),
     )
     this.operationQueue = operation.then(() => undefined, () => undefined)
     return operation
   }
 
-  private async compileNow(code: string): Promise<CompileResult> {
-    await this.ensureReady()
+  private async compileNow(code: string, bundle: string): Promise<CompileResult> {
+    await this.ensureReady(bundle)
     if (this.pendingCompile) throw new Error('A Lean proof is already being checked')
     reportLeanLoading(96, 'Checking the level with Lean…')
     return new Promise<CompileResult>(resolve => {
@@ -486,17 +524,12 @@ export class LocalWasmRpcClient {
     // persistent WASM compiler keys its cached environment by that header.
     const effectiveProof = [this.proofPrelude, proofBody].filter(Boolean).join('\n')
     const declaration = `${this.initialDeclaration} := by\n${indentProof(instrumentBrowserProof(effectiveProof))}\n  all_goals browser_report_state\n  all_goals sorry`
-    // Lean4Game's exported `descrFormat` contains the statement itself, but not
-    // the namespace surrounding the authored level. Every NNG4 level is
-    // declared in `MyNat`; restoring that context is what makes unqualified
-    // names such as `succ`, `zero_add`, and `add_assoc` resolve exactly as they
-    // do in the original game sources.
-    const repositoryName = this.gameId.split('/').at(-1)?.toLowerCase()
-    const namespacedDeclaration = repositoryName === 'nng4'
-      ? `namespace MyNat\n\n${declaration}\n\nend MyNat`
+    const runtime = browserGameRuntime(this.gameId)
+    const namespacedDeclaration = runtime.namespace
+      ? `namespace ${runtime.namespace}\n\n${declaration}\n\nend ${runtime.namespace}`
       : declaration
-    const code = `import GameServer.Tactic.Visual\nimport Game.Browser.Runtime\n\n${namespacedDeclaration}\n`
-    const result = await this.engine.compile(code)
+    const code = `import GameServer.Tactic.Visual\nimport ${runtime.facade}\n\n${namespacedDeclaration}\n`
+    const result = await this.engine.compile(code, runtime.bundle)
     const errors = result.diagnostics.filter(diag => diag.severity === 'error')
     if (!result.success) {
       const diagnosticText = errors.map(diag => diag.data).filter(Boolean).join('\n')
