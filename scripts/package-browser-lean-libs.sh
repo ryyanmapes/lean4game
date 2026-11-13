@@ -5,6 +5,7 @@ out="${1:-browser-lean-libs}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 nng4="$root/../NNG4"
 visualtest="$root/../VisualTest"
+nnvg="$root/../NNVG"
 
 rm -rf "$out"
 mkdir -p "$out/lean-lib"
@@ -58,6 +59,17 @@ if [[ -d "$visualtest/.lake/gamedata" ]]; then
   cp -R "$visualtest/.lake/gamedata/." "$out/gamedata/VisualTest/"
 fi
 
+# NNVG's browser build is package NNVG with modules NNVG.* (see
+# retarget-nnvg-browser-runtime.mjs), so none of its files meets NNG4's. Its
+# dependencies are GameServer's, collected above.
+if [[ "${INCLUDE_NNVG:-false}" == "true" ]]; then
+  copy_tree "$nnvg/.lake/build/lib/lean" "NNVG"
+  test -s "$out/lean-lib/NNVG/Browser/Runtime.olean"
+  mkdir -p "$out/gamedata/NNVG"
+  cp -R "$nnvg/.lake/gamedata/." "$out/gamedata/NNVG/"
+  test -s "$out/gamedata/NNVG/game.json"
+fi
+
 find "$out/lean-lib" -type f -printf '%P\n' | LC_ALL=C sort > "$out/lean-lib-files.txt"
 
 olean_count="$(find "$out/lean-lib" -type f -name '*.olean' | wc -l | tr -d ' ')"
@@ -79,7 +91,7 @@ while IFS= read -r -d '' olean; do
     echo "Missing browser IR beside ${olean#"$out/lean-lib/"}" >&2
     missing_ir=1
   fi
-done < <(find "$out/lean-lib/GameServer" "$out/lean-lib/Game" -type f -name '*.olean' -print0 2>/dev/null)
+done < <(find "$out/lean-lib/GameServer" "$out/lean-lib/Game" "$out/lean-lib/NNVG" -type f -name '*.olean' -print0 2>/dev/null)
 if [[ "$missing_ir" != 0 ]]; then
   echo 'GameServer and game modules must all use Lean module-system builds.' >&2
   exit 1
@@ -93,6 +105,7 @@ cat > "$out/build-info.json" <<EOF
   "lean4gameRef": "$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)",
   "nng4Ref": "$(if [[ "${INCLUDE_NNG4:-false}" == "true" ]]; then git -C "$nng4" rev-parse HEAD; else echo null; fi)",
   "visualTestRef": "$(git -C "$visualtest" rev-parse HEAD)",
+  "nnvgRef": "$(if [[ "${INCLUDE_NNVG:-false}" == "true" ]]; then git -C "$nnvg" rev-parse HEAD; else echo null; fi)",
   "oleanFiles": $olean_count,
   "irFiles": $ir_count
 }

@@ -23,6 +23,16 @@ on:
         required: false
         default: true
         type: boolean
+      nnvg_ref:
+        description: NNVG branch, tag, or SHA
+        required: false
+        default: main
+        type: string
+      include_nnvg:
+        description: Build and package ryyanmapes/NNVG (needs NNG4)
+        required: false
+        default: true
+        type: boolean
     secrets:
       CAULI_ARTIFACT_TOKEN:
         description: Unused since the toolchain moved to release assets; kept so existing callers still validate
@@ -46,6 +56,16 @@ on:
         type: string
       include_nng4:
         description: Build and package ryyanmapes/NNG4
+        required: true
+        default: true
+        type: boolean
+      nnvg_ref:
+        description: NNVG branch, tag, or SHA
+        required: false
+        default: main
+        type: string
+      include_nnvg:
+        description: Build and package ryyanmapes/NNVG (needs NNG4)
         required: true
         default: true
         type: boolean
@@ -125,6 +145,17 @@ jobs:
           git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/VisualTest ../VisualTest
           git -C ../VisualTest fetch --depth 1 origin "$VISUALTEST_REF"
           git -C ../VisualTest checkout --detach FETCH_HEAD
+
+      # The Natural Numbers Video Game ships its own module bundle beside NNG4's
+      # and shares NNG4's purpose-linked runtime, so it is only built with NNG4.
+      - name: Check out NNVG
+        if: inputs.include_nnvg && inputs.include_nng4
+        env:
+          NNVG_REF: ${{ inputs.nnvg_ref }}
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/NNVG ../NNVG
+          git -C ../NNVG fetch --depth 1 origin "$NNVG_REF"
+          git -C ../NNVG checkout --detach FETCH_HEAD
 
       - name: Download matching Cauli toolchain release
         env:
@@ -228,6 +259,14 @@ jobs:
           grep -q '^import GameServer$' ../VisualTest/Game/Metadata.lean
           (cd ../VisualTest && "$LEAN_HOME/bin/lake" update --keep-toolchain)
 
+      - name: Adapt NNVG package configuration to Cauli Lake
+        if: inputs.include_nnvg && inputs.include_nng4
+        run: |
+          # Like VisualTest, NNVG needs only GameServer and its dependencies.
+          rm -f ../NNVG/lake-manifest.json
+          rm -rf ../NNVG/.lake
+          (cd ../NNVG && "$LEAN_HOME/bin/lake" update --keep-toolchain)
+
       - name: Enable browser IR generation
         run: |
           node scripts/enable-browser-module-system.mjs --meta \
@@ -246,6 +285,16 @@ jobs:
             ../VisualTest/.lake/packages/Cli
           node scripts/enable-browser-module-system.mjs \
             ../VisualTest/.lake/packages/batteries
+
+          if [[ -d ../NNVG ]]; then
+            node scripts/enable-browser-module-system.mjs --meta \
+              ../NNVG/.lake/packages/importGraph \
+              ../NNVG/.lake/packages/i18n \
+              ../NNVG/.lake/packages/Cli
+            node scripts/enable-browser-module-system.mjs \
+              ../NNVG/.lake/packages/batteries
+            find ../NNVG/.lake/packages -type d -path '*/.lake/build' -prune -exec rm -rf {} +
+          fi
 
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
             node scripts/enable-browser-module-system.mjs --meta \
@@ -283,6 +332,26 @@ jobs:
           "$LEAN_HOME/bin/lake" build
           test -s .lake/gamedata/game.json
 
+      - name: Build NNVG metadata with Cauli Lean
+        if: inputs.include_nnvg && inputs.include_nng4
+        working-directory: ../NNVG
+        run: |
+          "$LEAN_HOME/bin/lake" build
+          test -s .lake/gamedata/game.json
+
+      # From its untouched sources the game data is generated; the browser
+      # copy then becomes package NNVG (see the script) on the browser command
+      # surface. This runs before NNG4's rebuild, which leaves GameServer's
+      # build tree as NNG4's runtime needs it, exactly as without NNVG.
+      - name: Build NNVG browser runtime with Cauli Lean
+        if: inputs.include_nnvg && inputs.include_nng4
+        run: |
+          node scripts/retarget-nnvg-browser-runtime.mjs ../NNVG --module-system
+          rm -rf ../NNVG/.lake/build
+          (cd ../NNVG && "$LEAN_HOME/bin/lake" build NNVG.Browser.Runtime)
+          test -s ../NNVG/.lake/build/lib/lean/NNVG/Browser/Runtime.olean
+          test -s ../NNVG/.lake/build/lib/lean/NNVG/Browser/Runtime.ir
+
       - name: Rebuild NNG4 against browser command surface
         if: inputs.include_nng4
         run: |
@@ -296,6 +365,7 @@ jobs:
       - name: Package browser libraries
         env:
           INCLUDE_NNG4: ${{ inputs.include_nng4 }}
+          INCLUDE_NNVG: ${{ inputs.include_nnvg && inputs.include_nng4 }}
         run: bash scripts/package-browser-lean-libs.sh browser-lean-libs
 
       - name: Unpack matching WebAssembly compiler
@@ -343,10 +413,18 @@ jobs:
           link_thread_flags=()
 
           (cd server && "$LEAN_HOME/bin/lake" env lean ../scripts/PrintVisualExterns.lean)
+          # NNVG's facade joins the export closure, so every toolchain module it
+          # imports keeps its initializer. Its own modules run as IR.
+          entry_modules=Game.Browser.Runtime
+          extra_roots=()
+          if [[ -d ../NNVG/NNVG ]]; then
+            entry_modules+=,NNVG.Browser.Runtime
+            extra_roots+=(../NNVG)
+          fi
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
             .visual-link/visual-exports.txt \
-            Game.Browser.Runtime .cauli-lean-source/src server ../NNG4 \
+            "$entry_modules" .cauli-lean-source/src server ../NNG4 "${extra_roots[@]}" \
             ../NNG4/.lake/packages/mathlib \
             ../NNG4/.lake/packages/importGraph \
             ../NNG4/.lake/packages/Cli \
@@ -437,6 +515,14 @@ jobs:
             node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
               "$VISUAL_RUNTIME" "$PWD/.nng-import-probes" /work/probe.lean
           done
+          if [[ -d ../NNVG/NNVG ]]; then
+            for module in NNVG.MyNat.Definition NNVG.Levels.Induction NNVG.Browser.Runtime; do
+              echo "WASM CLI import probe: $module"
+              printf 'import %s\n\nexample : True := True.intro\n' "$module" > .nng-import-probes/probe.lean
+              node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+                "$VISUAL_RUNTIME" "$PWD/.nng-import-probes" /work/probe.lean
+            done
+          fi
 
       - name: Bake Visual Lean NNG4 browser environment snapshot
         run: |
@@ -642,6 +728,92 @@ jobs:
           cp "$profiles/game-modules.tar.gz" browser-lean-libs/modules/
           echo "::notice title=Validated mobile module closure::$module_files files; $module_bytes bytes expanded; $module_gzip_bytes bytes gzip-compressed"
 
+          # NNVG gets a bundle of its own, traced and validated the same way:
+          # its players never download NNG4's modules, nor NNG4's players its.
+          if [[ -d ../NNVG/NNVG ]]; then
+            nnvg_work="$RUNNER_TEMP/nnvg-module-work"
+            nnvg_runtime="$RUNNER_TEMP/nnvg-module-runtime"
+            nnvg_lib="$profiles/nnvg-module-lib"
+            rm -rf "$nnvg_work" "$nnvg_runtime" "$nnvg_lib"
+            mkdir -p "$nnvg_work" "$nnvg_runtime/bin" "$nnvg_runtime/lib/lean" "$nnvg_lib"
+            cat > "$nnvg_work/probe.lean" <<'LEAN'
+          import GameServer.Tactic.Visual
+          import NNVG.Browser.Runtime
+
+          namespace MyNat
+
+          example : ∀ n : ℕ, 0 + n = n := by
+            intro n
+            induction n with d hd
+            · rw [add_zero]
+            · rw [add_succ, hd]
+
+          example (a : ℕ) (h : a ≠ 0) : ∃ b, a = S b := by
+            cases a with d
+            · exact absurd rfl h
+            · exact ⟨d, rfl⟩
+
+          example (n : ℕ) : n + 0 = n := by
+            drag_rw_lhs [add_zero]
+            click_goal
+
+          example (P : Prop) : P → P := by
+            click_goal
+            exact h
+
+          example (a b : ℕ) : a ≤ a + b := by
+            exact ⟨b, rfl⟩
+
+          end MyNat
+          LEAN
+
+            echo 'Tracing the NNVG module closure used by WASM...'
+            node --stack-size=8192 scripts/lean-wasm-node-trace.cjs \
+              "$VISUAL_RUNTIME" "$nnvg_work" "$nnvg_work/opened-files.txt" \
+              /work/probe.lean
+            test -s "$nnvg_work/opened-files.txt"
+            # Same selection as NNG4's closure above.
+            while IFS= read -r relative; do
+              [[ -n "$relative" ]] || continue
+              case "$relative" in
+                *.olean.private|*.olean.server) continue ;;
+              esac
+              if [[ -f "$VISUAL_RUNTIME/lib/lean/$relative" ]]; then
+                (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$relative" "$nnvg_lib")
+              fi
+              if [[ "$relative" == *.olean ]]; then
+                for companion in "${relative%.olean}.ir" "${relative%.olean}.ir.sig"; do
+                  if [[ -f "$VISUAL_RUNTIME/lib/lean/$companion" ]]; then
+                    (cd "$VISUAL_RUNTIME/lib/lean" && cp --parents "$companion" "$nnvg_lib")
+                  fi
+                done
+              fi
+            done < "$nnvg_work/opened-files.txt"
+            test -s "$nnvg_lib/NNVG/Browser/Runtime.olean"
+            if [[ -e "$nnvg_lib/Game" ]]; then
+              echo '::error::The NNVG module closure reaches NNG4 modules.'
+              exit 1
+            fi
+
+            cp "$VISUAL_RUNTIME/bin/lean.js" "$VISUAL_RUNTIME/bin/lean.wasm" "$nnvg_runtime/bin/"
+            cp -a "$nnvg_lib/." "$nnvg_runtime/lib/lean/"
+            echo 'Validating the NNVG proofs against only the traced module closure...'
+            node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
+              "$nnvg_runtime" "$nnvg_work" /work/probe.lean
+
+            nnvg_files="$(find "$nnvg_lib" -type f | wc -l | tr -d ' ')"
+            nnvg_bytes="$(du -sb "$nnvg_lib" | cut -f1)"
+            tar --format=ustar -C "$nnvg_lib" -cf "$profiles/nnvg-game-modules.tar" .
+            gzip -9 "$profiles/nnvg-game-modules.tar"
+            nnvg_gzip_bytes="$(stat -c '%s' "$profiles/nnvg-game-modules.tar.gz")"
+            printf 'nnvg-module-closure\t%s\t%s\n' "$nnvg_bytes" "$nnvg_gzip_bytes" \
+              | tee -a "$profiles/sizes.tsv"
+            cp "$nnvg_work/opened-files.txt" "$profiles/nnvg-opened-files.txt"
+            mkdir -p browser-lean-libs/modules/nnvg
+            cp "$profiles/nnvg-game-modules.tar.gz" browser-lean-libs/modules/nnvg/game-modules.tar.gz
+            echo "::notice title=Validated NNVG module closure::$nnvg_files files; $nnvg_bytes bytes expanded; $nnvg_gzip_bytes bytes gzip-compressed"
+          fi
+
           {
             echo '### Experimental mobile snapshot profiles'
             echo
@@ -671,6 +843,10 @@ jobs:
             browser-lean-libs/lean-lib-files.txt
           if [[ "${{ inputs.include_nng4 }}" == "true" ]]; then
             test -s browser-lean-libs/gamedata/NNG4/game.json
+          fi
+          if [[ -d ../NNVG/NNVG ]]; then
+            test -s browser-lean-libs/gamedata/NNVG/game.json
+            test -s browser-lean-libs/modules/nnvg/game-modules.tar.gz
           fi
           test -s browser-lean-libs/gamedata/VisualTest/game.json
           du -sh browser-lean-libs

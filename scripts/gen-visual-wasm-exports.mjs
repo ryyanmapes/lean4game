@@ -89,7 +89,9 @@ function visit(root, dir = root) {
 for (const root of sourceRoots) visit(path.resolve(root))
 
 const closure = new Set()
-const stack = [entryModule, 'Init']
+// Several games can share one runtime (NNG4's and NNVG's facades), so the entry
+// may be a comma-separated list; the closure covers every one of them.
+const stack = [...entryModule.split(',').filter(Boolean), 'Init']
 while (stack.length > 0) {
   const moduleName = stack.pop()
   if (closure.has(moduleName)) continue
