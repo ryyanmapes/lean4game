@@ -5,9 +5,14 @@ import {
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { formatFormulaText } from './expr-engine'
-import { UndoIcon } from './ControlIcons'
+import { ResetIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
+import { InstructionGuideArrow, guideRect } from './TransformationView'
+import type { GuideArrow } from './TransformationView'
+import { VisualInfoText } from './VisualInfoText'
+import { usePersistentHints, withText } from './hintPersistence'
+import type { VisualSpecializationInfo } from './types'
 
 // ── Construction term types ───────────────────────────────────────────────────
 
@@ -79,59 +84,89 @@ const PREC: Record<ConstructionTerm['kind'], number> = {
   add: 60,  sub: 60,
 }
 
-function parens(t: ConstructionTerm, outerPrec: number): string {
-  const s = termToLeanString(t)
+function parens(t: ConstructionTerm, outerPrec: number, successorName: string): string {
+  const s = termToLeanString(t, successorName)
   return PREC[t.kind] < outerPrec ? `(${s})` : s
 }
 
-export function termToLeanString(t: ConstructionTerm): string {
+/** `t` as Lean source. `successorName` is the game's successor function
+ * (`VisualSuccessorName`), `succ` unless the game says otherwise. */
+export function termToLeanString(t: ConstructionTerm, successorName = 'succ'): string {
+  const termToLeanString_ = (term: ConstructionTerm) => termToLeanString(term, successorName)
+  const parens_ = (term: ConstructionTerm, outerPrec: number) => parens(term, outerPrec, successorName)
   switch (t.kind) {
     case 'slot': return '_'
     case 'num':  return String(t.value)
     case 'var':  return t.name
     case 'succ': {
-      const inner = termToLeanString(t.arg)
+      const inner = termToLeanString_(t.arg)
       // Emit unqualified constructor form expected in MyNat levels.
-      return isAtomTerm(t.arg) ? `succ ${inner}` : `succ (${inner})`
+      return isAtomTerm(t.arg) ? `${successorName} ${inner}` : `${successorName} (${inner})`
     }
     case 'add': {
-      const l = parens(t.left,  PREC.add)
+      const l = parens_(t.left,  PREC.add)
       // Right-associative right side needs parens for add/sub to be explicit
       const r = (t.right.kind === 'add' || t.right.kind === 'sub')
-        ? `(${termToLeanString(t.right)})`
-        : parens(t.right, PREC.add)
+        ? `(${termToLeanString_(t.right)})`
+        : parens_(t.right, PREC.add)
       return `${l} + ${r}`
     }
     case 'sub': {
-      const l = parens(t.left, PREC.sub)
+      const l = parens_(t.left, PREC.sub)
       // Right side sub/add changes meaning without parens
       const r = (t.right.kind === 'add' || t.right.kind === 'sub')
-        ? `(${termToLeanString(t.right)})`
-        : parens(t.right, PREC.sub)
+        ? `(${termToLeanString_(t.right)})`
+        : parens_(t.right, PREC.sub)
       return `${l} - ${r}`
     }
     case 'mul': {
-      const l = parens(t.left, PREC.mul)
+      const l = parens_(t.left, PREC.mul)
       const r = (t.right.kind === 'mul' || t.right.kind === 'div')
-        ? `(${termToLeanString(t.right)})`
-        : parens(t.right, PREC.mul)
+        ? `(${termToLeanString_(t.right)})`
+        : parens_(t.right, PREC.mul)
       return `${l} * ${r}`
     }
     case 'div': {
-      const l = parens(t.left, PREC.div)
+      const l = parens_(t.left, PREC.div)
       // Division is left-associative; right side div/mul changes meaning
       const r = (t.right.kind === 'mul' || t.right.kind === 'div')
-        ? `(${termToLeanString(t.right)})`
-        : parens(t.right, PREC.div)
+        ? `(${termToLeanString_(t.right)})`
+        : parens_(t.right, PREC.div)
       return `${l} / ${r}`
     }
     case 'min': {
       // min is a prefix function; both args get parenthesised if non-atomic
-      const l = isAtomTerm(t.left) ? termToLeanString(t.left) : `(${termToLeanString(t.left)})`
-      const r = isAtomTerm(t.right) ? termToLeanString(t.right) : `(${termToLeanString(t.right)})`
+      const l = isAtomTerm(t.left) ? termToLeanString_(t.left) : `(${termToLeanString_(t.left)})`
+      const r = isAtomTerm(t.right) ? termToLeanString_(t.right) : `(${termToLeanString_(t.right)})`
       return `min ${l} ${r}`
     }
   }
+}
+
+/** `t` as the specialization view shows it, with `?` for each empty slot, for
+ * matching the term a hint is written for (`VisualSpecializeInfo`). */
+export function termDisplayText(t: ConstructionTerm, successorName = 'succ'): string {
+  const show = (term: ConstructionTerm): string => {
+    switch (term.kind) {
+      case 'slot': return '?'
+      case 'num': return String(term.value)
+      case 'var': return term.name
+      case 'succ': return `${successorName}(${show(term.arg)})`
+      case 'min': return `min(${show(term.left)}, ${show(term.right)})`
+      default: {
+        const op = term.kind === 'add' ? '+' : term.kind === 'sub' ? '-' : term.kind === 'mul' ? '*' : '/'
+        const side = (part: ConstructionTerm) =>
+          PREC[part.kind] <= PREC[term.kind] && part.kind !== 'slot' ? `(${show(part)})` : show(part)
+        return `${side(term.left)} ${op} ${side(term.right)}`
+      }
+    }
+  }
+  return show(t)
+}
+
+/** Text compared without spaces, so `S( _ )` and `S(_)` are the same. */
+function compactText(text: string): string {
+  return text.replace(/\s+/g, '')
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -145,6 +180,7 @@ function SlotNode({ id: slotId, selectedSlotId, onSelectSlot }: {
   return (
     <button
       ref={setNodeRef}
+      data-slot-id={slotId}
       className={`cn-slot${slotId === selectedSlotId ? ' selected' : ''}${isOver ? ' drop-hover' : ''}`}
       onClick={() => onSelectSlot(slotId)}
     >?</button>
@@ -155,9 +191,10 @@ interface TermDisplayProps {
   term: ConstructionTerm
   selectedSlotId: string | null
   onSelectSlot: (id: string) => void
+  successorName?: string
 }
 
-function TermDisplay({ term, selectedSlotId, onSelectSlot }: TermDisplayProps): React.ReactElement {
+function TermDisplay({ term, selectedSlotId, onSelectSlot, successorName = 'succ' }: TermDisplayProps): React.ReactElement {
   if (term.kind === 'slot') {
     return <SlotNode id={term.id} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
   }
@@ -166,9 +203,9 @@ function TermDisplay({ term, selectedSlotId, onSelectSlot }: TermDisplayProps): 
   if (term.kind === 'succ') {
     return (
       <span className="cn-expr cn-app">
-        <span className="cn-func-name">succ</span>
+        <span className="cn-func-name">{successorName}</span>
         <span className="cn-paren">(</span>
-        <TermDisplay term={term.arg} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+        <TermDisplay term={term.arg} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
         <span className="cn-paren">)</span>
       </span>
     )
@@ -179,9 +216,9 @@ function TermDisplay({ term, selectedSlotId, onSelectSlot }: TermDisplayProps): 
         <span className="cn-func-name">min</span>
         {/* cn-paren-vis is never hidden — keeps the two args delimited */}
         <span className="cn-paren-vis">(</span>
-        <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+        <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
         <span className="cn-op">,</span>
-        <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+        <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
         <span className="cn-paren-vis">)</span>
       </span>
     )
@@ -194,9 +231,9 @@ function TermDisplay({ term, selectedSlotId, onSelectSlot }: TermDisplayProps): 
     ' ÷ '
   return (
     <span className="cn-expr cn-binary">
-      <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+      <TermDisplay term={term.left} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
       <span className="cn-op">{opSymbol}</span>
-      <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} />
+      <TermDisplay term={term.right} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
     </span>
   )
 }
@@ -256,11 +293,18 @@ interface Props {
   isPhonePortrait?: boolean
   /** Pre-fill the construction term (e.g. when a hyp was dropped onto this theorem). */
   initialTerm?: ConstructionTerm
+  /** The game's successor function (`VisualSuccessorName`). */
+  successorName?: string
+  /** Hints for this view, already narrowed to the goal being specialized for. */
+  visualInfos?: VisualSpecializationInfo[]
+  /** Hints stay up after the step they were written for (`VisualPersistentHints`). */
+  persistentHints?: boolean
 }
 
 export function ConstructionView({
   varName, goalBody, contextVarNames, onApply, onClose, isProcessing,
   promptMode = 'propose', mode = 'nat', style, headerSlot, isPhonePortrait = false, initialTerm,
+  successorName = 'succ', visualInfos = [], persistentHints = false,
 }: Props) {
   const [term, setTerm] = useState<ConstructionTerm>(() => initialTerm ?? makeSlot())
   const [history, setHistory] = useState<ConstructionTerm[]>([])
@@ -318,11 +362,19 @@ export function ConstructionView({
     setSelectedSlotId(null)
   }
 
+  /** Back to the term as it was when the view opened. */
+  function handleReset() {
+    if (!canUndo || busy) return
+    setTerm(history[0]!)
+    setHistory([])
+    setSelectedSlotId(null)
+  }
+
   async function handleDone() {
     if (!isComplete || busy) return
     setIsDoneProcessing(true)
     setDoneError(false)
-    const success = await onApply(termToLeanString(term))
+    const success = await onApply(termToLeanString(term, successorName))
     setIsDoneProcessing(false)
     if (success) {
       onClose()
@@ -366,7 +418,7 @@ export function ConstructionView({
         { id: 'fn_min', label: 'min(_, _)', make: makeMin, tab: 'functions' as CnTab },
       ]
     : [
-        { id: 'fn_succ', label: 'succ( _ )', make: makeSucc, tab: 'functions' as CnTab },
+        { id: 'fn_succ', label: `${successorName}( _ )`, make: makeSucc, tab: 'functions' as CnTab },
         { id: 'fn_add',  label: '_ + _',    make: makeAdd,  tab: 'functions' as CnTab },
         { id: 'fn_mul',  label: '_ × _',    make: makeMul,  tab: 'functions' as CnTab },
       ]
@@ -449,6 +501,64 @@ export function ConstructionView({
 
   const activeBrickDef = activeBrickId ? allBricks.find(b => b.id === activeBrickId) : null
 
+  const termText = compactText(termDisplayText(term, successorName))
+  const matchingInfos = React.useMemo(
+    () => visualInfos.filter(info => !info.term || compactText(info.term) === termText),
+    [termText, visualInfos],
+  )
+  const shownInfos = withText(usePersistentHints(
+    persistentHints, history.length, matchingInfos, infos => infos.length === 0, infos => infos,
+  ))
+  const guideInfo = shownInfos[0]
+  const mainAreaRef = useRef<HTMLDivElement>(null)
+  const doneButtonRef = useRef<HTMLButtonElement>(null)
+  const lessonRef = useRef<HTMLDivElement>(null)
+  const [guideArrow, setGuideArrow] = useState<GuideArrow | null>(null)
+  useLayoutEffect(() => {
+    const update = () => {
+      let next: GuideArrow | null = null
+      const lesson = lessonRef.current?.getBoundingClientRect()
+      if (guideInfo?.kind === 'brick' && guideInfo.brick) {
+        const brick = allBricks.find(candidate => compactText(candidate.label) === compactText(guideInfo.brick!))
+        const brickEl = brick
+          ? pageRef.current?.querySelector<HTMLElement>(`[data-brick-id="${brick.id}"]`)
+          : null
+        const slotId = findFirstSlotId(term)
+        const slotEl = slotId
+          ? mainAreaRef.current?.querySelector<HTMLElement>(`[data-slot-id="${slotId}"]`)
+          : null
+        if (brickEl && slotEl) {
+          const from = brickEl.getBoundingClientRect()
+          const to = slotEl.getBoundingClientRect()
+          next = {
+            start: { x: from.left + from.width / 2, y: from.top + from.height / 2 },
+            end: { x: to.left + to.width / 2, y: to.top + to.height / 2 },
+            startRect: guideRect(from),
+            endRect: guideRect(to),
+            arc: 'up',
+          }
+        }
+      } else if (guideInfo?.kind === 'done' && doneButtonRef.current && lesson) {
+        const to = doneButtonRef.current.getBoundingClientRect()
+        next = {
+          start: { x: lesson.left + lesson.width / 2, y: lesson.bottom },
+          end: { x: to.left + to.width / 2, y: to.top + to.height / 2 },
+          startPadding: 8,
+          endRect: guideRect(to),
+          arc: 'down',
+        }
+      }
+      setGuideArrow(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
+    }
+    update()
+    const rafId = window.requestAnimationFrame(update)
+    window.addEventListener('resize', update)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', update)
+    }
+  })
+
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveBrickId(null)}>
       <div className={`visual-page tr-overlay tr-construction-overlay${isPhonePortrait ? ' phone-portrait' : ''}`} style={style}>
@@ -462,8 +572,24 @@ export function ConstructionView({
         {/* Processing overlay */}
         {busy && <div className="tr-processing" />}
 
+        {/* Hints, at the top of the page as in Rewrite Mode */}
+        {shownInfos.length > 0 && (
+          <div className="tr-top-lessons" data-testid="specialize-lessons">
+            {shownInfos.map((info, index) => (
+              <div
+                key={index}
+                ref={index === 0 ? lessonRef : undefined}
+                className="visual-info-callout transform-info top-info"
+              >
+                <VisualInfoText text={info.text} />
+              </div>
+            ))}
+          </div>
+        )}
+        {guideArrow && <InstructionGuideArrow arrow={guideArrow} className="specialize-guide-arrow" />}
+
         {/* Main area */}
-        <div className="tr-main-area cn-main-area">
+        <div className="tr-main-area cn-main-area" ref={mainAreaRef}>
 
           {/* "Propose x such that P x" header */}
           <div className="cn-propose-label">
@@ -498,11 +624,20 @@ export function ConstructionView({
               term={term}
               selectedSlotId={selectedSlotId}
               onSelectSlot={handleSelectSlot}
+              successorName={successorName}
             />
           </div>
 
-          {/* Undo — same position as in TransformationView */}
+          {/* Reset and Undo — same position as in TransformationView */}
           <div className="tr-controls">
+            <button
+              onClick={handleReset}
+              disabled={!canUndo}
+              aria-disabled={busy || !canUndo}
+              className={`tr-ctrl-btn${canUndo ? ' active-reset' : ''}`}
+              aria-label="Reset"
+              title="Clear the term"
+            ><ResetIcon /></button>
             <button
               onClick={handleUndo}
               disabled={!canUndo}
@@ -515,6 +650,8 @@ export function ConstructionView({
           {/* Done — replaces the reverse button */}
           <div className="tr-side-controls">
             <button
+              ref={doneButtonRef}
+              data-testid="specialize-done"
               onClick={() => void handleDone()}
               disabled={!isComplete}
               aria-disabled={busy || !isComplete}

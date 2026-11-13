@@ -282,6 +282,14 @@
 }
 
 
+/* Large windows scale the visual interface up, to stay readable at a distance. It's
+   sized in rem, so growing the root font keeps its proportions and leaves drag
+   coordinates, which are in pixels, alone. Up to 1440x810 nothing changes. What code
+   sizes in pixels follows along: see visualInterfaceScale. */
+:root:has(.visual-page) {
+  font-size: clamp(100%, min(100vw / 90, 100vh / 50.625), 200%);
+}
+
 .visual-page {
   --bg-gradient-start: var(--visual-bg-gradient-start);
   --bg-gradient-end: var(--visual-bg-gradient-end);
@@ -708,7 +716,7 @@
 .visual-page .statement-card.derived-theorem-card {
   border-color: rgba(52, 211, 153, 0.4);
   background: rgba(52, 211, 153, 0.08);
-  max-width: min(640px, calc(100vw - 6rem));
+  max-width: min(40rem, calc(100vw - 6rem));
   white-space: normal;
   overflow: hidden;
   touch-action: none;
@@ -751,7 +759,7 @@
 .visual-page .statement-card.tactic-tray-card {
   border-color: var(--visual-danger-border);
   background: var(--visual-danger-bg);
-  max-width: min(320px, calc(100vw - 6rem));
+  max-width: min(20rem, calc(100vw - 6rem));
   white-space: normal;
   overflow: hidden;
   touch-action: none;
@@ -861,6 +869,10 @@
   display: none;
 }
 
+.visual-info-strong {
+  font-weight: 700;
+}
+
 .visual-page .goal-info {
   position: relative;
   z-index: 30;
@@ -874,6 +886,24 @@
 
 .visual-page .goal-info.above {
   margin-bottom: -0.2rem;
+}
+
+/* A refusal explained in place, such as Rewrite Mode being off for the goal:
+   a few seconds at the top of the canvas, under the header. */
+.visual-page .visual-canvas-warning {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  border-color: var(--visual-warning);
+  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px var(--visual-warning-bg);
+  animation: visual-canvas-warning-in 0.25s ease-out;
+}
+
+@keyframes visual-canvas-warning-in {
+  from { opacity: 0; transform: translate(-50%, -0.5rem); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 .visual-page .visual-info-math {
@@ -1047,7 +1077,8 @@
   }
 }
 
-.visual-page .hyp-info {
+.visual-page .hyp-info,
+.visual-page .theorem-info {
   max-width: min(22.5rem, calc(100vw - 2rem));
 }
 
@@ -1128,7 +1159,7 @@
 
 .visual-page .proof-tree-panel {
   position: fixed;
-  top: calc(52px + 1rem);
+  top: calc(3.25rem + 1rem);
   right: 1.5rem;
   z-index: 31;
   display: flex;
@@ -1497,8 +1528,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  min-width: 220px;
-  max-width: min(520px, calc(100vw - 3rem));
+  min-width: 13.75rem;
+  max-width: min(32.5rem, calc(100vw - 3rem));
   padding: 0.75rem 0.9rem;
   border-radius: 12px;
   background: var(--visual-surface-strong);
@@ -1554,7 +1585,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 52px;
+  height: 3.25rem;
   z-index: 35;
   display: flex;
   align-items: center;
@@ -1615,6 +1646,21 @@
   overflow: hidden;
 }
 
+.visual-page:not(.phone-portrait) .visual-header-center.stacked-title {
+  flex-wrap: wrap;
+  gap: 0 0.35rem;
+  line-height: 1.2;
+}
+
+.visual-page:not(.phone-portrait) .stacked-title .visual-header-separator {
+  display: none;
+}
+
+.visual-page:not(.phone-portrait) .stacked-title .visual-header-title {
+  flex: 0 0 100%;
+  text-align: center;
+}
+
 .visual-header-check {
   color: #34d399;
   font-size: 1rem;
@@ -1635,6 +1681,9 @@
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* The box clips for the ellipsis, and the tight line heights of stacked and
+     phone titles leave descenders (g, p, y) hanging below it: room for them. */
+  padding-block: 0.15em;
 }
 
 .visual-header-separator {
@@ -1827,8 +1876,8 @@
 /* Back button — just right of the proof tab toggle, shifts with sidebar */
 .visual-page .tr-back-btn {
   position: absolute;
-  top: calc(52px + 0.6rem);
-  left: calc(var(--proof-sidebar-width, 0px) + 36px + 0.75rem);
+  top: calc(3.25rem + 0.6rem);
+  left: calc(var(--proof-sidebar-width, 0px) + 2.25rem + 0.75rem);
   transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 60;
   display: flex;
@@ -2081,6 +2130,11 @@
 .visual-page .tr-ctrl-btn.reset { color: var(--visual-danger); }
 /* Red, so starting over reads differently from the amber step-back Undo. */
 .visual-page .tr-ctrl-btn.active-reset { color: var(--visual-danger); background: var(--visual-danger-bg); }
+/* Swap sides ("⇆"), left of the direction toggle. */
+.visual-page .tr-ctrl-btn.tr-swap-btn .tr-ctrl-icon {
+  width: 1.4rem;
+  height: 1.4rem;
+}
 
 .visual-page.tr-transformation-overlay .tr-controls {
   left: var(--tr-controls-gap);
@@ -2487,7 +2541,7 @@
 /* ── Thinking label (below header, centered) ── */
 .visual-page .visual-thinking-label {
   position: fixed;
-  top: 52px;
+  top: 3.25rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 36;
@@ -2506,12 +2560,12 @@
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   position: fixed;
   left: 0;
-  top: 52px;
+  top: 3.25rem;
   bottom: 0;
-  width: 280px;
+  width: 17.5rem;
   overflow: visible;
   z-index: 55;
-  transform: translateX(-280px);
+  transform: translateX(-17.5rem);
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -2522,10 +2576,10 @@
 /* Tab sticking out from right edge of sidebar, just below the top header */
 .proof-sidebar-tab {
   position: absolute;
-  right: -36px;
+  right: -2.25rem;
   top: 6px;
-  width: 36px;
-  height: 96px;
+  width: 2.25rem;
+  height: 6rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2559,7 +2613,7 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 280px;
+  width: 17.5rem;
   overflow: hidden;
   background: var(--visual-surface-panel);
   border-right: 1px solid var(--visual-glass-border);
@@ -2671,11 +2725,18 @@
   color: var(--visual-text-bright);
 }
 
-/* Scrollable steps list */
+/* Scrollable steps list. Its scroll bar sits at the far left of the panel, away
+   from the canvas: a right-to-left box puts it there, and the steps inside read
+   left to right again. */
 .proof-sidebar-steps {
   flex: 1;
   overflow-y: auto;
   padding: 0.4rem 0;
+  direction: rtl;
+}
+
+.proof-sidebar-steps > * {
+  direction: ltr;
 }
 
 .proof-sidebar-steps::-webkit-scrollbar {
@@ -2818,6 +2879,7 @@
     white-space: nowrap;
     font-size: 0.66rem;
     line-height: 1.15;
+    padding-block: 0.15em;
   }
 
   .visual-page.phone-portrait .visual-header-center.split-title .visual-header-separator {
@@ -2868,7 +2930,7 @@
     position: fixed;
     left: 0.65rem;
     right: 0.45rem;
-    top: calc(52px + 0.55rem + 2.25rem + 0.6rem + var(--mobile-goal-stack-height, 92px) + 0.55rem);
+    top: calc(3.25rem + 0.55rem + 2.25rem + 0.6rem + var(--mobile-goal-stack-height, 92px) + 0.55rem);
     bottom: calc(var(--tray-height, 0px) + 0.25rem);
     z-index: 18;
     display: grid;
@@ -3044,7 +3106,7 @@
 
   .visual-page.phone-portrait .mobile-page-links {
     position: fixed;
-    top: calc(52px + 0.55rem);
+    top: calc(3.25rem + 0.55rem);
     left: 0.75rem;
     right: 0.75rem;
     z-index: 42;
@@ -3177,13 +3239,13 @@
   .visual-page.phone-portrait .goals-container {
     left: 0.75rem;
     right: 0.75rem;
-    top: calc(52px + 0.55rem + 2.25rem + 0.6rem) !important;
+    top: calc(3.25rem + 0.55rem + 2.25rem + 0.6rem) !important;
     bottom: auto;
     transform: none !important;
     align-items: center;
     gap: 0.55rem;
     z-index: 34;
-    max-height: min(34dvh, calc(100dvh - 52px - var(--tray-height, 0px) - 7rem));
+    max-height: min(34dvh, calc(100dvh - 3.25rem - var(--tray-height, 0px) - 7rem));
   }
 
   .visual-page.phone-portrait .goal-card-with-info {
@@ -3252,7 +3314,7 @@
 
   .visual-page.phone-portrait .mobile-side-page > .visual-header {
     position: relative;
-    flex: 0 0 52px;
+    flex: 0 0 3.25rem;
     z-index: 2;
   }
 
@@ -3276,7 +3338,7 @@
   }
 
   .visual-page.phone-portrait .mobile-side-page-top {
-    height: calc(52px + env(safe-area-inset-top, 0px));
+    height: calc(3.25rem + env(safe-area-inset-top, 0px));
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -3362,7 +3424,7 @@
   }
 
   .visual-page.phone-portrait.tr-overlay .tr-back-btn {
-    top: calc(52px + 0.5rem);
+    top: calc(3.25rem + 0.5rem);
     left: calc(env(safe-area-inset-left, 0px) + 0.65rem);
     padding: 0.36rem 0.82rem;
     font-size: 0.78rem;
@@ -3468,12 +3530,17 @@
     padding: 0;
   }
 
+  /* Reset above Undo, so the lessons beside Undo keep their width. */
+  .visual-page.phone-portrait.tr-overlay .tr-controls {
+    flex-direction: column-reverse;
+  }
+
   /* Lessons sit in the controls' row, between Undo (2.8rem wide) and the
      direction toggle, and grow upwards. Centred on the page they wrapped into
      a column half its width, and in a short viewport, such as an in-app
      browser's, there is no room for them above the controls. Absolute rather
      than fixed, like the rest of the phone layout (see .phone-portrait). */
-  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.side-info:not(.reverse-info),
+  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.side-info:not(.reverse-info):not(.swap-info),
   .visual-page.phone-portrait.tr-transformation-overlay .transform-info.rewrite-info {
     position: absolute;
     top: auto;
@@ -3495,7 +3562,13 @@
     line-height: 1.3;
   }
 
-  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.reverse-info {
+  .visual-page.phone-portrait.tr-transformation-overlay.tr-has-swap .transform-info.side-info:not(.reverse-info):not(.swap-info),
+  .visual-page.phone-portrait.tr-transformation-overlay.tr-has-swap .transform-info.rewrite-info {
+    right: calc(var(--tr-phone-controls-inset) + var(--tr-phone-direction-width) + 1rem + 2.8rem + 0.5rem);
+  }
+
+  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.reverse-info,
+  .visual-page.phone-portrait.tr-transformation-overlay .transform-info.swap-info {
     top: auto;
     /* Just above the direction toggle, leaving room for the arrow pointing at it. */
     bottom: calc(var(--tr-rule-dock-height, 0px) + var(--tr-phone-controls-inset) + 2.8rem + 1.75rem);
@@ -3920,7 +3993,6 @@
     margin-top: 0;
   }
 
-  .visual-map-page .visual-map-theme-toggle,
   .visual-map-page .visual-map-auto-branch-toggle {
     position: fixed;
     /* Sit just below the appbar so it doesn't get hidden by the phone's
@@ -4278,7 +4350,7 @@
 
   .visual-page .goals-container {
     right: 1rem;
-    top: calc(52px + 4.2rem);
+    top: calc(3.25rem + 4.2rem);
     transform: none;
     gap: 0.6rem;
   }
@@ -4306,7 +4378,7 @@
   }
 
   .visual-page .proof-tree-panel {
-    top: calc(52px + 0.65rem);
+    top: calc(3.25rem + 0.65rem);
     right: 0.8rem;
     gap: 0.25rem;
   }
@@ -4474,7 +4546,7 @@
    match. */
 .visual-page .tr-top-lessons {
   position: fixed;
-  top: calc(52px + 1rem);
+  top: calc(3.25rem + 1rem);
   left: calc(var(--proof-sidebar-width, 0px) + (100vw - var(--proof-sidebar-width, 0px)) / 2);
   transform: translateX(-50%);
   z-index: 95;
@@ -4553,11 +4625,33 @@
 
 /* ── Path-style world map (VisualPathMap) ─────────────────────────────────
    Every level is a node on its world's path; colours come from VisualPathMap. */
+.visual-path-map-scroll {
+  justify-content: flex-start;
+}
+
 .visual-path-map-svg {
   display: block;
   flex: none;
   height: auto;
+  /* Centred where it fits; where it doesn't, the scroller can reach its left edge. */
+  margin-inline: auto;
   overflow: visible;
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .visual-path-map-scroll {
+    overflow-x: auto;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+  }
+
+  .visual-map-appbar:has(.visual-map-theme-toggle) .visual-map-side {
+    flex: 0 0 auto;
+  }
+
+  .visual-map-appbar:has(.visual-map-theme-toggle) .visual-map-title {
+    flex: 1 1 0;
+  }
 }
 
 .visual-path-map-svg .path-map-level:focus {

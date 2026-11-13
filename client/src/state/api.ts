@@ -28,8 +28,11 @@ export interface VisualWorldNode {
   visualBonusOf?: { world: string, level: number },
   /** Named path colour (`VisualWorldColor`). */
   visualColor?: string,
-  /** Map column: 0 is the centre, negative is left (`VisualMapColumn`). */
+  /** Map column: 0 is the centre, negative is left (`VisualMapColumn`). For a bonus
+   * world, the column its path onwards runs down. */
   visualMapColumn?: number,
+  /** Sits below every other world, as a closing level does (`VisualMapBottom`). */
+  visualMapBottom?: boolean,
   /** Not part of any named world: grey and unlabelled (`VisualSharedPath`). */
   visualSharedPath?: boolean,
   /** Carries on another world's path: its colour, no label (`VisualContinues`). */
@@ -55,6 +58,16 @@ export interface GameInfo {
   visualPathMap?: boolean
   /** A proof of `False` closes any goal in this game (`VisualFastExfalso`). */
   visualFastExfalso?: boolean
+  /** Hints stay up after the proof moves on (`VisualPersistentHints`). */
+  visualPersistentHints?: boolean
+  /** Rewrite Mode on a goal shows the check mark in every level (`VisualRewriteCheck`). */
+  visualRewriteCheck?: boolean
+  /** The successor function's name for the term builder (`VisualSuccessorName`). */
+  visualSuccessorName?: string
+  /** Clicking a goal `a = a` doesn't close it (`VisualNoGoalRfl`). */
+  visualNoGoalRfl?: boolean
+  /** Theorems shown in the axiom colour (`VisualAxioms`), by full name. */
+  visualAxioms?: string[]
 }
 
 export interface InventoryTile {
@@ -89,7 +102,7 @@ export interface LevelInfo {
   image: null|string,
   completionNeutral?: boolean,
   visualGoalInfos?: Array<{ position: 'above' | 'below'; arrow: boolean; goal?: string | null; text: string }>,
-  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'info' | 'check'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>,
+  visualTransformInfos?: Array<{ kind: 'side' | 'rewrite' | 'back' | 'reverse' | 'swap' | 'info' | 'check'; side?: 'left' | 'right' | null; source?: string; target?: string; goal?: string | null; text: string }>,
   visualTacticHypInfos?: Array<{ tactic: string; hyp: string; goal?: string | null; text: string }>,
   visualHypGoalInfos?: Array<{ hyp: string; goal?: string | null; text: string }>,
   visualProofGraphInfos?: Array<{ goal?: string | null; text: string }>
@@ -105,6 +118,10 @@ export interface LevelInfo {
   visualBossLevel?: boolean,
   /** Write multiplication as `·` in Rewrite Mode (`VisualMulDot`). */
   visualMulDot?: boolean,
+  /** Hide Rewrite Mode's swap-sides button (`VisualHideSwapSides`). */
+  visualHideSwapSides?: boolean,
+  /** Rewrite Mode on the goal is refused with a warning (`VisualNoRewriteMode`). */
+  visualNoRewriteMode?: boolean,
 }
 
 /** Used to display the inventory on the welcome page */

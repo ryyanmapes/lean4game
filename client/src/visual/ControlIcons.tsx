@@ -48,6 +48,19 @@ export function ResetIcon() {
   )
 }
 
+/** "⇆": an arrow to the left over an arrow to the right, for swapping the two
+ * sides of a relation. */
+export function SwapSidesIcon() {
+  return (
+    <ControlIcon>
+      <path d="M9 4 5 8l4 4" />
+      <path d="M5 8h15" />
+      <path d="m15 12 4 4-4 4" />
+      <path d="M4 16h15" />
+    </ControlIcon>
+  )
+}
+
 /** "⇐ / ⇒", with the rewrite direction in use emphasised. Forward rewrites
  * turn an equation's left side into its right (⇒), as the rule cards print
  * it; reverse goes the other way (⇐). */

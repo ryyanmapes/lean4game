@@ -4,8 +4,11 @@
  * Every level is a node. A world is a column of its levels, top to bottom;
  * worlds split and join along the game's dependency edges, and a bonus world
  * (`VisualBonusOf`) sprouts sideways off one level of another world, with its
- * levels in a row. The layout is pure, so progress only changes how its parts
- * are painted.
+ * levels in a row. A path that can't run down its own column, because another
+ * world carries on there, leaves to the side first; where two paths cross, one
+ * bridges the other; and a world's title moves beside its path when something
+ * is in the way above it. The layout is pure, so progress only changes how its
+ * parts are painted.
  */
 
 export interface PathMapWorld {
@@ -14,8 +17,11 @@ export interface PathMapWorld {
   bonusOf?: { world: string; level: number }
   /** Named colour, see `PATH_MAP_COLORS`. */
   color?: string
-  /** Column: 0 is the centre, negative is left. */
+  /** Column: 0 is the centre, negative is left. For a bonus world, the column
+   * that its path onwards to a later world runs down. */
   column?: number
+  /** Below every other world, as a closing level is. */
+  bottom?: boolean
   /** Not part of any named world: grey and unlabelled. */
   shared?: boolean
   /** Carries on this world's path: its colour, and no label of its own. */
@@ -50,15 +56,19 @@ export interface PathMapSegment {
   points: PathMapPoint[]
   color: string
   source: { world: string; level: number }
+  /** A short piece of a path where it crosses another, drawn over it. */
+  bridge?: boolean
 }
 
-/** A world's title, centred on `x`. */
+/** A world's title. `x` is its middle, or the end named by `anchor` when it sits
+ * beside its path. */
 export interface PathMapLabel {
   world: string
   text: string
   x: number
   y: number
   color: string
+  anchor: 'middle' | 'start' | 'end'
 }
 
 export interface PathMapLayout {
@@ -77,7 +87,7 @@ export const PATH_MAP_CORNER_RADIUS = 26
 /** Colour of sections that aren't part of a named world. */
 export const PATH_MAP_SHARED_COLOR = 'grey'
 /** Named world colours, in the order worlds without a colour receive them. */
-export const PATH_MAP_COLORS = ['purple', 'amber', 'sky', 'green', 'pink', 'teal', 'orange', 'blue', 'red']
+export const PATH_MAP_COLORS = ['purple', 'amber', 'sky', 'green', 'pink', 'teal', 'orange', 'blue', 'red', 'indigo', 'lime']
 
 /** Rows from a world's last level to the first level of a world in another column. */
 const COLUMN_CHANGE_ROWS = 2
@@ -86,9 +96,22 @@ const TURN_ROWS_ABOVE = 0.9
 /** Distance between the levels of a bonus world's row, as a fraction of a column. */
 const BONUS_STEP_FRACTION = 0.6
 const MIN_BONUS_STEP = 60
-const LABEL_GAP = 12
+/** Clear space between a world's title and the top of the path below it. */
+const LABEL_GAP = 22
+/** Half the outer width of a path, which a title has to clear. */
+const PATH_HALF_WIDTH = 8
+/** Half the height of a title's text. */
+const LABEL_HALF_HEIGHT = 8
 /** Rough label width per character, for the bounds. */
 const LABEL_CHAR_WIDTH = 8.5
+/** A generous label width per character, for keeping titles clear of paths. */
+const LABEL_CLEAR_CHAR_WIDTH = 9.2
+/** Space between a title beside a path and that path's edge. */
+const LABEL_SIDE_GAP = 12
+/** Space a title keeps from paths, levels and other titles. */
+const LABEL_CLEARANCE = 5
+/** Half the length of a bridge over a crossed path. */
+const BRIDGE_HALF_LENGTH = PATH_HALF_WIDTH + 6
 
 function visibleLevels(input: PathMapInput, world: string): number[] {
   const skipped = new Set(input.skippedLevels?.[world] ?? [])
@@ -144,13 +167,32 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     mainSet.has(source) && mainSet.has(target))
   const predecessors: Record<string, string[]> = Object.fromEntries(mainWorlds.map(world => [world, []]))
   for (const [source, target] of mainEdges) predecessors[target]!.push(source)
+  // A bonus world can lead on to a main world. Its row follows from the main
+  // world it hangs off, however many bonuses lie in between.
+  const bonusRoot = (world: string): string => {
+    const seen = new Set<string>()
+    let current = world
+    while (bonusOf(current) && !seen.has(current)) {
+      seen.add(current)
+      current = bonusOf(current)!.world
+    }
+    return current
+  }
+  const onwardEdges = dedupeEdges(input.edges).filter(([source, target]) =>
+    bonusOf(source) !== undefined && mainSet.has(target) && mainSet.has(bonusRoot(source)))
+  const onwardRoots: Record<string, string[]> = Object.fromEntries(mainWorlds.map(world => [world, []]))
+  for (const [source, target] of onwardEdges) {
+    const root = bonusRoot(source)
+    if (root !== target) onwardRoots[target]!.push(root)
+  }
+  const isBottom = (world: string) => input.worlds[world]?.bottom === true
 
   // Dependency order; a cycle (which MakeGame reports) falls back to name order.
   const order: string[] = []
   const remaining = new Set(mainWorlds)
   while (remaining.size > 0) {
     const ready = [...remaining].filter(world =>
-      predecessors[world]!.every(source => !remaining.has(source)))
+      [...predecessors[world]!, ...onwardRoots[world]!].every(source => !remaining.has(source)))
     const next = ready.length > 0 ? ready : [[...remaining][0]!]
     for (const world of next) {
       order.push(world)
@@ -211,14 +253,33 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     return row[world]![last]! + branchRows(world, last)
   }
   const minStartRow: Record<string, number> = {}
+  // A path joining a world from the side turns in just above the world's first
+  // level. Where the world carries straight on from the one above, one row
+  // apart, that turn would be under the level above, as if the path came out
+  // of the level itself. Such a join gets a column change's room instead, so
+  // it turns in between the two levels, clear of both and of anything that
+  // leaves the level above.
+  const joinedFromSide = (world: string) =>
+    predecessors[world]!.some(source => column[source] !== column[world]) || onwardRoots[world]!.length > 0
+  // The same goes for a world carrying straight on from one that another path
+  // leaves sideways: that path turns away between the two levels.
+  const forksToSide = (source: string, world: string) =>
+    mainEdges.some(([from, to]) => from === source && to !== world && column[to] !== column[source])
+  // Worlds at the bottom of the map are placed last, below all the others.
+  const placeOrder = [...order.filter(world => !isBottom(world)), ...order.filter(isBottom)]
   const placeMainWorlds = () => {
-    for (const world of order) {
-      const sources = predecessors[world]!
-      const start = sources.length === 0
-        ? 0
-        : Math.max(...sources.map(source =>
-          endRowOf(source) + (column[source] === column[world] ? 1 : COLUMN_CHANGE_ROWS)))
-      placeLevels(world, Math.max(start, minStartRow[world] ?? 0))
+    let lowestRow = -COLUMN_CHANGE_ROWS
+    for (const world of placeOrder) {
+      const starts = [
+        ...predecessors[world]!.map(source =>
+          endRowOf(source) + (column[source] === column[world] && !joinedFromSide(world) && !forksToSide(source, world)
+            ? 1
+            : COLUMN_CHANGE_ROWS)),
+        ...onwardRoots[world]!.map(root => endRowOf(root) + COLUMN_CHANGE_ROWS),
+      ]
+      if (isBottom(world)) starts.push(lowestRow + COLUMN_CHANGE_ROWS)
+      placeLevels(world, Math.max(0, minStartRow[world] ?? 0, ...starts))
+      if (!isBottom(world)) lowestRow = Math.max(lowestRow, endRowOf(world))
     }
   }
   placeMainWorlds()
@@ -326,32 +387,93 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
   // stays in its column until just above the target, and the curves of a split
   // leave the stem at the same point: a smooth fork.
   const bendY: Record<string, number> = {}
+  const rowHeight = PATH_MAP_ROW_HEIGHT
+  /** Whether a level of some world lies in column `x` strictly between two heights. */
+  const columnBlocked = (x: number, fromY: number, toY: number) =>
+    nodes.some(node => node.x === x && node.y > fromY && node.y < toY)
+  const isShared = (world: string) => input.worlds[world]?.shared === true
+  const pushEdge = (
+    source: string,
+    target: string,
+    fromLevel: number,
+    out: PathMapPoint[],
+    into: PathMapPoint[],
+  ) => {
+    segments.push({
+      key: `edge:${source}:${target}:out`,
+      points: out,
+      color: colorOf(source),
+      source: { world: source, level: fromLevel },
+    })
+    segments.push({
+      key: `edge:${source}:${target}:in`,
+      points: into,
+      color: colorOf(target),
+      source: { world: source, level: fromLevel },
+    })
+  }
   for (const [source, target] of mainEdges) {
     if (row[source] === undefined || row[target] === undefined) continue
     const fromLevel = levelsOf[source]!.at(-1)!
     const toLevel = levelsOf[target]![0]!
     const start = position(source, fromLevel)
     const end = position(target, toLevel)
-    const sameColumn = start.x === end.x
-    const turnY = sameColumn
-      ? (start.y + end.y) / 2
-      : end.y - TURN_ROWS_ABOVE * PATH_MAP_ROW_HEIGHT
-    if (!sameColumn) bendY[target] = Math.min(bendY[target] ?? Infinity, turnY)
-    const colorChange = { x: start.x, y: sameColumn ? turnY : turnY - PATH_MAP_CORNER_RADIUS }
-    segments.push({
-      key: `edge:${source}:${target}:out`,
-      points: [start, colorChange],
-      color: colorOf(source),
-      source: { world: source, level: fromLevel },
-    })
-    segments.push({
-      key: `edge:${source}:${target}:in`,
-      points: sameColumn
-        ? [colorChange, end]
-        : [colorChange, { x: start.x, y: turnY }, { x: end.x, y: turnY }, end],
-      color: colorOf(target),
-      source: { world: source, level: fromLevel },
-    })
+    // Where a path turns away from its source: below the bonuses off its last
+    // level, and as far below those as a turn is above the level it leads to.
+    const leaveY = start.y + (branchRows(source, fromLevel) + COLUMN_CHANGE_ROWS - TURN_ROWS_ABOVE) * rowHeight
+    // A path to a section that belongs to no world is that section's grey as
+    // soon as it has left its source, however far it still has to go.
+    const earlyChangeY = isShared(target) && !isShared(source) ? leaveY - PATH_MAP_CORNER_RADIUS : Infinity
+    if (start.x === end.x) {
+      const change = { x: start.x, y: Math.min((start.y + end.y) / 2, earlyChangeY) }
+      pushEdge(source, target, fromLevel, [start, change], [change, end])
+      continue
+    }
+    const turnY = end.y - TURN_ROWS_ABOVE * rowHeight
+    if (columnBlocked(start.x, start.y, turnY) && leaveY < turnY - PATH_MAP_CORNER_RADIUS) {
+      // Another world carries on below the source, so the path can't stay in
+      // its column. It leaves to the side at once and runs down a clear column:
+      // the target's own if it can, or else the nearest one on the way there.
+      const direction = Math.sign(end.x - start.x)
+      const lanes = [end.x]
+      for (let x = start.x + direction * columnWidth; (end.x - x) * direction > 0; x += direction * columnWidth) lanes.push(x)
+      const laneX = lanes.find(x => !columnBlocked(x, leaveY, x === end.x ? end.y : turnY))
+      if (laneX !== undefined) {
+        const change = { x: start.x, y: leaveY - PATH_MAP_CORNER_RADIUS }
+        const into = [change, { x: start.x, y: leaveY }, { x: laneX, y: leaveY }]
+        if (laneX !== end.x) {
+          into.push({ x: laneX, y: turnY }, { x: end.x, y: turnY })
+          bendY[target] = Math.min(bendY[target] ?? Infinity, turnY)
+        }
+        pushEdge(source, target, fromLevel, [start, change], [...into, end])
+        continue
+      }
+    }
+    bendY[target] = Math.min(bendY[target] ?? Infinity, turnY)
+    const change = { x: start.x, y: Math.min(turnY - PATH_MAP_CORNER_RADIUS, earlyChangeY) }
+    pushEdge(source, target, fromLevel, [start, change],
+      [change, { x: start.x, y: turnY }, { x: end.x, y: turnY }, end])
+  }
+  // A bonus world's path onwards runs down the bonus world's column, if it has
+  // one, or straight down from its last level, and turns in above the target.
+  for (const [source, target] of onwardEdges) {
+    if (row[source] === undefined || row[target] === undefined) continue
+    const fromLevel = levelsOf[source]!.at(-1)!
+    const start = position(source, fromLevel)
+    const end = position(target, levelsOf[target]![0]!)
+    const lane = input.worlds[source]?.column
+    const laneX = lane === undefined ? start.x : lane * columnWidth
+    const turnY = end.y - TURN_ROWS_ABOVE * rowHeight
+    const leaveY = start.y + (COLUMN_CHANGE_ROWS - TURN_ROWS_ABOVE) * rowHeight
+    if (leaveY >= turnY) continue
+    const change = { x: laneX, y: (isShared(target) ? leaveY : turnY) - PATH_MAP_CORNER_RADIUS }
+    const out = laneX === start.x ? [start, change] : [start, { x: laneX, y: start.y }, change]
+    if (laneX === end.x) {
+      pushEdge(source, target, fromLevel, out, [change, end])
+      continue
+    }
+    bendY[target] = Math.min(bendY[target] ?? Infinity, turnY)
+    pushEdge(source, target, fromLevel, out, [change, { x: laneX, y: turnY }, { x: end.x, y: turnY }, end])
   }
   for (const world of placed) {
     const anchor = bonusOf(world)
@@ -367,19 +489,113 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     })
   }
 
-  // World titles above the stream of each named main world.
+  // Where the level run of one path crosses the upright run of another, a short
+  // bridge is drawn over the crossing, so the two don't read as a junction.
+  const bridges: PathMapSegment[] = []
+  const bridged = new Set<string>()
+  const edgeOf = (key: string) => key.replace(/:(?:out|in)$/u, '')
+  for (const over of segments) {
+    if (!over.key.startsWith('edge:')) continue
+    for (let index = 0; index + 1 < over.points.length; index += 1) {
+      const [a, b] = [over.points[index]!, over.points[index + 1]!]
+      if (a.y !== b.y || a.x === b.x) continue
+      const [left, right] = [Math.min(a.x, b.x), Math.max(a.x, b.x)]
+      for (const under of segments) {
+        if (edgeOf(under.key) === edgeOf(over.key)) continue
+        for (let leg = 0; leg + 1 < under.points.length; leg += 1) {
+          const [c, d] = [under.points[leg]!, under.points[leg + 1]!]
+          if (c.x !== d.x || c.y === d.y) continue
+          const [top, bottom] = [Math.min(c.y, d.y), Math.max(c.y, d.y)]
+          const crosses = c.x > left + BRIDGE_HALF_LENGTH && c.x < right - BRIDGE_HALF_LENGTH &&
+            a.y > top + BRIDGE_HALF_LENGTH && a.y < bottom - BRIDGE_HALF_LENGTH
+          const id = `${over.key}:${c.x}:${a.y}`
+          if (!crosses || bridged.has(id)) continue
+          bridged.add(id)
+          bridges.push({
+            key: `${over.key}:bridge:${c.x}`,
+            points: [{ x: c.x - BRIDGE_HALF_LENGTH, y: a.y }, { x: c.x + BRIDGE_HALF_LENGTH, y: a.y }],
+            color: over.color,
+            source: over.source,
+            bridge: true,
+          })
+        }
+      }
+    }
+  }
+  segments.push(...bridges)
+
+  // World titles above the stream of each named main world. A title that a
+  // path, a level or another title would run through moves beside the path
+  // into its world instead: on the outer side if that is clear, to the left
+  // from the centre, or else on the inner side.
+  interface Box { x1: number; x2: number; y1: number; y2: number }
+  const labelBox = (label: Pick<PathMapLabel, 'text' | 'x' | 'y' | 'anchor'>): Box => {
+    const width = label.text.length * LABEL_CLEAR_CHAR_WIDTH
+    const x1 = label.anchor === 'middle' ? label.x - width / 2 : label.anchor === 'end' ? label.x - width : label.x
+    return { x1, x2: x1 + width, y1: label.y - LABEL_HALF_HEIGHT, y2: label.y + LABEL_HALF_HEIGHT }
+  }
+  const boxesMeet = (a: Box, b: Box, clearance: number) =>
+    a.x1 < b.x2 + clearance && b.x1 < a.x2 + clearance && a.y1 < b.y2 + clearance && b.y1 < a.y2 + clearance
+  const labelBoxes: Box[] = []
+  /** How many paths, levels and titles a title in `box` would run into. */
+  const labelBlockers = (box: Box, clearance: number) => {
+    let count = 0
+    for (const segment of segments) {
+      for (let index = 0; index + 1 < segment.points.length; index += 1) {
+        const [a, b] = [segment.points[index]!, segment.points[index + 1]!]
+        const leg = {
+          x1: Math.min(a.x, b.x) - PATH_HALF_WIDTH,
+          x2: Math.max(a.x, b.x) + PATH_HALF_WIDTH,
+          y1: Math.min(a.y, b.y) - PATH_HALF_WIDTH,
+          y2: Math.max(a.y, b.y) + PATH_HALF_WIDTH,
+        }
+        if (boxesMeet(box, leg, clearance)) count += 1
+      }
+    }
+    for (const node of nodes) {
+      // Any level may be a boss, which is drawn larger.
+      const radius = PATH_MAP_BOSS_NODE_RADIUS + clearance
+      const dx = Math.max(box.x1 - node.x, 0, node.x - box.x2)
+      const dy = Math.max(box.y1 - node.y, 0, node.y - box.y2)
+      if (dx * dx + dy * dy < radius * radius) count += 1
+    }
+    return count + labelBoxes.filter(other => boxesMeet(box, other, clearance)).length
+  }
+  const mapCenterX = (() => {
+    const first = order.find(world => row[world] !== undefined)
+    return first ? position(first, levelsOf[first]![0]!).x : 0
+  })()
   const labels: PathMapLabel[] = []
   for (const world of placed) {
     const own = input.worlds[world]
     if (!own || own.shared || bonusOf(world) || continuesOf(world)) continue
     const first = position(world, levelsOf[world]![0]!)
-    labels.push({
-      world,
-      text: own.title || world,
-      x: first.x,
-      y: (bendY[world] ?? first.y - PATH_MAP_NODE_RADIUS) - LABEL_GAP - 8,
-      color: colorOf(world),
+    const text = own.title || world
+    const above = (top: number) => top - PATH_HALF_WIDTH - LABEL_GAP - LABEL_HALF_HEIGHT
+    const y = above(bendY[world] ?? first.y - PATH_MAP_NODE_RADIUS)
+    const sideGap = PATH_HALF_WIDTH + LABEL_SIDE_GAP
+    const outer = first.x > mapCenterX ? 1 : -1
+    const beside = (side: number, atY: number) => ({
+      text,
+      x: first.x + side * sideGap,
+      y: atY,
+      anchor: side > 0 ? 'start' as const : 'end' as const,
     })
+    const besideLevelY = above(first.y - PATH_MAP_NODE_RADIUS)
+    const candidates = [
+      { text, x: first.x, y, anchor: 'middle' as const },
+      beside(outer, y),
+      beside(-outer, y),
+      ...(besideLevelY === y ? [] : [beside(outer, besideLevelY), beside(-outer, besideLevelY)]),
+    ]
+    // The title stays above its world unless something actually runs through it
+    // there. Beside the path it keeps a little clear space as well. Where nothing
+    // is clear, as on a phone's narrow columns, it goes where the least is in its way.
+    const blockers = candidates.map((candidate, index) =>
+      labelBlockers(labelBox(candidate), index === 0 ? 0 : LABEL_CLEARANCE))
+    const chosen = candidates[blockers.indexOf(Math.min(...blockers))]!
+    labelBoxes.push(labelBox(chosen))
+    labels.push({ world, ...chosen, color: colorOf(world) })
   }
 
   const xs: number[] = []
@@ -388,13 +604,23 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     xs.push(node.x - PATH_MAP_NODE_RADIUS, node.x + PATH_MAP_NODE_RADIUS)
     ys.push(node.y - PATH_MAP_NODE_RADIUS, node.y + PATH_MAP_NODE_RADIUS)
   }
+  for (const segment of segments) {
+    for (const point of segment.points) {
+      xs.push(point.x - PATH_HALF_WIDTH, point.x + PATH_HALF_WIDTH)
+      ys.push(point.y)
+    }
+  }
   for (const label of labels) {
     const width = label.text.length * LABEL_CHAR_WIDTH
-    xs.push(label.x - width / 2, label.x + width / 2)
+    const x1 = label.anchor === 'middle' ? label.x - width / 2 : label.anchor === 'end' ? label.x - width : label.x
+    xs.push(x1, x1 + width)
     ys.push(label.y - 14, label.y + 8)
   }
+  // Centred on where the map starts, however lopsided it gets further down.
+  const centerX = mapCenterX
+  const halfWidth = xs.length > 0 ? Math.max(...xs.map(x => Math.abs(x - centerX))) : 0
   const bounds = xs.length > 0
-    ? { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }
+    ? { x1: centerX - halfWidth, y1: Math.min(...ys), x2: centerX + halfWidth, y2: Math.max(...ys) }
     : { x1: 0, y1: 0, x2: 0, y2: 0 }
 
   return { nodes, segments, labels, bounds }

@@ -10,16 +10,15 @@ import { ExprRenderer } from './ExprRenderer'
 import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
-import { RewriteDirectionIcon, UndoIcon } from './ControlIcons'
+import { ResetIcon, RewriteDirectionIcon, SwapSidesIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
+import { usePersistentHints } from './hintPersistence'
 import { compareTheoremNames } from './theoremOrdering'
 
 let transformationViewInstanceCounter = 0
 
-/** Theorems in this inventory category are shown in the axiom colour. */
-const AXIOM_CATEGORY = 'Axioms'
 
 export interface EqualityHyp {
   id: string       // for hyp cards: fvarId; for theorem cards: theorem name
@@ -58,12 +57,85 @@ interface ExpectedRewriteGoal {
   explicitReverseArg?: string
 }
 
+export interface GuideRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export interface GuideArrow {
   start: { x: number; y: number }
   end: { x: number; y: number }
   startPadding?: number
   endPadding?: number
   arc?: 'up' | 'down' | 'none'
+  /** The element pointed at. The arrow is cut where it would enter this box, so
+   *  its head stops `endGap` short of the element instead of running into it. */
+  endRect?: GuideRect
+  /** The element the arrow comes from, cut the same way at the start. */
+  startRect?: GuideRect
+  /** Clear space between the arrow's head and what it points at. */
+  endGap?: number
+  startGap?: number
+}
+
+export function guideRect(rect: DOMRect | GuideRect): GuideRect {
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+}
+
+/** Where the segment from `from` to `to` first enters `rect`, as a fraction of
+ * the way along it; `null` if it never does or `from` is already inside. */
+function rectEntry(from: { x: number; y: number }, to: { x: number; y: number }, rect: GuideRect): number | null {
+  let enter = 0
+  let exit = 1
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  for (const [delta, origin, low, high] of [
+    [dx, from.x, rect.left, rect.right],
+    [dy, from.y, rect.top, rect.bottom],
+  ] as const) {
+    if (Math.abs(delta) < 1e-9) {
+      if (origin < low || origin > high) return null
+      continue
+    }
+    const t1 = (low - origin) / delta
+    const t2 = (high - origin) / delta
+    enter = Math.max(enter, Math.min(t1, t2))
+    exit = Math.min(exit, Math.max(t1, t2))
+  }
+  if (enter > exit || enter <= 0) return null
+  return enter
+}
+
+/** `arrow` with its ends moved to the edges of the boxes it connects, less the gaps. */
+export function clipGuideArrow(arrow: GuideArrow): GuideArrow {
+  let { start, end } = arrow
+  const towards = (from: { x: number; y: number }, to: { x: number; y: number }, distance: number) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y) || 1
+    return { x: from.x + (to.x - from.x) * distance / length, y: from.y + (to.y - from.y) * distance / length }
+  }
+  if (arrow.endRect) {
+    const t = rectEntry(start, end, arrow.endRect)
+    if (t !== null) {
+      const edge = { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t }
+      end = towards(edge, start, arrow.endGap ?? 10)
+    }
+  }
+  if (arrow.startRect) {
+    const t = rectEntry(end, start, arrow.startRect)
+    if (t !== null) {
+      const edge = { x: end.x + (start.x - end.x) * t, y: end.y + (start.y - end.y) * t }
+      start = towards(edge, end, arrow.startGap ?? 8)
+    }
+  }
+  return {
+    ...arrow,
+    start,
+    end,
+    startPadding: arrow.startRect ? 0 : arrow.startPadding,
+    endPadding: arrow.endRect ? 0 : arrow.endPadding,
+  }
 }
 
 function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
@@ -71,14 +143,15 @@ function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   return draggedId.startsWith('thm_') ? hyp.id : (hyp.rewriteRef ?? hyp.label)
 }
 
-export function InstructionGuideArrow({ arrow, className = '' }: { arrow: GuideArrow; className?: string }) {
+export function InstructionGuideArrow({ arrow: requested, className = '' }: { arrow: GuideArrow; className?: string }) {
+  const arrow = clipGuideArrow(requested)
   const dx = arrow.end.x - arrow.start.x
   const dy = arrow.end.y - arrow.start.y
   const len = Math.sqrt(dx * dx + dy * dy) || 1
   // Trim the ends, but never past each other: an arrow shorter than its trims
   // would flip and point back the way it came. Leave room for the head.
   const wantedStartPad = arrow.startPadding ?? 44
-  const wantedEndPad = arrow.endPadding ?? 64
+  const wantedEndPad = arrow.endPadding ?? (arrow.endRect ? 0 : arrow.endGap ?? 64)
   const trimScale = Math.min(1, Math.max(0, len - 22) / ((wantedStartPad + wantedEndPad) || 1))
   const startPad = wantedStartPad * trimScale
   const endPad = wantedEndPad * trimScale
@@ -227,6 +300,13 @@ interface Props {
   onUndo: () => Promise<boolean>
   /** Whether the undo button should be enabled (parent has steps to undo). Overrides rewriteStepCount-based check when provided. */
   canUndo?: boolean
+  /** Called by the reset button: the relation goes back to how it read when
+   *  this view opened (the whole level starts over in a Rewrite-only one). */
+  onReset?: () => Promise<boolean>
+  /** Whether the reset button is enabled. */
+  canReset?: boolean
+  /** Called by the swap button; resolves to whether Lean swapped the sides. */
+  onSwap?: () => Promise<boolean>
   onClose: () => void
   /** Number of rewrite steps applied in this transformation session (incremented by parent on each rewrite). */
   rewriteStepCount: number
@@ -246,12 +326,16 @@ interface Props {
   isPhonePortrait?: boolean
   /** Names of equality-rewriting theorems to highlight with a soft glow. */
   emphasizeItems?: string[]
+  /** Full names of the theorems shown in the axiom colour (`VisualAxioms`). */
+  axioms?: string[]
   visualInfos?: VisualTransformInfo[]
   /** Rewrite Mode is the whole level: no Back button, and a check mark above the
    *  relation closes the goal once both sides match (`VisualRewriteOnly`). */
   rewriteOnly?: boolean
   /** Hide the rewrite-direction button; every rule rewrites left to right. */
   hideRewriteDirection?: boolean
+  /** Hide the swap-sides button (`VisualHideSwapSides`). */
+  hideSwapSides?: boolean
   /** Labels of rule cards whose `∀ …` footer is highlighted. */
   emphasizeForall?: string[]
   /** Called when the player clicks the check mark; resolves to whether Lean
@@ -259,6 +343,11 @@ interface Props {
   onCheck?: () => Promise<boolean>
   /** The level is solved: the check mark is shown green. */
   completed?: boolean
+  /** Show the check mark once both sides match although the level isn't Rewrite-only
+   *  (`VisualRewriteCheck`, on a goal). */
+  rewriteCheck?: boolean
+  /** Hints stay up after the rewrite they were written for (`VisualPersistentHints`). */
+  persistentHints?: boolean
 }
 
 function printLeanExpression(node: ExpressionNode): string {
@@ -270,10 +359,11 @@ function printLeanExpression(node: ExpressionNode): string {
 
 export function TransformationView({
   relation, goalLhsStr, goalRhsStr, goalLhsNode, goalRhsNode, equalityHyps, theoremEqualityHyps,
-  onRewrite, onUndo, canUndo, onClose, isReverse, onIsReverseChange,
+  onRewrite, onUndo, canUndo, onReset, canReset, onSwap, onClose, isReverse, onIsReverseChange,
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
-  isPhonePortrait = false, emphasizeItems, visualInfos = [],
-  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall, onCheck, completed = false,
+  isPhonePortrait = false, emphasizeItems, axioms, visualInfos = [],
+  rewriteOnly = false, hideRewriteDirection = false, hideSwapSides = false, emphasizeForall, onCheck, completed = false,
+  rewriteCheck = false, persistentHints = false,
 }: Props) {
   const instanceIdRef = useRef(++transformationViewInstanceCounter)
   const initialLhs = useCallback(() => {
@@ -290,15 +380,18 @@ export function TransformationView({
   const [history, setHistory] = useState<{ lhs: ExpressionNode; rhs: ExpressionNode }[]>([])
   // A Rewrite-only level never leaves this view, so an undo or reset can change
   // Lean's goal under it without going through the local history. Follow Lean.
+  // Elsewhere the local history is what the player sees, except while it is
+  // empty, as after a reset or after Undo brings a reset back: then Lean's goal
+  // is the only record of the relation, so follow it then too.
   const leanGoalKey = `${goalLhsNode ? printExpression(goalLhsNode) : goalLhsStr} ${relation} ${goalRhsNode ? printExpression(goalRhsNode) : goalRhsStr}`
   const syncedLeanGoalKeyRef = useRef(leanGoalKey)
   useEffect(() => {
     if (syncedLeanGoalKeyRef.current === leanGoalKey) return
     syncedLeanGoalKeyRef.current = leanGoalKey
-    if (!rewriteOnly) return
+    if (!rewriteOnly && history.length > 0) return
     setLhs(initialLhs())
     setRhs(initialRhs())
-  }, [initialLhs, initialRhs, leanGoalKey, rewriteOnly])
+  }, [history.length, initialLhs, initialRhs, leanGoalKey, rewriteOnly])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [arrowStart, setArrowStart] = useState<{ x: number; y: number } | null>(null)
   const [arrowEnd, setArrowEnd] = useState<{ x: number; y: number } | null>(null)
@@ -324,6 +417,8 @@ export function TransformationView({
   const backButtonRef = useRef<HTMLButtonElement>(null)
   const reverseButtonRef = useRef<HTMLButtonElement>(null)
   const reverseInfoRef = useRef<HTMLDivElement>(null)
+  const swapButtonRef = useRef<HTMLButtonElement>(null)
+  const swapInfoRef = useRef<HTMLDivElement>(null)
   const rewriteInfoRef = useRef<HTMLDivElement>(null)
   const relationRef = useRef<HTMLSpanElement>(null)
   const checkButtonRef = useRef<HTMLButtonElement>(null)
@@ -343,16 +438,20 @@ export function TransformationView({
   phoneExprShiftRef.current = phoneExprShift
   const [phoneRewriteArrow, setPhoneRewriteArrow] = useState<GuideArrow | null>(null)
   const [backGuide, setBackGuide] = useState<{ style: React.CSSProperties; arrow: GuideArrow } | null>(null)
-  const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null)
+  const [reverseArrow, setReverseArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number }; endRect?: GuideRect } | null>(null)
+  const [swapArrow, setSwapArrow] = useState<{ start: { x: number; y: number }; end: { x: number; y: number }; endRect?: GuideRect } | null>(null)
   const [rewriteGuide, setRewriteGuide] = useState<{
     info: VisualTransformInfo
     style: React.CSSProperties
     arrow: GuideArrow
   } | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = pageRef.current
     if (!el) return
+    // Measure before the first paint, so the rules are paged right from the start.
+    const style = window.getComputedStyle(el)
+    setPageWidth(el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight))
     const observer = new ResizeObserver(entries => setPageWidth(entries[0].contentRect.width))
     observer.observe(el)
     return () => observer.disconnect()
@@ -519,9 +618,11 @@ export function TransformationView({
     // otherwise the first, wider measurement creates one-card pages and the
     // cards moved to later pages are no longer present to be remeasured.
     measure()
-    const fontsReady = document.fonts?.ready
-    if (fontsReady) {
-      void fontsReady.then(() => {
+    // Measuring has laid the cards out, so a font they need has started loading by
+    // now. With none pending the measurement is final, and the dock can show in this
+    // very frame instead of popping in after the expression.
+    if (document.fonts && document.fonts.status !== 'loaded') {
+      void document.fonts.ready.then(() => {
         if (cancelled) return
         measure()
         setMeasuredLayoutKey(ruleDockLayoutKey)
@@ -555,7 +656,22 @@ export function TransformationView({
   // measurements are being committed. Once the dock has a measured height,
   // keep that stable shell painted during the handoff; hiding it again for a
   // single frame is the menu-bar flash players see after a rewrite.
-  const dockPresentationReady = layoutReady || hasPresentedReadyDockRef.current
+  // Should the measurements never settle, the view still has to show something:
+  // after a moment, present the rules as they are rather than a blank page.
+  const [forcedReady, setForcedReady] = useState(false)
+  const dockPresentationReady = layoutReady || hasPresentedReadyDockRef.current || forcedReady
+  useEffect(() => {
+    if (dockPresentationReady) return
+    const timer = window.setTimeout(() => {
+      console.warn('Rewrite Mode: the rule dock did not settle; showing it as it is', {
+        hasMeasurements, keyMatch: measuredLayoutKey === ruleDockLayoutKey,
+        dockKeyMatch: measuredDockLayoutKey === dockLayoutKey, ruleDockHeight, pageWidth, rules: tabRules.length,
+      })
+      setForcedReady(true)
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [dockPresentationReady, dockLayoutKey, hasMeasurements, measuredDockLayoutKey, measuredLayoutKey,
+    pageWidth, ruleDockHeight, ruleDockLayoutKey, tabRules.length])
 
   useLayoutEffect(() => {
     if (!hasMeasurements) return
@@ -590,6 +706,11 @@ export function TransformationView({
   // Emphasis: glow on matching cards; direct page buttons toward emphasized items.
   const isEmphasizedRule = (rule: { id: string }) =>
     emphasizeItems != null && emphasizeItems.includes(rule.id)
+  // Axioms keep their colour on whichever tab they are filed under.
+  const axiomNames = useMemo(() => new Set((axioms ?? []).flatMap(name =>
+    [name, name.split('.').at(-1) ?? name])), [axioms])
+  const isAxiomRule = (rule: { id: string; label: string; dragId: string }) =>
+    rule.dragId.startsWith('thm_') && (axiomNames.has(rule.id) || axiomNames.has(rule.label))
   const emphIndexesInTab = tabRules.reduce<number[]>((acc, rule, i) => {
     if (isEmphasizedRule(rule)) acc.push(i)
     return acc
@@ -600,10 +721,14 @@ export function TransformationView({
 
   const currentGoalText = formatFormulaText(`${printExpression(lhs)} ${relation} ${printExpression(rhs)}`)
   const currentSidesMatch = relation === '=' && expressionsEqual(lhs, rhs)
-  const activeVisualInfos = useMemo(
+  const matchingVisualInfos = useMemo(
     () => visualInfos.filter(info =>
       transformInfoMatchesGoal(info, currentGoalText, relation, currentSidesMatch)),
     [currentGoalText, currentSidesMatch, relation, visualInfos],
+  )
+  const activeVisualInfos = usePersistentHints(
+    persistentHints, rewriteStepCount, matchingVisualInfos,
+    infos => infos.length === 0, infos => infos,
   )
   // A Rewrite-only level has no Back button to point at.
   const backInfo = rewriteOnly ? undefined : activeVisualInfos.find(info => info.kind === 'back' && info.text)
@@ -611,8 +736,15 @@ export function TransformationView({
   const reverseInfo = hideRewriteDirection
     ? undefined
     : activeVisualInfos.find(info => info.kind === 'reverse' && info.text)
-  // The check mark closes a Rewrite-only level once both sides are the same.
-  const showCheck = rewriteOnly && (currentSidesMatch || completed)
+  // The swap button turns `a = b` into `b = a`, and `a ≠ b` likewise. A
+  // comparison would need its sign turned around too, so it gets no button.
+  const showSwap = !!onSwap && !hideSwapSides && (relation === '=' || relation === '≠')
+  const swapInfo = showSwap
+    ? activeVisualInfos.find(info => info.kind === 'swap' && info.text)
+    : undefined
+  // The check mark closes the goal once both sides are the same: always in a
+  // Rewrite-only level, and on any goal in a game with `VisualRewriteCheck`.
+  const showCheck = (rewriteOnly || rewriteCheck) && (currentSidesMatch || completed)
   const checkInfo = showCheck && !completed
     ? activeVisualInfos.find(info => info.kind === 'check' && info.text)
     : undefined
@@ -736,6 +868,7 @@ export function TransformationView({
         const reverseCenterX = reverseRect.left + reverseRect.width / 2
         const reverseCenterY = reverseRect.top + reverseRect.height / 2
         setReverseArrow({
+          endRect: guideRect(reverseRect),
           start: isPhonePortrait
             ? {
                 x: reverseCenterX,
@@ -752,6 +885,22 @@ export function TransformationView({
         })
       } else {
         setReverseArrow(null)
+      }
+
+      if (swapInfo && swapInfoRef.current && swapButtonRef.current) {
+        const infoRect = swapInfoRef.current.getBoundingClientRect()
+        const swapRect = swapButtonRef.current.getBoundingClientRect()
+        const swapCenterX = swapRect.left + swapRect.width / 2
+        const swapCenterY = swapRect.top + swapRect.height / 2
+        setSwapArrow({
+          endRect: guideRect(swapRect),
+          start: isPhonePortrait
+            ? { x: swapCenterX, y: infoRect.bottom }
+            : { x: infoRect.right, y: infoRect.top + infoRect.height / 2 },
+          end: { x: swapCenterX, y: swapCenterY },
+        })
+      } else {
+        setSwapArrow(null)
       }
 
       const page = pageRef.current
@@ -781,10 +930,11 @@ export function TransformationView({
           const targetRect = targetEl.getBoundingClientRect()
           const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
+          const edges = { startRect: guideRect(sourceRect), endRect: guideRect(targetRect) }
           if (rewriteOnly) {
             // The lesson sits with the others at the top of the page; the
             // arrow runs from the rule card to the term on every screen.
-            nextRewriteGuide = { info, style: {}, arrow: { start, end, startPadding: 48, endPadding: 60 } }
+            nextRewriteGuide = { info, style: {}, arrow: { start, end, ...edges } }
             break
           }
           if (isPhonePortrait) {
@@ -821,7 +971,7 @@ export function TransformationView({
               transform: 'translateY(-50%)',
               width: guideWidth,
             },
-            arrow: { start, end, startPadding: 48, endPadding: 60 },
+            arrow: { start, end, ...edges },
           }
           break
         }
@@ -834,13 +984,15 @@ export function TransformationView({
     window.addEventListener('scroll', updateGuides, true)
     // Opening or closing the proof sidebar slides the Back button and the row.
     window.addEventListener('transitionend', updateGuides, true)
+    window.addEventListener('animationend', updateGuides, true)
     return () => {
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
       window.removeEventListener('transitionend', updateGuides, true)
+      window.removeEventListener('animationend', updateGuides, true)
     }
   }, [backInfo, reverseInfo, rewriteInfos, lhs, rhs, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
-    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo])
+    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo, swapInfo])
 
   // The check mark floats just above the relation sign, wherever the row has
   // scrolled; its lesson's arrow runs from the lesson down to it.
@@ -864,12 +1016,20 @@ export function TransformationView({
       const button = checkButtonRef.current
       if (lesson && button) {
         const lessonRect = lesson.getBoundingClientRect()
-        const buttonRect = button.getBoundingClientRect()
+        // Where the button comes to rest, centred above the relation sign. Its
+        // measured box would be wrong while it pops in from a smaller scale,
+        // and the arrow would run into it once it has grown.
+        const width = button.offsetWidth
+        const height = button.offsetHeight
+        const centreX = overlayRect.left + left
+        const bottom = overlayRect.top + top
+        const buttonRect = { left: centreX - width / 2, right: centreX + width / 2, top: bottom - height, bottom, width, height }
         setCheckArrow({
           start: { x: lessonRect.left + lessonRect.width / 2, y: lessonRect.bottom },
           end: { x: buttonRect.left + buttonRect.width / 2, y: buttonRect.top + buttonRect.height / 2 },
           startPadding: 8,
-          endPadding: 30,
+          endRect: guideRect(buttonRect),
+          endGap: 10,
           arc: 'none',
         })
       } else {
@@ -883,11 +1043,13 @@ export function TransformationView({
     window.addEventListener('resize', update)
     window.addEventListener('scroll', update, true)
     window.addEventListener('transitionend', update, true)
+    window.addEventListener('animationend', update, true)
     return () => {
       window.cancelAnimationFrame(rafId)
       window.removeEventListener('resize', update)
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('transitionend', update, true)
+      window.removeEventListener('animationend', update, true)
     }
   }, [showCheck, checkInfo, checkPosition, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
 
@@ -1159,10 +1321,48 @@ export function TransformationView({
     }
   }
 
+  /** Back to the relation as it read when this view opened. A Rewrite-only
+   * level starts over and follows Lean's goal instead (see `leanGoalKey`). */
+  const handleReset = async () => {
+    if (!onReset || !canReset || isProcessing || undoInFlightRef.current) return
+    undoInFlightRef.current = true
+    setIsProcessing(true)
+    let success = false
+    try {
+      success = await onReset()
+    } finally {
+      undoInFlightRef.current = false
+      setIsProcessing(false)
+    }
+    if (!success) return
+    if (!rewriteOnly && history.length > 0) {
+      const opened = history[0]
+      setLhs(opened.lhs)
+      setRhs(opened.rhs)
+    }
+    setHistory([])
+  }
+
+  /** Swap the two sides; undo steps back through it as through a rewrite. */
+  const handleSwap = async () => {
+    if (!onSwap || isProcessing || completed) return
+    setIsProcessing(true)
+    let success = false
+    try {
+      success = await onSwap()
+    } finally {
+      setIsProcessing(false)
+    }
+    if (!success) return
+    setHistory(prev => [...prev, { lhs, rhs }])
+    setLhs(rhs)
+    setRhs(lhs)
+  }
+
   return (
     <div
       ref={overlayRef}
-      className={`visual-page tr-overlay tr-transformation-overlay${isPhonePortrait ? ' phone-portrait' : ''}`}
+      className={`visual-page tr-overlay tr-transformation-overlay${isPhonePortrait ? ' phone-portrait' : ''}${showSwap ? ' tr-has-swap' : ''}`}
       data-transform-instance={instanceIdRef.current}
       style={{
         ...(style ?? {}),
@@ -1193,8 +1393,15 @@ export function TransformationView({
         {/* Processing overlay */}
         {isProcessing && <div className="tr-processing" />}
 
-        {/* Main expression area */}
-        <div className="tr-main-area" ref={mainAreaRef}>
+        {/* Main expression area, which appears together with the rule dock */}
+        <div
+          className="tr-main-area"
+          ref={mainAreaRef}
+          // Faded out, not `visibility: hidden`: the dock is a composited layer
+          // (its blur), and a visibility flip on it has been seen not to repaint
+          // until the window was resized, leaving the view blank.
+          style={dockPresentationReady ? undefined : { opacity: 0, pointerEvents: 'none' }}
+        >
           <div
             className={`tr-expr-scroller${isExprOverflowing ? ' overflowing' : ''}`}
             ref={exprScrollerRef}
@@ -1223,14 +1430,19 @@ export function TransformationView({
                   <VisualInfoText text={generalInfo.text} />
                 </div>
               )}
-              {rewriteGuide && (
+              {(rewriteGuide?.info ?? rewriteInfos[0]) && (
                 <div ref={rewriteInfoRef} className="visual-info-callout transform-info top-info top-info-rewrite">
-                  <VisualInfoText text={rewriteGuide.info.text} />
+                  <VisualInfoText text={(rewriteGuide?.info ?? rewriteInfos[0])!.text} />
                 </div>
               )}
               {reverseInfo && (
                 <div ref={reverseInfoRef} className="visual-info-callout transform-info top-info top-info-reverse">
                   <VisualInfoText text={reverseInfo.text} />
+                </div>
+              )}
+              {swapInfo && (
+                <div ref={swapInfoRef} className="visual-info-callout transform-info top-info top-info-swap">
+                  <VisualInfoText text={swapInfo.text} />
                 </div>
               )}
               {checkInfo && (
@@ -1252,6 +1464,18 @@ export function TransformationView({
                   <VisualInfoText text={reverseInfo.text} />
                 </div>
               )}
+
+              {swapInfo && (
+                <div ref={swapInfoRef} className="visual-info-callout transform-info side-info swap-info">
+                  <VisualInfoText text={swapInfo.text} />
+                </div>
+              )}
+
+              {checkInfo && (
+                <div ref={checkInfoRef} className="visual-info-callout transform-info side-info check-info">
+                  <VisualInfoText text={checkInfo.text} />
+                </div>
+              )}
             </>
           )}
 
@@ -1261,8 +1485,16 @@ export function TransformationView({
             </div>
           )}
 
-          {/* Undo */}
+          {/* Reset and Undo */}
           <div className="tr-controls">
+            <button
+              onClick={() => void handleReset()}
+              disabled={!canReset}
+              aria-disabled={isProcessing || !canReset}
+              className={`tr-ctrl-btn${canReset ? ' active-reset' : ''}`}
+              aria-label="Reset"
+              title={rewriteOnly ? 'Start this level over' : 'Back to how this read when Rewrite Mode opened'}
+            ><ResetIcon /></button>
             <button
               onClick={handleUndo}
               disabled={!(canUndo ?? rewriteStepCount > 0)}
@@ -1272,16 +1504,29 @@ export function TransformationView({
             ><UndoIcon /></button>
           </div>
 
-          {/* Reverse */}
-          {!hideRewriteDirection && (
+          {/* Swap sides, then the rewrite direction */}
+          {(showSwap || !hideRewriteDirection) && (
             <div className="tr-side-controls">
-              <button
-                ref={reverseButtonRef}
-                onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
-                aria-disabled={isProcessing}
-                className={`tr-ctrl-btn tr-direction-btn${isReverse ? ' active-reverse' : ''}`}
-                aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
-              ><RewriteDirectionIcon reverse={isReverse} /></button>
+              {showSwap && (
+                <button
+                  ref={swapButtonRef}
+                  onClick={() => void handleSwap()}
+                  disabled={completed}
+                  aria-disabled={isProcessing || completed}
+                  className="tr-ctrl-btn tr-swap-btn"
+                  aria-label="Swap sides"
+                  title="Swap the two sides"
+                ><SwapSidesIcon /></button>
+              )}
+              {!hideRewriteDirection && (
+                <button
+                  ref={reverseButtonRef}
+                  onClick={() => { if (!isProcessing) onIsReverseChange(!isReverse) }}
+                  aria-disabled={isProcessing}
+                  className={`tr-ctrl-btn tr-direction-btn${isReverse ? ' active-reverse' : ''}`}
+                  aria-label={isReverse ? 'Mode: Reverse' : 'Mode: Forward'}
+                ><RewriteDirectionIcon reverse={isReverse} /></button>
+              )}
             </div>
           )}
 
@@ -1328,8 +1573,9 @@ export function TransformationView({
           className="tr-rule-dock"
           ref={ruleDockRef}
           data-layout-ready={dockPresentationReady ? 'true' : 'false'}
+          data-debug={JSON.stringify({ hasMeasurements, keyMatch: measuredLayoutKey === ruleDockLayoutKey, dockKeyMatch: measuredDockLayoutKey === dockLayoutKey, ruleDockHeight, pageWidth, rules: tabRules.length, widths: tabRules.map(rule => measuredWidths[rule.dragId] ?? null), fonts: typeof document !== 'undefined' && document.fonts ? document.fonts.status : null })}
           aria-busy={!dockPresentationReady}
-          style={{ visibility: dockPresentationReady ? 'visible' : 'hidden' }}
+          style={dockPresentationReady ? undefined : { opacity: 0, pointerEvents: 'none' }}
           onContextMenu={e => { e.preventDefault(); if (!isProcessing && !hideRewriteDirection) onIsReverseChange(!isReverse) }}
         >
           {/* Cards row */}
@@ -1362,7 +1608,7 @@ export function TransformationView({
                         forallFooter={rule.forallFooter}
                         forallEmphasized={emphasizeForall?.some(name =>
                           name === rule.label || sanitizeLeanDisplayName(name) === rule.label) ?? false}
-                        axiom={rule.category === AXIOM_CATEGORY}
+                        axiom={isAxiomRule(rule)}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         emphasized={isEmphasizedRule(rule)}
@@ -1423,14 +1669,14 @@ export function TransformationView({
         {reverseArrow && <InstructionGuideArrow arrow={{
           ...reverseArrow,
           startPadding: isPhonePortrait ? 6 : 28,
-          // On phone portrait the info text sits just above the reverse
-          // button — the gap is small (~30–60px), so a large endPadding
-          // would over-shoot and flip the arrow to point upward at the info
-          // text. Keep endPadding short enough to stop just past the button
-          // edge.
-          endPadding: isPhonePortrait ? 20 : 42,
+          // The head stops just short of the button's edge (`endRect`).
           arc: isPhonePortrait ? 'none' : 'up',
         }} />}
+        {swapArrow && <InstructionGuideArrow arrow={{
+          ...swapArrow,
+          startPadding: isPhonePortrait ? 6 : 28,
+          arc: isPhonePortrait ? 'none' : 'up',
+        }} className="swap-guide-arrow" />}
         {phoneRewriteArrow && <InstructionGuideArrow arrow={phoneRewriteArrow} />}
         {rewriteGuide && rewriteOnly && <InstructionGuideArrow arrow={rewriteGuide.arrow} />}
         {rewriteGuide && !isPhonePortrait && !rewriteOnly && (

@@ -82,6 +82,8 @@ macro "VisualGoalInfoOnGoal" ident "true" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualGoalInfoOnGoal" ident "false" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
+macro "VisualGoalInfoOnGoal" ident visualBool str "while" str : command =>
+  `(command| set_option linter.unusedVariables false)
 macro "VisualGoalInfoOnGoalWithHyp" ident visualBool str str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualGoalInfoOnGoalWithoutHyp" ident visualBool str str "show" str : command =>
@@ -96,9 +98,15 @@ macro "VisualTransformRewriteInfoOnGoal" ident str str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformBackInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
-macro "VisualTransformBackInfoOnHypothesis" "show" str : command =>
+macro "VisualTransformBackInfoOnHypothesis" (str)? "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTransformInfoOnHypothesis" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformReverseInfoOnGoal" str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTransformSwapInfoOnGoal" str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTransformSwapInfoOnHypothesis" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformInfoOnGoal" str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
@@ -112,6 +120,17 @@ macro "VisualHypGoalInfoOnGoal" ident str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualHypInfoOnHyp" ident str "show" str : command =>
   `(command| set_option linter.unusedVariables false)
+macro "VisualTheoremInfoOnGoal" ident str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualTheoremInfoOnGoalWithoutHyp" ident str str "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+syntax visualSpecializeGoal := "onGoal" str
+macro "VisualSpecializeInfo" str (visualSpecializeGoal)? "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualSpecializeBrickInfo" str str (visualSpecializeGoal)? "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
+macro "VisualSpecializeDoneInfo" str (visualSpecializeGoal)? "show" str : command =>
+  `(command| set_option linter.unusedVariables false)
 macro "VisualProofGraphInfo" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualProofGraphInfoOnGoal" str "show" str : command =>
@@ -121,10 +140,17 @@ macro "VisualProofGraphInfoBelow" str : command =>
 macro "VisualTextLevel" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualRewriteOnly" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualHideRewriteDirection" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualHideSwapSides" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualNoRewriteMode" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualEmphasizeForall" ident : command => `(command| set_option linter.unusedVariables false)
 macro "VisualBossLevel" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualMulDot" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualFastExfalso" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualPersistentHints" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualRewriteCheck" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualSuccessorName" ident : command => `(command| set_option linter.unusedVariables false)
+macro "VisualNoGoalRfl" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualAxioms" ident* : command => `(command| set_option linter.unusedVariables false)
 macro "VisualContinues" ident : command => `(command| set_option linter.unusedVariables false)
 macro "VisualPathMap" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualBonusOf" ident num : command => `(command| set_option linter.unusedVariables false)
@@ -133,6 +159,7 @@ syntax visualMapColumnArg := ("-")? num
 macro "VisualMapColumn" visualMapColumnArg : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualSharedPath" : command => `(command| set_option linter.unusedVariables false)
+macro "VisualMapBottom" : command => `(command| set_option linter.unusedVariables false)
 macro "VisualTransformText" str : command =>
   `(command| set_option linter.unusedVariables false)
 macro "VisualTransformCheckInfo" str : command =>

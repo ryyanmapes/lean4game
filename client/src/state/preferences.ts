@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-import { loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference, loadVisualOpenAnyLevelPreference } from "./local_storage";
+import { gameIdFromLocation, loadGameLightModePreference, loadPreferences, loadVisualAutoBranchSwitchPreference, loadVisualFastExfalsoPreference, loadVisualOpenAnyLevelPreference } from "./local_storage";
 
 export interface PreferencesState {
   layout: "mobile" | "auto" | "desktop";
@@ -36,14 +36,16 @@ const savedPreferences = loadPreferences()
 const savedVisualAutoBranchSwitching = loadVisualAutoBranchSwitchPreference()
 const savedVisualFastExfalso = loadVisualFastExfalsoPreference()
 const savedVisualOpenAnyLevel = loadVisualOpenAnyLevelPreference()
+const initialGameId = gameIdFromLocation()
 
 const initialState: PreferencesState = {
   ...defaultPreferencesState,
   ...savedPreferences,
-  // Light mode is retired. Anyone still carrying a stored preference for it
-  // returns to dark, rather than being stranded in a theme with no control
-  // left to leave it by.
-  isVisualLightMode: false,
+  // Light mode is stored per game, for the games that offer its toggle on their
+  // map. A preference stored under the old global key no longer applies, rather
+  // than stranding anyone in a theme with no control to leave it by. It's read here
+  // for the page's game, so the first frame is right; `App` follows game changes.
+  isVisualLightMode: initialGameId ? loadGameLightModePreference(initialGameId) : false,
   isVisualAutoBranchSwitching: savedVisualAutoBranchSwitching ?? savedPreferences?.isVisualAutoBranchSwitching ?? defaultPreferencesState.isVisualAutoBranchSwitching,
   isVisualFastExfalso: savedVisualFastExfalso ?? savedPreferences?.isVisualFastExfalso ?? defaultPreferencesState.isVisualFastExfalso,
   isVisualOpenAnyLevel: savedVisualOpenAnyLevel ?? savedPreferences?.isVisualOpenAnyLevel ?? defaultPreferencesState.isVisualOpenAnyLevel,

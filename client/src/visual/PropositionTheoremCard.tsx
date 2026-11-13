@@ -113,6 +113,7 @@ export function PropositionTheoremTemplateCard({ theorem, iffDirection, onClick,
       id={dragId}
       data-testid="theorem-tray-card"
       data-theorem-name={theorem.theoremName}
+      data-theorem-label={theorem.label}
       style={style}
       className={`statement-card theorem-tray-card${theorem.forallFooter ? ' has-forall-footer' : ''}${theorem.forallSpecification ? ' constructable' : ''}${isDragging ? ' dragging' : ''}${isIntegerTheorem(theorem) ? ' int-theorem' : ''}${theoremCardLayoutClass(theorem)}${emphasized ? ' visual-emphasize' : ''}`}
       onClick={onClick ? handleClick : undefined}

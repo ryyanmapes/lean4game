@@ -10,6 +10,7 @@ import './css/reset.css';
 import './css/app.css';
 import { PreferencesContext, WorldLevelIdContext} from './components/infoview/context';
 import UsePreferences from "./state/hooks/use_preferences"
+import { loadGameLightModePreference } from './state/local_storage'
 import i18n from './i18n';
 import { Popup } from './components/popup/popup';
 import { VisualRpcProvider } from './visual/VisualRpcProvider'
@@ -49,7 +50,12 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
     i18n.changeLanguage(language)
   }, [language])
 
-  React.useEffect(() => {
+  // Moving to another game, a layout effect so that the old game's theme never paints.
+  React.useLayoutEffect(() => {
+    setIsVisualLightMode(loadGameLightModePreference(gameId))
+  }, [gameId])
+
+  React.useLayoutEffect(() => {
     const background = isVisualLightMode ? '#f8fafc' : '#0f172a'
     const scheme = isVisualLightMode ? 'light' : 'dark'
     document.documentElement.style.backgroundColor = background

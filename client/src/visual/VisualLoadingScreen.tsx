@@ -25,6 +25,8 @@ type VisualLoadingScreenProps = {
   /** Enables the header's feedback (!) button while the level loads. */
   gameId?: string
   getFeedbackProofState?: () => unknown
+  /** See VisualHeader. */
+  titlePending?: boolean
 }
 
 export function HopLoadingIndicator({
@@ -85,17 +87,16 @@ export function VisualLoadingScreen({
   telemetryConsent,
   gameId,
   getFeedbackProofState,
+  titlePending = false,
 }: VisualLoadingScreenProps) {
   const [delayElapsed, setDelayElapsed] = React.useState(false)
   React.useEffect(() => {
     const timer = window.setTimeout(() => setDelayElapsed(true), 200)
     return () => window.clearTimeout(timer)
   }, [])
-  const chromeVisible = showChrome ?? delayElapsed
-
-  if (!chromeVisible) {
-    return <div className={`visual-page visual-loading${phonePortrait ? ' phone-portrait' : ''}`} aria-busy="true" />
-  }
+  // Only the animation waits, so a quick load doesn't flash it. The header is on every
+  // page of a level, so hiding it here would make it blink on each level change.
+  const animationVisible = showChrome ?? delayElapsed
 
   return (
     <div className={`visual-page visual-loading${phonePortrait ? ' phone-portrait' : ''}`} aria-busy="true">
@@ -117,9 +118,10 @@ export function VisualLoadingScreen({
           hideNav={!onWorldMap}
           gameId={gameId}
           getFeedbackProofState={getFeedbackProofState}
+          titlePending={titlePending}
         />
       )}
-      <HopLoadingIndicator message={message} progress={progress} />
+      {animationVisible && <HopLoadingIndicator message={message} progress={progress} />}
       {telemetryConsent && <TelemetryConsent gate={telemetryConsent} />}
     </div>
   )

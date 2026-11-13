@@ -268,6 +268,9 @@ structure VisualGoalInfo where
   /-- If set, the info is only displayed while the active goal does *not*
   contain a hypothesis whose type matches this string. -/
   excludeHypType : Option String := none
+  /-- Shown only while its goal matches, even in a game with `VisualPersistentHints`,
+  where hints otherwise stay up after the proof moves on. -/
+  onlyWhile : Bool := false
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
@@ -294,6 +297,9 @@ structure VisualHypGoalInfo where
   target : String := "goal"
   /-- For hypothesis-anchored callouts, hide once the hypothesis type changes. -/
   hypType : Option String := none
+  /-- If set, the info is only displayed while the active goal does *not* contain a
+  hypothesis whose type matches this string. -/
+  excludeHypType : Option String := none
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
@@ -301,6 +307,20 @@ structure VisualProofGraphInfo where
   goal : Option String := none
   /-- `left` of the proof-stream graph (older metadata) or `below` it. -/
   position : String := "left"
+  text : String
+deriving Inhabited, Repr, ToJson, FromJson
+
+/-- Guidance in the specialization view, where a player fills in the variable of a `∀`
+statement. `term` is the term built so far, as displayed, with `?` for each empty slot;
+`none` matches any term. -/
+structure VisualSpecializationInfo where
+  /-- `info` (text only), `brick` (an arrow from the brick labelled `brick` to the first
+  empty slot) or `done` (an arrow to the Done button). -/
+  kind : String
+  term : Option String := none
+  brick : String := ""
+  /-- If set, only while the goal being specialized for reads this. -/
+  goal : Option String := none
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
@@ -363,6 +383,8 @@ structure GameLevel where
   visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   /-- Visual Lean instructional callouts attached to the proof-stream graph. -/
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
+  /-- Visual Lean instructional callouts in the specialization view. -/
+  visualSpecializeInfos : Array VisualSpecializationInfo := #[]
   /-- When true, Visual Lean treats this level as text only: the path-style world map
   shows its introduction in a dialog, and closing the dialog completes the level. -/
   visualTextLevel : Bool := false
@@ -377,6 +399,10 @@ structure GameLevel where
   visualBossLevel : Bool := false
   /-- When true, Visual Lean writes multiplication as `·` in Rewrite Mode. -/
   visualMulDot : Bool := false
+  /-- When true, Visual Lean hides Rewrite Mode's swap-sides button. -/
+  visualHideSwapSides : Bool := false
+  /-- When true, Visual Lean refuses Rewrite Mode on the goal, with a warning. -/
+  visualNoRewriteMode : Bool := false
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -412,12 +438,15 @@ structure LevelInfo where
   visualTacticHypInfos : Array VisualTacticHypInfo := #[]
   visualHypGoalInfos : Array VisualHypGoalInfo := #[]
   visualProofGraphInfos : Array VisualProofGraphInfo := #[]
+  visualSpecializeInfos : Array VisualSpecializationInfo := #[]
   visualTextLevel : Bool := false
   visualRewriteOnly : Bool := false
   visualHideRewriteDirection : Bool := false
   visualEmphasizeForall : Array String := #[]
   visualBossLevel : Bool := false
   visualMulDot : Bool := false
+  visualHideSwapSides : Bool := false
+  visualNoRewriteMode : Bool := false
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -461,12 +490,15 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     visualTacticHypInfos := lvl.visualTacticHypInfos
     visualHypGoalInfos := lvl.visualHypGoalInfos
     visualProofGraphInfos := lvl.visualProofGraphInfos
+    visualSpecializeInfos := lvl.visualSpecializeInfos
     visualTextLevel := lvl.visualTextLevel
     visualRewriteOnly := lvl.visualRewriteOnly
     visualHideRewriteDirection := lvl.visualHideRewriteDirection
     visualEmphasizeForall := lvl.visualEmphasizeForall.map (·.toString)
     visualBossLevel := lvl.visualBossLevel
     visualMulDot := lvl.visualMulDot
+    visualHideSwapSides := lvl.visualHideSwapSides
+    visualNoRewriteMode := lvl.visualNoRewriteMode
   }
 
 /-! ## World -/
@@ -490,14 +522,20 @@ structure World where
   visualBonusOf? : Option (Name × Nat) := none
   /-- Visual Lean path map: named colour of this world's path. -/
   visualColor? : Option String := none
-  /-- Visual Lean path map: column of this world's path (0 = centre, negative = left). -/
+  /-- Visual Lean path map: column of this world's path (0 = centre, negative = left).
+  For a bonus world, the column its path onwards to a later world runs down. -/
   visualMapColumn? : Option Int := none
+  /-- Visual Lean path map: this world sits below every other world, as a closing level
+  does (see `VisualMapBottom`). -/
+  visualMapBottom : Bool := false
   /-- Visual Lean path map: this section isn't part of any named world. It is drawn
   in the shared grey and gets no title label. -/
   visualSharedPath : Bool := false
   /-- Visual Lean path map: this world carries on the path of another world, in its
   colour and without a title label of its own. -/
   visualContinues? : Option Name := none
+  /-- Visual Lean: hide Rewrite Mode's swap-sides button in every level of this world. -/
+  visualHideSwapSides : Bool := false
 deriving Inhabited
 
 instance : ToJson World := ⟨
@@ -517,6 +555,7 @@ instance : ToJson World := ⟨
       | some column => [("visualMapColumn", toJson column)]
       | none => []) ++
     (if world.visualSharedPath then [("visualSharedPath", toJson true)] else []) ++
+    (if world.visualMapBottom then [("visualMapBottom", toJson true)] else []) ++
     (match world.visualContinues? with
       | some source => [("visualContinues", toJson source)]
       | none => [])
@@ -588,6 +627,21 @@ structure Game where
   /-- When true, Visual Lean lets a proof of `False` close any goal, as the Fast `exfalso`
   setting does, whatever that setting says. -/
   visualFastExfalso : Bool := false
+  /-- When true, Visual Lean hints stay up after the proof moves past the state they
+  were written for, until another hint replaces them (see `VisualPersistentHints`). -/
+  visualPersistentHints : Bool := false
+  /-- When true, Rewrite Mode on a goal shows the check mark once both sides match in
+  every level, not only in `VisualRewriteOnly` ones (see `VisualRewriteCheck`). -/
+  visualRewriteCheck : Bool := false
+  /-- The name the game gives the successor function, for Visual Lean's term builder
+  (see `VisualSuccessorName`). `succ` when unset. -/
+  visualSuccessorName? : Option String := none
+  /-- When true, clicking a goal `a = a` in Visual Lean doesn't close it: the player
+  opens it in Rewrite Mode and uses the check mark (see `VisualNoGoalRfl`). -/
+  visualNoGoalRfl : Bool := false
+  /-- Theorems that Visual Lean shows in the axiom colour, whatever inventory tab they
+  are filed under (see `VisualAxioms`). -/
+  visualAxioms : Array Name := #[]
 deriving Inhabited, ToJson, FromJson
 
 def getGameJson (game : «Game») : Json := Id.run do
@@ -634,7 +688,9 @@ def World.merge (old : World) (new : World) : World :=
   visualColor? := new.visualColor? <|> old.visualColor?
   visualMapColumn? := new.visualMapColumn? <|> old.visualMapColumn?
   visualSharedPath := new.visualSharedPath || old.visualSharedPath
-  visualContinues? := new.visualContinues? <|> old.visualContinues? }
+  visualMapBottom := new.visualMapBottom || old.visualMapBottom
+  visualContinues? := new.visualContinues? <|> old.visualContinues?
+  visualHideSwapSides := new.visualHideSwapSides || old.visualHideSwapSides }
 
 def Game.merge (old : Game) (new : Game) : Game :=
 { new with

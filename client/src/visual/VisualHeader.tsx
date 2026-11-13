@@ -23,6 +23,9 @@ interface VisualHeaderProps {
   getFeedbackProofState?: () => unknown
   /** When true, suppress all navigation buttons (back to map, prev, next). */
   hideNav?: boolean
+  /** The level's data hasn't arrived, so its name isn't known yet: keep the place empty
+   * rather than show a provisional one and correct it. */
+  titlePending?: boolean
 }
 
 export function VisualHeader({
@@ -42,6 +45,7 @@ export function VisualHeader({
   gameId,
   getFeedbackProofState,
   hideNav,
+  titlePending = false,
 }: VisualHeaderProps) {
   // A level the player already finished opens green, with no replay of the
   // completion flourish. `previouslyCompleted` alone cannot say that: solving
@@ -62,6 +66,7 @@ export function VisualHeader({
     ? `${worldTitle ?? worldId} - ${shownLevelId}`
     : `Level ${shownLevelId}`
   const splitLongTitle = Boolean(plainTitle && `${levelLabel}: ${plainTitle}`.length > 28)
+  const stackTitle = Boolean(plainTitle && `${levelLabel}: ${plainTitle}`.length > 90)
 
   return (
     <div className={`visual-header${isCompleted ? ' completed' : ''}${completedOnEntry ? ' precompleted' : ''}`}>
@@ -78,7 +83,10 @@ export function VisualHeader({
             mode="visual" getProofState={getFeedbackProofState} />}
         </>}
       </div>
-      <div className={`visual-header-center${splitLongTitle ? ' split-title' : ''}`}>
+      <div
+        className={`visual-header-center${splitLongTitle ? ' split-title' : ''}${stackTitle ? ' stacked-title' : ''}`}
+        style={titlePending ? { visibility: 'hidden' } : undefined}
+      >
         {previouslyCompleted && <span className="visual-header-check">✓</span>}
         <span className="visual-header-level">
           {levelLabel}

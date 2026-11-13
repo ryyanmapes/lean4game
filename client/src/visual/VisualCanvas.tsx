@@ -5,13 +5,13 @@ import type { CollisionDetection } from '@dnd-kit/core'
 import { TaggedText_stripTags } from '@leanprover/infoview-api'
 import { v4 as uuidv4 } from 'uuid'
 import { flushSync } from 'react-dom'
-import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
+import type { CanvasState, GoalStream, HypCard as HypCardType, PropositionTheorem, PropositionTheoremCopy, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualSpecializationInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { ClickAction, ClickActionOption, InteractiveGoalsWithHints, ProofState } from '../components/infoview/rpc_api'
 import { HypCard, HypCardPreviewCard } from './HypCard'
-import { GoalCard } from './GoalCard'
+import { GoalCard, goalInfoMatchesGoal } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
-import { InstructionGuideArrow, isHypothesisTransformInfo, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
+import { guideRect, InstructionGuideArrow, isHypothesisTransformInfo, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
 import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
@@ -22,6 +22,7 @@ import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
 import { statementCanTargetGoal } from './goalApplication'
+import { currentVisualInterfaceScale } from './interfaceScale'
 import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication, buildRuntimeQuantifiedStatementDisplay } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
 import { ProofStreamGraph } from './ProofStreamGraph'
@@ -45,6 +46,7 @@ import {
 import { inferLocalTheoremPremiseApplication, reconcileProofTreeAfterInteraction } from './streamReconciliation'
 import { DERIVED_THEOREM_PREFIX } from './theoremNames'
 import { goalInfoVisibleAfterTactics } from './levelPresentation'
+import { usePersistentHints, withText } from './hintPersistence'
 import { MulDotContext } from './formulaDisplay'
 import {
   buildStructuredProof,
@@ -176,7 +178,17 @@ function resolveCollisions(
     const obstacleEl = options.phonePortrait
       ? goalEl
       : ((goalEl?.closest('.goal-card-with-info') as HTMLElement | null) ?? goalEl)
-    const rect = obstacleEl?.getBoundingClientRect()
+    const measured = obstacleEl?.getBoundingClientRect()
+    // The proof graph's panel sits in the top right corner. Count the corner up to
+    // the canvas's edges as taken, so that cards are pushed out of it to the left
+    // or downwards, where there is room, rather than into the edges.
+    const rect = measured && id === PROOF_TREE_PANEL_ID
+      ? (() => {
+          const right = canvasBounds.left + canvasBounds.width
+          const top = canvasBounds.top
+          return { left: measured.left, top, width: right - measured.left, height: measured.bottom - top }
+        })()
+      : measured
     if (rect) {
       items.push({
         id,
@@ -243,8 +255,9 @@ function resolveCollisions(
     if (overlapsOccupied(candidate)) {
       let free: typeof candidate | null = null
       for (let slot = 0; slot < Math.max(30, items.length * 3) && !free; slot += 1) {
-        const left = 80 + (slot % 3) * 280
-        const top = 130 + Math.floor(slot / 3) * 110
+        const scale = currentVisualInterfaceScale()
+        const left = (80 + (slot % 3) * 280) * scale
+        const top = (130 + Math.floor(slot / 3) * 110) * scale
         const next = {
           left,
           top,
@@ -412,10 +425,11 @@ function avoidFreshOversizedCollisions(
     if (!oversizedFreshIds.has(card.id)) occupied.push(cardRect(card))
   }
 
-  const startX = 80
-  const startY = 130
-  const columnStep = 280
-  const rowStep = 110
+  const scale = currentVisualInterfaceScale()
+  const startX = 80 * scale
+  const startY = 130 * scale
+  const columnStep = 280 * scale
+  const rowStep = 110 * scale
   const columns = 3
   return cards.map(card => {
     if (!oversizedFreshIds.has(card.id)) return card
@@ -513,7 +527,11 @@ function resolveCanvasStateCollisions(
   canvasBounds: CanvasBounds,
   options: { phonePortrait?: boolean } = {},
 ): CanvasState {
-  const obstacleIds = canvas.streams.map(stream => stream.id)
+  // The goal stack, and on wider screens the proof graph's panel when it shows.
+  const obstacleIds = [
+    ...canvas.streams.map(stream => stream.id),
+    ...(options.phonePortrait ? [] : [PROOF_TREE_PANEL_ID]),
+  ]
   let changed = false
 
   const streams = canvas.streams.map(stream => {
@@ -693,6 +711,11 @@ interface InteractionOptions {
    * goal rather than the contradiction the player actually used. */
   solvedGoalDisplay?: string
   queueIfBusy?: boolean
+  /** The Rewrite Mode the step was taken in, which undoing it returns to. */
+  transformTargetSnapshot?: TransformTarget
+  /** Called with the canvas the accepted step leads to and its active stream,
+   * for a caller that has to follow the step into a renamed stream. */
+  onApplied?: (nextCanvas: CanvasState, nextActiveId: string | null) => void
 }
 
 interface GoalChoiceMenu {
@@ -731,6 +754,41 @@ interface HypInfoGuide {
   info: VisualHypGoalInfo
   style: React.CSSProperties
   arrow: GuideArrow
+}
+
+/** The hints a canvas shows at once; with `VisualPersistentHints` they persist together. */
+interface CanvasHints {
+  goal: VisualGoalInfo[]
+  tacticHyp: VisualTacticHypInfo[]
+  hypGoal: VisualHypGoalInfo[]
+  hyp: VisualHypGoalInfo[]
+  theorem: VisualHypGoalInfo[]
+  graph: VisualProofGraphInfo[]
+}
+
+function canvasHintsEmpty(hints: CanvasHints): boolean {
+  return hints.goal.length === 0 && hints.tacticHyp.length === 0 && hints.hypGoal.length === 0 &&
+    hints.hyp.length === 0 && hints.theorem.length === 0 && hints.graph.length === 0
+}
+
+/** What stays up once the hints stop matching: not those that only show while they match. */
+function canvasHintsKept(hints: CanvasHints): CanvasHints {
+  return { ...hints, goal: hints.goal.filter(info => !info.onlyWhile) }
+}
+
+/** The inventory card of a theorem a hint names: by its Lean name or its display name. */
+function theoremCardElement(name: string): HTMLElement | null {
+  const escape = (value: string) => {
+    const escapeFn = (window as Window & { CSS?: { escape?: (value: string) => string } }).CSS?.escape
+    return escapeFn ? escapeFn(value) : value.replace(/["\\]/g, '\\$&')
+  }
+  const short = name.split('.').at(-1) ?? name
+  for (const candidate of [name, short]) {
+    const card = document.querySelector<HTMLElement>(`[data-testid="theorem-tray-card"][data-theorem-name="${escape(candidate)}"]`)
+      ?? document.querySelector<HTMLElement>(`[data-testid="theorem-tray-card"][data-theorem-label="${escape(candidate)}"]`)
+    if (card) return card
+  }
+  return null
 }
 
 interface ExpectedRewriteGoal {
@@ -800,6 +858,8 @@ interface VisualCanvasTestHarness {
     isReverse?: boolean,
   ) => Promise<void>
   closeTransform: () => void
+  swapSidesInTransform: () => Promise<boolean>
+  resetTransform: () => Promise<boolean>
   getTransformStatus: () => {
     isOpen: boolean
     pendingSync: boolean
@@ -848,6 +908,8 @@ interface VisualCanvasTestHarness {
 }
 
 const THEOREM_TRAY_ID = 'theorem-tray'
+/** The proof graph's panel, which cards make way for like the goal stack. */
+const PROOF_TREE_PANEL_ID = 'visual-proof-tree-panel'
 const MOBILE_DIVIDER_PREFIX = 'mobile-divider:'
 const REDUCTION_TOOLTIP_EXIT_MS = 140
 type TrayTab = 'tactics' | 'theorems'
@@ -1075,8 +1137,11 @@ function goalIsReflexiveEquality(stream: GoalStream): boolean {
   return formulaTextIsReflexiveEquality(TaggedText_stripTags(stream.goal.type))
 }
 
-function goalIsTransformable(stream: GoalStream, allowComparisons: boolean): boolean {
-  if (goalIsReflexiveEquality(stream)) return false
+/** Whether the goal opens in Rewrite Mode. A goal `a = a` is closed by a click
+ * instead, except in a game that turns that click off (`VisualNoGoalRfl`), where
+ * it opens like any other equality and the check mark closes it. */
+function goalIsTransformable(stream: GoalStream, allowComparisons: boolean, allowReflexive = false): boolean {
+  if (!allowReflexive && goalIsReflexiveEquality(stream)) return false
   return stream.equalityTree != null || parsedGoalTarget(stream, allowComparisons) !== null
 }
 
@@ -2344,6 +2409,12 @@ interface ResetUndoEntry {
   canvasState: CanvasState
   displayCanvasState: CanvasState
   theoremCopies: PropositionTheoremCopy[]
+  /** How many of `proofSteps` the reset kept: none for the level's reset,
+   * those before Rewrite Mode opened for Rewrite Mode's. */
+  baseStepCount: number
+  /** The Rewrite Mode the reset was made in, which undoing it returns to. */
+  transformTarget: TransformTarget | null
+  transformationVersion: number
 }
 
 interface VisualCanvasProps {
@@ -2359,6 +2430,18 @@ interface VisualCanvasProps {
   visualTacticHypInfos?: VisualTacticHypInfo[]
   visualHypGoalInfos?: VisualHypGoalInfo[]
   visualProofGraphInfos?: VisualProofGraphInfo[]
+  visualSpecializeInfos?: VisualSpecializationInfo[]
+  /** Hints stay up after the proof moves on (`VisualPersistentHints`). */
+  persistentHints?: boolean
+  /** Rewrite Mode on a goal shows the check mark in every level (`VisualRewriteCheck`). */
+  rewriteCheck?: boolean
+  /** The successor function's name in the term builder (`VisualSuccessorName`). */
+  successorName?: string
+  /** Clicking a goal `a = a` doesn't close it: the player opens it in Rewrite
+   *  Mode and uses the check mark (`VisualNoGoalRfl`). */
+  noGoalRfl?: boolean
+  /** Full names of the theorems shown in the axiom colour (`VisualAxioms`). */
+  axioms?: string[]
   worldId: string
   levelId: number
   /** Display label: the index after Visual Lean-only skipped levels are
@@ -2369,6 +2452,10 @@ interface VisualCanvasProps {
   rewriteOnly?: boolean
   /** Hide Rewrite Mode's rewrite-direction button (`VisualHideRewriteDirection`). */
   hideRewriteDirection?: boolean
+  /** Hide Rewrite Mode's swap-sides button (`VisualHideSwapSides`). */
+  hideSwapSides?: boolean
+  /** Refuse Rewrite Mode on the goal, with a warning (`VisualNoRewriteMode`). */
+  noRewriteMode?: boolean
   /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
   emphasizeForall?: string[]
   /** Write multiplication as `·` in Rewrite Mode (`VisualMulDot`). */
@@ -2659,10 +2746,12 @@ function TheoremTray({
 
 export function VisualCanvas({
   gameId, initialState, theoremEqualityHyps, propositionTheorems, visualTactics, emphasizeItems, visualGoalInfos, visualTransformInfos,
-  visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, worldId, levelId,
+  visualTacticHypInfos, visualHypGoalInfos, visualProofGraphInfos, visualSpecializeInfos, worldId, levelId,
+  persistentHints = false, rewriteCheck = false, successorName, noGoalRfl = false, axioms,
   displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = '',
-  rewriteOnly = false, hideRewriteDirection = false, emphasizeForall, mulDot = false, gameFastExfalso = false,
+  rewriteOnly = false, hideRewriteDirection = false, hideSwapSides = false, noRewriteMode = false,
+  emphasizeForall, mulDot = false, gameFastExfalso = false,
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso } =
     React.useContext(PreferencesContext)
@@ -2679,6 +2768,7 @@ export function VisualCanvas({
   const [tacticHypGuides, setTacticHypGuides] = useState<TacticHypGuide[]>([])
   const [hypGoalGuides, setHypGoalGuides] = useState<HypGoalGuide[]>([])
   const [hypInfoGuides, setHypInfoGuides] = useState<HypInfoGuide[]>([])
+  const [theoremInfoGuides, setTheoremInfoGuides] = useState<HypInfoGuide[]>([])
   const [canvasState, setCanvasState] = useState<CanvasState>(() => resumeState?.canvasState ?? initialState)
   // Frozen snapshot for display — updated only when there are streams, so cards
   // stay visible after completion (when Lean returns an empty goals array).
@@ -2717,6 +2807,17 @@ export function VisualCanvas({
   }, [propositionTheorems])
 
   const [transformTarget, setTransformTarget] = useState<TransformTarget | null>(null)
+  // A refusal explained in place, such as Rewrite Mode being off for the goal.
+  const [canvasWarning, setCanvasWarning] = useState<string | null>(null)
+  const canvasWarningTimerRef = useRef<number | null>(null)
+  function showCanvasWarning(text: string) {
+    if (canvasWarningTimerRef.current !== null) window.clearTimeout(canvasWarningTimerRef.current)
+    setCanvasWarning(text)
+    canvasWarningTimerRef.current = window.setTimeout(() => {
+      canvasWarningTimerRef.current = null
+      setCanvasWarning(null)
+    }, 5000)
+  }
   const lastTransformPropsRef = useRef<TransformViewPresentation | null>(null)
   const [constructionTarget, setConstructionTarget] = useState<ConstructionTarget | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
@@ -2740,7 +2841,20 @@ export function VisualCanvas({
   // Each reset's cleared proof, newest last. Undo with no steps left brings
   // back the newest one, so a reset is never a dead end.
   const [resetHistory, setResetHistory] = useState<ResetUndoEntry[]>([])
-  const canUndo = proofSteps.length > 0 || resetHistory.length > 0
+  /** The newest reset whose kept steps are exactly the current proof, or -1.
+   * A reset made in Rewrite Mode is only restorable from the proof it left. */
+  const restorableResetIndex = () => {
+    for (let index = resetHistory.length - 1; index >= 0; index -= 1) {
+      const entry = resetHistory[index]!
+      if (entry.baseStepCount !== proofSteps.length) continue
+      const keptAsIs = entry.proofSteps
+        .slice(0, entry.baseStepCount)
+        .every((step, position) => step.command === proofSteps[position]?.command)
+      if (keptAsIs) return index
+    }
+    return -1
+  }
+  const canUndo = proofSteps.length > 0 || restorableResetIndex() >= 0
   // The proof tree is kept in a stable player-facing order, while `rotate_left`
   // permanently changes Lean's outstanding-goal order. Keep both: using the
   // rendered order for a second action after a graph navigation can silently
@@ -2999,12 +3113,16 @@ export function VisualCanvas({
     const desktopMaxY = trayTop === undefined
       ? rect.height
       : Math.max(0, Math.min(rect.height, trayTop - rect.top))
+    // The canvas runs under the fixed header; a card pushed up (say, away from
+    // the proof graph's panel) must stop below it.
+    const headerBottom = document.querySelector('.visual-header')?.getBoundingClientRect().bottom
+    const desktopMinY = headerBottom === undefined ? undefined : Math.max(0, headerBottom - rect.top + 8)
     return {
       left: rect.left,
       top: rect.top,
       width: rect.width,
       height: rect.height,
-      minY: isPhonePortrait ? phoneBounds.minY : undefined,
+      minY: isPhonePortrait ? phoneBounds.minY : desktopMinY,
       maxY: isPhonePortrait ? phoneBounds.maxY : desktopMaxY,
     }
   }
@@ -3051,7 +3169,7 @@ export function VisualCanvas({
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(stableUpdater(prev =>
       resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait })))
-  }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight])
+  }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight, proofTree])
 
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current
@@ -3530,7 +3648,7 @@ export function VisualCanvas({
         canvasSnapshot: cloneCanvasState(nextCanvas),
         activeStreamIdAfter: nextActiveId,
       activeStreamIdBefore: activeStreamId,
-        transformTargetSnapshot: null,
+        transformTargetSnapshot: options?.transformTargetSnapshot ?? null,
         theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
       })
 
@@ -3644,7 +3762,7 @@ export function VisualCanvas({
       canvasSnapshot: cloneCanvasState(nextCanvas),
       activeStreamIdAfter: nextActiveId,
       activeStreamIdBefore: activeStreamId,
-      transformTargetSnapshot: null,
+      transformTargetSnapshot: options?.transformTargetSnapshot ?? null,
       theoremCopiesBefore: cloneTheoremCopies(theoremCopies),
     })
     consumeTheoremCopies(options?.consumedTheoremCopyIds)
@@ -3677,6 +3795,7 @@ export function VisualCanvas({
     }
 
     setCanvasState(nextCanvas)
+    options?.onApplied?.(nextCanvas, nextActiveId)
     return true
   }
 
@@ -3717,14 +3836,22 @@ export function VisualCanvas({
         return latestUndoLastStep()
       }
     }
-    if (proofSteps.length === 0) return undoResetUnlocked()
+    const restorableReset = restorableResetIndex()
+    if (restorableReset >= 0) return undoResetUnlocked(restorableReset)
+    return undoStepsUnlocked(1)
+  }
+
+  /** Remove the last `count` proof steps and return to the state before the
+   * earliest of them, in the mode that step was taken in. */
+  async function undoStepsUnlocked(count: number): Promise<boolean> {
+    if (count < 1 || proofSteps.length < count) return false
     setGoalChoiceMenu(null)
     closeReductionTooltip()
     setPendingTransformSync(null)
     updateProcessingState(true)
 
-    const removedStep = proofSteps[proofSteps.length - 1]
-    const newSteps = proofSteps.slice(0, -1)
+    const removedStep = proofSteps[proofSteps.length - count]!
+    const newSteps = proofSteps.slice(0, proofSteps.length - count)
     const newScript = serializeProofCommands(newSteps.map(step => step.command))
     const result = await onInteraction(newScript)
 
@@ -3762,7 +3889,7 @@ export function VisualCanvas({
     setSolvedGoalId(null)
     setDisplayCanvasState(cloneCanvasState(restoredCanvas))
     setCanvasState(restoredCanvas)
-    onProofStep?.('undo', 'undo')
+    for (let removed = 0; removed < count; removed += 1) onProofStep?.('undo', 'undo')
 
     // Navigate to the mode where the undone step was taken.
     // If it was a rewrite (non-null snapshot), restore transformation mode.
@@ -3795,7 +3922,7 @@ export function VisualCanvas({
             dismissTransformationView()
           }
         }
-        setTransformationVersion(v => Math.max(0, v - 1))
+        setTransformationVersion(v => Math.max(0, v - count))
       } else {
         setActiveStreamId(nextActiveId)
         dismissTransformationView()
@@ -3812,9 +3939,10 @@ export function VisualCanvas({
     return true
   }
 
-  /** Bring back the proof the newest reset cleared, exactly as it stood. */
-  async function undoResetUnlocked(): Promise<boolean> {
-    const cleared = resetHistory.at(-1)
+  /** Bring back the proof a reset cleared, exactly as it stood, and the
+   * Rewrite Mode it was made in. */
+  async function undoResetUnlocked(index: number): Promise<boolean> {
+    const cleared = resetHistory[index]
     if (!cleared) return false
     setGoalChoiceMenu(null)
     closeReductionTooltip()
@@ -3829,7 +3957,7 @@ export function VisualCanvas({
     }
     leanGoalOrderRef.current = proofStateToCanvas(result).streams.map(stream => stream.id)
 
-    setResetHistory(prev => prev.slice(0, -1))
+    setResetHistory(prev => prev.slice(0, index))
     setTheoremCopies(cloneTheoremCopies(cleared.theoremCopies))
     setProofSteps(cleared.proofSteps)
     setProofTree(cloneProofTree(cleared.proofTree))
@@ -3840,10 +3968,17 @@ export function VisualCanvas({
     setCanvasState(cloneCanvasState(cleared.canvasState))
     setActiveStreamId(cleared.activeStreamId)
     onResetUndone?.(
-      cleared.proofSteps.map(step => buildInteractiveProofLine(step.rotation, step.playTactic)),
+      cleared.proofSteps
+        .slice(cleared.baseStepCount)
+        .map(step => buildInteractiveProofLine(step.rotation, step.playTactic)),
       cleared.canvasState.completed,
     )
-    dismissTransformationView()
+    if (cleared.transformTarget) {
+      setTransformTarget(cleared.transformTarget)
+      setTransformationVersion(cleared.transformationVersion)
+    } else {
+      dismissTransformationView()
+    }
 
     updateProcessingState(false)
     return true
@@ -3876,6 +4011,9 @@ export function VisualCanvas({
       canvasState: cloneCanvasState(canvasState),
       displayCanvasState: cloneCanvasState(displayCanvasState),
       theoremCopies: cloneTheoremCopies(theoremCopies),
+      baseStepCount: 0,
+      transformTarget: null,
+      transformationVersion: 0,
     }])
     const restoredTree = cloneProofTree(initialProofTreeRef.current)
     const restoredCanvas = cloneCanvasState(initialState)
@@ -4775,6 +4913,21 @@ export function VisualCanvas({
     return Boolean(clickAction?.playTactic || (clickAction?.options.length ?? 0) > 0)
   }
 
+  /** In a game with `VisualNoGoalRfl`, whether a click on this goal is refused
+   *  because all it would do is close `a = a`. The player opens the goal in
+   *  Rewrite Mode and uses the check mark instead, or, in a level that keeps
+   *  Rewrite Mode off the goal, proves it from a proposition. A goal with no
+   *  such way through keeps its click. */
+  function goalClickIsRefusedRfl(stream: GoalStream, clickAction: ClickAction | undefined, goalText: string): boolean {
+    if (!noGoalRfl || !clickAction?.playTactic || clickAction.options.length > 0) return false
+    const closesByRfl = coreCommandForGoalClick(
+      clickAction.playTactic,
+      clickAction.tooltip,
+      formulaTextIsReflexiveEquality(goalText),
+    ) === 'rfl'
+    return closesByRfl && (noRewriteMode || goalIsTransformable(stream, comparisonTransformEnabled, true))
+  }
+
   function hasReductionForms(forms?: string[]): forms is string[] {
     return (forms?.length ?? 0) > 0
   }
@@ -4918,6 +5071,8 @@ export function VisualCanvas({
 
   function handleGoalClick(streamId: string, clickAction?: ClickAction, displayedGoalText?: string) {
     if (isProcessing || canvasState.completed || !hasClickAction(clickAction)) return
+    const clickedStream = canvasState.streams.find(stream => stream.id === streamId)
+    if (clickedStream && goalClickIsRefusedRfl(clickedStream, clickAction, displayedGoalText ?? '')) return
     closeReductionTooltip()
     if (clickAction.options.length > 0) {
       setGoalChoiceMenu({
@@ -5048,9 +5203,14 @@ export function VisualCanvas({
       onGesture?.({ kind: 'rejected', command: 'transform goal', reason: 'busy' })
       return
     }
+    if (noRewriteMode) {
+      showCanvasWarning('Rewrite Mode is off for the goal in this level. Prove the equality like any other proposition!')
+      onGesture?.({ kind: 'rejected', command: 'transform goal', reason: 'no-rewrite-mode' })
+      return
+    }
     const stream = canvasState.streams.find(s => s.id === streamId)
     if (!stream) return
-    if (!goalIsTransformable(stream, comparisonTransformEnabled)) return
+    if (!goalIsTransformable(stream, comparisonTransformEnabled, noGoalRfl)) return
     closeReductionTooltip()
     setSolvedGoalId(null)
     setPendingTransformSync(null)
@@ -5921,8 +6081,9 @@ export function VisualCanvas({
 
   // A Rewrite-only level is played in Rewrite Mode on the goal: open it on load
   // and again whenever an undo or reset returns to the canvas. A reflexive goal
-  // still opens, so its check mark can close it.
-  useEffect(() => {
+  // still opens, so its check mark can close it. This is a layout effect so that
+  // the canvas underneath never paints, not even for a frame.
+  useLayoutEffect(() => {
     if (!rewriteOnly || transformTarget || constructionTarget) return
     const stream = canvasState.streams.find(candidate => candidate.id === activeStreamId)
       ?? canvasState.streams[0]
@@ -5934,13 +6095,102 @@ export function VisualCanvas({
   }, [activeStreamId, canvasState.streams, comparisonTransformEnabled, constructionTarget,
     displayCanvasState.streams, rewriteOnly, transformTarget])
 
-  /** The check mark of a Rewrite-only level: close the matching goal with rfl. */
+  /** The check mark: close the matching goal with rfl. In a Rewrite-only level,
+   * or when it finishes the level, Rewrite Mode stays open with the check mark
+   * green (Back returns to the finished proof); when other goals remain, the
+   * player goes back to them. */
   const handleRewriteCheck = async (): Promise<boolean> => {
     if (!transformingStream || isProcessing || canvasState.completed) return false
-    return applyInteraction('click_goal', transformingStream.id, {
+    const otherGoalsRemain = canvasState.streams.some(stream => stream.id !== transformingStream.id)
+    const accepted = await applyInteraction('click_goal', transformingStream.id, {
       solvedGoalId: transformingStream.id,
       targetStreamId: transformingStream.id,
+      // Undo comes back to Rewrite Mode, where the check mark was clicked.
+      ...(!rewriteOnly && transformTarget ? { transformTargetSnapshot: transformTarget } : {}),
     })
+    if (accepted && !rewriteOnly) {
+      setTransformationVersion(v => v + 1)
+      if (otherGoalsRemain) dismissTransformationView()
+    }
+    return accepted
+  }
+  const goalCheckAvailable = rewriteOnly || (rewriteCheck && transformTarget?.kind === 'goal')
+
+  /** The swap button: `a = b` becomes `b = a`, through `symm`, on the goal or
+   * the hypothesis Rewrite Mode is open on. Rewrite Mode follows the step. */
+  async function handleSwapSides(): Promise<boolean> {
+    if (!transformTarget || isProcessing || canvasState.completed) return false
+    const target = transformTarget
+    const stream = canvasState.streams.find(candidate => candidate.id === target.streamId)
+    if (!stream) return false
+    const playTactic = interactionToPlayTactic({
+      type: 'drag_tactic',
+      tacticName: 'symm',
+      targetHypName: target.kind === 'hyp' ? target.hypRef : undefined,
+    })
+    const accepted = await applyInteraction(playTactic, target.kind === 'hyp' ? target.hypId : stream.id, {
+      targetStreamId: stream.id,
+      transformTargetSnapshot: target,
+      onApplied: (nextCanvas, nextActiveId) => {
+        const nextStream = nextCanvas.streams.find(candidate => candidate.id === nextActiveId)
+          ?? nextCanvas.streams[0]
+          ?? null
+        if (!nextStream) {
+          dismissTransformationView()
+          return
+        }
+        if (target.kind === 'goal') {
+          setTransformTarget({ kind: 'goal', streamId: nextStream.id })
+          return
+        }
+        const nextHyp = nextStream.hyps.find(card =>
+          interactionHypName(card) === target.hypRef || card.hyp.names[0] === target.hypName,
+        )
+        if (nextHyp) {
+          setTransformTarget({
+            kind: 'hyp',
+            streamId: nextStream.id,
+            hypId: nextHyp.id,
+            hypName: nextHyp.hyp.names[0] ?? target.hypName,
+            hypRef: interactionHypName(nextHyp) ?? target.hypRef,
+          })
+        } else {
+          dismissTransformationView()
+        }
+      },
+    })
+    if (accepted) setTransformationVersion(v => v + 1)
+    return accepted
+  }
+
+  /** Rewrite Mode's reset: the relation goes back to how it read when the view
+   * opened, by undoing every step taken since. In a Rewrite-only level, where
+   * the view is the whole level, the level starts over. Undo brings the
+   * cleared steps back, as after the level's reset. */
+  async function resetTransformation(): Promise<boolean> {
+    if (rewriteOnly) return resetProof()
+    if (undoRequestInFlightRef.current || isProcessingRef.current) return false
+    const count = Math.min(transformationVersion, proofSteps.length)
+    if (count < 1) return false
+    undoRequestInFlightRef.current = true
+    try {
+      const cleared: ResetUndoEntry = {
+        proofSteps,
+        proofTree: cloneProofTree(proofTree),
+        activeStreamId,
+        canvasState: cloneCanvasState(canvasState),
+        displayCanvasState: cloneCanvasState(displayCanvasState),
+        theoremCopies: cloneTheoremCopies(theoremCopies),
+        baseStepCount: proofSteps.length - count,
+        transformTarget,
+        transformationVersion,
+      }
+      const undone = await undoStepsUnlocked(count)
+      if (undone) setResetHistory(prev => [...prev, cleared])
+      return undone
+    } finally {
+      undoRequestInFlightRef.current = false
+    }
   }
 
   // ── Build ConstructionView props ─────────────────────────────────────────────
@@ -5973,6 +6223,18 @@ export function VisualCanvas({
       mode: cnMode,
     }
   })()
+  // Specialization hints for the goal the player is specializing for.
+  const constructionGoalText = constructionTarget
+    ? (() => {
+        const stream = canvasState.streams.find(candidate => candidate.id === constructionTarget.streamId)
+        return stream ? formatFormulaText(TaggedText_stripTags(stream.goal.type)) : null
+      })()
+    : null
+  const constructionInfos = React.useMemo(
+    () => (visualSpecializeInfos ?? []).filter(info =>
+      !info.goal || (constructionGoalText !== null && formatFormulaText(info.goal) === constructionGoalText)),
+    [constructionGoalText, visualSpecializeInfos],
+  )
 
   const constructionTargetKey = (() => {
     if (!constructionTarget) return ''
@@ -6158,40 +6420,85 @@ export function VisualCanvas({
     ),
     [proofSteps, visualGoalInfos],
   )
-  const activeTacticHypInfos = React.useMemo(
-    () => (visualTacticHypInfos ?? []).filter(info =>
-      !proofGraphOccupiesMainView && (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
-    ),
-    [displayGoalText, proofGraphOccupiesMainView, visualTacticHypInfos],
+  const displayHypTypeTexts = React.useMemo(
+    () => (displayStream?.goal.hyps ?? []).map(hyp => formatFormulaText(TaggedText_stripTags(hyp.type))),
+    [displayStream],
   )
+  // The hints whose conditions the shown proof state meets. Where they are drawn
+  // can still hide some (the proof graph takes the place of the cards).
+  const matchingCanvasHints = React.useMemo((): CanvasHints => {
+    const goalMatches = (goal?: string | null) =>
+      !goal || (displayGoalText !== null && formatFormulaText(goal) === displayGoalText)
+    const withoutExcludedHyp = (info: VisualHypGoalInfo) =>
+      !info.excludeHypType || !displayHypTypeTexts.includes(formatFormulaText(info.excludeHypType))
+    const hypGoalInfos = visualHypGoalInfos ?? []
+    return {
+      goal: displayGoalText === null
+        ? []
+        : visibleVisualGoalInfos.filter(info => goalInfoMatchesGoal(info, displayGoalText, displayHypTypeTexts)),
+      tacticHyp: (visualTacticHypInfos ?? []).filter(info => goalMatches(info.goal)),
+      hypGoal: hypGoalInfos.filter(info =>
+        info.target !== 'hyp' && info.target !== 'theorem' && goalMatches(info.goal) && withoutExcludedHyp(info)),
+      hyp: hypGoalInfos.filter(info => {
+        if (info.target !== 'hyp') return false
+        const card = visibleHyps.find(candidate =>
+          candidate.hyp.names.includes(info.hyp) || candidate.hyp.playName === info.hyp
+        )
+        if (!card) return false
+        return !info.hypType ||
+          formatFormulaText(TaggedText_stripTags(card.hyp.type)) === formatFormulaText(info.hypType)
+      }),
+      theorem: hypGoalInfos.filter(info =>
+        info.target === 'theorem' && goalMatches(info.goal) && withoutExcludedHyp(info)),
+      graph: proofGraphVisible ? (visualProofGraphInfos ?? []).filter(info => goalMatches(info.goal)) : [],
+    }
+  }, [displayGoalText, displayHypTypeTexts, proofGraphVisible, visibleHyps, visibleVisualGoalInfos,
+    visualHypGoalInfos, visualProofGraphInfos, visualTacticHypInfos])
+  // A finished proof keeps no hints about moves still to make.
+  const canvasHints = usePersistentHints(
+    persistentHints && !canvasState.completed, proofSteps.length, matchingCanvasHints,
+    canvasHintsEmpty, canvasHintsKept,
+  )
+  const shownGoalInfos = React.useMemo(() => withText(canvasHints.goal), [canvasHints.goal])
+  const activeTacticHypInfos = React.useMemo(
+    () => proofGraphOccupiesMainView ? [] : withText(canvasHints.tacticHyp),
+    [canvasHints.tacticHyp, proofGraphOccupiesMainView],
+  )
+  // With the proof graph in view the cards make way for it, except for hints that
+  // point at a theorem in the inventory, which stays where it is.
   const activeHypGoalInfos = React.useMemo(
-    () => (visualHypGoalInfos ?? []).filter(info =>
-      info.target !== 'hyp' &&
-      !proofGraphOccupiesMainView &&
-      (!info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText))
-    ),
-    [displayGoalText, proofGraphOccupiesMainView, visualHypGoalInfos],
+    () => {
+      const infos = withText(canvasHints.hypGoal)
+      if (!proofGraphOccupiesMainView) return infos
+      return infos.filter(info => !visibleHyps.some(card =>
+        card.hyp.names.includes(info.hyp) || card.hyp.playName === info.hyp))
+    },
+    [canvasHints.hypGoal, proofGraphOccupiesMainView, visibleHyps],
   )
   const activeHypInfos = React.useMemo(
-    () => (visualHypGoalInfos ?? []).filter(info => {
-      if (info.target !== 'hyp' || proofGraphOccupiesMainView) return false
-      const card = visibleHyps.find(candidate =>
-        candidate.hyp.names.includes(info.hyp) || candidate.hyp.playName === info.hyp
-      )
-      if (!card) return false
-      return !info.hypType ||
-        formatFormulaText(TaggedText_stripTags(card.hyp.type)) === formatFormulaText(info.hypType)
-    }),
-    [proofGraphOccupiesMainView, visibleHyps, visualHypGoalInfos],
+    () => proofGraphOccupiesMainView ? [] : withText(canvasHints.hyp),
+    [canvasHints.hyp, proofGraphOccupiesMainView],
+  )
+  const activeTheoremInfos = React.useMemo(
+    () => withText(canvasHints.theorem),
+    [canvasHints.theorem],
   )
   const activeProofGraphInfos = React.useMemo(
-    () => proofGraphVisible
-      ? (visualProofGraphInfos ?? []).filter(info =>
-          !info.goal || (displayGoalText !== null && formatFormulaText(info.goal) === displayGoalText)
-        )
-      : [],
-    [displayGoalText, proofGraphVisible, visualProofGraphInfos],
+    () => proofGraphVisible ? withText(canvasHints.graph) : [],
+    [canvasHints.graph, proofGraphVisible],
   )
+  // A hint pointing at a theorem card brings the theorems into view.
+  const theoremHintOpenedTrayRef = useRef(false)
+  useEffect(() => {
+    if (theoremHintOpenedTrayRef.current) return
+    const hypNames = new Set(visibleHyps.flatMap(card => [...card.hyp.names, card.hyp.playName ?? '']))
+    const pointsAtTheorem = activeTheoremInfos.length > 0 ||
+      activeHypGoalInfos.some(info => !hypNames.has(info.hyp) &&
+        propositionTheorems.some(theorem => theorem.theoremName === info.hyp || theorem.label === info.hyp))
+    if (!pointsAtTheorem || propositionTheorems.length === 0) return
+    theoremHintOpenedTrayRef.current = true
+    setActiveTrayTab('theorems')
+  }, [activeHypGoalInfos, activeTheoremInfos, propositionTheorems, visibleHyps])
 
   useEffect(() => {
     if (!isPhonePortrait && mobilePage !== 'main') {
@@ -6312,10 +6619,12 @@ export function VisualCanvas({
     }
     window.addEventListener('resize', updateGuides)
     window.addEventListener('scroll', updateGuides, true)
+    window.addEventListener('animationend', updateGuides, true)
     return () => {
       observer?.disconnect()
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
+      window.removeEventListener('animationend', updateGuides, true)
     }
   }, [activeTacticHypInfos, activeTrayTab, isPhonePortrait, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
 
@@ -6351,7 +6660,7 @@ export function VisualCanvas({
         const sourceCard = visibleHyps.find(card =>
           card.hyp.names.includes(info.hyp) || card.hyp.playName === info.hyp
         )
-        const sourceEl = sourceCard ? document.getElementById(sourceCard.id) : null
+        const sourceEl = sourceCard ? document.getElementById(sourceCard.id) : theoremCardElement(info.hyp)
         if (!sourceEl) continue
 
         const sourceRect = sourceEl.getBoundingClientRect()
@@ -6415,12 +6724,73 @@ export function VisualCanvas({
     }
     window.addEventListener('resize', updateGuides)
     window.addEventListener('scroll', updateGuides, true)
+    window.addEventListener('animationend', updateGuides, true)
     return () => {
       observer?.disconnect()
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
+      window.removeEventListener('animationend', updateGuides, true)
     }
-  }, [activeHypGoalInfos, isPhonePortrait, layoutVersion, trayHeight, visibleHyps])
+  }, [activeHypGoalInfos, activeTrayTab, isPhonePortrait, layoutVersion, trayHeight, trayPageIndexByTab, visibleHyps])
+
+  // Hints pointing at a theorem's card in the inventory: the callout sits above the
+  // tray, with an arrow down to the card.
+  useLayoutEffect(() => {
+    const updateGuides = () => {
+      if (activeTheoremInfos.length === 0) {
+        setTheoremInfoGuides(current => current.length === 0 ? current : [])
+        return
+      }
+      const trayRect = document.getElementById(THEOREM_TRAY_ID)?.getBoundingClientRect()
+      const canvasRect = combiningCanvasRef.current?.getBoundingClientRect()
+      const nextGuides: HypInfoGuide[] = []
+      for (const info of activeTheoremInfos) {
+        const cardEl = theoremCardElement(info.hyp)
+        if (!cardEl) continue
+        const cardRect = cardEl.getBoundingClientRect()
+        const guideWidth = Math.min(380, Math.max(260, window.innerWidth - 32))
+        const minLeft = (canvasRect?.left ?? 0) + 16
+        const maxLeft = Math.min(
+          window.innerWidth - guideWidth - 16,
+          (canvasRect?.right ?? window.innerWidth) - guideWidth - 16,
+        )
+        const left = clampViewportValue(cardRect.left + cardRect.width / 2 - guideWidth / 2, minLeft, maxLeft)
+        const bottom = (trayRect?.top ?? cardRect.top) - 64
+        nextGuides.push({
+          info,
+          style: { left, top: bottom, width: guideWidth, transform: 'translateY(-100%)' },
+          arrow: {
+            start: { x: cardRect.left + cardRect.width / 2, y: bottom + 8 },
+            end: { x: cardRect.left + cardRect.width / 2, y: cardRect.top + cardRect.height / 2 },
+            startPadding: 0,
+            endRect: guideRect(cardRect),
+            endGap: 8,
+            arc: 'none',
+          },
+        })
+      }
+      setTheoremInfoGuides(current =>
+        JSON.stringify(current) === JSON.stringify(nextGuides) ? current : nextGuides
+      )
+    }
+
+    updateGuides()
+    const tray = document.getElementById(THEOREM_TRAY_ID)
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateGuides)
+    if (observer) {
+      if (combiningCanvasRef.current) observer.observe(combiningCanvasRef.current)
+      if (tray) observer.observe(tray)
+    }
+    window.addEventListener('resize', updateGuides)
+    window.addEventListener('scroll', updateGuides, true)
+    window.addEventListener('animationend', updateGuides, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updateGuides)
+      window.removeEventListener('scroll', updateGuides, true)
+      window.removeEventListener('animationend', updateGuides, true)
+    }
+  }, [activeTheoremInfos, activeTrayTab, layoutVersion, trayHeight, trayPageIndexByTab])
 
   useLayoutEffect(() => {
     const updateGuides = () => {
@@ -6486,10 +6856,12 @@ export function VisualCanvas({
     if (observer && combiningCanvasRef.current) observer.observe(combiningCanvasRef.current)
     window.addEventListener('resize', updateGuides)
     window.addEventListener('scroll', updateGuides, true)
+    window.addEventListener('animationend', updateGuides, true)
     return () => {
       observer?.disconnect()
       window.removeEventListener('resize', updateGuides)
       window.removeEventListener('scroll', updateGuides, true)
+      window.removeEventListener('animationend', updateGuides, true)
     }
   }, [activeHypInfos, layoutVersion, trayHeight, visibleHyps])
 
@@ -6728,6 +7100,9 @@ export function VisualCanvas({
     if (!hasClickAction(clickAction) || !clickAction.playTactic) {
       throw new Error(`Goal on stream ${stream.id} is not directly clickable`)
     }
+    if (goalClickIsRefusedRfl(stream, clickAction, formatFormulaText(TaggedText_stripTags(stream.goal.type)))) {
+      throw new Error(`Goal on stream ${stream.id} is not closed by a click in this game`)
+    }
     await latestApplyInteraction(clickAction.playTactic, stream.id, {
       solvedGoalId: stream.id,
       streamSplit: clickAction.streamSplit,
@@ -6957,6 +7332,8 @@ export function VisualCanvas({
       rewriteGoalInTransform: applyTestRewriteGoalInTransform,
       rewriteHypInTransform: applyTestRewriteHypInTransform,
       closeTransform: closeTestTransform,
+      swapSidesInTransform: handleSwapSides,
+      resetTransform: resetTransformation,
       getTransformStatus,
       getLastTransformRewriteDebug,
       getLastDragDebug: () => lastDragDebugRef.current,
@@ -6992,9 +7369,8 @@ export function VisualCanvas({
     navigateToStream(activeStreamIds[currentStreamIndex + 1]!)
   }
 
-  const proofSidebarWidth = !isPhonePortrait && showProofSidebar ? 280 : 0
   const visualPageStyle = {
-    '--proof-sidebar-width': `${proofSidebarWidth}px`,
+    '--proof-sidebar-width': !isPhonePortrait && showProofSidebar ? '17.5rem' : '0px',
     '--tray-height': `${trayHeight}px`,
     '--mobile-goal-stack-height': `${goalStackHeight}px`,
   } as React.CSSProperties
@@ -7293,9 +7669,12 @@ export function VisualCanvas({
     const stream = displayStream
     const liveGoalStream = currentStream && currentStream.id === stream.id ? currentStream : stream
     const renderedGoalText = formatFormulaText(TaggedText_stripTags(stream.goal.type))
-    const clickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
+    const offeredClickAction = liveGoalStream.goal.clickAction ?? stream.goal.clickAction
+    const clickAction = goalClickIsRefusedRfl(liveGoalStream, offeredClickAction, renderedGoalText)
+      ? undefined
+      : offeredClickAction
     const isClickable = hasClickAction(clickAction)
-    const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled)
+    const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled, noGoalRfl)
     const isConstructable = goalIsConstructable(liveGoalStream)
     const isTacticTarget = activeDraggedTactic
       ? tacticCanTargetGoal(activeDraggedTactic, liveGoalStream)
@@ -7323,7 +7702,8 @@ export function VisualCanvas({
         // an actually solved loaded proof (or solved branch).
         isSolved={canvasState.completed || solvedGoalId === stream.id || currentStreamIsCompleted}
         animateSolved={solvedGoalId === stream.id}
-        visualInfos={visibleVisualGoalInfos}
+        visualInfos={persistentHints ? shownGoalInfos : visibleVisualGoalInfos}
+        infosMatched={persistentHints}
         infoPositions={infoPositions}
         showDropTarget={activeDraggedTactic ? isTacticTarget : isStatementTarget}
         isPotentialTarget={isTacticTarget || isStatementTarget}
@@ -7339,7 +7719,9 @@ export function VisualCanvas({
     )
   }
 
-  const mobileBelowGoalInfos = displayStream
+  const mobileBelowGoalInfos = persistentHints
+    ? shownGoalInfos.filter(info => info.position === 'below')
+    : displayStream
     ? visibleVisualGoalInfos.filter(info => {
         if (info.position !== 'below') return false
         if (info.goal && formatFormulaText(info.goal) !== displayGoalText) return false
@@ -7457,7 +7839,7 @@ export function VisualCanvas({
           </div>
 
           {proofGraphVisible && !isPhonePortrait && (
-            <div className="proof-tree-panel" ref={proofTreePanelRef}>
+            <div className="proof-tree-panel" id={PROOF_TREE_PANEL_ID} ref={proofTreePanelRef}>
               {renderProofGraphContent()}
             </div>
           )}
@@ -7501,9 +7883,9 @@ export function VisualCanvas({
                         ))}
                       </div>
                     )}
-                    {(tacticHypGuides.length > 0 || hypGoalGuides.length > 0 || hypInfoGuides.length > 0) && (
+                    {(tacticHypGuides.length > 0 || hypGoalGuides.length > 0 || hypInfoGuides.length > 0 || theoremInfoGuides.length > 0) && (
                       <div className="mobile-scrolling-guides">
-                        {[...tacticHypGuides, ...hypGoalGuides, ...hypInfoGuides].map((guide, index) => (
+                        {[...tacticHypGuides, ...hypGoalGuides, ...hypInfoGuides, ...theoremInfoGuides].map((guide, index) => (
                           <div key={index} className="visual-info-callout mobile-scrolling-guide">
                             <VisualInfoText text={guide.info.text} />
                           </div>
@@ -7658,7 +8040,20 @@ export function VisualCanvas({
                 </div>
               </React.Fragment>
             ))}
+            {!isPhonePortrait && theoremInfoGuides.map((guide, index) => (
+              <React.Fragment key={`${guide.info.hyp}-theorem-${index}`}>
+                <InstructionGuideArrow arrow={guide.arrow} className="combining-instruction-arrow" />
+                <div className="visual-info-callout combining-info theorem-info" style={guide.style}>
+                  <VisualInfoText text={guide.info.text} />
+                </div>
+              </React.Fragment>
+            ))}
           </div>
+          {canvasWarning && (
+            <div className="visual-info-callout visual-canvas-warning" role="alert" data-testid="canvas-warning">
+              <VisualInfoText text={canvasWarning} />
+            </div>
+          )}
           <div
             className="tr-controls"
             style={{
@@ -7796,6 +8191,9 @@ export function VisualCanvas({
           contextVarNames={constructionProps.contextVarNames}
           promptMode={constructionProps.promptMode}
           mode={constructionProps.mode}
+          successorName={successorName}
+          visualInfos={constructionTarget?.kind === 'forall_spec' ? constructionInfos : undefined}
+          persistentHints={persistentHints}
           isPhonePortrait={isPhonePortrait}
           onApply={handleConstructionApply}
           onClose={() => {
@@ -7836,6 +8234,7 @@ export function VisualCanvas({
           equalityHyps={transformProps.equalityHyps}
           theoremEqualityHyps={transformProps.theoremEqualityHyps}
           emphasizeItems={emphasizeItems}
+          axioms={axioms}
           visualInfos={transformTarget
             // Hypothesis-only guidance (e.g. "go back and rewrite the goal")
             // never shows on the goal, and goal guidance never on a hypothesis.
@@ -7843,13 +8242,19 @@ export function VisualCanvas({
               isHypothesisTransformInfo(info) === (transformTarget.kind === 'hyp'))
             : undefined}
           rewriteOnly={rewriteOnly}
+          rewriteCheck={goalCheckAvailable}
+          persistentHints={persistentHints}
           hideRewriteDirection={hideRewriteDirection}
+          hideSwapSides={hideSwapSides}
           emphasizeForall={emphasizeForall}
-          onCheck={rewriteOnly ? handleRewriteCheck : undefined}
+          onCheck={goalCheckAvailable ? handleRewriteCheck : undefined}
           completed={canvasState.completed}
           onRewrite={handleRewrite}
+          onSwap={handleSwapSides}
           onUndo={undoLastStep}
           canUndo={canUndo}
+          onReset={resetTransformation}
+          canReset={rewriteOnly ? proofSteps.length > 0 : transformationVersion > 0}
           onClose={() => {
             onGesture?.({ kind: 'view', command: 'close' })
             closeTransformationView()

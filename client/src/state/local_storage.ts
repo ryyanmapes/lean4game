@@ -82,6 +82,34 @@ export function loadVisualLightModePreference() {
   }
 }
 
+/** A game whose map offers the theme toggle stores its own choice, so it can't
+ * strand a player in another game that has no toggle. `index.html` reads this
+ * key too, to paint the page's background before the app has loaded. */
+function gameLightModeKey(gameId: string) {
+  return `${VISUAL_LIGHT_MODE_KEY}/${gameId}`
+}
+
+/** The game in the page's address, for what has to be known before the app renders. */
+export function gameIdFromLocation(): string | null {
+  return /\bg\/[^/#?]+\/[^/#?]+/.exec(window.location.pathname + window.location.hash)?.[0] ?? null
+}
+
+export function loadGameLightModePreference(gameId: string): boolean {
+  try {
+    return localStorage.getItem(gameLightModeKey(gameId)) === 'true'
+  } catch (e) {
+    return false
+  }
+}
+
+export function saveGameLightModePreference(gameId: string, isLightMode: boolean) {
+  try {
+    localStorage.setItem(gameLightModeKey(gameId), String(isLightMode))
+  } catch (e) {
+    // Ignore
+  }
+}
+
 export function saveVisualLightModePreference(isVisualLightMode: boolean) {
   try {
     localStorage.setItem(VISUAL_LIGHT_MODE_KEY, JSON.stringify(isVisualLightMode))

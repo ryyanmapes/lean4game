@@ -49,7 +49,10 @@ def saveGameData (allItemsByType : HashMap InventoryType (HashSet Name))
 
   for (worldId, world) in game.worlds.nodes.toArray do
     for (levelId, level) in world.levels.toArray do
-      IO.FS.writeFile (path / levelFileName worldId levelId) (toString (toJson (level.toInfo env)))
+      -- A world-wide `VisualHideSwapSides` reaches the client through its levels.
+      let info := { level.toInfo env with
+        visualHideSwapSides := level.visualHideSwapSides || world.visualHideSwapSides }
+      IO.FS.writeFile (path / levelFileName worldId levelId) (toString (toJson info))
 
   IO.FS.writeFile (path / gameFileName) (toString (getGameJson game))
 

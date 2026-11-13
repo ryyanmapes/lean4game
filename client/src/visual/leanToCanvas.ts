@@ -5,6 +5,7 @@ import {
   isHiddenDerivedTheoremName,
 } from './theoremNames'
 import { sanitizeLeanDisplayName } from './expr-engine'
+import { currentVisualInterfaceScale } from './interfaceScale'
 
 export function proofStateToCanvas(proof: ProofState | null | undefined): CanvasState {
   const steps = Array.isArray(proof?.steps) ? proof.steps : []
@@ -100,13 +101,14 @@ function gridPosition(streamIndex: number, cardIndex: number): { x: number; y: n
   const phoneColW = phoneCols === 1
     ? 0
     : Math.max(156, (viewportWidth - phoneStartX * 2 - phoneGap) / phoneCols)
-  const COL_W = phonePortrait ? phoneColW : compactLandscape ? 180 : 280
-  const ROW_H = phonePortrait ? 96 : compactLandscape ? 92 : 110
-  const START_X = phonePortrait ? phoneStartX : compactLandscape ? 28 : 80
+  const scale = currentVisualInterfaceScale()
+  const COL_W = phonePortrait ? phoneColW : compactLandscape ? 180 : 280 * scale
+  const ROW_H = phonePortrait ? 96 : compactLandscape ? 92 : 110 * scale
+  const START_X = phonePortrait ? phoneStartX : compactLandscape ? 28 : 80 * scale
   // On phone portrait, place hyps just below a typical goal card; the
   // collision resolver pushes them further down when the goal stack grows
   // (e.g. a tutorial info callout appears beneath the goal card).
-  const START_Y = phonePortrait ? 196 : compactLandscape ? 96 : 130
+  const START_Y = phonePortrait ? 196 : compactLandscape ? 96 : 130 * scale
   const cols = phonePortrait
     ? phoneCols
     : compactLandscape

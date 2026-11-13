@@ -1373,7 +1373,9 @@ private def goalClickAction? (goal : MVarId) : MetaM (Option ClickAction) := goa
   | some .introProp =>
       pure <| some (directClickAction "click_goal" "Click to introduce assumption")
   | some .splitAnd =>
-      pure <| some (splitClickAction "click_goal" "Click to split conjunction")
+      let isIff := (← withReducible (whnf target)).isAppOfArity ``Iff 2
+      pure <| some (splitClickAction "click_goal"
+        (if isIff then "Click to split into both directions" else "Click to split conjunction"))
   | _ =>
       let targetWhnf ← withReducible (whnf target)
       match targetWhnf with

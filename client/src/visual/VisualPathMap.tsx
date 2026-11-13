@@ -26,6 +26,7 @@ import {
   roundedPathData,
   type PathMapNode,
 } from './pathMapLayout'
+import { visualInterfaceScale } from './interfaceScale'
 import { bonusAnchorsOf, computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
 
 /** Fill and edge of each named world colour. */
@@ -40,6 +41,8 @@ const WORLD_COLORS: Record<string, { fill: string; edge: string }> = {
   orange: { fill: '#f97316', edge: '#c2410c' },
   red: { fill: '#ef4444', edge: '#b91c1c' },
   pink: { fill: '#ec4899', edge: '#be185d' },
+  indigo: { fill: '#6366f1', edge: '#4338ca' },
+  lime: { fill: '#84cc16', edge: '#4d7c0f' },
 }
 
 interface PathMapTheme {
@@ -55,6 +58,9 @@ const LIGHT_THEME: PathMapTheme = { background: '#f8fafc', shadow: '#cbd5e1', lo
 const PATH_OUTER_WIDTH = 16
 const PATH_INNER_WIDTH = 10
 const MAP_PADDING = 48
+/** A phone scrolls sideways rather than shrink the map below this, so its levels
+ * stay readable and tappable. */
+const MIN_PHONE_SCALE = 0.62
 
 interface LevelMeta {
   title?: string
@@ -69,17 +75,27 @@ function worldColor(name: string) {
   return WORLD_COLORS[name] ?? WORLD_COLORS.purple!
 }
 
+/** Each game's level metadata, kept for the session: coming back from a level
+ * paints the map complete straight away, with no fetch. */
+const levelMetaCache = new Map<string, Record<string, LevelMeta>>()
+
+/** The metadata of every level of a game, or null until it has all arrived. Levels'
+ * labels and sizes depend on it, so the map waits rather than paint and correct them. */
 function useLevelMeta(gameId: string, worldSize: Record<string, number> | null | undefined) {
-  const [meta, setMeta] = React.useState<Record<string, LevelMeta>>({})
+  const [meta, setMeta] = React.useState<Record<string, LevelMeta> | null>(() => levelMetaCache.get(gameId) ?? null)
   React.useEffect(() => {
-    if (!worldSize) return
+    if (!worldSize || levelMetaCache.has(gameId)) return
     const controller = new AbortController()
     const base = getDataBaseUrl().replace(/\/$/u, '')
+    let complete = true
     const requests = Object.entries(worldSize).flatMap(([world, size]) =>
       Array.from({ length: size }, (_, index) => {
         const level = index + 1
         return fetch(`${base}/${gameId}/level__${world}__${level}.json`, { signal: controller.signal })
-          .then(response => response.ok ? response.json() : null)
+          .then(response => {
+            if (!response.ok) complete = false
+            return response.ok ? response.json() : null
+          })
           .then((data: {
             title?: string | null
             introduction?: string | null
@@ -93,10 +109,16 @@ function useLevelMeta(gameId: string, worldSize: Record<string, number> | null |
             boss: Boolean(data?.visualBossLevel),
             introduction: data?.introduction ?? undefined,
           }] as const)
-          .catch(() => [`${world}:${level}`, { textLevel: false, boss: false }] as const)
+          .catch(() => {
+            complete = false
+            return [`${world}:${level}`, { textLevel: false, boss: false }] as const
+          })
       }))
     void Promise.all(requests).then(entries => {
-      if (!controller.signal.aborted) setMeta(Object.fromEntries(entries))
+      if (controller.signal.aborted) return
+      const next = Object.fromEntries(entries)
+      if (complete) levelMetaCache.set(gameId, next)
+      setMeta(next)
     })
     return () => controller.abort()
   }, [gameId, worldSize])
@@ -114,7 +136,7 @@ function PathMapLevel({ node, meta, state, theme, onOpen }: {
   const color = worldColor(node.color)
   const label = meta?.label ?? String(node.index)
   const title = plainLevelTitle(meta?.title ?? `Level ${label}`)
-  const { tooltip, triggerProps } = useMapLevelTooltip(state === 'locked' ? `${title} (locked)` : title)
+  const { tooltip, triggerProps } = useMapLevelTooltip(state === 'locked' ? `🔒 ${title}` : title)
   const activate = () => onOpen?.()
   const stroke = state === 'completed' ? color.edge : state === 'frontier' ? color.fill : theme.shadow
   const fill = state === 'completed' ? color.fill : theme.background
@@ -211,9 +233,12 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   // Subscribe so completions and imports repaint the map.
   useAppSelector(selectProgress(gameId))
   const meta = useLevelMeta(gameId, gameInfo.worldSize)
-  const [viewportWidth, setViewportWidth] = React.useState(() => window.innerWidth)
+  const [{ viewportWidth, viewportHeight }, setViewport] = React.useState(() => ({
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  }))
   React.useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth)
+    const onResize = () => setViewport({ viewportWidth: window.innerWidth, viewportHeight: window.innerHeight })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -230,6 +255,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
       column: node.visualMapColumn,
       shared: node.visualSharedPath,
       continues: node.visualContinues,
+      bottom: node.visualMapBottom,
     }])),
     edges: gameInfo.worlds?.edges ?? [],
     worldSize: gameInfo.worldSize ?? {},
@@ -259,7 +285,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
     const match = requested ? /^(.+)\/(\d+)$/u.exec(requested) : null
     return match ? { world: match[1]!, level: Number(match[2]) } : null
   })
-  const openTextMeta = openText ? meta[`${openText.world}:${openText.level}`] : undefined
+  const openTextMeta = openText ? meta?.[`${openText.world}:${openText.level}`] : undefined
   const closeText = React.useCallback(() => {
     if (!openText) return
     dispatch(levelCompleted({ game: gameId, world: openText.world, level: openText.level }))
@@ -272,7 +298,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   }, [dispatch, gameId, openText, searchParams, setSearchParams])
 
   const openLevel = (node: PathMapNode) => {
-    const levelMeta = meta[`${node.world}:${node.level}`]
+    const levelMeta = meta?.[`${node.world}:${node.level}`]
     if (levelMeta?.textLevel) {
       dispatch(levelEntered({ game: gameId, world: node.world, level: node.level }))
       setOpenText({ world: node.world, level: node.level })
@@ -294,6 +320,8 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
     const targetRect = target.getBoundingClientRect()
     const offset = targetRect.top + targetRect.height / 2 - (scrollRect.top + scrollRect.height / 2)
     if (offset > 0) scroller.scrollTop += offset
+    // Sideways only where a phone can't fit the whole map.
+    scroller.scrollLeft += targetRect.left + targetRect.width / 2 - (scrollRect.left + scrollRect.width / 2)
   })
 
   const { bounds } = layout
@@ -301,20 +329,34 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   const viewY = bounds.y1 - MAP_PADDING
   const viewWidth = bounds.x2 - bounds.x1 + 2 * MAP_PADDING
   const viewHeight = bounds.y2 - bounds.y1 + 2 * MAP_PADDING
-  // Natural size where it fits; narrower screens scale the whole map down.
-  const displayWidth = Math.min(viewWidth, Math.max(240, viewportWidth - 16))
+  // Natural size where it fits, larger on a large window, and scaled down to fit
+  // a narrower one, as far as a phone can still read it.
+  const fittedWidth = Math.min(
+    viewWidth * visualInterfaceScale(viewportWidth, viewportHeight),
+    // The window less the scroller's padding and scrollbar.
+    Math.max(240, viewportWidth - (compact ? 16 : 48)),
+  )
+  const displayWidth = compact ? Math.max(fittedWidth, viewWidth * MIN_PHONE_SCALE) : fittedWidth
 
   // Two passes, outlines then fillings, so overlapping stretches join without
   // seams; lit stretches go last so they cover the outline of an unlit twin.
-  const segments = layout.segments.map(segment => ({
+  const painted = layout.segments.map(segment => ({
     ...segment,
     lit: isDone(segment.source.world, segment.source.level),
     data: roundedPathData(segment.points, PATH_MAP_CORNER_RADIUS),
   })).sort((a, b) => Number(a.lit) - Number(b.lit))
+  const segments = painted.filter(segment => !segment.bridge)
+  // Where one path crosses another, a bridge is painted over both afterwards,
+  // outline and all, so that the path underneath is seen to pass below.
+  const bridges = painted.filter(segment => segment.bridge)
+
+  // A world's title is grey until one of its levels can be played.
+  const worldUnlocked = (world: string) =>
+    layout.nodes.some(node => node.world === world && stateOf(node) !== 'locked')
 
   return (
     <div className="visual-map-scroll visual-path-map-scroll" ref={scrollRef} data-testid="visual-world-map">
-      <svg
+      {meta && <svg
         xmlns="http://www.w3.org/2000/svg"
         className="visual-path-map-svg"
         data-testid="visual-path-map"
@@ -342,32 +384,56 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
             />
           ))}
         </g>
-        {layout.labels.map(label => (
-          <text
-            key={`label:${label.world}`}
-            className="path-map-world-label"
-            data-testid="path-map-world-label"
-            x={label.x}
-            y={label.y}
-            dy="0.35em"
-            textAnchor="middle"
-            fill={worldColor(label.color).fill}
-          >{label.text}</text>
-        ))}
+        <g className="path-map-bridges" fill="none" strokeLinecap="butt">
+          {bridges.map(bridge => (
+            <React.Fragment key={bridge.key}>
+              <path
+                d={bridge.data}
+                stroke={bridge.lit ? worldColor(bridge.color).edge : theme.shadow}
+                strokeWidth={PATH_OUTER_WIDTH}
+              />
+              <path
+                data-testid="path-map-bridge"
+                data-segment={bridge.key}
+                data-lit={bridge.lit ? 'true' : 'false'}
+                d={bridge.data}
+                stroke={bridge.lit ? worldColor(bridge.color).fill : theme.background}
+                strokeWidth={PATH_INNER_WIDTH}
+              />
+            </React.Fragment>
+          ))}
+        </g>
+        {layout.labels.map(label => {
+          const unlocked = worldUnlocked(label.world)
+          return (
+            <text
+              key={`label:${label.world}`}
+              className="path-map-world-label"
+              data-testid="path-map-world-label"
+              data-unlocked={unlocked ? 'true' : 'false'}
+              data-anchor={label.anchor}
+              x={label.x}
+              y={label.y}
+              dy="0.35em"
+              textAnchor={label.anchor}
+              fill={unlocked ? worldColor(label.color).fill : theme.lockedText}
+            >{label.text}</text>
+          )
+        })}
         {layout.nodes.map(node => {
           const state = stateOf(node)
           return (
             <PathMapLevel
               key={`${node.world}:${node.level}`}
               node={node}
-              meta={meta[`${node.world}:${node.level}`]}
+              meta={meta?.[`${node.world}:${node.level}`]}
               state={state}
               theme={theme}
               onOpen={state !== 'locked' || openAnyLevel ? () => openLevel(node) : undefined}
             />
           )
         })}
-      </svg>
+      </svg>}
       {openText && openTextMeta && (
         <TextLevelDialog
           title={openTextMeta.title ?? 'Welcome'}

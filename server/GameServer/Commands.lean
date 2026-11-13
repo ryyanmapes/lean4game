@@ -207,6 +207,20 @@ left to right. -/
 elab "VisualHideRewriteDirection" : command => do
   modifyCurLevel fun lvl => pure { lvl with visualHideRewriteDirection := true }
 
+/-- Hide Rewrite Mode's swap-sides button, which turns `a = b` into `b = a`. In a level
+file it applies to that level; in a world file, to every level of the world. -/
+elab "VisualHideSwapSides" : command => do
+  match ← getCurLayer with
+  | .Level => modifyCurLevel fun lvl => pure { lvl with visualHideSwapSides := true }
+  | .World => modifyCurWorld fun world => pure { world with visualHideSwapSides := true }
+  | .Game => throwError "VisualHideSwapSides belongs in a world or level file"
+
+/-- Refuse Rewrite Mode on this level's goal: opening it shows a warning instead, so the
+player proves the equality like any other proposition. Rewrite Mode on a hypothesis
+stays available. -/
+elab "VisualNoRewriteMode" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualNoRewriteMode := true }
+
 /-- Highlight the `∀ …` part of a rule card in Rewrite Mode. Example:
 `VisualEmphasizeForall add_comm` -/
 elab "VisualEmphasizeForall" name:ident : command => do
@@ -227,6 +241,43 @@ Fast `exfalso` setting does for players who switch it on. Use it in the game fil
 elab "VisualFastExfalso" : command => do
   modifyCurGame fun game => pure { game with visualFastExfalso := true }
 
+/-- Keep Visual Lean hints up when the proof moves on. A hint written for one goal
+appears when that goal does and then stays, without its arrow if the arrow's target is
+gone, until another hint in the same view appears. Undo brings back the hint of the
+state it returns to. A hint whose text is empty shows nothing but still replaces the
+one before it, and `VisualGoalInfoOnGoal … while …` writes a hint that leaves with its
+goal. Use it in the game file, before `MakeGame`. -/
+elab "VisualPersistentHints" : command => do
+  modifyCurGame fun game => pure { game with visualPersistentHints := true }
+
+/-- In Rewrite Mode on a goal, show the check mark once both sides match in every level,
+not only in `VisualRewriteOnly` ones. Clicking it closes the goal; if that finishes the
+level, the player stays in Rewrite Mode and can go Back to see the finished proof. Use it
+in the game file, before `MakeGame`. -/
+elab "VisualRewriteCheck" : command => do
+  modifyCurGame fun game => pure { game with visualRewriteCheck := true }
+
+/-- The name of the game's successor function, for the term builder of Visual Lean's
+specialization view, when it isn't `succ`. Use it in the game file, before `MakeGame`.
+Example: `VisualSuccessorName S` -/
+elab "VisualSuccessorName" name:ident : command => do
+  modifyCurGame fun game => pure { game with visualSuccessorName? := some name.getId.toString }
+
+/-- Don't let a click on a goal `a = a` close it in Visual Lean. The player opens the goal
+in Rewrite Mode instead and uses the check mark there, so pair this with
+`VisualRewriteCheck`. Clicks that introduce or split a goal are unaffected. Use it in the
+game file, before `MakeGame`. -/
+elab "VisualNoGoalRfl" : command => do
+  modifyCurGame fun game => pure { game with visualNoGoalRfl := true }
+
+/-- Show these theorems in the axiom colour in Visual Lean, whichever inventory tab
+(`TheoremDoc … in "…"`) they are filed under. Use it in the game file, before `MakeGame`;
+it can be used several times. Example: `VisualAxioms MyNat.add_zero MyNat.add_succ` -/
+elab "VisualAxioms" names:ident* : command => do
+  modifyCurGame fun game => pure { game with
+    visualAxioms := names.foldl (fun axioms name =>
+      if axioms.contains name.getId then axioms else axioms.push name.getId) game.visualAxioms }
+
 /-- Draw the Visual Lean world map as paths of individual levels instead of worlds with
 orbiting level dots. Each world is a column of its levels; worlds join along their
 dependencies. Use it in the game file, before `MakeGame`. See also `VisualBonusOf`,
@@ -242,11 +293,12 @@ elab "VisualBonusOf" source:ident level:num : command => do
     visualBonusOf? := some (source.getId, level.getNat) }
 
 /-- Path map: colour of the current world's path, one of `purple`, `blue`, `sky`,
-`teal`, `green`, `amber`, `orange`, `red` and `pink`. Worlds without one get a colour
-in map order. Use it in the world file. Example: `VisualWorldColor amber` -/
+`teal`, `green`, `amber`, `orange`, `red`, `pink`, `indigo` and `lime`. Worlds without
+one get a colour in map order. Use it in the world file. Example: `VisualWorldColor amber` -/
 elab "VisualWorldColor" color:ident : command => do
   let name := color.getId.toString
-  let known := ["purple", "blue", "sky", "teal", "green", "amber", "orange", "red", "pink"]
+  let known := ["purple", "blue", "sky", "teal", "green", "amber", "orange", "red", "pink",
+    "indigo", "lime"]
   unless known.contains name do
     throwErrorAt color m!"Unknown colour `{name}`; expected one of {known}"
   modifyCurWorld fun world => pure { world with visualColor? := some name }
@@ -256,6 +308,9 @@ syntax visualMapColumnArg := ("-")? num
 /-- Path map: column of the current world's path, `0` for the centre, negative numbers to
 the left and positive ones to the right. Without it, a world continues in the column of
 the world it follows, and worlds that split off one world spread out around it.
+In a bonus world (`VisualBonusOf`), whose levels are a row beside the world it branches
+off, it is instead the column that the path from the bonus on to a later world runs
+down; without it, that path goes straight down from the bonus's last level.
 Use it in the world file. Example: `VisualMapColumn -1` -/
 elab "VisualMapColumn" column:visualMapColumnArg : command => do
   let value : Int ← match column with
@@ -269,6 +324,11 @@ level before the paths split. It is drawn in the shared grey and gets no title l
 Use it in the world file. -/
 elab "VisualSharedPath" : command => do
   modifyCurWorld fun world => pure { world with visualSharedPath := true }
+
+/-- Path map: put the current world below every other world, as for a closing level that
+several paths lead to. Use it in the world file. -/
+elab "VisualMapBottom" : command => do
+  modifyCurWorld fun world => pure { world with visualMapBottom := true }
 
 /-- Path map: the current world carries on the path of world `source` under the same name,
 for when a world needs splitting so that other paths can join or leave it partway. It is
@@ -303,6 +363,10 @@ def mkVisualTransformBackInfo (goal : Option String) (text : String) :
 def mkVisualTransformReverseInfo (goal : Option String) (text : String) :
     VisualTransformInfo :=
   { kind := "reverse", goal := goal, text := text }
+
+def mkVisualTransformSwapInfo (goal : Option String) (text : String) :
+    VisualTransformInfo :=
+  { kind := "swap", goal := goal, text := text }
 
 def mkVisualTransformGeneralInfo (goal : Option String) (text : String) :
     VisualTransformInfo :=
@@ -357,6 +421,21 @@ elab "VisualGoalInfoOnGoal " pos:ident &"false" goalText:str &"show" text:str : 
   unless position == "above" || position == "below" do
     throwErrorAt pos "VisualGoalInfoOnGoal position must be `above` or `below`"
   let info := mkVisualGoalInfo position false (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
+
+/-- Like `VisualGoalInfoOnGoal … show …`, but the text leaves as soon as the goal stops
+matching, even in a game with `VisualPersistentHints`. Example:
+`VisualGoalInfoOnGoal above true "A ∧ B" while "Click the goal to split it."` -/
+elab "VisualGoalInfoOnGoal " pos:ident arrow:visualBool goalText:str &"while" text:str : command => do
+  let position := pos.getId.toString
+  unless position == "above" || position == "below" do
+    throwErrorAt pos "VisualGoalInfoOnGoal position must be `above` or `below`"
+  let arrowBool :=
+    match arrow with
+    | `(visualBool| true) => true
+    | _ => false
+  let info := { mkVisualGoalInfo position arrowBool (some (goalText.getString)) text.getString with
+    onlyWhile := true }
   modifyCurLevel fun lvl => pure { lvl with visualGoalInfos := lvl.visualGoalInfos.push info }
 
 /-- Add Visual Lean-only instructional text near the goal card, only while the current
@@ -432,15 +511,40 @@ elab "VisualTransformBackInfoOnGoal " goalText:str &"show" text:str : command =>
 /-- Add Visual Lean-only transformation guidance pointing to the Back button,
 shown whenever the player opens Transformation Mode on a *hypothesis* instead of
 the goal (e.g. to steer them back to rewriting the goal). Encoded as a `back`
-info with `target := "hypothesis"`; goal-targeted infos never have that target. -/
-elab "VisualTransformBackInfoOnHypothesis " &"show" text:str : command => do
-  let info := { mkVisualTransformBackInfo none text.getString with target := "hypothesis" }
+info with `target := "hypothesis"`; goal-targeted infos never have that target.
+With a display text, as in `VisualTransformBackInfoOnHypothesis "x = 1" show "…"`, it
+shows only while the hypothesis being rewritten reads that. -/
+elab "VisualTransformBackInfoOnHypothesis " hypText:(str)? &"show" text:str : command => do
+  let info := { mkVisualTransformBackInfo (hypText.map (·.getString)) text.getString with
+    target := "hypothesis" }
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only instructional text to Rewrite Mode on a *hypothesis*, without an
+arrow, while the hypothesis being rewritten reads the supplied display text. Example:
+`VisualTransformInfoOnHypothesis "x = S(0)" show "Rewrite this into `x = 1`."` -/
+elab "VisualTransformInfoOnHypothesis " hypText:str &"show" text:str : command => do
+  let info := { mkVisualTransformGeneralInfo (some hypText.getString) text.getString with
+    target := "hypothesis" }
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
 
 /-- Add Visual Lean-only transformation guidance pointing to the rewrite-direction
 button, only while the current goal matches the supplied display text. -/
 elab "VisualTransformReverseInfoOnGoal " goalText:str &"show" text:str : command => do
   let info := mkVisualTransformReverseInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only transformation guidance pointing to the swap-sides button,
+only while the current goal matches the supplied display text. -/
+elab "VisualTransformSwapInfoOnGoal " goalText:str &"show" text:str : command => do
+  let info := mkVisualTransformSwapInfo (some (goalText.getString)) text.getString
+  modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
+
+/-- Add Visual Lean-only guidance pointing to the swap-sides button in Rewrite Mode on a
+*hypothesis*, while the hypothesis being rewritten reads the supplied display text.
+Example: `VisualTransformSwapInfoOnHypothesis "1 = x" show "Use the swap button!"` -/
+elab "VisualTransformSwapInfoOnHypothesis " hypText:str &"show" text:str : command => do
+  let info := { mkVisualTransformSwapInfo (some hypText.getString) text.getString with
+    target := "hypothesis" }
   modifyCurLevel fun lvl => pure { lvl with visualTransformInfos := lvl.visualTransformInfos.push info }
 
 /-- Add Visual Lean-only instructional text inside the transformation overlay
@@ -494,6 +598,23 @@ elab "VisualHypGoalInfoOnGoal " hyp:ident goalText:str &"show" text:str : comman
   let info := mkVisualHypGoalInfo hyp.getId.toString (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
 
+/-- Add Visual Lean-only guidance with an arrow pointing to the card of theorem `thm` in
+the inventory, while the current goal matches the supplied display text. Example:
+`VisualTheoremInfoOnGoal MyNat.reflection "S(0) = S(0)" show "Click `reflection`."`
+(`VisualHypGoalInfoOnGoal` with a theorem's name draws an arrow from its card to the goal.) -/
+elab "VisualTheoremInfoOnGoal " thm:ident goalText:str &"show" text:str : command => do
+  let info := { mkVisualHypGoalInfo thm.getId.toString (some goalText.getString) text.getString with
+    target := "theorem" }
+  modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
+
+/-- Like `VisualTheoremInfoOnGoal`, but only while the active goal has no hypothesis of
+type `hypType`, e.g. before the player has made the theorem's instance they need. -/
+elab "VisualTheoremInfoOnGoalWithoutHyp " thm:ident goalText:str hypType:str &"show" text:str :
+    command => do
+  let info := { mkVisualHypGoalInfo thm.getId.toString (some goalText.getString) text.getString with
+    target := "theorem", excludeHypType := some hypType.getString }
+  modifyCurLevel fun lvl => pure { lvl with visualHypGoalInfos := lvl.visualHypGoalInfos.push info }
+
 /-- Add Visual Lean-only guidance immediately below a hypothesis. The message
 disappears as soon as that hypothesis's displayed type changes. -/
 elab "VisualHypInfoOnHyp " hyp:ident hypType:str &"show" text:str : command => do
@@ -516,6 +637,43 @@ only while the current goal matches the supplied display text. -/
 elab "VisualProofGraphInfoOnGoal " goalText:str &"show" text:str : command => do
   let info := mkVisualProofGraphInfo (some (goalText.getString)) text.getString
   modifyCurLevel fun lvl => pure { lvl with visualProofGraphInfos := lvl.visualProofGraphInfos.push info }
+
+syntax visualSpecializeGoal := &"onGoal" str
+
+def visualSpecializeGoal? : Option (TSyntax ``visualSpecializeGoal) → Option String
+  | some stx => match stx with
+    | `(visualSpecializeGoal| onGoal $goal:str) => some goal.getString
+    | _ => none
+  | none => none
+
+/-- Add Visual Lean-only text to the specialization view (where a player fills in the
+variable of a `∀` statement) while the term built so far reads `term`, written as
+displayed with `?` for each empty slot. With `onGoal "…"`, only while the goal being
+specialized for reads that. Example:
+`VisualSpecializeInfo "S(?)" onGoal "S(0) = S(0)" show "Now drag the `0` inside of that!"` -/
+elab "VisualSpecializeInfo " term:str goal:(visualSpecializeGoal)? &"show" text:str : command => do
+  let info : VisualSpecializationInfo :=
+    { kind := "info", term := some term.getString, goal := visualSpecializeGoal? goal,
+      text := text.getString }
+  modifyCurLevel fun lvl => pure { lvl with visualSpecializeInfos := lvl.visualSpecializeInfos.push info }
+
+/-- Like `VisualSpecializeInfo`, with an arrow from the brick labelled `brick` (as
+displayed, e.g. `"S(_)"` or `"0"`) to the first empty slot. Example:
+`VisualSpecializeBrickInfo "S(_)" "?" show "Drag `S(_)` into the workspace."` -/
+elab "VisualSpecializeBrickInfo " brick:str term:str goal:(visualSpecializeGoal)? &"show" text:str :
+    command => do
+  let info : VisualSpecializationInfo :=
+    { kind := "brick", brick := brick.getString, term := some term.getString,
+      goal := visualSpecializeGoal? goal, text := text.getString }
+  modifyCurLevel fun lvl => pure { lvl with visualSpecializeInfos := lvl.visualSpecializeInfos.push info }
+
+/-- Like `VisualSpecializeInfo`, with an arrow to the Done button. Example:
+`VisualSpecializeDoneInfo "S(0)" show "Click ‘Done’."` -/
+elab "VisualSpecializeDoneInfo " term:str goal:(visualSpecializeGoal)? &"show" text:str : command => do
+  let info : VisualSpecializationInfo :=
+    { kind := "done", term := some term.getString, goal := visualSpecializeGoal? goal,
+      text := text.getString }
+  modifyCurLevel fun lvl => pure { lvl with visualSpecializeInfos := lvl.visualSpecializeInfos.push info }
 
 -- Note: the syntax to add multiple is `(&"anotherOption" <|> &"unbundleHyps")`
 syntax settingsArg := atomic(" (" (&"unbundleHyps") " := " withoutPosition(term) ")")

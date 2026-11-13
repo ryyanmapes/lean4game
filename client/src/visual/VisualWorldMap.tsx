@@ -17,6 +17,8 @@ import {
   faDownload,
   faEraser,
   faLockOpen,
+  faMoon,
+  faSun,
   faUpload,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons'
@@ -27,6 +29,7 @@ import { GameIdContext } from '../app'
 import { PreferencesContext } from '../components/infoview/context'
 import { useGetGameInfoQuery } from '../state/api'
 import { selectCompleted, selectEntered, selectProgress } from '../state/progress'
+import { saveGameLightModePreference } from '../state/local_storage'
 import { store } from '../state/store'
 import { computeWorldLayout } from '../components/world_tree'
 import { plainLevelTitle } from '../components/annotated_level_title'
@@ -167,7 +170,7 @@ function VisualLevelIcon({ world, level, displayLevel, visualIndex, position, co
   // explanations inside the compact map tooltip.
   const levelLabel = plainLevelTitle(title ?? `Level ${displayLevel}`)
   // Locked levels stay focusable so their names can still be read.
-  const { tooltip, triggerProps } = useMapLevelTooltip(locked ? `${levelLabel} (locked)` : levelLabel)
+  const { tooltip, triggerProps } = useMapLevelTooltip(locked ? `🔒 ${levelLabel}` : levelLabel)
   const N = Math.max(worldSize, NMIN)
   const beta = 2 * Math.PI / Math.min(N + 2, ((N < (NMAX + 1) ? NMAX : NSPIRAL) + 1))
   let R = 1.1 * r / Math.sin(beta / 2)
@@ -476,6 +479,8 @@ function VisualMapAppBar({
   fastExfalsoFixedByGame,
   openAnyLevel,
   onToggleOpenAnyLevel,
+  isLightMode,
+  onToggleLightMode,
 }: {
   gameTitle: string
   autoBranchSwitching: boolean
@@ -486,6 +491,9 @@ function VisualMapAppBar({
   fastExfalsoFixedByGame: boolean
   openAnyLevel: boolean
   onToggleOpenAnyLevel: () => void
+  isLightMode: boolean
+  /** Only the games that offer the light scheme pass this. */
+  onToggleLightMode?: () => void
 }) {
   const { t } = useTranslation()
   const gameId = React.useContext(GameIdContext)
@@ -511,6 +519,18 @@ function VisualMapAppBar({
       </div>
       <span className="visual-map-title">{gameTitle}</span>
       <div className="visual-map-side visual-map-actions">
+        {onToggleLightMode && (
+          <button
+            type="button"
+            className={`visual-map-theme-toggle${isLightMode ? ' active' : ''}`}
+            onClick={onToggleLightMode}
+            aria-pressed={isLightMode}
+            aria-label={isLightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+            title={isLightMode ? 'Light mode' : 'Dark mode'}
+          >
+            <FontAwesomeIcon icon={toIconProp(isLightMode ? faSun : faMoon)} />
+          </button>
+        )}
         <VisualMapMenuButton />
       </div>
       <div className={`visual-map-dropdown${navOpen ? ' open' : ''}`}>
@@ -973,6 +993,13 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
       fastExfalsoFixedByGame={gameInfo.data?.visualFastExfalso ?? false}
       openAnyLevel={isVisualOpenAnyLevel}
       onToggleOpenAnyLevel={() => setIsVisualOpenAnyLevel(!isVisualOpenAnyLevel)}
+      isLightMode={isVisualLightMode}
+      onToggleLightMode={gameInfo.data.visualPathMap
+        ? () => {
+            saveGameLightModePreference(gameId, !isVisualLightMode)
+            setIsVisualLightMode(!isVisualLightMode)
+          }
+        : undefined}
     />
   )
 

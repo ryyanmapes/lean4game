@@ -19,7 +19,7 @@ import { LoadFailureScreen } from './LoadFailureScreen'
 import { classifyLoadFailure } from './loadFailure'
 import { unloadedFeedbackState } from './loadDiagnostics'
 import type { LoadFailure } from './loadFailure'
-import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
+import type { CanvasState, PropositionTheorem, VisualGoalInfo, VisualHypGoalInfo, VisualProofGraphInfo, VisualSpecializationInfo, VisualTactic, VisualTacticHypInfo, VisualTransformInfo } from './types'
 import type { EqualityHyp } from './TransformationView'
 import { parseEqualityHyp } from './TransformationView'
 import { buildEqualityTheoremDisplay, buildPropositionTheoremDisplay } from './quantifiedStatement'
@@ -106,6 +106,8 @@ const DEFAULT_LEVEL_PRESENTATION = {
   levelNumber: undefined,
   rewriteOnly: false,
   hideRewriteDirection: false,
+  hideSwapSides: false,
+  noRewriteMode: false,
   emphasizeForall: [] as string[],
   mulDot: false,
 }
@@ -326,10 +328,13 @@ export function VisualProofPage() {
   const [visualTacticHypInfos, setVisualTacticHypInfos] = useState<VisualTacticHypInfo[]>([])
   const [visualHypGoalInfos, setVisualHypGoalInfos] = useState<VisualHypGoalInfo[]>([])
   const [visualProofGraphInfos, setVisualProofGraphInfos] = useState<VisualProofGraphInfo[]>([])
+  const [visualSpecializeInfos, setVisualSpecializeInfos] = useState<VisualSpecializationInfo[]>([])
   const [levelPresentation, setLevelPresentation] = useState<{
     levelNumber?: string
     rewriteOnly: boolean
     hideRewriteDirection: boolean
+    hideSwapSides: boolean
+    noRewriteMode: boolean
     emphasizeForall: string[]
     mulDot: boolean
   }>(DEFAULT_LEVEL_PRESENTATION)
@@ -556,6 +561,7 @@ export function VisualProofPage() {
     setVisualTacticHypInfos([])
     setVisualHypGoalInfos([])
     setVisualProofGraphInfos([])
+    setVisualSpecializeInfos([])
     setLevelPresentation(DEFAULT_LEVEL_PRESENTATION)
     if (!worldId || !levelId) return
     let active = true
@@ -573,10 +579,13 @@ export function VisualProofPage() {
         visualTacticHypInfos?: VisualTacticHypInfo[]
         visualHypGoalInfos?: VisualHypGoalInfo[]
         visualProofGraphInfos?: VisualProofGraphInfo[]
+        visualSpecializeInfos?: VisualSpecializationInfo[]
         visualLevelNumber?: string | null
         visualTextLevel?: boolean
         visualRewriteOnly?: boolean
         visualHideRewriteDirection?: boolean
+        visualHideSwapSides?: boolean
+        visualNoRewriteMode?: boolean
         visualEmphasizeForall?: string[]
         visualMulDot?: boolean
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
@@ -599,10 +608,13 @@ export function VisualProofPage() {
         if (levelData.visualTacticHypInfos?.length) setVisualTacticHypInfos(levelData.visualTacticHypInfos)
         if (levelData.visualHypGoalInfos?.length) setVisualHypGoalInfos(levelData.visualHypGoalInfos)
         if (levelData.visualProofGraphInfos?.length) setVisualProofGraphInfos(levelData.visualProofGraphInfos)
+        if (levelData.visualSpecializeInfos?.length) setVisualSpecializeInfos(levelData.visualSpecializeInfos)
         setLevelPresentation({
           levelNumber: levelData.visualLevelNumber ?? undefined,
           rewriteOnly: levelData.visualRewriteOnly ?? false,
           hideRewriteDirection: levelData.visualHideRewriteDirection ?? false,
+          hideSwapSides: levelData.visualHideSwapSides ?? false,
+          noRewriteMode: levelData.visualNoRewriteMode ?? false,
           emphasizeForall: levelData.visualEmphasizeForall ?? [],
           mulDot: levelData.visualMulDot ?? false,
         })
@@ -752,7 +764,8 @@ export function VisualProofPage() {
 
   // Skip-aware prev/next: find closest non-skipped neighbour.
   const hasPrev = (() => { let p = levelId - 1; while (skippedLevels.includes(p) && p >= 1) p--; return p >= 1 })()
-  const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && worldSize != null && n <= worldSize) n++; return worldSize == null || n <= worldSize })()
+  const knownWorldSize = worldSize ?? gameInfo.data?.worldSize?.[worldId] ?? null
+  const hasNext = (() => { let n = levelId + 1; while (skippedLevels.includes(n) && knownWorldSize != null && n <= knownWorldSize) n++; return knownWorldSize == null || n <= knownWorldSize })()
   const displayLevelId = levelPresentation.levelNumber ?? visualDisplayLevelId(levelId, skippedLevels)
 
   const contentReady = Boolean(canvasState && presentationReady)
@@ -782,6 +795,7 @@ export function VisualProofPage() {
       telemetryConsent={telemetryConsent}
       gameId={gameId}
       getFeedbackProofState={() => unloadedFeedbackState()}
+      titlePending={levelTitle === null}
     />
   }
 
@@ -798,8 +812,16 @@ export function VisualProofPage() {
       visualTacticHypInfos={visualTacticHypInfos}
       visualHypGoalInfos={visualHypGoalInfos}
       visualProofGraphInfos={visualProofGraphInfos}
+      visualSpecializeInfos={visualSpecializeInfos}
+      persistentHints={gameInfo.data?.visualPersistentHints ?? false}
+      rewriteCheck={gameInfo.data?.visualRewriteCheck ?? false}
+      successorName={gameInfo.data?.visualSuccessorName}
+      noGoalRfl={gameInfo.data?.visualNoGoalRfl ?? false}
+      axioms={gameInfo.data?.visualAxioms}
       rewriteOnly={levelPresentation.rewriteOnly}
       hideRewriteDirection={levelPresentation.hideRewriteDirection}
+      hideSwapSides={levelPresentation.hideSwapSides}
+      noRewriteMode={levelPresentation.noRewriteMode}
       emphasizeForall={levelPresentation.emphasizeForall}
       mulDot={levelPresentation.mulDot}
       gameFastExfalso={gameInfo.data?.visualFastExfalso ?? false}

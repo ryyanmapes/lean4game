@@ -80,8 +80,9 @@ private def hasLeadingPropBinderReducing (target : Expr) : MetaM Bool := do
     throw ex
 
 /-- Recognize goals that can be handled by a direct click:
-literal reflexive equalities, forall binders, and proposition implications,
-including reducible surface forms like `¬ P` and `a ≠ b`. -/
+literal reflexive equalities, forall binders, proposition implications,
+including reducible surface forms like `¬ P` and `a ≠ b`, and conjunctions and
+iffs, which split in two. -/
 def clickGoalKind? (target : Expr) : MetaM (Option ClickGoalKind) := do
   match target.consumeMData with
   | .app (.app (.app (.const ``Eq _) _) lhs) rhs =>
@@ -93,6 +94,9 @@ def clickGoalKind? (target : Expr) : MetaM (Option ClickGoalKind) := do
       let targetWhnf ← withReducible (whnf target)
       match targetWhnf with
       | .app (.app (.const ``And _) _) _ =>
+          pure <| some .splitAnd
+      -- `A ↔ B` is a pair of implications, and separates the same way.
+      | .app (.app (.const ``Iff _) _) _ =>
           pure <| some .splitAnd
       | .forallE _ domain _ _ =>
           if ← isProp domain then

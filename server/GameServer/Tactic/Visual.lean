@@ -1257,6 +1257,12 @@ example (x y : Nat) (h : x * y = 1) : True := by
   fail_if_success drag_to oneNeZeroRewriteLocal h
   trivial
 
+-- An iff goal separates into its two directions, like a conjunction.
+example (P Q : Prop) (hpq : P → Q) (hqp : Q → P) : P ↔ Q := by
+  click_goal
+  · exact hpq
+  · exact hqp
+
 example (x : Nat) : x + 1 = 4 → x = 3 := by
   intro h
   drag_to succInjLocal h

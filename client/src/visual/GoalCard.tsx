@@ -9,6 +9,15 @@ import type { VisualGoalInfo } from './types'
 import { AtomicForm } from './AtomicForm'
 import { inferAtomicReductionForms } from './existsDisplay'
 
+/** Whether a goal hint's conditions hold for a goal reading `goalText` (as displayed)
+ * whose hypotheses read `hypTypeTexts`. */
+export function goalInfoMatchesGoal(info: VisualGoalInfo, goalText: string, hypTypeTexts: string[]): boolean {
+  if (info.goal && formatFormulaText(info.goal) !== goalText) return false
+  if (info.requireHypType && !hypTypeTexts.includes(formatFormulaText(info.requireHypType))) return false
+  if (info.excludeHypType && hypTypeTexts.includes(formatFormulaText(info.excludeHypType))) return false
+  return true
+}
+
 interface GoalCardProps {
   id: string
   goal: InteractiveGoal
@@ -24,6 +33,9 @@ interface GoalCardProps {
   isSolved?: boolean
   animateSolved?: boolean
   visualInfos?: VisualGoalInfo[]
+  /** `visualInfos` are already the ones to show (the canvas matched them, and may be
+   *  keeping them up after they stopped matching). */
+  infosMatched?: boolean
   showDropTarget?: boolean
   isPotentialTarget?: boolean
   infoPositions?: Array<'above' | 'below'>
@@ -45,6 +57,7 @@ export function GoalCard({
   isSolved,
   animateSolved = false,
   visualInfos = [],
+  infosMatched = false,
   showDropTarget = false,
   isPotentialTarget = false,
   infoPositions = ['above', 'below'],
@@ -71,19 +84,10 @@ export function GoalCard({
     [goal.hyps],
   )
   const activeVisualInfos = React.useMemo(
-    () => visualInfos.filter(info => {
-      if (info.goal && formatFormulaText(info.goal) !== goalText) return false
-      if (info.requireHypType) {
-        const target = formatFormulaText(info.requireHypType)
-        if (!hypTypeTexts.includes(target)) return false
-      }
-      if (info.excludeHypType) {
-        const target = formatFormulaText(info.excludeHypType)
-        if (hypTypeTexts.includes(target)) return false
-      }
-      return true
-    }),
-    [goalText, hypTypeTexts, visualInfos],
+    () => infosMatched
+      ? visualInfos
+      : visualInfos.filter(info => goalInfoMatchesGoal(info, goalText, hypTypeTexts)),
+    [goalText, hypTypeTexts, infosMatched, visualInfos],
   )
 
   const classes = [

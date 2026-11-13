@@ -121,8 +121,8 @@ describe('local NNG4 release maps', () => {
     cy.contains('The Natural Numbers Video Game', { timeout: 30_000 }).should('be.visible')
     cy.contains('button', 'Unlock levels').should('not.exist')
     cy.get('a.visual-map-back-btn[href="/"]').should('exist')
-    // Light mode is retired: no control offers it, and a stored preference
-    // for it no longer applies, so the map always renders dark.
+    // No light mode here: no control offers it, and a stored preference for it
+    // doesn't apply, so the map always renders dark. (It's per game, see `App`.)
     cy.get('.visual-map-theme-toggle').should('not.exist')
     cy.get('.app').should('have.attr', 'data-visual-theme', 'dark')
     cy.get('.visual-map-link.level').first().focus()

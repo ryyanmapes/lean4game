@@ -26,13 +26,16 @@ function useHintInput(): HintInput {
 }
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
-  return text.split(/(\$[^$]+\$|`[^`]+`|\*[^*]+\*)/gu).map((part, partIndex) => {
+  return text.split(/(\$[^$]+\$|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/gu).map((part, partIndex) => {
     const key = `${keyPrefix}-${partIndex}`
     if (part.startsWith('$') && part.endsWith('$') && part.length > 1) {
       return <span key={key} className="proposition visual-info-math">{colorizeFormula(part.slice(1, -1))}</span>
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length > 1) {
       return <code key={key}>{part.slice(1, -1)}</code>
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={key} className="visual-info-strong">{part.slice(2, -2)}</strong>
     }
     if (part.startsWith('*') && part.endsWith('*') && part.length > 1) {
       return <em key={key}>{part.slice(1, -1)}</em>
