@@ -417,9 +417,13 @@ jobs:
           # imports keeps its initializer. Its own modules run as IR.
           entry_modules=Game.Browser.Runtime
           extra_roots=()
+          nnvg_native=()
           if [[ -d ../NNVG/NNVG ]]; then
             entry_modules+=,NNVG.Browser.Runtime
             extra_roots+=(../NNVG)
+            # NNVG's browser `cases` (retarget-nnvg-browser-runtime.mjs); it
+            # imports only Lean, so its native initializer needs nothing else.
+            nnvg_native+=(../NNVG/.lake/build/ir/NNVG/Tactic/BrowserCasesCore.c)
           fi
           node scripts/gen-visual-wasm-exports.mjs \
             "$kit/emscripten-exports.txt" .visual-link/visual-externs.txt \
@@ -441,7 +445,8 @@ jobs:
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserApplyAt.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserHave.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserCasesCore.c \
-            ../NNG4/.lake/build/ir/Game/Tactic/Cases.c
+            ../NNG4/.lake/build/ir/Game/Tactic/Cases.c \
+            "${nnvg_native[@]}"
 
           objects=()
           for module in \
@@ -455,10 +460,12 @@ jobs:
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserApplyAt.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserHave.c \
             ../NNG4/.lake/build/ir/Game/Tactic/BrowserCasesCore.c \
-            ../NNG4/.lake/build/ir/Game/Tactic/Cases.c
+            ../NNG4/.lake/build/ir/Game/Tactic/Cases.c \
+            "${nnvg_native[@]}"
           do
             source="$module"
-            object=".visual-link/$(basename "$module").o"
+            # Named by the whole path: NNG4 and NNVG both have a BrowserCasesCore.c.
+            object=".visual-link/${module//[\/.]/_}.o"
             test -f "$source"
             emcc "${compile_thread_flags[@]}" -DLEAN_EMSCRIPTEN -I "$WASM_HOME/include" -I .cauli-lean-source/src/include \
               -c "$source" -o "$object"
@@ -753,6 +760,15 @@ jobs:
             · exact absurd rfl h
             · exact ⟨d, rfl⟩
 
+          example (P Q : Prop) (h : P ∨ Q) : Q ∨ P := by
+            cases h with hp hq
+            · exact Or.inr hp
+            · exact Or.inl hq
+
+          example (a b : ℕ) (h : a ≤ b) : ∃ c, b = a + c := by
+            cases h with c hc
+            exact ⟨c, hc⟩
+
           example (n : ℕ) : n + 0 = n := by
             drag_rw_lhs [add_zero]
             click_goal
@@ -767,36 +783,10 @@ jobs:
           end MyNat
           LEAN
 
-            # TEMPORARY (debugging an address-zero heap abort after the NNVG
-            # probe elaborates without errors): run each example alone, and let
-            # the step finish so the artifact uploads. Restore before merging.
-            bisect_header=$'import GameServer.Tactic.Visual\nimport NNVG.Browser.Runtime\n\nnamespace MyNat\n'
-            printf '%s\nexample : True := True.intro\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-true.lean"
-            printf '%s\nexample : ∀ n : ℕ, 0 + n = n := by\n  intro n\n  induction n with d hd\n  · rw [add_zero]\n  · rw [add_succ, hd]\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-induction.lean"
-            printf '%s\nexample (a : ℕ) (h : a ≠ 0) : ∃ b, a = S b := by\n  cases a with d\n  · exact absurd rfl h\n  · exact ⟨d, rfl⟩\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-cases.lean"
-            printf '%s\nexample (n : ℕ) : n + 0 = n := by\n  drag_rw_lhs [add_zero]\n  click_goal\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-dragrw.lean"
-            printf '%s\nexample (n : ℕ) : n + 0 = n := by\n  rw [add_zero]\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-rw.lean"
-            printf '%s\nexample (P : Prop) : P → P := by\n  click_goal\n  exact h\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-click.lean"
-            printf '%s\nexample (a b : ℕ) : a ≤ a + b := by\n  exact ⟨b, rfl⟩\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-le.lean"
-            printf '%s\nexample : (2 : ℕ) = S 1 := by\n  rfl\nend MyNat\n' "$bisect_header" > "$nnvg_work/b-numeral.lean"
-            for probe in b-true b-induction b-cases b-dragrw b-rw b-click b-le b-numeral; do
-              set +e
-              node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
-                "$VISUAL_RUNTIME" "$nnvg_work" "/work/$probe.lean" > "$nnvg_work/$probe.out" 2>&1
-              status=$?
-              set -e
-              grep -E 'ABORT|error|hasErrors' "$nnvg_work/$probe.out" | head -5 || true
-              echo "NNVG bisect $probe: exit $status" | tee -a "$profiles/nnvg-bisect.txt"
-            done
-
             echo 'Tracing the NNVG module closure used by WASM...'
-            set +e
             node --stack-size=8192 scripts/lean-wasm-node-trace.cjs \
               "$VISUAL_RUNTIME" "$nnvg_work" "$nnvg_work/opened-files.txt" \
               /work/probe.lean
-            trace_status=$?
-            set -e
-            [[ "$trace_status" == 0 ]] || echo "::warning::NNVG trace exited $trace_status"
             test -s "$nnvg_work/opened-files.txt"
             # Same selection as NNG4's closure above.
             while IFS= read -r relative; do
@@ -824,12 +814,8 @@ jobs:
             cp "$VISUAL_RUNTIME/bin/lean.js" "$VISUAL_RUNTIME/bin/lean.wasm" "$nnvg_runtime/bin/"
             cp -a "$nnvg_lib/." "$nnvg_runtime/lib/lean/"
             echo 'Validating the NNVG proofs against only the traced module closure...'
-            set +e
             node --stack-size=8192 .cauli-browser-host/scripts/lean-wasm-node.cjs \
               "$nnvg_runtime" "$nnvg_work" /work/probe.lean
-            validate_status=$?
-            set -e
-            [[ "$validate_status" == 0 ]] || echo "::warning::NNVG closure validation exited $validate_status"
 
             nnvg_files="$(find "$nnvg_lib" -type f | wc -l | tr -d ' ')"
             nnvg_bytes="$(du -sb "$nnvg_lib" | cut -f1)"

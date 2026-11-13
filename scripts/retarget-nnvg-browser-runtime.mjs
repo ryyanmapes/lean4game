@@ -67,11 +67,62 @@ fs.writeFileSync(lakefile, lakeAfter)
 // (as NNG4's induction macro showed), so the build-only copy of each proof
 // gets the exact core syntax the macro expands to. Players' own `induction` and
 // `cases` commands still go through the macros, imported by the runtime facade.
-const tacticModules = ['NNVG.MyNat.Induction', 'NNVG.Tactic.Cases', 'NNVG.Tactic.Xyzzy']
+const tacticModules = ['NNVG.MyNat.Induction', 'NNVG.Tactic.BrowserCasesCore', 'NNVG.Tactic.Cases', 'NNVG.Tactic.Xyzzy']
+
+// Lean's own `cases` elaborator needs private induction-elaborator bodies that
+// the browser compiler leaves out: in lean.wasm a `cases` corrupts the heap
+// (NNG4 hit the same and has its own `nng_cases'`). So the browser's `cases`,
+// a player's and Visual Lean's own, is this one, built on Lean's public
+// `MVarId.cases` and linked into lean.wasm (build-browser-lean-libs.yml). It
+// imports only Lean, as a natively linked module must. The zero case reads `0`,
+// like the game's `cases_eliminator` makes it natively.
+const browserCasesCore = `import Lean.Elab.Tactic.Basic
+import Lean.Meta.Tactic.Cases
+import Lean.Meta.Tactic.Rename
+
+open Lean Meta Elab Tactic
+
+/-- Lean-3-style \`cases\` from Lean's public cases primitive, for the browser. -/
+elab "nnvg_cases' " target:ident
+    withArg:((" with" (ppSpace colGt binderIdent)+)?) : tactic => do
+  let g :: gs ← getUnsolvedGoals | throwNoGoalsToBeSolved
+  g.withContext do
+    let some localDecl := (← getLCtx).findFromUserName? target.getId
+      | throwErrorAt target "unknown local variable '{target.getId}'"
+    let results ← g.cases localDecl.fvarId
+    let mut names : List Syntax := withArg.raw[1]!.getArgs |>.toList
+    let mut subgoals := #[]
+    for result in results do
+      let mut goal := result.mvarId
+      for field in result.fields do
+        if let nameStx :: rest := names then
+          names := rest
+          goal ← goal.rename field.fvarId! (getNameOfIdent' nameStx[0])
+      subgoals := subgoals.push goal
+    setGoals <| subgoals.toList ++ gs
+`
+const browserCasesMacros = `/-- \`zero_eq_0\` turns the zero case of a browser \`cases\` into \`0\`. -/
+theorem MyNat.zero_eq_0 : MyNat.zero = 0 := rfl
+
+open Lean Parser Tactic
+
+/-- \`cases n with d\` splits the goal into the case \`n = 0\` and the case \`n = S d\`. -/
+macro "cases " target:ident : tactic => \`(tactic| nnvg_cases' $target)
+
+macro "cases " target:ident " with" name:(colGt binderIdent) : tactic =>
+  \`(tactic| nnvg_cases' $target with $name <;> try rewrite [MyNat.zero_eq_0] at *)
+
+macro "cases " target:ident " with" first:(colGt binderIdent) second:(colGt binderIdent) : tactic =>
+  \`(tactic| nnvg_cases' $target with $first $second)
+`
 const ident = String.raw`[A-Za-z_][A-Za-z0-9_'!?₀-₉]*`
 const inductionLine = new RegExp(String.raw`^([ \t]+)induction[ \t]+(${ident})[ \t]+with[ \t]+(${ident})[ \t]+(${ident})[ \t]*$`, 'gmu')
 const casesLine = new RegExp(String.raw`^([ \t]+)cases[ \t]+(${ident})[ \t]+with[ \t]+(${ident})[ \t]*$`, 'gmu')
 const xyzzyLine = /^([ \t]+)xyzzy[ \t]*$/gmu
+
+const casesCorePath = path.join(newTree, 'Tactic', 'BrowserCasesCore.lean')
+if (fs.existsSync(casesCorePath)) throw new Error('NNVG already has a Tactic/BrowserCasesCore.lean')
+fs.writeFileSync(casesCorePath, browserCasesCore)
 
 let rewrittenProofLines = 0
 let retargeted = 0
@@ -85,6 +136,17 @@ for (const file of leanFiles(newTree)) {
   if (relative === 'NNVG/Tactic/Xyzzy.lean') {
     // The `Lean` umbrella would put the whole language server in every worker.
     after = after.replace(/^import Lean[ \t]*$/mu, 'import Lean.Elab.Tactic.Basic')
+  }
+  if (relative === 'NNVG/Tactic/Cases.lean') {
+    // The game's `cases n with d` macro gives way to the browser's three forms.
+    const macro = after.indexOf('macro (name := MyNat.casesWith)')
+    const doc = after.lastIndexOf('/--', macro)
+    if (macro < 0 || doc < 0 || !/^import NNVG\.MyNat\.Definition$/mu.test(after)) {
+      throw new Error('NNVG/Tactic/Cases.lean no longer has the expected import and cases macro')
+    }
+    after = after.slice(0, doc)
+      .replace(/^import NNVG\.MyNat\.Definition$/mu, '$&\nimport NNVG.Tactic.BrowserCasesCore') +
+      browserCasesMacros
   }
   const level = relative.startsWith('NNVG/Levels/') && /^\s*Statement\b/mu.test(after)
   if (level) {
