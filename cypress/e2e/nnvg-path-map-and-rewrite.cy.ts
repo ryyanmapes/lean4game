@@ -256,6 +256,44 @@ function openCanvasLevel(world: string, n: number) {
   cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
 }
 
+/** Whether the theorem tray has the card labelled `label`. The tray renders one
+ * page of cards at a time, so this pages through it from the first page. */
+function trayShouldHaveCard(label: string, expected: boolean) {
+  const card = `[data-testid="theorem-tray-card"][data-theorem-label="${label}"]`
+  const indicator = '.theorem-tray-panel .tr-page-indicator'
+  // Turn the page, and wait until the tray shows the new one.
+  const turn = ($button: JQuery<HTMLElement>, $tray: JQuery<HTMLElement>) => {
+    const before = $tray.find('.tr-page-indicator').text()
+    cy.wrap($button.first()).click()
+    cy.get(indicator).should('not.have.text', before)
+  }
+  const look = (remainingPages: number): void => {
+    cy.get('.theorem-tray-panel', { timeout: LOAD_TIMEOUT }).then($tray => {
+      if ($tray.find(card).length > 0) {
+        expect(expected, `theorem card ${label}`).to.equal(true)
+        return
+      }
+      const $next = $tray.find('.tr-nav-btn[aria-label="Next"]')
+      if ($next.length === 0 || $next.is(':disabled') || remainingPages <= 0) {
+        expect(expected, `theorem card ${label}`).to.equal(false)
+        return
+      }
+      turn($next, $tray)
+      look(remainingPages - 1)
+    })
+  }
+  const rewind = (remainingPages: number): void => {
+    cy.get('.theorem-tray-panel', { timeout: LOAD_TIMEOUT }).then($tray => {
+      const $previous = $tray.find('.tr-nav-btn[aria-label="Previous"]')
+      if ($previous.length === 0 || $previous.is(':disabled') || remainingPages <= 0) return
+      turn($previous, $tray)
+      rewind(remainingPages - 1)
+    })
+  }
+  rewind(40)
+  look(40)
+}
+
 function headerShouldNameLevel(number: string, title: string) {
   cy.get('.visual-header-level', { timeout: LOAD_TIMEOUT }).filter(':visible').first().should('contain.text', `- ${number}`)
   cy.get('.visual-header-title', { timeout: LOAD_TIMEOUT }).filter(':visible').first().should('contain.text', title)
@@ -1598,12 +1636,12 @@ describe('Natural Numbers Video Game', () => {
     openCanvasLevel('AdvAddition', 5)
     headerShouldNameLevel('5', 'add_right_eq_zero (Advanced Addition World Boss)')
     cy.get('[data-testid="theorem-tray-card"]', { timeout: LOAD_TIMEOUT }).should('have.length.greaterThan', 0)
-    cy.get('[data-testid="theorem-tray-card"][data-theorem-label="add_left_eq_zero"]').should('not.exist')
+    trayShouldHaveCard('add_left_eq_zero', false)
     openCanvasLevel('LessOrEqual', 1)
     headerShouldNameLevel('1', 'le_refl')
-    cy.get('[data-testid="theorem-tray-card"][data-theorem-label="add_left_eq_zero"]', { timeout: LOAD_TIMEOUT })
-      .should('exist')
-    cy.get('[data-testid="theorem-tray-card"][data-theorem-label="add_right_eq_zero"]').should('exist')
+    cy.get('[data-testid="theorem-tray-card"]', { timeout: LOAD_TIMEOUT }).should('have.length.greaterThan', 0)
+    trayShouldHaveCard('add_left_eq_zero', true)
+    trayShouldHaveCard('add_right_eq_zero', true)
   })
 
   it('plays the bonus off Proposition World level 8 on the canvas', () => {
