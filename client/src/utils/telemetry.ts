@@ -53,7 +53,7 @@ export type TelemetryEvent = BaseEvent & {
  * release build (lean4.js scripts/sync-lean4game-client.mjs) provides it; dev
  * servers have none. */
 export type GameBuild = Partial<Record<
-  'site' | 'client' | 'runtime' | 'nng4' | 'visualtest' | 'lean' | 'built', string
+  'site' | 'client' | 'runtime' | 'nng4' | 'visualtest' | 'nnvg' | 'lean' | 'built', string
 >>
 
 const GAME_BUILD: GameBuild | null = (() => {
