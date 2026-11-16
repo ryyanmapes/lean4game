@@ -3967,10 +3967,10 @@ export function VisualCanvas({
     setDisplayCanvasState(cloneCanvasState(cleared.displayCanvasState))
     setCanvasState(cloneCanvasState(cleared.canvasState))
     setActiveStreamId(cleared.activeStreamId)
+    // The whole restored proof, including the steps a Rewrite Mode reset
+    // kept: the new attempt starts from all of it.
     onResetUndone?.(
-      cleared.proofSteps
-        .slice(cleared.baseStepCount)
-        .map(step => buildInteractiveProofLine(step.rotation, step.playTactic)),
+      cleared.proofSteps.map(step => buildInteractiveProofLine(step.rotation, step.playTactic)),
       cleared.canvasState.completed,
     )
     if (cleared.transformTarget) {

@@ -96,6 +96,24 @@ test('undoing a reset starts a new attempt from the proof the reset cleared', ()
   assert.equal(restart.source_attempt_uuid, 'attempt-1')
 })
 
+test('undoing a Rewrite Mode reset starts a new attempt from the whole proof', () => {
+  // Rewrite Mode's Reset logs one undo per step it removes and keeps the
+  // steps made before the mode opened. Undoing it brings back the whole proof,
+  // kept steps included; starting from the removed steps alone left replays
+  // without the proof's opening.
+  const { log, events } = harness()
+  log.start()
+  log.step('command', 'intro h')
+  log.step('command', 'rw [h]')
+  log.step('command', 'rw [add_comm]')
+  log.step('undo', 'undo')
+  log.step('undo', 'undo')
+  log.resetUndone(['intro h', 'rw [h]', 'rw [add_comm]'], false)
+  const restart = events.find(event => event.attempt_uuid === 'attempt-2')
+  assert.equal(restart.initial_script, JSON.stringify(['intro h', 'rw [h]', 'rw [add_comm]']))
+  assert.equal(restart.source_attempt_uuid, 'attempt-1')
+})
+
 test('a solved proof brought back by undoing a reset is not a new completion', () => {
   const { log, events } = harness()
   log.start()
