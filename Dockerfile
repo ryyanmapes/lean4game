@@ -1,9 +1,9 @@
 # Docker build for lean4game + all games (NNG4, VisualTest)
 #
 # Build context: the PARENT directory containing all repos:
-#   lean4game/   ← ryyanmapes/lean4game  (relay, client, GameServer)
-#   NNG4/        ← ryyanmapes/NNG4
-#   VisualTest/  ← ryyanmapes/VisualTest
+#   lean4game/   ← astroautomata/lean4game  (relay, client, GameServer)
+#   NNG4/        ← astroautomata/NNG4
+#   VisualTest/  ← astroautomata/VisualTest
 #
 # The Dockerfile is at lean4game/Dockerfile; the context root is one level up.
 

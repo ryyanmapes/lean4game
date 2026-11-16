@@ -97,10 +97,10 @@ jobs:
       # it instead of silently testing a missing /data route (404).
       - name: Checkout VisualTest
         if: matrix.id == 'implication-display'
-        run: git clone https://github.com/ryyanmapes/VisualTest ../VisualTest
+        run: git clone https://github.com/astroautomata/VisualTest ../VisualTest
 
       - name: Checkout NNG4
-        run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
+        run: git clone https://github.com/astroautomata/NNG4 ../NNG4
 
       - name: Record NNG4 revision
         id: nng4-revision

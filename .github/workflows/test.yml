@@ -56,10 +56,10 @@ jobs:
       # VisualTest's lakefile.toml and lean-toolchain both reference ../lean4game/server
       # via relative paths, which also resolve correctly with this layout.
       - name: Checkout VisualTest
-        run: git clone https://github.com/ryyanmapes/VisualTest ../VisualTest
+        run: git clone https://github.com/astroautomata/VisualTest ../VisualTest
 
       - name: Checkout NNG4
-        run: git clone https://github.com/ryyanmapes/NNG4 ../NNG4
+        run: git clone https://github.com/astroautomata/NNG4 ../NNG4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

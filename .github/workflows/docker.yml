@@ -36,14 +36,14 @@ jobs:
       - name: Checkout NNG4
         uses: actions/checkout@v4
         with:
-          repository: ryyanmapes/NNG4
+          repository: astroautomata/NNG4
           ref: ${{ inputs.nng4_ref || 'main' }}
           path: NNG4
 
       - name: Checkout VisualTest
         uses: actions/checkout@v4
         with:
-          repository: ryyanmapes/VisualTest
+          repository: astroautomata/VisualTest
           ref: ${{ inputs.visualtest_ref || 'main' }}
           path: VisualTest
 

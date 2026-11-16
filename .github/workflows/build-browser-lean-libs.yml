@@ -19,7 +19,7 @@ on:
         default: main
         type: string
       include_nng4:
-        description: Build and package ryyanmapes/NNG4
+        description: Build and package astroautomata/NNG4
         required: false
         default: true
         type: boolean
@@ -29,7 +29,7 @@ on:
         default: main
         type: string
       include_nnvg:
-        description: Build and package ryyanmapes/NNVG (needs NNG4)
+        description: Build and package astroautomata/NNVG (needs NNG4)
         required: false
         default: true
         type: boolean
@@ -55,7 +55,7 @@ on:
         default: main
         type: string
       include_nng4:
-        description: Build and package ryyanmapes/NNG4
+        description: Build and package astroautomata/NNG4
         required: true
         default: true
         type: boolean
@@ -65,7 +65,7 @@ on:
         default: main
         type: string
       include_nnvg:
-        description: Build and package ryyanmapes/NNVG (needs NNG4)
+        description: Build and package astroautomata/NNVG (needs NNG4)
         required: true
         default: true
         type: boolean
@@ -99,7 +99,7 @@ jobs:
       - name: Check out lean4game
         uses: actions/checkout@v4
         with:
-          repository: ryyanmapes/lean4game
+          repository: astroautomata/lean4game
           ref: ${{ inputs.lean4game_ref }}
 
       - name: Restore Lean4Game sibling layout
@@ -134,7 +134,7 @@ jobs:
         env:
           NNG4_REF: ${{ inputs.nng4_ref }}
         run: |
-          git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/NNG4 ../NNG4
+          git clone --filter=blob:none --no-checkout https://github.com/astroautomata/NNG4 ../NNG4
           git -C ../NNG4 fetch --depth 1 origin "$NNG4_REF"
           git -C ../NNG4 checkout --detach FETCH_HEAD
 
@@ -142,7 +142,7 @@ jobs:
         env:
           VISUALTEST_REF: ${{ inputs.visualtest_ref }}
         run: |
-          git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/VisualTest ../VisualTest
+          git clone --filter=blob:none --no-checkout https://github.com/astroautomata/VisualTest ../VisualTest
           git -C ../VisualTest fetch --depth 1 origin "$VISUALTEST_REF"
           git -C ../VisualTest checkout --detach FETCH_HEAD
 
@@ -153,7 +153,7 @@ jobs:
         env:
           NNVG_REF: ${{ inputs.nnvg_ref }}
         run: |
-          git clone --filter=blob:none --no-checkout https://github.com/ryyanmapes/NNVG ../NNVG
+          git clone --filter=blob:none --no-checkout https://github.com/astroautomata/NNVG ../NNVG
           git -C ../NNVG fetch --depth 1 origin "$NNVG_REF"
           git -C ../NNVG checkout --detach FETCH_HEAD
 
