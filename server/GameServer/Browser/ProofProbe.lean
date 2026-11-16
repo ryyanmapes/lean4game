@@ -146,13 +146,54 @@ private def hypClickJson? (name : String) (type : Expr) : MetaM (Option Json) :=
           return some <| directClickJson s!"click_prop {name}" "Click to introduce witness and condition"
       | _ => return none
 
+private def prettyString (e : Expr) : MetaM String :=
+  return (<- ppExpr e).pretty.trimAscii.toString
+
+private def prettyBinderString (binderName : Name) (binderInfo : BinderInfo) (type : Expr) :
+    MetaM String := do
+  let typeStr <- prettyString type
+  let nameStr := toString binderName
+  pure <| match binderInfo with
+    | .implicit       => "{" ++ nameStr ++ " : " ++ typeStr ++ "}"
+    | .strictImplicit => "⦃" ++ nameStr ++ " : " ++ typeStr ++ "⦄"
+    | .instImplicit   =>
+        if binderName == Name.anonymous then "[" ++ typeStr ++ "]"
+        else "[" ++ nameStr ++ " : " ++ typeStr ++ "]"
+    | _               => s!"({nameStr} : {typeStr})"
+
+/-- A `∀` hypothesis as its body and a `∀ (x y : ℕ)` footer, the card layout the
+client gives quantified hypotheses (and from which Rewrite Mode makes them rules).
+The same as `quantifiedTypeDisplay?` in `GameServer.InteractiveGoal`, which the
+natively linked browser runtime doesn't import. -/
+private partial def quantifiedTypeDisplay? (type : Expr) : MetaM (Option (String × String)) := do
+  let rec go (e : Expr) (binders : Array String) : MetaM (Option (String × String)) := do
+    let e <- instantiateMVars e
+    match e.consumeMData with
+    | .forallE binderName domain body binderInfo =>
+        if binderInfo != .instImplicit && (<- isProp domain) then
+          if binders.isEmpty then
+            return none
+          else
+            return some (<- prettyString e, s!"∀ {String.intercalate " " binders.toList}")
+        withLocalDecl binderName binderInfo domain fun fvar => do
+          let binderName <- fvar.fvarId!.getUserName
+          let binderStr <- prettyBinderString binderName binderInfo domain
+          go (body.instantiate1 fvar) (binders.push binderStr)
+    | _ =>
+        if binders.isEmpty then
+          return none
+        else
+          return some (<- prettyString e, s!"∀ {String.intercalate " " binders.toList}")
+  go type #[]
+
 private def hypJson (decl : LocalDecl) : MetaM Json := do
   let type <- instantiateMVars decl.type
   let name := decl.userName.toString
   let value? <- match decl with
     | .ldecl _ _ _ _ value _ _ => pure <| some (<- ppExpr value).pretty
     | _ => pure none
-  return Json.mkObj [
+  let quantified? <- quantifiedTypeDisplay? type
+  return Json.mkObj <| [
     ("names", toJson #[name]),
     ("playName", toJson name),
     ("fvarIds", toJson #[decl.fvarId.name.toString]),
@@ -164,7 +205,9 @@ private def hypJson (decl : LocalDecl) : MetaM Json := do
     ("equalityTree", toJson (<- equalityJson? type)),
     ("reductionForms", toJson (<- reductionForms type)),
     ("clickAction", toJson (<- hypClickJson? name type))
-  ]
+  ] ++ (match quantified? with
+    | some (body, footer) => [("typeBody", toJson body), ("forallFooter", toJson footer)]
+    | none => [])
 
 private def goalJson (goal : MVarId) : MetaM Json := goal.withContext do
   let decl <- goal.getDecl
