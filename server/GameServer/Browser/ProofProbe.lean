@@ -81,16 +81,39 @@ private def existsJson? (e : Expr) : MetaM (Option Json) := do
       | _ => return none
   | _ => return none
 
+private def parenthesize (s : String) : String :=
+  if s.startsWith "(" && s.endsWith ")" then s else s!"({s})"
+
+private def implicationToFalseDomain? : Expr → Option Expr
+  | .forallE _ domain body _ =>
+      match body.consumeMData with
+      | .const ``False _ => some domain
+      | _ => none
+  | _ => none
+
+/-- `p → False` reads as `¬ (p)` too, which is how the client sees that a `¬`
+card proves `False` from `p`. -/
+private def tooltipVariants (e : Expr) : MetaM (Array String) := do
+  match implicationToFalseDomain? e.consumeMData with
+  | some domain =>
+      let wrapped := parenthesize (<- ppExpr domain).pretty.trimAscii.toString
+      return #[s!"¬ {wrapped}", s!"{wrapped} → False"]
+  | none => return #[(<- ppExpr e).pretty.trimAscii.toString]
+
+/-- What `e` unfolds to, step by step at default transparency, as the native
+proof state reports it (`reductionFormsForExpr` in `GameServer.RpcHandlers`):
+`¬(A ∨ B)` gives `(A ∨ B) → False`, and `a ≤ b` its `∃`. -/
 private def reductionForms (e : Expr) : MetaM (Array String) := do
   let original := (<- ppExpr e).pretty.trimAscii.toString
   let mut forms : Array String := #[]
   let mut current := (<- instantiateMVars e).consumeMData
   for _ in [:8] do
-    let next := (<- instantiateMVars (<- withReducible (whnf current))).consumeMData
+    for form in (<- tooltipVariants current) do
+      let form := form.trimAscii.toString
+      if !form.isEmpty && form != original && !forms.contains form then
+        forms := forms.push form
+    let next := (<- instantiateMVars (<- whnf current)).consumeMData
     if next == current then break
-    let rendered := (<- ppExpr next).pretty.trimAscii.toString
-    if !rendered.isEmpty && rendered != original && !forms.contains rendered then
-      forms := forms.push rendered
     current := next
   return forms
 
@@ -108,7 +131,9 @@ private def goalClickJson? (goal : MVarId) : MetaM (Option Json) := goal.withCon
   | some .introProp =>
       return some <| directClickJson "click_goal" "Click to introduce assumption"
   | some .splitAnd =>
-      return some <| directClickJson "click_goal" "Click to split conjunction" true
+      let isIff := (<- withReducible (whnf target)).isAppOfArity ``Iff 2
+      return some <| directClickJson "click_goal"
+        (if isIff then "Click to split into both directions" else "Click to split conjunction") true
   | none =>
       let target <- withReducible (whnf target)
       match target with
@@ -130,6 +155,25 @@ private def goalClickJson? (goal : MVarId) : MetaM (Option Json) := goal.withCon
           ]
       | _ => return none
 
+private def isReflexiveEqualityProp (e : Expr) : MetaM Bool := do
+  let e <- withReducible (whnf e)
+  match e.consumeMData with
+  | .app (.app (.app (.const ``Eq _) _) lhs) rhs =>
+      let saved <- getMCtx
+      let isRefl <- withReducible (isDefEq lhs rhs)
+      setMCtx saved
+      return isRefl
+  | _ => return false
+
+/-- `x = x → P`, which a click specializes with `rfl`. -/
+private def isReflexiveEqualityImplication (e : Expr) : MetaM Bool := do
+  match e.consumeMData with
+  | .forallE _ domain _ _ =>
+      if !(<- isProp domain) then return false
+      isReflexiveEqualityProp domain
+  | _ => return false
+
+/-- As the native proof state's `hypClickAction?` (`GameServer.RpcHandlers`). -/
 private def hypClickJson? (name : String) (type : Expr) : MetaM (Option Json) := do
   let reduced <- withReducible (whnf type)
   match reduced with
@@ -137,14 +181,17 @@ private def hypClickJson? (name : String) (type : Expr) : MetaM (Option Json) :=
       return some <| directClickJson s!"click_prop {name}" "Click to split conjunction"
   | .app (.app (.const ``Or _) _) _ =>
       return some <| directClickJson s!"click_prop {name}" "Click to split into cases" true
-  | .app (.app (.const ``Exists _) _) _ =>
-      return some <| directClickJson s!"click_prop {name}" "Click to introduce witness and condition"
   | _ =>
+      if <- isReflexiveEqualityImplication reduced then
+        return some <| directClickJson s!"click_prop {name}" "Click to specialize with rfl"
       let fullyReduced <- whnf type
       match fullyReduced with
       | .app (.app (.const ``Exists _) _) _ =>
           return some <| directClickJson s!"click_prop {name}" "Click to introduce witness and condition"
-      | _ => return none
+      | _ =>
+          if <- isReflexiveEqualityImplication fullyReduced then
+            return some <| directClickJson s!"click_prop {name}" "Click to specialize with rfl"
+          return none
 
 private def prettyString (e : Expr) : MetaM String :=
   return (<- ppExpr e).pretty.trimAscii.toString
