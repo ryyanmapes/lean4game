@@ -109,10 +109,12 @@ describe('Visual loading progress and Implication guidance', () => {
         'hypothesis transformation is open',
       ).to.include({ isOpen: true, targetKind: 'hyp' })
     })
+    // Clicking a rule card rewrites its first match, reading left to right, in
+    // the one-row Rewrite Mode: here `0 + x`.
     clickVisibleTransformRule('zero_add')
-    cy.window().should(win => {
+    cy.window({ timeout: LOAD_TIMEOUT }).should(win => {
       const h = (win as HarnessWindow).__visualTestHarness!.getCurrentStreamSnapshot().hypTypes.h
-      expect(h).to.match(/^0\s*\+\s*x\s*=\s*y\s*\+\s*2$/)
+      expect(h).to.match(/^x\s*=\s*0\s*\+\s*y\s*\+\s*2$/)
     })
 
     cy.contains(

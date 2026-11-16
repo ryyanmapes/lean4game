@@ -97,6 +97,20 @@ describe('The Natural Numbers Video Game in the browser release', () => {
     cy.get('.visual-header.completed', { timeout: LOAD_TIMEOUT }).should('exist')
   })
 
+  it('offers a ∀ hypothesis as a Rewrite Mode rule', () => {
+    // The browser's proof probe has to split `∀ x y, …` into body and footer,
+    // as the native proof state does, or the card never becomes a rule.
+    visit(level('Rewrite', 4))
+    cy.get('.tr-rule-dock[data-layout-ready="true"]', { timeout: LOAD_TIMEOUT }).should('exist')
+    cy.get('.tr-rule-card[data-rule-label="add_comm"] .tr-forall-footer', { timeout: LOAD_TIMEOUT }).should('exist')
+    clickRule('hx')
+    clickRule('hy')
+    clickRule('hz')
+    relationShouldBe('(1 + 2) + 3 = 3 + (2 + 1)')
+    clickRule('add_comm')
+    relationShouldBe('3 + (1 + 2) = 3 + (2 + 1)')
+  })
+
   it('proves zero_add with a player’s induction', () => {
     visit(level('Induction', 1))
     cy.get('[data-testid="goal-card"]', { timeout: LOAD_TIMEOUT }).should('be.visible')
@@ -108,7 +122,9 @@ describe('The Natural Numbers Video Game in the browser release', () => {
     enterRewriteMode()
     clickRule('add_zero')
     relationShouldBe('0 = 0')
-    check()
+    // This check mark closes the base case only, so Rewrite Mode closes too.
+    notProcessing()
+    cy.get('[data-testid="rewrite-check"]', { timeout: LOAD_TIMEOUT }).should('be.visible').click()
     cy.get('.tr-transformation-overlay', { timeout: LOAD_TIMEOUT }).should('not.exist')
 
     notProcessing()
