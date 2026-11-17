@@ -4540,11 +4540,12 @@
   color: #ec4899;
 }
 
-/* ── Rewrite-only levels (VisualRewriteOnly) ──────────────────────────────
-   The level is played in Rewrite Mode: lessons stack right above the relation
-   sign (TransformationView sets left and top), leaving room for the check mark
-   that appears there and closes the goal once both sides match. */
-.visual-page .tr-top-lessons {
+/* ── Rewrite Mode's lessons and check mark ────────────────────────────────
+   Lessons stack right above the relation sign (TransformationView sets left
+   and top), leaving room for the check mark that appears there and closes the
+   goal once both sides match. A phone keeps the lessons of a level with a
+   canvas in its controls' row instead (see .transform-info.side-info). */
+.visual-page .tr-relation-lessons {
   position: fixed;
   top: calc(3.25rem + 1rem);
   left: calc(var(--proof-sidebar-width, 0px) + (100vw - var(--proof-sidebar-width, 0px)) / 2);
@@ -4555,11 +4556,11 @@
   align-items: center;
   gap: 0.6rem;
   width: max-content;
-  max-width: min(36rem, calc(100vw - 2rem));
+  max-width: min(36rem, calc(100vw - var(--proof-sidebar-width, 0px) - 2rem));
   pointer-events: none;
 }
 
-.visual-page .tr-top-lessons .transform-info.top-info {
+.visual-page .tr-relation-lessons .transform-info.stacked-info {
   position: static;
   transform: none;
   max-width: 100%;

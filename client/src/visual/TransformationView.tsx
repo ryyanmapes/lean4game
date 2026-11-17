@@ -138,6 +138,23 @@ export function clipGuideArrow(arrow: GuideArrow): GuideArrow {
   }
 }
 
+/** A measured position, as text, for keeping in state. Layout effects measure
+ * positions and other layout effects depend on them. As an object, a position
+ * gets a new identity whenever React re-applies its queued updates on top of a
+ * lower-priority one that is still pending, which a quick resize brings about;
+ * the effects depending on it then ran on every render until React gave up
+ * ("Maximum update depth exceeded"). The same text compares equal however often
+ * it is set. Half pixels are plenty for placing a hint. */
+function positionKey(left: number, top: number): string {
+  return `${Math.round(left * 2) / 2},${Math.round(top * 2) / 2}`
+}
+
+function positionFromKey(key: string | null): { left: number; top: number } | null {
+  if (key === null) return null
+  const [left, top] = key.split(',').map(Number)
+  return { left: left ?? 0, top: top ?? 0 }
+}
+
 function rewriteReferenceForDrag(draggedId: string, hyp: EqualityHyp): string {
   // Theorem cards show friendly aliases, but Lean rewrites need the real declaration name.
   return draggedId.startsWith('thm_') ? hyp.id : (hyp.rewriteRef ?? hyp.label)
@@ -428,8 +445,11 @@ export function TransformationView({
   const checkButtonRef = useRef<HTMLButtonElement>(null)
   const checkInfoRef = useRef<HTMLDivElement>(null)
   const lessonsRef = useRef<HTMLDivElement>(null)
-  const [lessonsPosition, setLessonsPosition] = useState<{ left: number; top: number } | null>(null)
-  const [checkPosition, setCheckPosition] = useState<{ left: number; top: number } | null>(null)
+  // Positions are kept as text: see `positionKey`.
+  const [lessonsSpot, setLessonsSpot] = useState<string | null>(null)
+  const lessonsPosition = useMemo(() => positionFromKey(lessonsSpot), [lessonsSpot])
+  const [checkSpot, setCheckSpot] = useState<string | null>(null)
+  const checkPosition = useMemo(() => positionFromKey(checkSpot), [checkSpot])
   const [checkArrow, setCheckArrow] = useState<GuideArrow | null>(null)
   const suppressRuleClickRef = useRef(false)
   const undoInFlightRef = useRef(false)
@@ -704,19 +724,22 @@ export function TransformationView({
   // cards can change size without the rules changing: a font arrives, or the
   // window is resized and the interface rescales. So watch the cards on screen,
   // and when one no longer has the width it was packed with, or the page's row
-  // has outgrown the page, measure every card of the tab again. Each set of
-  // rules gets a few such rounds at most, so that a card that never settles
-  // can't keep the dock remeasuring.
-  const remeasureRoundsRef = useRef({ key: '', rounds: 0 })
+  // has outgrown the page, measure every card of the tab again. A burst of
+  // such rounds is cut short, so that a card that never settles can't keep the
+  // dock remeasuring; once things have been quiet for a while the count starts
+  // over, since a later resize is a new change, not the same one again.
+  const remeasureRoundsRef = useRef({ rounds: 0, last: 0 })
   useEffect(() => {
     if (!hasMeasurements) return
     const page = pageRef.current
     if (!page || typeof ResizeObserver === 'undefined') return
-    const rulesKey = JSON.stringify([selectedTab, isReverse, tabRules.map(rule => rule.dragId)])
-    if (remeasureRoundsRef.current.key !== rulesKey) remeasureRoundsRef.current = { key: rulesKey, rounds: 0 }
     const remeasureRules = () => {
-      if (remeasureRoundsRef.current.rounds >= 4) return
-      remeasureRoundsRef.current.rounds += 1
+      const now = Date.now()
+      const burst = remeasureRoundsRef.current
+      if (now - burst.last > 1000) burst.rounds = 0
+      if (burst.rounds >= 4) return
+      burst.rounds += 1
+      burst.last = now
       setMeasureEpoch(epoch => epoch + 1)
     }
     const check = () => {
@@ -739,7 +762,7 @@ export function TransformationView({
       observer.disconnect()
       fonts?.removeEventListener?.('loadingdone', check)
     }
-  }, [cardGap, dockLayoutKey, hasMeasurements, isReverse, measuredWidths, selectedTab, tabRules])
+  }, [cardGap, dockLayoutKey, hasMeasurements, measuredWidths])
 
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
@@ -778,6 +801,10 @@ export function TransformationView({
     persistentHints, rewriteStepCount, matchingVisualInfos,
     infos => infos.length === 0, infos => infos,
   )
+  // Lessons stack right above the relation sign. A phone keeps them in the
+  // controls' row, where its narrow screen has room for them, except in a
+  // Rewrite-only level, whose page has no canvas lessons to make way for.
+  const stackedLessons = rewriteOnly || !isPhonePortrait
   // A Rewrite-only level has no Back button to point at.
   const backInfo = rewriteOnly ? undefined : activeVisualInfos.find(info => info.kind === 'back' && info.text)
   const generalInfo = activeVisualInfos.find(info => info.kind === 'info' && info.text)
@@ -979,48 +1006,17 @@ export function TransformationView({
           const start = { x: sourceRect.left + sourceRect.width / 2, y: sourceRect.top + sourceRect.height / 2 }
           const end = { x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2 }
           const edges = { startRect: guideRect(sourceRect), endRect: guideRect(targetRect) }
-          if (rewriteOnly) {
-            // The lesson sits with the others at the top of the page; the
-            // arrow runs from the rule card to the term on every screen.
+          if (stackedLessons) {
+            // The lesson sits with the others above the relation sign; the
+            // arrow runs from the rule card to the term.
             nextRewriteGuide = { info, style: {}, arrow: { start, end, ...edges } }
             break
           }
-          if (isPhonePortrait) {
-            // CSS places the lesson in the controls' row with the others; its
-            // arrow runs from the lesson's top edge up to the bottom of the
-            // term to rewrite once the lesson is laid out (phoneRewriteArrow).
-            const targetBottom = { x: end.x, y: targetRect.bottom }
-            nextRewriteGuide = { info, style: {}, arrow: { start: targetBottom, end: targetBottom } }
-            break
-          }
-          const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
-          const viewportW = window.innerWidth
-          // The open proof sidebar covers the left of the window.
-          const minLeft = (mainAreaRef.current?.getBoundingClientRect().left ?? 0) + 16
-          const guideWidth = 360
-          const margin = 34
-          const lineLeft = Math.min(sourceRect.left, targetRect.left)
-          const lineRight = Math.max(sourceRect.right, targetRect.right)
-          const leftPos = lineLeft - guideWidth - margin
-          const rightPos = lineRight + margin
-          const fitsLeft = leftPos >= minLeft
-          const fitsRight = rightPos + guideWidth <= viewportW - 16
-          // Prefer whichever side has more room. If neither side has clearance,
-          // clamp to the viewport edge with the most space.
-          const preferLeft = fitsLeft && (!fitsRight || lineLeft - minLeft > viewportW - lineRight)
-          const left = preferLeft
-            ? Math.max(minLeft, leftPos)
-            : Math.min(viewportW - guideWidth - 16, rightPos)
-          nextRewriteGuide = {
-            info,
-            style: {
-              left,
-              top: midpoint.y,
-              transform: 'translateY(-50%)',
-              width: guideWidth,
-            },
-            arrow: { start, end, ...edges },
-          }
+          // A phone: CSS places the lesson in the controls' row with the
+          // others; its arrow runs from the lesson's top edge up to the bottom
+          // of the term to rewrite once the lesson is laid out (phoneRewriteArrow).
+          const targetBottom = { x: end.x, y: targetRect.bottom }
+          nextRewriteGuide = { info, style: {}, arrow: { start: targetBottom, end: targetBottom } }
           break
         }
       }
@@ -1040,13 +1036,13 @@ export function TransformationView({
       window.removeEventListener('animationend', updateGuides, true)
     }
   }, [backInfo, reverseInfo, rewriteInfos, lhs, rhs, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
-    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo, swapInfo, lessonsPosition])
+    phoneExprScale, phoneExprShift, stackedLessons, generalInfo, checkInfo, swapInfo, lessonsSpot])
 
   // The check mark floats just above the relation sign, wherever the row has
   // scrolled; its lesson's arrow runs from the lesson down to it.
   useLayoutEffect(() => {
     if (!showCheck) {
-      setCheckPosition(null)
+      setCheckSpot(null)
       setCheckArrow(null)
       return
     }
@@ -1058,8 +1054,7 @@ export function TransformationView({
       const relationRect = relationEl.getBoundingClientRect()
       const left = relationRect.left + relationRect.width / 2 - overlayRect.left
       const top = relationRect.top - overlayRect.top - 6
-      setCheckPosition(prev =>
-        prev && Math.abs(prev.left - left) < 0.5 && Math.abs(prev.top - top) < 0.5 ? prev : { left, top })
+      setCheckSpot(positionKey(left, top))
       const lesson = checkInfoRef.current
       const button = checkButtonRef.current
       if (lesson && button) {
@@ -1099,22 +1094,28 @@ export function TransformationView({
       window.removeEventListener('transitionend', update, true)
       window.removeEventListener('animationend', update, true)
     }
-  }, [showCheck, checkInfo, checkPosition, lessonsPosition, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
+  }, [showCheck, checkInfo, checkSpot, lessonsSpot, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
 
-  // A Rewrite-only level's lessons sit right above the relation sign, with room
-  // left for the check mark to appear between them, and for the arrow to it
-  // when a lesson points at it.
+  // The rewrite lesson shown in the stack: the one whose arrow is drawn, or the
+  // first while its rule card or its term is off screen.
+  const rewriteLesson = rewriteGuide?.info ?? rewriteInfos[0]
+  // The lessons sit right above the relation sign, with room left for the check
+  // mark to appear between them, and for the arrow to it when a lesson points
+  // at it. A relation nested deep enough to stand taller than that room pushes
+  // them up to clear its top.
   useLayoutEffect(() => {
-    if (!rewriteOnly) {
-      setLessonsPosition(null)
+    if (!stackedLessons) {
+      setLessonsSpot(null)
       return
     }
     const update = () => {
       const relationEl = relationRef.current
       const lessons = lessonsRef.current
       const scroller = exprScrollerRef.current
-      if (!relationEl || !lessons || !scroller) return
+      const row = exprWrapperRef.current
+      if (!relationEl || !lessons || !scroller || !row) return
       const relationRect = relationEl.getBoundingClientRect()
+      const rowRect = row.getBoundingClientRect()
       const bounds = scroller.getBoundingClientRect()
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
       const checkRoom = 2.6 * rem + 6
@@ -1125,10 +1126,10 @@ export function TransformationView({
         bounds.left + margin + half,
         Math.min(relationRect.left + relationRect.width / 2, bounds.right - margin - half),
       )
+      const bottom = Math.min(relationRect.top - room, rowRect.top - 0.5 * rem)
       // Never up under the header.
-      const top = Math.max(3.75 * rem, relationRect.top - room - lessons.offsetHeight)
-      setLessonsPosition(prev =>
-        prev && Math.abs(prev.left - left) < 0.5 && Math.abs(prev.top - top) < 0.5 ? prev : { left, top })
+      const top = Math.max(3.75 * rem, bottom - lessons.offsetHeight)
+      setLessonsSpot(positionKey(left, top))
     }
     update()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
@@ -1144,12 +1145,12 @@ export function TransformationView({
       window.removeEventListener('transitionend', update, true)
       window.removeEventListener('animationend', update, true)
     }
-  }, [rewriteOnly, checkInfo, generalInfo, reverseInfo, swapInfo, rewriteGuide, rewriteInfos, lhs, rhs,
+  }, [stackedLessons, checkInfo, generalInfo, reverseInfo, swapInfo, rewriteLesson, lhs, rhs,
     isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight, dockPresentationReady])
 
   useLayoutEffect(() => {
     const lesson = rewriteInfoRef.current
-    if (!isPhonePortrait || rewriteOnly || !rewriteGuide || !lesson) {
+    if (stackedLessons || !rewriteGuide || !lesson) {
       setPhoneRewriteArrow(null)
       return
     }
@@ -1165,7 +1166,7 @@ export function TransformationView({
       endPadding: 6,
       arc: 'none',
     })
-  }, [isPhonePortrait, rewriteGuide, rewriteOnly])
+  }, [rewriteGuide, stackedLessons])
 
   useEffect(() => {
     if (!activeId) return
@@ -1512,36 +1513,37 @@ export function TransformationView({
             </div>
           </div>
 
-          {/* A Rewrite-only level stacks its lessons right above the relation sign. */}
-          {rewriteOnly ? (
+          {/* Lessons stack right above the relation sign; a phone keeps those of a
+              level with a canvas in its controls' row. */}
+          {stackedLessons ? (
             <div
               ref={lessonsRef}
-              className="tr-top-lessons"
+              className="tr-relation-lessons"
               data-testid="rewrite-lessons"
               style={lessonsPosition ?? { visibility: 'hidden' }}
             >
               {generalInfo && (
-                <div className="visual-info-callout transform-info top-info">
+                <div className="visual-info-callout transform-info stacked-info">
                   <VisualInfoText text={generalInfo.text} />
                 </div>
               )}
-              {(rewriteGuide?.info ?? rewriteInfos[0]) && (
-                <div ref={rewriteInfoRef} className="visual-info-callout transform-info top-info top-info-rewrite">
-                  <VisualInfoText text={(rewriteGuide?.info ?? rewriteInfos[0])!.text} />
+              {rewriteLesson && (
+                <div ref={rewriteInfoRef} className="visual-info-callout transform-info stacked-info stacked-info-rewrite">
+                  <VisualInfoText text={rewriteLesson.text} />
                 </div>
               )}
               {reverseInfo && (
-                <div ref={reverseInfoRef} className="visual-info-callout transform-info top-info top-info-reverse">
+                <div ref={reverseInfoRef} className="visual-info-callout transform-info stacked-info stacked-info-reverse">
                   <VisualInfoText text={reverseInfo.text} />
                 </div>
               )}
               {swapInfo && (
-                <div ref={swapInfoRef} className="visual-info-callout transform-info top-info top-info-swap">
+                <div ref={swapInfoRef} className="visual-info-callout transform-info stacked-info stacked-info-swap">
                   <VisualInfoText text={swapInfo.text} />
                 </div>
               )}
               {checkInfo && (
-                <div ref={checkInfoRef} className="visual-info-callout transform-info top-info check-info">
+                <div ref={checkInfoRef} className="visual-info-callout transform-info stacked-info check-info">
                   <VisualInfoText text={checkInfo.text} />
                 </div>
               )}
@@ -1574,7 +1576,7 @@ export function TransformationView({
             </>
           )}
 
-          {isPhonePortrait && !rewriteOnly && rewriteGuide && (
+          {!stackedLessons && rewriteGuide && (
             <div ref={rewriteInfoRef} className="visual-info-callout transform-info rewrite-info">
               <VisualInfoText text={rewriteGuide.info.text} />
             </div>
@@ -1773,15 +1775,7 @@ export function TransformationView({
           arc: isPhonePortrait ? 'none' : 'up',
         }} className="swap-guide-arrow" />}
         {phoneRewriteArrow && <InstructionGuideArrow arrow={phoneRewriteArrow} />}
-        {rewriteGuide && rewriteOnly && <InstructionGuideArrow arrow={rewriteGuide.arrow} />}
-        {rewriteGuide && !isPhonePortrait && !rewriteOnly && (
-          <>
-            <InstructionGuideArrow arrow={rewriteGuide.arrow} />
-            <div className="visual-info-callout transform-info rewrite-info" style={rewriteGuide.style}>
-              <VisualInfoText text={rewriteGuide.info.text} />
-            </div>
-          </>
-        )}
+        {rewriteGuide && stackedLessons && <InstructionGuideArrow arrow={rewriteGuide.arrow} />}
         {checkInfo && checkArrow && <InstructionGuideArrow arrow={checkArrow} className="check-guide-arrow" />}
 
         <DragOverlay dropAnimation={null}>
