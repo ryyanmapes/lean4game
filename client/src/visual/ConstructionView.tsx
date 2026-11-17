@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
@@ -518,7 +518,16 @@ export function ConstructionView({
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const doneButtonRef = useRef<HTMLButtonElement>(null)
   const lessonRef = useRef<HTMLDivElement>(null)
-  const [guideArrow, setGuideArrow] = useState<GuideArrow | null>(null)
+  // The measured arrow is kept in state as text. This effect runs after every
+  // render and sets it each time. As an object, the arrow got a new identity
+  // whenever React re-applied the queued updates over a lower-priority one still
+  // pending (the one from the animation frame below), which made each render
+  // lead to another without end. The same text set again changes nothing.
+  const [guideArrowText, setGuideArrowText] = useState<string | null>(null)
+  const guideArrow = useMemo(
+    () => guideArrowText === null ? null : JSON.parse(guideArrowText) as GuideArrow,
+    [guideArrowText],
+  )
   useLayoutEffect(() => {
     const update = () => {
       let next: GuideArrow | null = null
@@ -553,7 +562,7 @@ export function ConstructionView({
           arc: 'down',
         }
       }
-      setGuideArrow(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
+      setGuideArrowText(next === null ? null : JSON.stringify(next))
     }
     update()
     const rafId = window.requestAnimationFrame(update)

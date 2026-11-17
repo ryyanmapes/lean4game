@@ -148,6 +148,8 @@ function resolveCollisions(
     hh: number
     fixed: boolean
     oversized: boolean
+    /** The goal stack or the proof graph's panel, rather than a card. */
+    obstacle?: boolean
   }[] =
     hyps.map(h => {
       const el = document.getElementById(h.id)
@@ -200,6 +202,7 @@ function resolveCollisions(
         hh: rect.height / 2 + HITBOX_PADDING,
         fixed: true,
         oversized: false,
+        obstacle: true,
       })
     }
   }
@@ -341,6 +344,47 @@ function resolveCollisions(
       }
     }
     if (!moved) break
+  }
+
+  // A card pushed out of one obstacle straight into another, as from the proof
+  // graph's corner down onto the goal stack, is handed back and forth by the
+  // passes above until they give up, and is left underneath one of them, where
+  // a hint above the goal hides it. Move such a card to the nearest spot that is
+  // clear of the obstacles and of the other cards.
+  const boxAt = (item: typeof items[number], cx = item.cx, cy = item.cy) => ({
+    left: cx - item.width / 2,
+    top: cy - item.height / 2,
+    right: cx + item.width / 2,
+    bottom: cy + item.height / 2,
+  })
+  const boxesOverlap = (a: ReturnType<typeof boxAt>, b: ReturnType<typeof boxAt>, gap: number) =>
+    a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top
+  const obstacles = items.filter(item => item.obstacle)
+  for (const item of items) {
+    if (item.fixed || obstacles.length === 0) continue
+    // A few pixels under an obstacle's edge is the passes' own tolerance.
+    if (!obstacles.some(obstacle => boxesOverlap(boxAt(item), boxAt(obstacle), -4))) continue
+    const minX = (canvasBounds.minX ?? 0) + item.hw + COLLISION_EDGE_MARGIN
+    const maxX = Math.max(minX, (canvasBounds.maxX ?? canvasBounds.width) - item.hw - COLLISION_EDGE_MARGIN)
+    const minY = (canvasBounds.minY ?? 0) + item.hh + COLLISION_EDGE_MARGIN
+    const maxY = Math.max(minY, (canvasBounds.maxY ?? canvasBounds.height) - item.hh - COLLISION_EDGE_MARGIN)
+    const others = items.filter(other => other !== item)
+    const isClear = (cx: number, cy: number) =>
+      cx >= minX && cx <= maxX && cy >= minY && cy <= maxY &&
+      !others.some(other => boxesOverlap(boxAt(item, cx, cy), boxAt(other), other.obstacle ? 8 : RECTANGLE_GAP))
+    let spot: { cx: number; cy: number } | null = null
+    for (let radius = 16; radius <= 960 && !spot; radius += 16) {
+      for (let step = 0; step < 24 && !spot; step += 1) {
+        const angle = (step / 24) * Math.PI * 2
+        const cx = item.cx + radius * Math.cos(angle)
+        const cy = item.cy + radius * Math.sin(angle)
+        if (isClear(cx, cy)) spot = { cx, cy }
+      }
+    }
+    if (spot) {
+      item.cx = spot.cx
+      item.cy = spot.cy
+    }
   }
 
   return hyps.map(h => {
@@ -3174,7 +3218,7 @@ export function VisualCanvas({
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(stableUpdater(prev =>
       resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait })))
-  }, [collisionStructureKey, goalStackHeight, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight, proofTree])
+  }, [collisionStructureKey, goalStackHeight, goalsTopOverride, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight, proofTree])
 
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current

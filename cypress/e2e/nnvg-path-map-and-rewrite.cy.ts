@@ -394,7 +394,7 @@ describe('Natural Numbers Video Game', () => {
     mapLevel('Rewrite', 6).should('have.attr', 'data-boss', 'true')
     mapLevel('Successor', 3).should('have.attr', 'data-boss', 'true')
     mapLevel('SuccessorJoined', 2).should('have.attr', 'data-boss', 'true')
-    mapLevel('PropositionRight', 7).should('have.attr', 'data-boss', 'true')
+    mapLevel('PropositionRight', 8).should('have.attr', 'data-boss', 'true')
     mapLevel('NeqBoss', 1).should('have.attr', 'data-boss', 'true')
     mapLevel('Multiplication', 9).should('have.attr', 'data-boss', 'true')
     mapLevel('Power', 9).should('have.attr', 'data-boss', 'true')
@@ -436,9 +436,11 @@ describe('Natural Numbers Video Game', () => {
       'edge:NeqBoss:Outro:in',
       'bonus:NeqJoined:1:NeqBoss',
       'bonus:Power:9:PowerBonus',
+      // Two bonuses leave Rewrite World's level 2, neither needing the other.
       'bonus:Rewrite:3:RewriteBonus',
+      'bonus:Rewrite:3:RewriteBonusB',
       'bonus:PropositionRight:2:PropositionBonus',
-      'bonus:PropositionRight:7:PropositionBonusB',
+      'bonus:PropositionRight:8:PropositionBonusB',
     ]) {
       cy.get(`[data-segment="${segment}"]`).should('exist')
     }
@@ -452,9 +454,19 @@ describe('Natural Numbers Video Game', () => {
     // Numbering restarts per stream, and bonuses are numbered as in the spec.
     mapLevel('RewriteBonus', 1).should('contain.text', 'A1')
     mapLevel('RewriteBonus', 2).should('not.exist')
+    mapLevel('RewriteBonusB', 1).should('contain.text', 'B1')
+    // Both branch off to the same side, one row below the other.
+    mapLevel('RewriteBonus', 1).then($a => {
+      mapLevel('RewriteBonusB', 1).then($b => {
+        const [a, b] = [$a[0]!.getBoundingClientRect(), $b[0]!.getBoundingClientRect()]
+        expect(Math.abs(a.left - b.left), 'same column').to.be.lessThan(2)
+        expect(b.top, 'B below A').to.be.greaterThan(a.bottom)
+      })
+    })
     mapLevel('Proposition', 7).should('contain.text', '6')
     mapLevel('PropositionRight', 1).should('contain.text', '7')
     mapLevel('PropositionRight', 7).should('contain.text', '13')
+    mapLevel('PropositionRight', 8).should('contain.text', '14')
     mapLevel('PropositionBonus', 1).should('contain.text', 'A1')
     mapLevel('PropositionBonusB', 3).should('contain.text', 'B3')
     mapLevel('SuccessorJoined', 1).should('contain.text', '4')
@@ -476,7 +488,7 @@ describe('Natural Numbers Video Game', () => {
         .getBoundingClientRect()
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
     }
-    cy.get('[data-testid="path-map-level"]').should('have.length', 90).then($levels => {
+    cy.get('[data-testid="path-map-level"]').should('have.length', 92).then($levels => {
       // ≤ World leaves Advanced Addition World to the right, and Advanced
       // Multiplication World carries on below it.
       expect(centre('LessOrEqual', 1).x).to.be.greaterThan(centre('AdvAddition', 5).x + 50)
@@ -556,7 +568,7 @@ describe('Natural Numbers Video Game', () => {
     leave('Intro', 1)
     for (const [world, n, title] of [
       ['Rewrite', 6, 'On The Count of Three (Rewriting World Boss)'],
-      ['PropositionRight', 7, 'The De Morgan\'s Law That Is Intuitionistically Valid (Proposition World Boss)'],
+      ['PropositionRight', 8, 'The De Morgan\'s Law That Is Intuitionistically Valid (Proposition World Boss)'],
       ['SuccessorJoined', 2, 'Plug and Chug (Successor World Boss)'],
       ['NeqBoss', 1, 'Equality in ℕ is Decidable (≠ World Boss)'],
       ['Multiplication', 9, 'mul_assoc (Multiplication World Boss)'],
@@ -591,7 +603,7 @@ describe('Natural Numbers Video Game', () => {
     mapLevel('Outro', 1).should('have.attr', 'data-state', 'locked')
     // Everything The End follows but the ≠ boss: it stays locked, with two of its paths lit.
     const done = {
-      Intro: 1, Rewrite: 6, Proposition: 7, PropositionRight: 7, Successor: 3, SuccessorJoined: 2, Induction: 4,
+      Intro: 1, Rewrite: 6, Proposition: 7, PropositionRight: 8, Successor: 3, SuccessorJoined: 2, Induction: 4,
       Neq: 8, NeqJoined: 1, Multiplication: 9, Power: 9, AdvAddition: 5, LessOrEqual: 10, AdvMultiplication: 10,
     }
     visitWithProgress(done)
@@ -642,7 +654,10 @@ describe('Natural Numbers Video Game', () => {
     cy.get('[data-testid="rewrite-check"]').should('be.visible')
     cy.wait(400)
     arrowStopsShortOf('.check-guide-arrow', '[data-testid="rewrite-check"]')
+    // Orange while it waits to be clicked, and no longer once the proof is done.
+    cy.get('[data-testid="rewrite-check"]').should('have.css', 'border-top-color', 'rgb(249, 115, 22)')
     check()
+    cy.get('[data-testid="rewrite-check"]').should('not.have.css', 'border-top-color', 'rgb(249, 115, 22)')
     cy.get('.visual-header.completed', { timeout: LOAD_TIMEOUT }).should('exist')
 
     // Level 1: many substitutions, each click rewriting its only match.
@@ -650,7 +665,8 @@ describe('Natural Numbers Video Game', () => {
     cy.location('pathname').should('contain', '/world/Rewrite/level/2/visual')
     expectRewriteOnlyLevel()
     lessonsShouldContain('many substitutions')
-    lessonsShouldContain('reading left to right')
+    // The hint about clicking moved to the bonus level Fast Rewriting.
+    cy.get('[data-testid="rewrite-lessons"]').should('not.contain.text', 'reading left to right')
     relationShouldBe('(x + y) + z = 0')
     // The specific hypotheses come first, then the general one.
     cy.get('.tr-rule-card').filter(':visible').then($cards => {
@@ -683,12 +699,14 @@ describe('Natural Numbers Video Game', () => {
     relationShouldBe('0 = 0')
     check()
 
-    // The bonus sprouts after level 2 without holding up level 3.
+    // The bonuses sprout after level 2 without holding up level 3.
     cy.get('.visual-header-map-btn').filter(':visible').first().click()
     mapLevel('Rewrite', 3).should('have.attr', 'data-state', 'completed')
     mapLevel('Rewrite', 4).should('have.attr', 'data-state', 'frontier')
     mapLevel('RewriteBonus', 1).should('have.attr', 'data-state', 'frontier')
+    mapLevel('RewriteBonusB', 1).should('have.attr', 'data-state', 'frontier')
     cy.get('[data-segment="bonus:Rewrite:3:RewriteBonus"]').should('have.attr', 'data-lit', 'true')
+    cy.get('[data-segment="bonus:Rewrite:3:RewriteBonusB"]').should('have.attr', 'data-lit', 'true')
   })
 
   it('uses a ∀ hypothesis as a rule anywhere it fits', () => {
@@ -763,7 +781,7 @@ describe('Natural Numbers Video Game', () => {
   it('plays Proposition World on the canvas, with a card for `A : Prop`', () => {
     openCanvasLevel('Proposition', 1)
     headerShouldNameLevel('0', 'Basic Propositions')
-    cy.contains('Goals can be proven by dragging over a proposition that matches it!').should('be.visible')
+    cy.contains('Goals can be proven by dragging over a matching proposition!').should('be.visible')
     cy.get('[data-testid="hyp-card"]').should('have.length', 2)
     cy.get('[data-testid="hyp-card"][data-hyp-type="Prop"]').should('have.length', 1)
     cy.get('[data-testid="hyp-card"][data-hyp-name="h"]').should('exist')
@@ -935,9 +953,21 @@ describe('Natural Numbers Video Game', () => {
     // With the hypothesis split, its hint stays up: both branches need finishing.
     goalHintShouldContain('reachable from both sides')
     goalShouldBe('B ∨ A')
+    // The side this branch has no proof of is a dead end, and says so.
+    harness(h => h.clickGoal('click_goal_left'))
+    goalShouldBe('B')
+    goalHintShouldContain('any way of proving')
+    cy.contains('in this branch').should('be.visible')
+    notProcessing()
+    cy.get('button[aria-label="Undo"]').filter(':visible').first().click()
+    goalShouldBe('B ∨ A')
+    goalHintShouldContain('reachable from both sides')
+    // The side it does have a proof of: no warning, and no stale hint.
     harness(h => h.clickGoal('click_goal_right'))
     goalShouldBe('A')
     cy.contains('depend on which branch').should('not.exist')
+    cy.contains('in this branch').should('not.exist')
+    cy.contains('reachable from both sides').should('not.exist')
     harness(h => h.dragHypToGoal('left'))
     nextUnsolvedBranch()
     goalShouldBe('B ∨ A')
@@ -971,23 +1001,104 @@ describe('Natural Numbers Video Game', () => {
     shouldBeCompleted()
   })
 
-  it('proves a False goal backwards with a ¬ card too', () => {
+  it('plays Negation (2): `A → B` gives `B`, and `¬B` takes nothing else', () => {
     openCanvasLevel('PropositionRight', 6)
     headerShouldNameLevel('12', 'Negation (2)')
-    goalShouldBe('¬(A ∧ ¬A)')
+    goalShouldBe('A → ¬B → ¬(A → B)')
+    clickGoal()
+    goalShouldBe('¬B → ¬(A → B)')
+    clickGoal()
+    goalShouldBe('¬(A → B)')
     clickGoal()
     goalShouldBe('False')
-    clickHyp('h')
-    hypShouldExist('right')
-    dragCardToGoal('¬A')
-    goalShouldBe('A')
-    dragCardToGoal('A')
+    // `¬B` is `B → False`: `A` isn't its premise.
+    dragCard('A', '¬B')
+    notProcessing()
+    cy.get('[data-testid="hyp-card"][data-hyp-type="False"]').should('not.exist')
+    dragCard('A', 'A → B')
+    dragCard('B', '¬B')
+    dragCardToGoal('False')
     shouldBeCompleted()
   })
 
-  it('plays the Proposition World boss', () => {
+  it('plays Negation (3) backwards from the goal, as its hidden hint says', () => {
     openCanvasLevel('PropositionRight', 7)
-    headerShouldNameLevel('13', 'The De Morgan')
+    headerShouldNameLevel('13', 'Negation (3)')
+    goalShouldBe('A → ¬(A ∧ B) → ¬B')
+    // The hint is there to be revealed, not shown.
+    goalHintShouldContain('Hint:')
+    cy.contains('rewrite backwards from the goal').should('not.exist')
+    cy.contains('button', 'Click to reveal').click()
+    cy.contains('Remember that you can rewrite backwards from the goal!').should('be.visible')
+    clickGoal()
+    goalShouldBe('¬(A ∧ B) → ¬B')
+    clickGoal()
+    goalShouldBe('¬B')
+    clickGoal()
+    goalShouldBe('False')
+    dragCardToGoal('¬(A ∧ B)')
+    goalShouldBe('A ∧ B')
+    clickGoal()
+    goalShouldBe('A')
+    dragCardToGoal('A')
+    nextUnsolvedBranch()
+    goalShouldBe('B')
+    dragCardToGoal('B')
+    shouldBeCompleted()
+  })
+
+  it('takes premises in order: `B` is refused on `A → (B → C)`', () => {
+    openCanvasLevel('Proposition', 4)
+    headerShouldNameLevel('3', 'Implications (3)')
+    clickGoal()
+    goalShouldBe('(A → B) → (A → B → C) → C')
+    clickGoal()
+    goalShouldBe('(A → B → C) → C')
+    clickGoal()
+    goalShouldBe('C')
+    dragCard('A', 'A → B')
+    cy.get('[data-testid="hyp-card"][data-hyp-type="B"]', { timeout: LOAD_TIMEOUT }).should('exist')
+    // Skipping `A` would leave `A → C`, which nobody asked for: refused, whichever card is dragged.
+    dragCard('B', 'A → (B → C)')
+    dragCard('A → (B → C)', 'B')
+    notProcessing()
+    cy.get('[data-testid="hyp-card"][data-hyp-type="A → C"]').should('not.exist')
+    cy.get('[data-testid="hyp-card"]').should('have.length', 7)
+    dragCard('A', 'A → (B → C)')
+    cy.get('[data-testid="hyp-card"][data-hyp-type="B → C"]', { timeout: LOAD_TIMEOUT }).should('exist')
+    dragCard('B', 'B → C')
+    dragCardToGoal('C')
+    shouldBeCompleted()
+  })
+
+  it('keeps every card clear of the goal and its hint when the proof graph appears', () => {
+    visit(level('PropositionRight', 2))
+    harness(h => h.clickGoal('click_goal_right'))
+    goalShouldBe('A ∨ B → B ∨ A')
+    harness(h => h.clickGoal())
+    goalShouldBe('B ∨ A')
+    harness(h => h.clickGoal('click_goal_left'))
+    goalShouldBe('B')
+    cy.get('[data-testid="hyp-card"]', { timeout: LOAD_TIMEOUT }).filter('[data-hyp-type="A ∨ B"]').first()
+      .invoke('attr', 'data-hyp-name').then(name => {
+        harness(h => h.clickHyp(name as string))
+      })
+    hypShouldExist('left')
+    goalHintShouldContain('in this branch')
+    // `B : Prop` makes way for the graph's panel; it used to end up under the hint.
+    cy.get('[data-testid="hyp-card"]').should($cards => {
+      const stack = Cypress.$('.goal-card-with-info')[0]!.getBoundingClientRect()
+      const hidden = [...$cards].filter(element => {
+        const box = element.getBoundingClientRect()
+        return box.left < stack.right - 4 && box.right > stack.left + 4 && box.top < stack.bottom - 4 && box.bottom > stack.top + 4
+      }).map(element => element.getAttribute('data-hyp-type'))
+      expect(hidden, 'cards under the goal stack').to.deep.equal([])
+    })
+  })
+
+  it('plays the Proposition World boss', () => {
+    openCanvasLevel('PropositionRight', 8)
+    headerShouldNameLevel('14', 'The De Morgan')
     cy.contains('em', 'other').should('be.visible')
     cy.contains('strong', 'not').should('be.visible').and('have.css', 'font-weight', '700')
     goalShouldBe('¬(A ∨ B) ↔ ¬A ∧ ¬B')
@@ -1662,5 +1773,106 @@ describe('Natural Numbers Video Game', () => {
     nextUnsolvedBranch()
     goalShouldBe('B')
     dragToGoal('left1')
+  })
+
+  it('plays Fast Rewriting, bonus A1, with seven clicks', () => {
+    openRewriteLevel(1, 'RewriteBonus')
+    headerShouldNameLevel('A1', 'Fast Rewriting')
+    lessonsShouldContain('you can also click them')
+    const sum = (zeros: number): string => zeros === 1 ? '0' : zeros === 2 ? '0 + 0' : `(${sum(zeros - 1)}) + 0`
+    relationShouldBe(`${sum(8)} = 0`)
+    for (let zeros = 7; zeros >= 1; zeros -= 1) {
+      clickRule('zero_add_zero')
+      relationShouldBe(`${sum(zeros)} = 0`)
+    }
+    check()
+    shouldBeCompleted()
+  })
+
+  it('opens Fixed Point as bonus B1', () => {
+    openRewriteLevel(1, 'RewriteBonusB')
+    headerShouldNameLevel('B1', 'Fixed Point')
+    relationShouldBe('f(x) = 0')
+  })
+
+  it('rewrites with `add_zero` backwards, on the term the rule is dropped on', () => {
+    openRewriteLevel(2, 'Successor')
+    relationShouldBe('a + 1 = S(a)')
+    cy.get('.tr-direction-btn').click()
+    // `n ⇐ n + 0` fits any term, so the drop says which one. NNVG has no Mathlib,
+    // whose `nth_rewrite` this used to be sent as.
+    notProcessing()
+    dragWithPointer('.tr-rule-card[data-rule-label="add_zero"]', '.tr-expr-wrapper [data-expr-text="a"]')
+    relationShouldBe('(a + 0) + 1 = S(a)')
+    // A click rewrites the first term it fits: the whole left side.
+    clickRule('add_zero')
+    relationShouldBe('((a + 0) + 1) + 0 = S(a)')
+  })
+
+  it('puts Rewrite Mode hints right above the relation sign, leaving room for the check mark', () => {
+    const lessonsSitAboveTheSign = () => {
+      cy.get('[data-testid="rewrite-lessons"]', { timeout: LOAD_TIMEOUT }).should($lessons => {
+        const lessons = $lessons[0]!.getBoundingClientRect()
+        const sign = Cypress.$('.tr-relation-op')[0]!.getBoundingClientRect()
+        expect(lessons.height, 'lessons are laid out').to.be.greaterThan(20)
+        expect(sign.top - lessons.bottom, 'room for the check mark, and no more than that and an arrow').to.be.within(48, 110)
+        expect(Math.abs((lessons.left + lessons.right) / 2 - (sign.left + sign.right) / 2), 'centred on the sign')
+          .to.be.lessThan(40)
+      })
+    }
+    openRewriteLevel(1)
+    lessonsShouldContain('Drag a hypothesis onto a term')
+    lessonsSitAboveTheSign()
+    // Rewrite Mode opened from a canvas level puts its hints there too.
+    openCanvasLevel('SuccessorJoined', 1)
+    harness(h => h.openHypTransform('hx'))
+    cy.get('.tr-rule-dock[data-layout-ready="true"]', { timeout: LOAD_TIMEOUT }).should('exist')
+    lessonsShouldContain("Let's try rewriting this equation")
+    lessonsSitAboveTheSign()
+  })
+
+  it('pages Rewrite Mode rules without overflow on a large window', () => {
+    cy.viewport(2560, 1440)
+    openCanvasLevel('Multiplication', 6)
+    harness(h => h.openGoalTransform())
+    cy.get('.tr-transformation-overlay .tr-rule-dock[data-layout-ready="true"]', { timeout: LOAD_TIMEOUT }).should('exist')
+    // The interface is scaled up here, and the gap between the cards with it.
+    const pageHoldsItsCards = () => {
+      cy.get('.tr-transformation-overlay .tr-rule-page').should($page => {
+        const page = $page[0]!.getBoundingClientRect()
+        const cards = [...$page.find('.tr-rule-card')].map(element => element.getBoundingClientRect())
+        expect(cards.length, 'cards on the page').to.be.greaterThan(0)
+        expect(Math.min(...cards.map(box => box.left)), 'first card').to.be.at.least(page.left - 1)
+        expect(Math.max(...cards.map(box => box.right)), 'last card').to.be.at.most(page.right + 1)
+      })
+    }
+    const walk = (remaining: number): void => {
+      pageHoldsItsCards()
+      cy.get('.tr-transformation-overlay .tr-nav-btn[aria-label="Next rule"]').then($next => {
+        if ($next.is(':disabled') || remaining <= 0) return
+        const before = Cypress.$('.tr-transformation-overlay .tr-page-indicator').text()
+        cy.wrap($next).click()
+        cy.get('.tr-transformation-overlay .tr-page-indicator').should('not.have.text', before)
+        walk(remaining - 1)
+      })
+    }
+    cy.get('.tr-transformation-overlay .tr-page-indicator').should('contain.text', 'Page 1 of')
+    walk(8)
+    cy.viewport(1000, 660)
+  })
+
+  it('survives a phone viewport that shrinks and grows back within a frame', () => {
+    cy.viewport(390, 844)
+    openRewriteLevel(1)
+    lessonsShouldContain('Drag a hypothesis onto a term')
+    // A screenshot shrinks the viewport to Cypress's own window and restores it at
+    // once. The hints' position used to be an object in state, which that resize
+    // sent through layout effects without end ("Maximum update depth exceeded").
+    cy.screenshot('nnvg-phone-rewrite-level', { capture: 'viewport', overwrite: true })
+    cy.get('.tr-transformation-overlay').should('exist')
+    cy.contains('Maximum update depth').should('not.exist')
+    clickRule('hypothesis1')
+    relationShouldBe('1 + y = 1 + 2')
+    cy.viewport(1000, 660)
   })
 })
