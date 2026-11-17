@@ -7,7 +7,7 @@ import {
 import { formatFormulaText } from './expr-engine'
 import { ResetIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
-import { packAdaptivePages } from './adaptivePagination'
+import { packAdaptivePages, renderedCardGap } from './adaptivePagination'
 import { InstructionGuideArrow, guideRect } from './TransformationView'
 import type { GuideArrow } from './TransformationView'
 import { VisualInfoText } from './VisualInfoText'
@@ -315,6 +315,8 @@ export function ConstructionView({
   const [activeBrickId, setActiveBrickId] = useState<string | null>(null)
   const [pageWidth, setPageWidth] = useState(0)
   const [brickWidthsByTab, setBrickWidthsByTab] = useState<Partial<Record<CnTab, Record<string, number>>>>({})
+  // The gap between bricks as laid out; it grows with the interface on a large window.
+  const [brickGap, setBrickGap] = useState(12)
   const [pageIndexByTab, setPageIndexByTab] = useState<Partial<Record<CnTab, number>>>({})
   const pageRef = useRef<HTMLDivElement>(null)
   const formattedGoalBody = formatFormulaText(goalBody)
@@ -450,6 +452,10 @@ export function ConstructionView({
     if (!el) return
     const bricks = Array.from(el.querySelectorAll<HTMLElement>('.cn-brick'))
     if (!bricks.length) return
+    setBrickGap(prev => {
+      const gap = renderedCardGap(el, prev)
+      return Math.abs(prev - gap) > 0.25 ? gap : prev
+    })
     setBrickWidthsByTab(prev => {
       const previous = prev[selectedTab] ?? {}
       const next = { ...previous }
@@ -468,12 +474,11 @@ export function ConstructionView({
     })
   }, [displayedBricks, selectedTab, pageWidth, pageIndexByTab])
 
-  const BRICK_GAP_PX = 12
   const hasBricks = displayedBricks.length > 0
   const measuredWidths = brickWidthsByTab[selectedTab] ?? {}
   const hasMeasurements = displayedBricks.some(brick => measuredWidths[brick.id] > 0)
   const pages = hasMeasurements
-    ? packAdaptivePages(displayedBricks.map(brick => measuredWidths[brick.id] ?? pageWidth), pageWidth, BRICK_GAP_PX)
+    ? packAdaptivePages(displayedBricks.map(brick => measuredWidths[brick.id] ?? pageWidth), pageWidth, brickGap)
     : [{ start: 0, end: displayedBricks.length }]
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = pages.length

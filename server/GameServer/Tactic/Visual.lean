@@ -1297,6 +1297,31 @@ example (P Q : Prop) (hpq : P → Q) (hp : P) : Q := by
   drag_to hpq hp
   exact h
 
+-- Premises are supplied in order. `B` dropped on `A → B → C` is refused rather than
+-- answered with `A → C`, whichever card is dragged, and likewise through `¬`.
+example (A B C : Prop) (h : A → B → C) (ha : A) (hb : B) : C := by
+  fail_if_success drag_to h hb
+  fail_if_success drag_to hb h
+  fail_if_success drag_apply h hb
+  drag_to h ha
+  drag_to h1 hb
+  exact h2
+
+example (A B : Prop) (h : A → ¬B) (hb : B) : True := by
+  fail_if_success drag_to hb h
+  trivial
+
+private theorem orderedPremisesLocal (x : Nat) : x = 0 → x ≠ 1 → True := by
+  intro _ _
+  trivial
+
+example (x : Nat) (hx : x = 0) (h : x ≠ 1) : True := by
+  fail_if_success drag_apply orderedPremisesLocal h
+  fail_if_success drag_to orderedPremisesLocal h
+  drag_apply orderedPremisesLocal hx
+  drag_to thm_orderedPremisesLocal h
+  exact thm_orderedPremisesLocal
+
 private theorem propBinderLocal {a b : Nat} : a = a → b = b → True := by
   intro _ _
   trivial

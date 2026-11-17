@@ -252,6 +252,17 @@ private def visiblePropPremiseMatches (domain argType : Expr) : MetaM Bool := do
     setMCtx checkpoint
     return false
 
+/-- Whether a binder's domain is a proposition, so that the binder is a premise the
+    player has to supply rather than data that unification fills in. `isProp` can fail on
+    a negation whose data parameter is still a metavariable (`?x ≠ 0`), so the visible
+    negation form counts as well. -/
+private def isPropPremiseDomain (domain : Expr) : MetaM Bool := do
+  try
+    if ← isProp domain then return true
+    return isVisibleNegation (← unfoldVisibleNot domain)
+  catch _ =>
+    return false
+
 /-- Return the domain of the named binder in `fnType`, after accounting for dependencies
     on earlier binders. -/
 def binderDomainByName? (fnType : Expr) (binderName : Name) : MetaM (Option Expr) := do
@@ -313,6 +324,12 @@ def mkPremiseApplication? (fnExpr fnType argExpr argType : Expr) : MetaM (Option
           setMCtx savedMCtx
           return some proof
       setMCtx checkpoint
+      -- Premises are supplied in order. Matching a later one would skip this
+      -- premise and leave it in front of the result, turning `A → B → C` and
+      -- `B` into `A → C`: a statement the player never asked for.
+      if ← isPropPremiseDomain dom then
+        setMCtx savedMCtx
+        return none
     setMCtx savedMCtx
     return none
   catch _ =>
@@ -366,6 +383,10 @@ def mkConstantPremiseApplication?
         let proof ← abstractRemainingApplication prefixProof (← inferType prefixProof)
         return some (← instantiateMVars proof)
       setMCtx checkpoint
+      -- As in `mkPremiseApplication?`: no premise is skipped to reach a later one.
+      if ← isPropPremiseDomain domain then
+        setMCtx savedMCtx
+        return none
     setMCtx savedMCtx
     return none
   catch _ =>

@@ -12,7 +12,7 @@ import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
 import { ResetIcon, RewriteDirectionIcon, SwapSidesIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
-import { packAdaptivePages } from './adaptivePagination'
+import { packAdaptivePages, renderedCardGap } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
 import { usePersistentHints } from './hintPersistence'
 import { compareTheoremNames } from './theoremOrdering'
@@ -402,6 +402,10 @@ export function TransformationView({
     typeof window === 'undefined' ? 0 : Math.max(0, window.innerWidth - (isPhonePortrait ? 96 : 160))
   )
   const [cardWidthsByTab, setCardWidthsByTab] = useState<Record<string, Record<string, number>>>({})
+  // The gap between cards as laid out; it grows with the interface on a large window.
+  const [cardGap, setCardGap] = useState(isPhonePortrait ? 8 : 12)
+  // Raised to have every card of the tab measured again (see `remeasureRules`).
+  const [measureEpoch, setMeasureEpoch] = useState(0)
   const [ruleDockHeight, setRuleDockHeight] = useState(0)
   const [measuredLayoutKey, setMeasuredLayoutKey] = useState('')
   const [measuredDockLayoutKey, setMeasuredDockLayoutKey] = useState('')
@@ -423,6 +427,8 @@ export function TransformationView({
   const relationRef = useRef<HTMLSpanElement>(null)
   const checkButtonRef = useRef<HTMLButtonElement>(null)
   const checkInfoRef = useRef<HTMLDivElement>(null)
+  const lessonsRef = useRef<HTMLDivElement>(null)
+  const [lessonsPosition, setLessonsPosition] = useState<{ left: number; top: number } | null>(null)
   const [checkPosition, setCheckPosition] = useState<{ left: number; top: number } | null>(null)
   const [checkArrow, setCheckArrow] = useState<GuideArrow | null>(null)
   const suppressRuleClickRef = useRef(false)
@@ -574,6 +580,7 @@ export function TransformationView({
   }, [allRules, selectedTab])
 
   const ruleDockLayoutKey = useMemo(() => JSON.stringify({
+    measureEpoch,
     selectedTab,
     isReverse,
     pageWidth: Math.round(pageWidth),
@@ -584,7 +591,7 @@ export function TransformationView({
       rule.rhsStr,
       (rule as EqualityHyp & { forallFooter?: string }).forallFooter ?? '',
     ]),
-  }), [isReverse, pageWidth, selectedTab, tabRules])
+  }), [isReverse, measureEpoch, pageWidth, selectedTab, tabRules])
 
   // Track cards independently so each page can hold as many of its own cards
   // as fit, rather than inheriting the width of the tab's widest theorem.
@@ -595,6 +602,10 @@ export function TransformationView({
     const measure = () => {
       if (cancelled) return
       const cards = Array.from(el.querySelectorAll<HTMLElement>('.tr-rule-card'))
+      setCardGap(prev => {
+        const gap = renderedCardGap(el, prev)
+        return Math.abs(prev - gap) > 0.25 ? gap : prev
+      })
       setCardWidthsByTab(prev => {
         const previous = prev[selectedTab] ?? {}
         const next = { ...previous }
@@ -633,16 +644,12 @@ export function TransformationView({
     return () => { cancelled = true }
   }, [ruleDockLayoutKey, selectedTab])
 
-  // Keep this in sync with the responsive `.tr-rule-page-cards` gap. Phone
-  // pages intentionally use the tighter spacing so adjacent compact rules
-  // share a page instead of wasting most of it on a single card.
-  const GAP_PX = isPhonePortrait ? 8 : 12
   const hasRules = tabRules.length > 0
   const measuredWidths = cardWidthsByTab[selectedTab] ?? {}
   const hasMeasurements = measuredLayoutKey === ruleDockLayoutKey &&
     tabRules.every(rule => measuredWidths[rule.dragId] > 0)
   const pages = hasMeasurements
-    ? packAdaptivePages(tabRules.map(rule => measuredWidths[rule.dragId] ?? pageWidth), pageWidth, GAP_PX)
+    ? packAdaptivePages(tabRules.map(rule => measuredWidths[rule.dragId] ?? pageWidth), pageWidth, cardGap)
     : [{ start: 0, end: tabRules.length }]
   const desiredPage = pageIndexByTab[selectedTab] ?? 0
   const totalPages = pages.length
@@ -692,6 +699,47 @@ export function TransformationView({
     observer.observe(dock)
     return () => observer.disconnect()
   }, [dockLayoutKey, hasMeasurements])
+
+  // The pages are packed from widths taken when the rules last changed. The
+  // cards can change size without the rules changing: a font arrives, or the
+  // window is resized and the interface rescales. So watch the cards on screen,
+  // and when one no longer has the width it was packed with, or the page's row
+  // has outgrown the page, measure every card of the tab again. Each set of
+  // rules gets a few such rounds at most, so that a card that never settles
+  // can't keep the dock remeasuring.
+  const remeasureRoundsRef = useRef({ key: '', rounds: 0 })
+  useEffect(() => {
+    if (!hasMeasurements) return
+    const page = pageRef.current
+    if (!page || typeof ResizeObserver === 'undefined') return
+    const rulesKey = JSON.stringify([selectedTab, isReverse, tabRules.map(rule => rule.dragId)])
+    if (remeasureRoundsRef.current.key !== rulesKey) remeasureRoundsRef.current = { key: rulesKey, rounds: 0 }
+    const remeasureRules = () => {
+      if (remeasureRoundsRef.current.rounds >= 4) return
+      remeasureRoundsRef.current.rounds += 1
+      setMeasureEpoch(epoch => epoch + 1)
+    }
+    const check = () => {
+      const cards = Array.from(page.querySelectorAll<HTMLElement>('.tr-rule-card'))
+      const resized = cards.some(card => {
+        const id = card.dataset.ruleId
+        const width = card.getBoundingClientRect().width
+        return id !== undefined && width > 0 && Math.abs((measuredWidths[id] ?? 0) - width) > 0.5
+      })
+      const row = page.querySelector<HTMLElement>('.tr-rule-page-cards')
+      const overflowing = cards.length > 1 && row !== null && row.scrollWidth - row.clientWidth > 1
+      const gapChanged = Math.abs(renderedCardGap(page, cardGap) - cardGap) > 0.25
+      if (resized || overflowing || gapChanged) remeasureRules()
+    }
+    const observer = new ResizeObserver(check)
+    page.querySelectorAll('.tr-rule-card').forEach(card => observer.observe(card))
+    const fonts = typeof document === 'undefined' ? undefined : document.fonts
+    fonts?.addEventListener?.('loadingdone', check)
+    return () => {
+      observer.disconnect()
+      fonts?.removeEventListener?.('loadingdone', check)
+    }
+  }, [cardGap, dockLayoutKey, hasMeasurements, isReverse, measuredWidths, selectedTab, tabRules])
 
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
@@ -992,7 +1040,7 @@ export function TransformationView({
       window.removeEventListener('animationend', updateGuides, true)
     }
   }, [backInfo, reverseInfo, rewriteInfos, lhs, rhs, selectedTab, clampedPage, pageItems.length, isReverse, ruleDockHeight, isPhonePortrait,
-    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo, swapInfo])
+    phoneExprScale, phoneExprShift, rewriteOnly, generalInfo, checkInfo, swapInfo, lessonsPosition])
 
   // The check mark floats just above the relation sign, wherever the row has
   // scrolled; its lesson's arrow runs from the lesson down to it.
@@ -1051,7 +1099,53 @@ export function TransformationView({
       window.removeEventListener('transitionend', update, true)
       window.removeEventListener('animationend', update, true)
     }
-  }, [showCheck, checkInfo, checkPosition, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
+  }, [showCheck, checkInfo, checkPosition, lessonsPosition, lhs, rhs, isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight])
+
+  // A Rewrite-only level's lessons sit right above the relation sign, with room
+  // left for the check mark to appear between them, and for the arrow to it
+  // when a lesson points at it.
+  useLayoutEffect(() => {
+    if (!rewriteOnly) {
+      setLessonsPosition(null)
+      return
+    }
+    const update = () => {
+      const relationEl = relationRef.current
+      const lessons = lessonsRef.current
+      const scroller = exprScrollerRef.current
+      if (!relationEl || !lessons || !scroller) return
+      const relationRect = relationEl.getBoundingClientRect()
+      const bounds = scroller.getBoundingClientRect()
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+      const checkRoom = 2.6 * rem + 6
+      const room = checkRoom + (checkInfo ? 3.25 : 0.75) * rem
+      const half = lessons.offsetWidth / 2
+      const margin = 0.75 * rem
+      const left = Math.max(
+        bounds.left + margin + half,
+        Math.min(relationRect.left + relationRect.width / 2, bounds.right - margin - half),
+      )
+      // Never up under the header.
+      const top = Math.max(3.75 * rem, relationRect.top - room - lessons.offsetHeight)
+      setLessonsPosition(prev =>
+        prev && Math.abs(prev.left - left) < 0.5 && Math.abs(prev.top - top) < 0.5 ? prev : { left, top })
+    }
+    update()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    if (lessonsRef.current) observer?.observe(lessonsRef.current)
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('transitionend', update, true)
+    window.addEventListener('animationend', update, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('transitionend', update, true)
+      window.removeEventListener('animationend', update, true)
+    }
+  }, [rewriteOnly, checkInfo, generalInfo, reverseInfo, swapInfo, rewriteGuide, rewriteInfos, lhs, rhs,
+    isPhonePortrait, phoneExprScale, phoneExprShift, ruleDockHeight, dockPresentationReady])
 
   useLayoutEffect(() => {
     const lesson = rewriteInfoRef.current
@@ -1176,18 +1270,14 @@ export function TransformationView({
       : printExpression(applyEqualityRule(workingExpr, targetId, hyp.lhs, hyp.rhs, isReverse)) !== printExpression(workingExpr)
     if (!patternMatches) return false
 
-    // Lean's elaborated expression can hide typeclass-backed arithmetic behind a
-    // different application tree than the display ExprTree (notably MyNat.add).
-    // When this is the only matching target on the selected side, let Lean's
-    // side-scoped rewrite find it without a structural path. Keep explicit paths
-    // only when they are actually needed to distinguish multiple matches.
-    const path = isThm && isReverse && from.type === 'variable'
-      ? undefined
-      : findDisambiguatingRewritePath(
-          workingExpr,
-          targetId,
-          node => ruleMatchesNode(node, from, matching),
-        )
+    // The path to the chosen term goes with every rewrite. A rule read backwards
+    // from a lone variable (`n ⇐ n + 0`) matches every term, so nothing but the
+    // path says which one the player picked.
+    const path = findDisambiguatingRewritePath(
+      workingExpr,
+      targetId,
+      node => ruleMatchesNode(node, from, matching),
+    )
     // rw_nth counts matches across the complete relation from left to right,
     // not merely within the side that contains the target.
     // For a reverse variable theorem, count the concrete selected expression
@@ -1422,9 +1512,14 @@ export function TransformationView({
             </div>
           </div>
 
-          {/* A Rewrite-only level stacks its lessons at the top of the page. */}
+          {/* A Rewrite-only level stacks its lessons right above the relation sign. */}
           {rewriteOnly ? (
-            <div className="tr-top-lessons" data-testid="rewrite-lessons">
+            <div
+              ref={lessonsRef}
+              className="tr-top-lessons"
+              data-testid="rewrite-lessons"
+              style={lessonsPosition ?? { visibility: 'hidden' }}
+            >
               {generalInfo && (
                 <div className="visual-info-callout transform-info top-info">
                   <VisualInfoText text={generalInfo.text} />

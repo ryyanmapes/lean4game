@@ -4541,9 +4541,9 @@
 }
 
 /* ── Rewrite-only levels (VisualRewriteOnly) ──────────────────────────────
-   The level is played in Rewrite Mode: lessons stack at the top of the page,
-   and a check mark above the relation sign closes the goal once both sides
-   match. */
+   The level is played in Rewrite Mode: lessons stack right above the relation
+   sign (TransformationView sets left and top), leaving room for the check mark
+   that appears there and closes the goal once both sides match. */
 .visual-page .tr-top-lessons {
   position: fixed;
   top: calc(3.25rem + 1rem);
@@ -4576,11 +4576,12 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 2px solid var(--visual-success-border);
+  /* Orange and glowing while it waits to be clicked; green once the proof is done. */
+  border: 2px solid #f97316;
   border-radius: 9999px;
   background: var(--visual-glass-bg);
-  color: var(--visual-success);
-  box-shadow: 0 0 12px var(--visual-success-glow);
+  color: #f97316;
+  box-shadow: 0 0 14px 2px rgba(249, 115, 22, 0.6);
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
@@ -4588,18 +4589,25 @@
   -webkit-appearance: none;
   appearance: none;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
-  animation: tr-check-appear 0.25s ease-out;
+  animation: tr-check-appear 0.25s ease-out, tr-check-glow 1.6s ease-in-out 0.25s infinite;
 }
 
 .visual-page .tr-check-btn:hover:not(:disabled) {
-  background: var(--visual-success-bg-strong);
+  background: rgba(249, 115, 22, 0.22);
 }
 
 .visual-page .tr-check-btn.completed {
   border-color: var(--visual-stream-complete);
   background: var(--visual-stream-complete);
   color: #fff;
+  box-shadow: 0 0 12px var(--visual-success-glow);
+  animation: none;
   cursor: default;
+}
+
+@keyframes tr-check-glow {
+  0%, 100% { box-shadow: 0 0 10px 1px rgba(249, 115, 22, 0.45); }
+  50% { box-shadow: 0 0 22px 6px rgba(249, 115, 22, 0.8); }
 }
 
 @keyframes tr-check-appear {

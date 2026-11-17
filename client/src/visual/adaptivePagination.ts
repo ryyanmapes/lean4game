@@ -35,3 +35,16 @@ export function packAdaptivePages(
   pages.push({ start, end: widths.length })
   return pages
 }
+
+/**
+ * The gap between the cards of a page row as the browser lays it out. The
+ * stylesheet sizes it in rem, so it grows with the interface on a large
+ * window; packing with a fixed pixel gap then puts more cards on a page than
+ * fit. `fallback` is used until the row is in the document.
+ */
+export function renderedCardGap(page: Element | null, fallback: number): number {
+  const row = page?.querySelector('.tr-rule-page-cards')
+  if (!row || typeof getComputedStyle === 'undefined') return fallback
+  const gap = parseFloat(getComputedStyle(row).columnGap)
+  return Number.isFinite(gap) && gap >= 0 ? gap : fallback
+}

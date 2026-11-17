@@ -30,7 +30,7 @@ import { VisualHeader } from './VisualHeader'
 import { VisualInfoText } from './VisualInfoText'
 import { ResetIcon, UndoIcon } from './ControlIcons'
 import { useSwipePaging } from './useSwipePaging'
-import { packAdaptivePages } from './adaptivePagination'
+import { packAdaptivePages, renderedCardGap } from './adaptivePagination'
 import { compareCombiningTheoremNames, THEOREM_BUCKETS, theoremBucket } from './theoremOrdering'
 import type { TheoremBucket } from './theoremOrdering'
 import {
@@ -2552,6 +2552,8 @@ function TheoremTray({
   const { setNodeRef, isOver } = useDroppable({ id: THEOREM_TRAY_ID })
   const [pageWidth, setPageWidth] = useState(0)
   const [cardWidthsByTab, setCardWidthsByTab] = useState<Partial<Record<TrayTab, Record<string, number>>>>({})
+  // The gap between cards as laid out; it grows with the interface on a large window.
+  const [cardGap, setCardGap] = useState(12)
   const dockCardsRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
 
@@ -2581,6 +2583,10 @@ function TheoremTray({
     if (!el || !visibleTab) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('.statement-card'))
     if (!cards.length) return
+    setCardGap(prev => {
+      const gap = renderedCardGap(el, prev)
+      return Math.abs(prev - gap) > 0.25 ? gap : prev
+    })
     setCardWidthsByTab(prev => {
       const previous = prev[visibleTab] ?? {}
       const next = { ...previous }
@@ -2601,11 +2607,10 @@ function TheoremTray({
     })
   }, [items, pageWidth, visibleTab])
 
-  const GAP_PX = 12
   const measuredWidths = visibleTab ? (cardWidthsByTab[visibleTab] ?? {}) : {}
   const hasMeasurements = items.some(item => measuredWidths[item.id] > 0)
   const pages = hasMeasurements
-    ? packAdaptivePages(items.map(item => measuredWidths[item.id] ?? pageWidth), pageWidth, GAP_PX)
+    ? packAdaptivePages(items.map(item => measuredWidths[item.id] ?? pageWidth), pageWidth, cardGap)
     : [{ start: 0, end: items.length }]
   const totalPages = pages.length
   const desiredPage = visibleTab ? (pageIndexByTab[visibleTab] ?? 0) : 0
@@ -5579,9 +5584,12 @@ export function VisualCanvas({
       command = rotation ? `${rotation}\n${comparisonRewrite}` : comparisonRewrite
     }
     // A reverse theorem whose source is a lone pattern variable (notably
-    // `x → x + 0`) is intentionally rejected by Lean's generic rewrite
-    // search. The player selected an exact expression, so make that theorem
-    // parameter explicit and retain the selected side/path with `conv`.
+    // `x → x + 0`) is intentionally rejected by Lean's generic rewrite search.
+    // drag_rw rewrites the term at the chosen path, so it needs no search and
+    // goes first. Should Lean refuse it, the same rewrite is tried once more
+    // with the theorem's parameter spelled out. That form needs `nth_rewrite`,
+    // which only games with Mathlib have, so it can't be the first choice.
+    let fallbackCommand: string | null = null
     if (explicitReverseArg && transformTarget && displayedFocusedTarget?.relation === '=') {
       const scopedRewrite = explicitReverseRewriteCommand(
         hypLabel,
@@ -5594,13 +5602,18 @@ export function VisualCanvas({
         transformTarget.kind === 'hyp' ? transformTarget.hypRef : undefined,
         occurrence,
       )
-      command = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
+      fallbackCommand = rotation ? `${rotation}\n${scopedRewrite}` : scopedRewrite
     }
     closeReductionTooltip()
     updateProcessingState(true)
 
-    const newScript = serializeProofCommands([...proofSteps.map(step => step.command), command])
-    const result = await onInteraction(newScript)
+    let result = await onInteraction(
+      serializeProofCommands([...proofSteps.map(step => step.command), command]))
+    if (result === null && fallbackCommand !== null && fallbackCommand !== command) {
+      command = fallbackCommand
+      result = await onInteraction(
+        serializeProofCommands([...proofSteps.map(step => step.command), command]))
+    }
     updateProcessingState(false)
 
     const lastStep = result?.steps.at(-1)
