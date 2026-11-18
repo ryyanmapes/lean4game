@@ -12,6 +12,7 @@ import { GoalCard, goalInfoMatchesGoal } from './GoalCard'
 import { PropositionTheoremTemplateCard, PropositionTheoremCopyCard, PropositionTheoremPreviewCard } from './PropositionTheoremCard'
 import { VisualTacticTemplateCard, VisualTacticPreviewCard } from './VisualTacticCard'
 import { guideRect, InstructionGuideArrow, isHypothesisTransformInfo, parseEqualityHyp, parseGoalEquality, parseTransformTarget, TransformationView } from './TransformationView'
+import { rewriteTabId } from './TransformationView'
 import type { EqualityHyp, GuideArrow } from './TransformationView'
 import type { ParsedTransformTarget, TransformRelation } from './TransformationView'
 import { ConstructionView } from './ConstructionView'
@@ -22,6 +23,7 @@ import type { ExpressionNode } from './expr-types'
 import { interactiveGoalsToStreams, proofStateToCanvas } from './leanToCanvas'
 import { interactionToPlayTactic } from './interactionToTactic'
 import { statementCanTargetGoal } from './goalApplication'
+import { tacticUsesOnBranch } from './tacticUses'
 import { currentVisualInterfaceScale } from './interfaceScale'
 import { buildForallSpecificationFromDisplay, buildQuantifiedTheoremApplication, buildRuntimeQuantifiedStatementDisplay } from './quantifiedStatement'
 import type { ForallSpecificationInfo } from './quantifiedStatement'
@@ -1345,6 +1347,14 @@ function streamConstructionMode(stream: GoalStream): ConstructionMode {
   return realContextVarNames(stream).length > 0 ? 'real' : 'nat'
 }
 
+/** The context's propositions (`A : Prop`), the names a proposition is built from. */
+function propContextVarNames(stream: GoalStream): string[] {
+  return stream.hyps
+    .filter(card => TaggedText_stripTags(card.hyp.type).trim() === 'Prop')
+    .map(card => card.hyp.names[0])
+    .filter((name): name is string => Boolean(name))
+}
+
 function nextFreshHypName(cards: HypCardType[], baseName: string): string {
   const existing = new Set(cards.map(card => card.hyp.names[0] ?? ''))
   if (!existing.has(baseName)) return baseName
@@ -2500,6 +2510,14 @@ interface VisualCanvasProps {
   hideSwapSides?: boolean
   /** Refuse Rewrite Mode on the goal, with a warning (`VisualNoRewriteMode`). */
   noRewriteMode?: boolean
+  /** Rewrite Mode has no tabs: every rule is in one list (`VisualNoRewriteTabs`). */
+  noRewriteTabs?: boolean
+  /** Rewrite Mode has no Hypotheses tab (`VisualNoHypothesesTab`). */
+  noHypothesesTab?: boolean
+  /** The tab Rewrite Mode opens on, by its label (`VisualStartTab`). */
+  startTab?: string
+  /** How often a tactic can be used along one branch (`VisualTacticUses`). */
+  tacticUses?: Array<{ tactic: string; uses: number }>
   /** Rule cards whose `∀ …` footer is highlighted (`VisualEmphasizeForall`). */
   emphasizeForall?: string[]
   /** Write multiplication as `·` in Rewrite Mode (`VisualMulDot`). */
@@ -2549,7 +2567,10 @@ function TheoremTray({
   getTemplateIffDirection,
   onTemplateContextMenu,
   emphasizeItems,
+  tacticUsesLeft,
 }: {
+  /** Uses left on the current branch, for tactics with a limit (`VisualTacticUses`). */
+  tacticUsesLeft?: Record<string, number>
   theorems: PropositionTheorem[]
   tactics: VisualTactic[]
   activeTab: TrayTab
@@ -2715,7 +2736,9 @@ function TheoremTray({
                       key={(item as VisualTactic).id}
                       tactic={item as VisualTactic}
                       onClick={onTacticClick ? () => onTacticClick(item as VisualTactic) : undefined}
-                      disabled={(item as VisualTactic).activation === 'goal_click' && !onTacticClick}
+                      disabled={((item as VisualTactic).activation === 'goal_click' && !onTacticClick)
+                        || tacticUsesLeft?.[(item as VisualTactic).name] === 0}
+                      usesLeft={tacticUsesLeft?.[(item as VisualTactic).name]}
                       emphasized={isEmphasized(item)}
                     />
                   )
@@ -2800,6 +2823,7 @@ export function VisualCanvas({
   displayLevelId, onInteraction, onNextLevel, nextLevelLocked, onPreviousLevel, onWorldMap, levelTitle, worldTitle, worldSize, skippedLevels, previouslyCompleted,
   onLevelCompleted, onProofStep, onResetUndone, onGesture, onOpenClassic, onValidateProof, resumeState, onAutosave, proofPrelude = '',
   rewriteOnly = false, hideRewriteDirection = false, hideSwapSides = false, noRewriteMode = false,
+  noRewriteTabs = false, noHypothesesTab = false, startTab, tacticUses,
   emphasizeForall, mulDot = false, gameFastExfalso = false,
 }: VisualCanvasProps) {
   const { isVisualAutoBranchSwitching, isVisualFastExfalso } =
@@ -2871,7 +2895,7 @@ export function VisualCanvas({
   const [constructionTarget, setConstructionTarget] = useState<ConstructionTarget | null>(null)
   const [transformationVersion, setTransformationVersion] = useState(0)
   const [isTransformReverse, setIsTransformReverse] = useState(false)
-  const [transformSelectedTab, setTransformSelectedTab] = useState<string>('all')
+  const [transformSelectedTab, setTransformSelectedTab] = useState<string>(() => rewriteTabId(startTab))
   const [transformPageIndexByTab, setTransformPageIndexByTab] = useState<Record<string, number>>({ all: 0 })
   const [pendingTransformSync, setPendingTransformSync] = useState<PendingTransformSync | null>(null)
 
@@ -4554,6 +4578,8 @@ export function VisualCanvas({
     }
 
     if (tacticTemplate) {
+      // A spent tactic's card can't be picked up; this is for a drag that began before.
+      if (tacticUsesLeftRef.current?.[tacticTemplate.name] === 0) return
       const targetGoalStream = interactionStreams.find(stream => stream.id === overId)
       if (targetGoalStream && tacticCanTargetGoal(tacticTemplate, targetGoalStream)) {
         const playTactic = interactionToPlayTactic({ type: 'drag_tactic', tacticName: tacticTemplate.name })
@@ -5189,6 +5215,7 @@ export function VisualCanvas({
   function handleTrayTacticClick(tactic: VisualTactic) {
     if (tactic.activation !== 'goal_click') return
     if (isProcessing || canvasState.completed || !currentStream || !streamInteractionsEnabled) return
+    if (tacticUsesLeftRef.current?.[tactic.name] === 0) return
     closeReductionTooltip()
     applyInteraction(tactic.name, `visual_tactic_${tactic.name}`, {
       solvedGoalId: currentStream.id,
@@ -6101,6 +6128,7 @@ export function VisualCanvas({
           lhs,
           rhs,
           forallFooter: card.hyp.forallFooter,
+          derived: card.isTheorem || undefined,
         } as EqualityHyp]
       }
       const parsedHyp = parsedHypEquality(card)
@@ -6111,6 +6139,7 @@ export function VisualCanvas({
         label: name,
         rewriteRef: interactionHypName(card) ?? name,
         forallFooter: card.hyp.forallFooter,
+        derived: card.isTheorem || undefined,
       } as EqualityHyp]
     })
 
@@ -6272,12 +6301,14 @@ export function VisualCanvas({
         mode: cnMode,
       }
     }
+    // `∀ P : Prop, …` is specialized to a proposition the player builds.
+    const specifiesProp = constructionTarget.prompt.varType === 'Prop'
     return {
       promptMode: 'specify' as const,
       varName: constructionTarget.prompt.varName,
       goalBody: constructionTarget.prompt.body,
-      contextVarNames: cnVarNames,
-      mode: cnMode,
+      contextVarNames: specifiesProp ? propContextVarNames(stream) : cnVarNames,
+      mode: specifiesProp ? 'prop' as const : cnMode,
     }
   })()
   // Specialization hints for the goal the player is specializing for.
@@ -6329,6 +6360,21 @@ export function VisualCanvas({
       : null)
     ?? canvasState.streams[0]
     ?? (defaultSnapshotId ? streamSnapshots[defaultSnapshotId] ?? null : null)
+  // `VisualTacticUses`: what each limited tactic has left on the branch being
+  // looked at. A use counts for the branch it was made on and those that came
+  // from it, so the tray shows `x0` there and `x1` in an unrelated branch.
+  const currentStreamId = currentStream?.id
+  const tacticUsesLeft = React.useMemo(() => {
+    if (!tacticUses?.length) return undefined
+    return Object.fromEntries(tacticUses.map(limit => [
+      limit.tactic,
+      Math.max(0, limit.uses - (currentStreamId
+        ? tacticUsesOnBranch(proofSteps, initialProofTreeRef.current, proofTree, currentStreamId, limit.tactic)
+        : 0)),
+    ])) as Record<string, number>
+  }, [currentStreamId, proofSteps, proofTree, tacticUses])
+  const tacticUsesLeftRef = useRef(tacticUsesLeft)
+  tacticUsesLeftRef.current = tacticUsesLeft
   const currentLeaf = currentStream ? findLeafForStream(proofTree, currentStream.id) : null
   const currentStreamIsLive = currentStream
     ? canvasState.streams.some(stream => stream.id === currentStream.id)
@@ -7070,6 +7116,7 @@ export function VisualCanvas({
     // Refuse what the real drop refuses, such as `cases` on a disjunction.
     const tactic = visualTactics.find(candidate => candidate.name === tacticName)
     if (tactic && !tacticCanTargetHyp(tactic, targetCard)) return
+    if (tacticUsesLeftRef.current?.[tacticName] === 0) return
     const targetPlayName = interactionHypName(targetCard) ?? hypName
     const latestApplyInteraction = applyInteractionRef.current
     if (!latestApplyInteraction) throw new Error('Visual interaction bridge is not ready')
@@ -8072,6 +8119,7 @@ export function VisualCanvas({
                 )
               }}
               emphasizeItems={emphasizeItems}
+              tacticUsesLeft={tacticUsesLeft}
             />
             {!isPhonePortrait && tacticHypGuides.map((guide, index) => (
               <React.Fragment key={`${guide.info.tactic}-${guide.info.hyp}-${index}`}>
@@ -8303,6 +8351,8 @@ export function VisualCanvas({
           persistentHints={persistentHints}
           hideRewriteDirection={hideRewriteDirection}
           hideSwapSides={hideSwapSides}
+          noTabs={noRewriteTabs}
+          noHypothesesTab={noHypothesesTab}
           emphasizeForall={emphasizeForall}
           onCheck={goalCheckAvailable ? handleRewriteCheck : undefined}
           completed={canvasState.completed}

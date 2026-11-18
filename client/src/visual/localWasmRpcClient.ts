@@ -138,6 +138,12 @@ function formatLoadedBytes(bytes: number) {
   return `${Math.max(1, Math.round(bytes / (1024 * 1024)))} MB`
 }
 
+/** The download's total size if it can be trusted, else 0 for "unknown": the
+ *  bytes received can't exceed it. Exported for tests. */
+export function knownDownloadTotal(received: number, total: number): number {
+  return total > 0 && received <= total ? total : 0
+}
+
 function parseStructuredGoals(diagnostics: WorkerDiagnostic[]): InteractiveGoalWithHints[] {
   const goals: InteractiveGoalWithHints[] = []
   for (const diagnostic of diagnostics) {
@@ -276,7 +282,7 @@ class LocalLeanWorker {
           })
         } else if (msg.type === 'snapshot_progress') {
           const received = Number(msg.received) || 0
-          const total = Number(msg.total) || 0
+          const total = knownDownloadTotal(received, Number(msg.total) || 0)
           const progress = total > 0
             ? 30 + Math.min(52, (received / total) * 52)
             : 30 + Math.min(46, (received / (512 * 1024 * 1024)) * 46)
@@ -292,7 +298,10 @@ class LocalLeanWorker {
           this.snapshotResolver = null
         } else if (msg.type === 'module_bundle_progress') {
           const received = Number(msg.received) || 0
-          const total = Number(msg.total) || 0
+          // A total the download has run past was never the size of what is
+          // being counted (a server that decodes the bundle on the way, say),
+          // so it is not shown: "95 MB of 69 MB" reads as a broken download.
+          const total = knownDownloadTotal(received, Number(msg.total) || 0)
           const progress = total > 0
             ? 30 + Math.min(52, (received / total) * 52)
             : 30

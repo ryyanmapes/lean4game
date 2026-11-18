@@ -52,7 +52,8 @@ export function VisualInfoText({ text }: { text: string }) {
   return (
     <>
       {lines.map((line, lineIndex) => {
-        const reveal = /^\s*\[Click to reveal:\s*(.+)\]\s*$/u.exec(line)
+        // `[Click to reveal: …]` or `[Click to show: …]`, the button saying the same.
+        const reveal = /^\s*\[Click to (reveal|show):\s*(.+)\]\s*$/u.exec(line)
         const revealed = revealedLines.has(lineIndex)
         return <React.Fragment key={lineIndex}>
           {lineIndex > 0 && <br />}
@@ -68,10 +69,10 @@ export function VisualInfoText({ text }: { text: string }) {
                     else next.add(lineIndex)
                     return next
                   })}
-                >{input === 'mobile' ? 'Tap to reveal' : 'Click to reveal'}</button>
+                >{input === 'mobile' ? 'Tap' : 'Click'} to {reveal[1]}</button>
                 {revealed && <>
                   <br />
-                  <span className="visual-info-reveal-answer">{renderInline(reveal[1]!, `answer-${lineIndex}`)}</span>
+                  <span className="visual-info-reveal-answer">{renderInline(reveal[2]!, `answer-${lineIndex}`)}</span>
                 </>}
               </span>
             : renderInline(line, `line-${lineIndex}`)}

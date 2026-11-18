@@ -27,11 +27,14 @@ export function VisualTacticTemplateCard({
   onClick,
   disabled = false,
   emphasized = false,
+  usesLeft,
 }: {
   tactic: VisualTactic
   onClick?: () => void
   disabled?: boolean
   emphasized?: boolean
+  /** Uses left on the current branch, shown under the card (`VisualTacticUses`). */
+  usesLeft?: number
 }) {
   const dragId = `visual_tactic_${tactic.id}`
   const clickOnly = isClickOnlyTactic(tactic)
@@ -42,7 +45,7 @@ export function VisualTacticTemplateCard({
   })
   const style: React.CSSProperties | undefined = isDragging ? { visibility: 'hidden' } : undefined
 
-  return (
+  const card = (
     <div
       ref={setNodeRef}
       id={dragId}
@@ -55,6 +58,13 @@ export function VisualTacticTemplateCard({
       {...(!clickOnly && !disabled ? attributes : {})}
     >
       <VisualTacticContent tactic={tactic} />
+    </div>
+  )
+  if (usesLeft === undefined) return card
+  return (
+    <div className={`tactic-with-uses${usesLeft === 0 ? ' spent' : ''}`}>
+      {card}
+      <span className="tactic-uses" data-testid="tactic-uses" data-tactic-name={tactic.name}>x{usesLeft}</span>
     </div>
   )
 }

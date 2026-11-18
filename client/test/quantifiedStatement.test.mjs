@@ -27,6 +27,7 @@ test('proposition theorems keep propositional binders in the body and numeric bi
   assert.equal(display.forallFooter, `${FORALL} (a : ${NAT}) (b : ${NAT})`)
   assert.deepEqual(display.forallSpecification, {
     varName: 'a',
+    varType: NAT,
     body: `${FORALL} (b : ${NAT}), succ a = succ b ${IMPLIES} a = b`,
     isImplicit: false,
   })
@@ -37,6 +38,7 @@ test('equality theorems only unpack one grouped forall binder at a time', () => 
 
   assert.deepEqual(display.forallSpecification, {
     varName: 'a',
+    varType: NAT,
     body: `${FORALL} (b : ${NAT}), a + b = b + a`,
     isImplicit: false,
   })
@@ -51,6 +53,7 @@ test('order hypotheses render as implication premises instead of forall binders'
   assert.equal(display.forallFooter, `${FORALL} (x : ${NAT}) (y : ${NAT}) (z : ${NAT})`)
   assert.deepEqual(display.forallSpecification, {
     varName: 'x',
+    varType: NAT,
     body: `${FORALL} (y : ${NAT}) (z : ${NAT}), x ${LE} y ${IMPLIES} y ${LE} z ${IMPLIES} x ${LE} z`,
     isImplicit: false,
   })
@@ -77,6 +80,7 @@ test('function-valued binders stay in the forall footer instead of becoming impl
   assert.equal(display.forallFooter, `${FORALL} (ε : ${RAT}) (a : ${NAT} ${IMPLIES} ${RAT})`)
   assert.deepEqual(display.forallSpecification, {
     varName: 'ε',
+    varType: RAT,
     body: `${FORALL} (a : ${NAT} ${IMPLIES} ${RAT}), ε.Steady ↑a ↔ ∀ (n m : ${NAT}), Chapter5.Rat.Close ε (a n) (a m)`,
     isImplicit: false,
   })
@@ -94,6 +98,7 @@ test('proposition theorems can end in equalities while keeping value binders in 
   assert.equal(display.forallFooter, `${FORALL} (x : ${REAL}) (y : ${REAL})`)
   assert.deepEqual(display.forallSpecification, {
     varName: 'x',
+    varType: REAL,
     body: `${FORALL} (y : ${REAL}), x ${NE} 0 ${IMPLIES} y ${NE} 0 ${IMPLIES} 1 / x - 1 / y = (y - x) / (x * y)`,
     isImplicit: false,
   })
@@ -125,6 +130,7 @@ test('workspace cards can reconstruct the next specification step from displayed
   )
   assert.deepEqual(firstStep, {
     varName: 'a',
+    varType: NAT,
     body: `${FORALL} (b : ${NAT}), succ a = succ b ${IMPLIES} a = b`,
     isImplicit: false,
   })
@@ -135,6 +141,7 @@ test('workspace cards can reconstruct the next specification step from displayed
   )
   assert.deepEqual(secondStep, {
     varName: 'b',
+    varType: NAT,
     body: `succ chosen = succ b ${IMPLIES} chosen = b`,
     isImplicit: false,
   })
@@ -145,6 +152,7 @@ test('runtime forall hypotheses can be specified without a separate footer', () 
     buildForallSpecificationFromDisplay(`${FORALL} (y : ${NAT}), d ${LE} y ∨ y ${LE} d`),
     {
       varName: 'y',
+      varType: NAT,
       body: `d ${LE} y ∨ y ${LE} d`,
       isImplicit: false,
     },
@@ -159,9 +167,21 @@ test('partially specialized theorem cards retain remaining binders in the lower 
       forallFooter: `${FORALL} (t : ${NAT})`,
       forallSpecification: {
         varName: 't',
+        varType: NAT,
         body: `b ${LE} b1 ${IMPLIES} b * t ${LE} b1 * t`,
         isImplicit: false,
       },
     },
   )
+})
+
+test('a specification knows the type of the binder it fills', () => {
+  // `∀ P : Prop` is specialized to a proposition the player builds.
+  assert.deepEqual(buildForallSpecificationFromDisplay(`${FORALL} (P : Prop), ¬¬P ${IMPLIES} P`), {
+    varName: 'P',
+    varType: 'Prop',
+    body: `¬¬P ${IMPLIES} P`,
+    isImplicit: false,
+  })
+  assert.equal(buildForallSpecificationFromDisplay('P ∨ ¬P', `${FORALL} {P : Prop}`).varType, 'Prop')
 })

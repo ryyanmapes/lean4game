@@ -585,3 +585,54 @@ test('The End follows the last world of each side of the map, and no path crosse
   assert.equal(byWorld.LessOrEqual.anchor, 'middle')
   assert.equal(byWorld.AdvAddition.anchor, 'middle')
 })
+
+// The map since the 2026-11-18 spec pull: two bonus branches leave Rewrite World's
+// level 2 (A and B), and two leave Proposition World's boss (B and C). Proposition
+// World forks after its level 7, so its two parts have eight levels each.
+const nnvg7 = {
+  ...nnvg6,
+  worlds: {
+    ...nnvg6.worlds,
+    RewriteBonusB: { title: 'Rewrite World Bonus', bonusOf: { world: 'Rewrite', level: 3 } },
+    PropositionBonusB: { title: 'Proposition World Bonus', bonusOf: { world: 'PropositionRight', level: 8 } },
+    PropositionBonusC: { title: 'Proposition World Bonus', bonusOf: { world: 'PropositionRight', level: 8 } },
+  },
+  edges: [...nnvg6.edges, ['Rewrite', 'RewriteBonusB'], ['PropositionRight', 'PropositionBonusC']],
+  worldSize: { ...nnvg6.worldSize, RewriteBonusB: 1, Proposition: 8, PropositionRight: 8, PropositionBonusC: 1,
+    SuccessorJoined: 3 },
+}
+
+test('bonus branches off one level leave its path once and fan out from a stem', () => {
+  const layout = computePathMapLayout(nnvg7)
+  assertNoPathOverLevels(layout)
+  for (const [world, level, branches] of [
+    ['Rewrite', 3, ['RewriteBonus', 'RewriteBonusB']],
+    ['PropositionRight', 8, ['PropositionBonusB', 'PropositionBonusC']],
+  ]) {
+    const anchor = node(layout, world, level)
+    const [first, second] = branches.map(branch => node(layout, branch, 1))
+    const [toFirst, toSecond] = branches.map(branch => segment(layout, `bonus:${world}:${level}:${branch}`))
+    const side = Math.sign(first.x - anchor.x)
+    // One row each, the first above the second, both starting past the stem.
+    assert.equal(second.y, first.y + PATH_MAP_ROW_HEIGHT)
+    assert.equal(second.x, first.x)
+    const stemX = toFirst.points[1].x
+    assert.ok(side * (stemX - anchor.x) > 22, 'the stem is clear of the levels on the path')
+    assert.ok(side * (first.x - stemX) > 22 + PATH_MAP_CORNER_RADIUS, 'a branch has room to turn off the stem')
+    // Only the first branch touches the path it leaves: sideways out of the level,
+    // then down the stem.
+    assert.deepEqual(toFirst.points, [
+      { x: anchor.x, y: anchor.y }, { x: stemX, y: anchor.y }, { x: stemX, y: first.y }, { x: first.x, y: first.y },
+    ])
+    // The second carries the stem on from the first one's turn.
+    assert.deepEqual(toSecond.points, [
+      { x: stemX, y: first.y - PATH_MAP_CORNER_RADIUS }, { x: stemX, y: second.y }, { x: second.x, y: second.y },
+    ])
+    assert.ok(toSecond.points.every(point => point.x !== anchor.x))
+    // Both light up with the level they leave.
+    assert.deepEqual(toSecond.source, { world, level })
+  }
+  // A single branch still drops straight down from its level.
+  const lone = segment(layout, 'bonus:PropositionRight:2:PropositionBonus')
+  assert.equal(lone.points[1].x, node(layout, 'PropositionRight', 2).x)
+})

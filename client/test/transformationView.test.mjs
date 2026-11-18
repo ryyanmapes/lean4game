@@ -97,3 +97,27 @@ test('parseTransformTarget accepts a top-level comparison with unary negation', 
   assert.equal(parsed?.lhsStr, '-b')
   assert.equal(parsed?.rhsStr, 'a')
 })
+
+// The specialization view's terms (ConstructionView), compiled beside TransformationView.
+const { termToLeanString, termDisplayText, countSlots } =
+  require('../../tmp-transformation-tests/visual/ConstructionView.js')
+
+test('a proposition built in the specialization view is bracketed as it was built', () => {
+  const name = n => ({ kind: 'var', name: n, id: n })
+  const slot = { kind: 'slot', id: 's' }
+  const lem = { kind: 'or', left: name('P'), right: { kind: 'not', arg: name('P'), id: 'n' }, id: 'o' }
+  assert.equal(termToLeanString(lem), 'P ∨ (¬P)')
+  assert.equal(termDisplayText(lem), 'P ∨ (¬P)')
+  const nested = {
+    kind: 'imp',
+    left: { kind: 'and', left: name('A'), right: name('B'), id: 'a' },
+    right: { kind: 'iff', left: name('False'), right: slot, id: 'i' },
+    id: 'm',
+  }
+  assert.equal(termToLeanString(nested), '(A ∧ B) → (False ↔ _)')
+  assert.equal(termDisplayText(nested), '(A ∧ B) → (False ↔ ?)')
+  assert.equal(countSlots(nested), 1)
+  assert.equal(termToLeanString({ kind: 'not', arg: lem, id: 'x' }), '¬(P ∨ (¬P))')
+  // Numbers are written as before.
+  assert.equal(termToLeanString({ kind: 'succ', arg: { kind: 'num', value: 0, id: 'z' }, id: 'q' }, 'S'), 'S 0')
+})

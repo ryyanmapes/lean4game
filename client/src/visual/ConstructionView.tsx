@@ -26,6 +26,18 @@ export type ConstructionTerm =
   | { kind: 'mul';  left: ConstructionTerm; right: ConstructionTerm; id: string }
   | { kind: 'div';  left: ConstructionTerm; right: ConstructionTerm; id: string }
   | { kind: 'min';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  // Propositions (`mode="prop"`); a proposition variable or `False` is a `var`.
+  | { kind: 'not';  arg: ConstructionTerm; id: string }
+  | { kind: 'and';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'or';   left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'imp';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+  | { kind: 'iff';  left: ConstructionTerm; right: ConstructionTerm; id: string }
+
+type PropConnective = 'and' | 'or' | 'imp' | 'iff'
+const PROP_SYMBOL: Record<PropConnective, string> = { and: '∧', or: '∨', imp: '→', iff: '↔' }
+function isPropConnective(kind: ConstructionTerm['kind']): kind is PropConnective {
+  return kind === 'and' || kind === 'or' || kind === 'imp' || kind === 'iff'
+}
 
 function genId(): string { return Math.random().toString(36).slice(2, 10) }
 export function makeSlot(): ConstructionTerm  { return { kind: 'slot', id: genId() } }
@@ -37,13 +49,17 @@ function makeSub():  ConstructionTerm { return { kind: 'sub',  left: makeSlot(),
 function makeMul():  ConstructionTerm { return { kind: 'mul',  left: makeSlot(), right: makeSlot(), id: genId() } }
 function makeDiv():  ConstructionTerm { return { kind: 'div',  left: makeSlot(), right: makeSlot(), id: genId() } }
 function makeMin():  ConstructionTerm { return { kind: 'min',  left: makeSlot(), right: makeSlot(), id: genId() } }
+function makeNot():  ConstructionTerm { return { kind: 'not',  arg: makeSlot(), id: genId() } }
+function makeConnective(kind: PropConnective): () => ConstructionTerm {
+  return () => ({ kind, left: makeSlot(), right: makeSlot(), id: genId() })
+}
 
 export function countSlots(t: ConstructionTerm): number {
   switch (t.kind) {
     case 'slot': return 1
     case 'num': case 'var': return 0
-    case 'succ': return countSlots(t.arg)
-    case 'add': case 'sub': case 'mul': case 'div': case 'min':
+    case 'succ': case 'not': return countSlots(t.arg)
+    default:
       return countSlots(t.left) + countSlots(t.right)
   }
 }
@@ -51,7 +67,7 @@ export function countSlots(t: ConstructionTerm): number {
 function slotExists(root: ConstructionTerm, id: string): boolean {
   if (root.kind === 'slot') return root.id === id
   if (root.kind === 'num' || root.kind === 'var') return false
-  if (root.kind === 'succ') return slotExists(root.arg, id)
+  if (root.kind === 'succ' || root.kind === 'not') return slotExists(root.arg, id)
   return slotExists(root.left, id) || slotExists(root.right, id)
 }
 
@@ -59,8 +75,8 @@ function findFirstSlotId(t: ConstructionTerm): string | null {
   switch (t.kind) {
     case 'slot': return t.id
     case 'num': case 'var': return null
-    case 'succ': return findFirstSlotId(t.arg)
-    case 'add': case 'sub': case 'mul': case 'div': case 'min':
+    case 'succ': case 'not': return findFirstSlotId(t.arg)
+    default:
       return findFirstSlotId(t.left) ?? findFirstSlotId(t.right)
   }
 }
@@ -68,7 +84,7 @@ function findFirstSlotId(t: ConstructionTerm): string | null {
 function fillSlotById(root: ConstructionTerm, id: string, filler: ConstructionTerm): ConstructionTerm {
   if (root.kind === 'slot') return root.id === id ? filler : root
   if (root.kind === 'num' || root.kind === 'var') return root
-  if (root.kind === 'succ') return { ...root, arg: fillSlotById(root.arg, id, filler) }
+  if (root.kind === 'succ' || root.kind === 'not') return { ...root, arg: fillSlotById(root.arg, id, filler) }
   return { ...root, left: fillSlotById(root.left, id, filler), right: fillSlotById(root.right, id, filler) }
 }
 
@@ -82,6 +98,16 @@ const PREC: Record<ConstructionTerm['kind'], number> = {
   succ: 90, min: 90,      // function-application style
   mul: 70,  div: 70,
   add: 60,  sub: 60,
+  // A proposition inside another is always written in brackets, so these only
+  // need to be below the atoms.
+  not: 40, and: 35, or: 30, imp: 25, iff: 20,
+}
+
+/** A proposition as part of a larger one: in brackets unless it is a single name
+ * or an empty slot. `A ∧ (B ∨ C)` then reads as it was built, whatever the
+ * connectives' precedence, in Lean and on screen alike. */
+function propPart(t: ConstructionTerm, show: (term: ConstructionTerm) => string): string {
+  return isAtomTerm(t) || t.kind === 'slot' ? show(t) : `(${show(t)})`
 }
 
 function parens(t: ConstructionTerm, outerPrec: number, successorName: string): string {
@@ -140,6 +166,9 @@ export function termToLeanString(t: ConstructionTerm, successorName = 'succ'): s
       const r = isAtomTerm(t.right) ? termToLeanString_(t.right) : `(${termToLeanString_(t.right)})`
       return `min ${l} ${r}`
     }
+    case 'not': return `¬${propPart(t.arg, termToLeanString_)}`
+    case 'and': case 'or': case 'imp': case 'iff':
+      return `${propPart(t.left, termToLeanString_)} ${PROP_SYMBOL[t.kind]} ${propPart(t.right, termToLeanString_)}`
   }
 }
 
@@ -153,6 +182,9 @@ export function termDisplayText(t: ConstructionTerm, successorName = 'succ'): st
       case 'var': return term.name
       case 'succ': return `${successorName}(${show(term.arg)})`
       case 'min': return `min(${show(term.left)}, ${show(term.right)})`
+      case 'not': return `¬${propPart(term.arg, show)}`
+      case 'and': case 'or': case 'imp': case 'iff':
+        return `${propPart(term.left, show)} ${PROP_SYMBOL[term.kind]} ${propPart(term.right, show)}`
       default: {
         const op = term.kind === 'add' ? '+' : term.kind === 'sub' ? '-' : term.kind === 'mul' ? '*' : '/'
         const side = (part: ConstructionTerm) =>
@@ -223,6 +255,25 @@ function TermDisplay({ term, selectedSlotId, onSelectSlot, successorName = 'succ
       </span>
     )
   }
+  if (term.kind === 'not' || isPropConnective(term.kind)) {
+    // A proposition inside another shows its brackets, as `propPart` writes them.
+    const part = (inner: ConstructionTerm) => {
+      const display = <TermDisplay term={inner} selectedSlotId={selectedSlotId} onSelectSlot={onSelectSlot} successorName={successorName} />
+      return isAtomTerm(inner) || inner.kind === 'slot'
+        ? display
+        : <><span className="cn-paren-vis">(</span>{display}<span className="cn-paren-vis">)</span></>
+    }
+    if (term.kind === 'not') {
+      return <span className="cn-expr cn-binary"><span className="cn-op">¬</span>{part(term.arg)}</span>
+    }
+    return (
+      <span className="cn-expr cn-binary">
+        {part(term.left)}
+        <span className="cn-op">{` ${PROP_SYMBOL[term.kind as PropConnective]} `}</span>
+        {part(term.right)}
+      </span>
+    )
+  }
   // add, sub, mul, div — infix binary
   const opSymbol =
     term.kind === 'add' ? ' + ' :
@@ -276,8 +327,10 @@ interface BrickDef {
 }
 
 /** 'nat' — natural-number mode (succ, +, ×, nums 0–4).
- *  'real' — real-number mode (+, −, ×, ÷, min, nums 0/1/2). */
-export type ConstructionMode = 'nat' | 'real'
+ *  'real' — real-number mode (+, −, ×, ÷, min, nums 0/1/2).
+ *  'prop' — a proposition is built: the context's propositions, `False`, and the
+ *  connectives ¬, ∧, ∨, → and ↔. */
+export type ConstructionMode = 'nat' | 'real' | 'prop'
 
 interface Props {
   varName: string
@@ -407,11 +460,21 @@ export function ConstructionView({
     id: `var_${name}`, label: name, make: () => makeVar(name), tab: 'variables',
   }))
 
-  const numBricks: BrickDef[] = mode === 'real'
+  const numBricks: BrickDef[] = mode === 'prop'
+    ? [{ id: 'const_False', label: 'False', make: () => makeVar('False'), tab: 'numbers' as CnTab }]
+    : mode === 'real'
     ? [0, 1, 2].map(n => ({ id: `num_${n}`, label: String(n), make: () => makeNum(n), tab: 'numbers' as CnTab }))
     : [0, 1, 2, 3, 4].map(n => ({ id: `num_${n}`, label: String(n), make: () => makeNum(n), tab: 'numbers' as CnTab }))
 
-  const fnBricks: BrickDef[] = mode === 'real'
+  const fnBricks: BrickDef[] = mode === 'prop'
+    ? [
+        { id: 'fn_not', label: '¬ _',   make: makeNot, tab: 'functions' as CnTab },
+        { id: 'fn_and', label: '_ ∧ _', make: makeConnective('and'), tab: 'functions' as CnTab },
+        { id: 'fn_or',  label: '_ ∨ _', make: makeConnective('or'),  tab: 'functions' as CnTab },
+        { id: 'fn_imp', label: '_ → _', make: makeConnective('imp'), tab: 'functions' as CnTab },
+        { id: 'fn_iff', label: '_ ↔ _', make: makeConnective('iff'), tab: 'functions' as CnTab },
+      ]
+    : mode === 'real'
     ? [
         { id: 'fn_add', label: '_ + _',    make: makeAdd, tab: 'functions' as CnTab },
         { id: 'fn_sub', label: '_ − _',    make: makeSub, tab: 'functions' as CnTab },
@@ -500,8 +563,8 @@ export function ConstructionView({
   const TABS: { id: CnTab; label: string; disabled?: boolean }[] = [
     { id: 'everything', label: 'Everything' },
     { id: 'variables',  label: 'Variables', disabled: varBricks.length === 0 },
-    { id: 'numbers',    label: 'Numbers' },
-    { id: 'functions',  label: 'Functions' },
+    { id: 'numbers',    label: mode === 'prop' ? 'Constants' : 'Numbers' },
+    { id: 'functions',  label: mode === 'prop' ? 'Connectives' : 'Functions' },
   ]
 
   const activeBrickDef = activeBrickId ? allBricks.find(b => b.id === activeBrickId) : null

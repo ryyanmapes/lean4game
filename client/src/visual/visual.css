@@ -800,6 +800,31 @@
   cursor: not-allowed;
 }
 
+/* A tactic with a limited number of uses (`VisualTacticUses`): the count sits under it. */
+.visual-page .tactic-with-uses {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.visual-page .tactic-uses {
+  color: var(--visual-tactic-text);
+  font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.visual-page .tactic-with-uses.spent .tactic-uses {
+  opacity: 0.55;
+}
+
+.visual-page .tactic-with-uses.spent .statement-card.tactic-tray-card {
+  filter: grayscale(1);
+}
+
 .visual-page .statement-card.fly-in {
   transition: left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
               top 0.28s cubic-bezier(0.22, 1, 0.36, 1),
@@ -2390,17 +2415,37 @@
   white-space: nowrap;
 }
 
-/* Equality hyp cards — blue tint */
+/* Theorem rules: blue tint */
 .visual-page .tr-eq-card {
   border-color: var(--visual-info-border);
   background: var(--visual-info-bg);
 }
 .visual-page .tr-eq-card h3 { color: var(--visual-info); }
+/* An axiom is a theorem with a double outline: a second line just inside the border. */
 .visual-page .tr-axiom-card {
-  border-color: #c084fc;
-  background: rgba(192, 132, 252, 0.14);
+  position: relative;
+  border-color: var(--visual-info);
 }
-.visual-page .tr-axiom-card h3 { color: #c084fc; }
+.visual-page .tr-axiom-card::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--visual-info);
+  border-radius: 9px;
+  pointer-events: none;
+}
+/* The level's own hypotheses look as they do in Proposition Mode: grey, or the
+   green of a proposition the player derived. */
+.visual-page .tr-eq-card.tr-hyp-rule-card {
+  border-color: var(--visual-glass-border);
+  background: var(--visual-glass-bg);
+}
+.visual-page .tr-eq-card.tr-hyp-rule-card h3 { color: var(--visual-hyp-text); }
+.visual-page .tr-eq-card.tr-derived-rule-card {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+}
+.visual-page .tr-eq-card.tr-derived-rule-card h3 { color: var(--visual-success-card-text); }
 
 /* A variable named `frac1over2` (formulaDisplay.tsx). */
 .formula-fraction {
@@ -4577,12 +4622,13 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  /* Orange and glowing while it waits to be clicked; green once the proof is done. */
-  border: 2px solid #f97316;
+  /* Glowing in the orange of an open goal's card while it waits to be clicked;
+     green once the proof is done. */
+  border: 2px solid #eab308;
   border-radius: 9999px;
   background: var(--visual-glass-bg);
-  color: #f97316;
-  box-shadow: 0 0 14px 2px rgba(249, 115, 22, 0.6);
+  color: #eab308;
+  box-shadow: 0 0 14px 2px rgba(234, 179, 8, 0.6);
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
@@ -4594,7 +4640,7 @@
 }
 
 .visual-page .tr-check-btn:hover:not(:disabled) {
-  background: rgba(249, 115, 22, 0.22);
+  background: rgba(234, 179, 8, 0.22);
 }
 
 .visual-page .tr-check-btn.completed {
@@ -4607,8 +4653,8 @@
 }
 
 @keyframes tr-check-glow {
-  0%, 100% { box-shadow: 0 0 10px 1px rgba(249, 115, 22, 0.45); }
-  50% { box-shadow: 0 0 22px 6px rgba(249, 115, 22, 0.8); }
+  0%, 100% { box-shadow: 0 0 10px 1px rgba(234, 179, 8, 0.45); }
+  50% { box-shadow: 0 0 22px 6px rgba(234, 179, 8, 0.8); }
 }
 
 @keyframes tr-check-appear {

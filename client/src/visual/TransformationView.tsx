@@ -33,6 +33,8 @@ export interface EqualityHyp {
   category?: string
   /** The `∀ …` binders of a quantified rule, shown under the card. */
   forallFooter?: string
+  /** A hypothesis the player derived (a green card in Proposition Mode). */
+  derived?: boolean
 }
 
 export type TransformRelation = '=' | '<' | '>' | '≤' | '≥' | '≠'
@@ -353,6 +355,10 @@ interface Props {
   hideRewriteDirection?: boolean
   /** Hide the swap-sides button (`VisualHideSwapSides`). */
   hideSwapSides?: boolean
+  /** No tabs: every rule is in one list (`VisualNoRewriteTabs`). */
+  noTabs?: boolean
+  /** No tab for the hypotheses alone (`VisualNoHypothesesTab`). */
+  noHypothesesTab?: boolean
   /** Labels of rule cards whose `∀ …` footer is highlighted. */
   emphasizeForall?: string[]
   /** Called when the player clicks the check mark; resolves to whether Lean
@@ -365,6 +371,14 @@ interface Props {
   rewriteCheck?: boolean
   /** Hints stay up after the rewrite they were written for (`VisualPersistentHints`). */
   persistentHints?: boolean
+}
+
+/** The id of the Rewrite Mode tab with this label (`VisualStartTab`); the tab
+ *  listing everything when there is none. */
+export function rewriteTabId(label: string | undefined): string {
+  if (!label || /^everything$/i.test(label)) return 'all'
+  if (/^hypothes[ie]s$/i.test(label)) return 'hyps'
+  return label
 }
 
 function printLeanExpression(node: ExpressionNode): string {
@@ -380,7 +394,7 @@ export function TransformationView({
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
   isPhonePortrait = false, emphasizeItems, axioms, visualInfos = [],
   rewriteOnly = false, hideRewriteDirection = false, hideSwapSides = false, emphasizeForall, onCheck, completed = false,
-  rewriteCheck = false, persistentHints = false,
+  rewriteCheck = false, persistentHints = false, noTabs = false, noHypothesesTab = false,
 }: Props) {
   const instanceIdRef = useRef(++transformationViewInstanceCounter)
   const initialLhs = useCallback(() => {
@@ -578,11 +592,14 @@ export function TransformationView({
         hasUncategorized = true
       }
     })
-    const result: { id: string; label: string }[] = [{ id: 'all', label: 'Everything' }, { id: 'hyps', label: 'Hypotheses' }]
+    const result: { id: string; label: string }[] = [{ id: 'all', label: 'Everything' }]
+    // With one tab there is no tab bar: every rule is in one list.
+    if (noTabs) return result
+    if (!noHypothesesTab) result.push({ id: 'hyps', label: 'Hypotheses' })
     catOrder.forEach(cat => result.push({ id: cat, label: cat }))
     if (hasUncategorized) result.push({ id: 'other', label: 'Other' })
     return result
-  }, [allRules])
+  }, [allRules, noHypothesesTab, noTabs])
 
   // Clamp selectedTab to a valid tab when tabs change
   useEffect(() => {
@@ -1099,10 +1116,10 @@ export function TransformationView({
   // The rewrite lesson shown in the stack: the one whose arrow is drawn, or the
   // first while its rule card or its term is off screen.
   const rewriteLesson = rewriteGuide?.info ?? rewriteInfos[0]
-  // The lessons sit right above the relation sign, with room left for the check
-  // mark to appear between them, and for the arrow to it when a lesson points
-  // at it. A relation nested deep enough to stand taller than that room pushes
-  // them up to clear its top.
+  // The lessons sit right above the relation, centred across its width, with
+  // room left above its sign for the check mark to appear, and for the arrow to
+  // it when a lesson points at it. A relation nested deep enough to stand
+  // taller than that room pushes them up to clear its top.
   useLayoutEffect(() => {
     if (!stackedLessons) {
       setLessonsSpot(null)
@@ -1122,10 +1139,12 @@ export function TransformationView({
       const room = checkRoom + (checkInfo ? 3.25 : 0.75) * rem
       const half = lessons.offsetWidth / 2
       const margin = 0.75 * rem
-      const left = Math.max(
-        bounds.left + margin + half,
-        Math.min(relationRect.left + relationRect.width / 2, bounds.right - margin - half),
-      )
+      // Centred on the whole relation, as much of it as is in view, not on its
+      // sign: a long side would otherwise pull the lessons off to the other.
+      const viewLeft = Math.max(rowRect.left, bounds.left)
+      const viewRight = Math.min(rowRect.right, bounds.right)
+      const centre = viewRight > viewLeft ? (viewLeft + viewRight) / 2 : (bounds.left + bounds.right) / 2
+      const left = Math.max(bounds.left + margin + half, Math.min(centre, bounds.right - margin - half))
       const bottom = Math.min(relationRect.top - room, rowRect.top - 0.5 * rem)
       // Never up under the header.
       const top = Math.max(3.75 * rem, bottom - lessons.offsetHeight)
@@ -1706,6 +1725,7 @@ export function TransformationView({
                         forallEmphasized={emphasizeForall?.some(name =>
                           name === rule.label || sanitizeLeanDisplayName(name) === rule.label) ?? false}
                         axiom={isAxiomRule(rule)}
+                        source={rule.dragId.startsWith('thm_') ? 'theorem' : rule.derived ? 'derived' : 'hyp'}
                         isReverse={isReverse}
                         isFailing={failingCardId === rule.dragId}
                         emphasized={isEmphasizedRule(rule)}

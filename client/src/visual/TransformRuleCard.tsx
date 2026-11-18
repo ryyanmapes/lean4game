@@ -15,8 +15,11 @@ interface EqualityHypCardProps {
   forallFooter?: string
   /** Highlight the `∀ …` footer (`VisualEmphasizeForall`). */
   forallEmphasized?: boolean
-  /** Shown in the axiom colour. */
+  /** Shown with the axioms' double outline. */
   axiom?: boolean
+  /** Where the rule comes from: a theorem of the inventory, one of the level's
+   *  hypotheses, or a proposition the player derived. It picks the card's colour. */
+  source?: 'theorem' | 'hyp' | 'derived'
   isReverse: boolean
   isFailing?: boolean
   emphasized?: boolean
@@ -44,6 +47,7 @@ export function EqualityHypCard({
   forallFooter,
   forallEmphasized = false,
   axiom = false,
+  source = 'theorem',
   isReverse,
   isFailing = false,
   emphasized = false,
@@ -69,6 +73,7 @@ export function EqualityHypCard({
       data-rule-id={dragId}
       data-rule-label={label}
       data-rule-axiom={axiom ? 'true' : undefined}
+      data-rule-kind={source}
       data-rule-source={isReverse ? rhsStr : lhsStr}
       data-rule-target={isReverse ? lhsStr : rhsStr}
       {...listeners}
@@ -76,7 +81,7 @@ export function EqualityHypCard({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`tr-rule-card tr-eq-card${axiom ? ' tr-axiom-card' : ''}${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
+      className={`tr-rule-card tr-eq-card${source === 'hyp' ? ' tr-hyp-rule-card' : source === 'derived' ? ' tr-derived-rule-card' : ''}${axiom ? ' tr-axiom-card' : ''}${forallFooter ? ' has-forall-footer' : ''}${isDragging ? ' dragging' : ''}${isFailing ? ' drag-fail' : ''}${emphasized ? ' visual-emphasize' : ''}`}
     >
       <h3>{renderFormulaText(label)}</h3>
       <div className="tr-symbol">

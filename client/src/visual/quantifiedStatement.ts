@@ -271,9 +271,12 @@ function buildForallSpecification(
 
   const t = firstBinder.text
   const isImplicit = t.startsWith('{') || t.startsWith('[') || t.startsWith('⦃')
+  const colonIdx = t.indexOf(':')
+  const varType = colonIdx === -1 ? undefined : t.slice(colonIdx + 1).replace(/[)}\]⦄]\s*$/u, '').trim()
 
   return {
     varName: firstBinder.name,
+    ...(varType ? { varType } : {}),
     body: remainingBinders.length > 0
       ? `\u2200 ${remainingBinders.map(binder => binder.text).join(' ')}, ${mainText}`
       : mainText,
@@ -283,6 +286,8 @@ function buildForallSpecification(
 
 export interface ForallSpecificationInfo {
   varName: string
+  /** The binder's type as written, such as `ℕ` or `Prop`, when it has one. */
+  varType?: string
   body: string
   /** True when the binder uses `{...}` or `[...]` syntax (implicit/instance). */
   isImplicit: boolean

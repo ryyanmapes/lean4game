@@ -310,6 +310,13 @@ structure VisualProofGraphInfo where
   text : String
 deriving Inhabited, Repr, ToJson, FromJson
 
+/-- How often a tactic of Visual Lean's tray can be used along one branch of a proof
+(`VisualTacticUses`). -/
+structure VisualTacticUses where
+  tactic : String
+  uses : Nat
+deriving Inhabited, Repr, ToJson, FromJson
+
 /-- Guidance in the specialization view, where a player fills in the variable of a `∀`
 statement. `term` is the term built so far, as displayed, with `?` for each empty slot;
 `none` matches any term. -/
@@ -403,6 +410,14 @@ structure GameLevel where
   visualHideSwapSides : Bool := false
   /-- When true, Visual Lean refuses Rewrite Mode on the goal, with a warning. -/
   visualNoRewriteMode : Bool := false
+  /-- When true, Rewrite Mode has no tabs: every rule is in one list. -/
+  visualNoRewriteTabs : Bool := false
+  /-- When true, Rewrite Mode has no tab for the level's hypotheses alone. -/
+  visualNoHypothesesTab : Bool := false
+  /-- The tab Rewrite Mode opens on, by its label. -/
+  visualStartTab? : Option String := none
+  /-- How often each of these tactics can be used along one branch of the proof. -/
+  visualTacticUses : Array VisualTacticUses := #[]
 deriving Inhabited, Repr
 
 /-- Json-encodable version of `GameLevel`
@@ -447,6 +462,10 @@ structure LevelInfo where
   visualMulDot : Bool := false
   visualHideSwapSides : Bool := false
   visualNoRewriteMode : Bool := false
+  visualNoRewriteTabs : Bool := false
+  visualNoHypothesesTab : Bool := false
+  visualStartTab? : Option String := none
+  visualTacticUses : Array VisualTacticUses := #[]
 deriving ToJson, FromJson
 
 def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
@@ -499,6 +518,10 @@ def GameLevel.toInfo (lvl : GameLevel) (env : Environment) : LevelInfo :=
     visualMulDot := lvl.visualMulDot
     visualHideSwapSides := lvl.visualHideSwapSides
     visualNoRewriteMode := lvl.visualNoRewriteMode
+    visualNoRewriteTabs := lvl.visualNoRewriteTabs
+    visualNoHypothesesTab := lvl.visualNoHypothesesTab
+    visualStartTab? := lvl.visualStartTab?
+    visualTacticUses := lvl.visualTacticUses
   }
 
 /-! ## World -/
@@ -536,6 +559,11 @@ structure World where
   visualContinues? : Option Name := none
   /-- Visual Lean: hide Rewrite Mode's swap-sides button in every level of this world. -/
   visualHideSwapSides : Bool := false
+  /-- Visual Lean: Rewrite Mode has no tabs in any level of this world. -/
+  visualNoRewriteTabs : Bool := false
+  /-- Visual Lean: how often each of these tactics can be used along one branch of a
+  proof, in every level of this world. -/
+  visualTacticUses : Array VisualTacticUses := #[]
 deriving Inhabited
 
 instance : ToJson World := ⟨
@@ -690,7 +718,10 @@ def World.merge (old : World) (new : World) : World :=
   visualSharedPath := new.visualSharedPath || old.visualSharedPath
   visualMapBottom := new.visualMapBottom || old.visualMapBottom
   visualContinues? := new.visualContinues? <|> old.visualContinues?
-  visualHideSwapSides := new.visualHideSwapSides || old.visualHideSwapSides }
+  visualHideSwapSides := new.visualHideSwapSides || old.visualHideSwapSides
+  visualNoRewriteTabs := new.visualNoRewriteTabs || old.visualNoRewriteTabs
+  visualTacticUses := if new.visualTacticUses.isEmpty then old.visualTacticUses
+    else new.visualTacticUses }
 
 def Game.merge (old : Game) (new : Game) : Game :=
 { new with

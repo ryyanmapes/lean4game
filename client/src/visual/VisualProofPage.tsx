@@ -108,6 +108,10 @@ const DEFAULT_LEVEL_PRESENTATION = {
   hideRewriteDirection: false,
   hideSwapSides: false,
   noRewriteMode: false,
+  noRewriteTabs: false,
+  noHypothesesTab: false,
+  startTab: undefined as string | undefined,
+  tacticUses: [] as Array<{ tactic: string; uses: number }>,
   emphasizeForall: [] as string[],
   mulDot: false,
 }
@@ -335,6 +339,10 @@ export function VisualProofPage() {
     hideRewriteDirection: boolean
     hideSwapSides: boolean
     noRewriteMode: boolean
+    noRewriteTabs: boolean
+    noHypothesesTab: boolean
+    startTab?: string
+    tacticUses: Array<{ tactic: string; uses: number }>
     emphasizeForall: string[]
     mulDot: boolean
   }>(DEFAULT_LEVEL_PRESENTATION)
@@ -586,6 +594,10 @@ export function VisualProofPage() {
         visualHideRewriteDirection?: boolean
         visualHideSwapSides?: boolean
         visualNoRewriteMode?: boolean
+        visualNoRewriteTabs?: boolean
+        visualNoHypothesesTab?: boolean
+        visualStartTab?: string | null
+        visualTacticUses?: Array<{ tactic: string; uses: number }>
         visualEmphasizeForall?: string[]
         visualMulDot?: boolean
       }>(`${baseUrl}/${gameId}/level__${worldId}__${levelId}.json`),
@@ -615,6 +627,10 @@ export function VisualProofPage() {
           hideRewriteDirection: levelData.visualHideRewriteDirection ?? false,
           hideSwapSides: levelData.visualHideSwapSides ?? false,
           noRewriteMode: levelData.visualNoRewriteMode ?? false,
+          noRewriteTabs: levelData.visualNoRewriteTabs ?? false,
+          noHypothesesTab: levelData.visualNoHypothesesTab ?? false,
+          startTab: levelData.visualStartTab ?? undefined,
+          tacticUses: levelData.visualTacticUses ?? [],
           emphasizeForall: levelData.visualEmphasizeForall ?? [],
           mulDot: levelData.visualMulDot ?? false,
         })
@@ -822,6 +838,10 @@ export function VisualProofPage() {
       hideRewriteDirection={levelPresentation.hideRewriteDirection}
       hideSwapSides={levelPresentation.hideSwapSides}
       noRewriteMode={levelPresentation.noRewriteMode}
+      noRewriteTabs={levelPresentation.noRewriteTabs}
+      noHypothesesTab={levelPresentation.noHypothesesTab}
+      startTab={levelPresentation.startTab}
+      tacticUses={levelPresentation.tacticUses}
       emphasizeForall={levelPresentation.emphasizeForall}
       mulDot={levelPresentation.mulDot}
       gameFastExfalso={gameInfo.data?.visualFastExfalso ?? false}

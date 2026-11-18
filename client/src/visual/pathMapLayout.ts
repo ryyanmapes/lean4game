@@ -96,6 +96,11 @@ const TURN_ROWS_ABOVE = 0.9
 /** Distance between the levels of a bonus world's row, as a fraction of a column. */
 const BONUS_STEP_FRACTION = 0.6
 const MIN_BONUS_STEP = 60
+/** Where several bonus branches leave one level, they leave its path once, down a
+ * shared stem beside it, and fan out from the stem. The stem's distance from the
+ * path, and how much further out the branches' levels then sit, in bonus steps. */
+const BONUS_STEM_FRACTION = 0.5
+const BONUS_FAN_SHIFT_FRACTION = 0.25
 /** Clear space between a world's title and the top of the path below it. */
 const LABEL_GAP = 22
 /** Half the outer width of a path, which a title has to clear. */
@@ -325,8 +330,10 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     const siblings = branchesAt[`${anchor.world}:${from}`]!
     const branchRow = row[anchor.world]![from]! + 1 + siblings.indexOf(world!)
     row[world!] = Object.fromEntries(levelsOf[world!]!.map(level => [level, branchRow]))
+    // Branches that fan out from a stem start past it.
+    const fanShift = siblings.length > 1 ? BONUS_FAN_SHIFT_FRACTION * bonusStep : 0
     levelX[world!] = Object.fromEntries(levelsOf[world!]!.map((level, levelIndex) =>
-      [level, anchorX + side * (levelIndex + 1) * bonusStep]))
+      [level, anchorX + side * ((levelIndex + 1) * bonusStep + fanShift)]))
   }
   const placed = worldIds.filter(world => row[world] !== undefined)
 
@@ -481,9 +488,22 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     const from = anchorLevel(levelsOf[anchor.world]!, anchor.level)
     const anchorPoint = position(anchor.world, from)
     const firstPoint = position(world, levelsOf[world]![0]!)
+    const siblings = branchesAt[`${anchor.world}:${from}`]!
+    let points = [anchorPoint, { x: anchorPoint.x, y: firstPoint.y }, firstPoint]
+    if (siblings.length > 1) {
+      // Several branches off one level: the first leaves the level sideways and
+      // turns down a stem beside the path, and each later one carries the stem
+      // on from the branch above it, so the path is left only once.
+      const stemX = anchorPoint.x + Math.sign(firstPoint.x - anchorPoint.x) * BONUS_STEM_FRACTION * bonusStep
+      const index = siblings.indexOf(world)
+      const above = index > 0 ? position(siblings[index - 1]!, levelsOf[siblings[index - 1]!]![0]!) : undefined
+      points = above
+        ? [{ x: stemX, y: above.y - PATH_MAP_CORNER_RADIUS }, { x: stemX, y: firstPoint.y }, firstPoint]
+        : [anchorPoint, { x: stemX, y: anchorPoint.y }, { x: stemX, y: firstPoint.y }, firstPoint]
+    }
     segments.push({
       key: `bonus:${anchor.world}:${from}:${world}`,
-      points: [anchorPoint, { x: anchorPoint.x, y: firstPoint.y }, firstPoint],
+      points,
       color: colorOf(world),
       source: { world: anchor.world, level: from },
     })

@@ -215,6 +215,38 @@ elab "VisualHideSwapSides" : command => do
   | .World => modifyCurWorld fun world => pure { world with visualHideSwapSides := true }
   | .Game => throwError "VisualHideSwapSides belongs in a world or level file"
 
+/-- Give Rewrite Mode no tabs: every rule, hypothesis or theorem, is in one list. In a
+level file it applies to that level; in a world file, to every level of the world. -/
+elab "VisualNoRewriteTabs" : command => do
+  match ← getCurLayer with
+  | .Level => modifyCurLevel fun lvl => pure { lvl with visualNoRewriteTabs := true }
+  | .World => modifyCurWorld fun world => pure { world with visualNoRewriteTabs := true }
+  | .Game => throwError "VisualNoRewriteTabs belongs in a world or level file"
+
+/-- Leave the Hypotheses tab out of this level's Rewrite Mode. The hypotheses are still
+among the rules of the first tab, which lists everything. -/
+elab "VisualNoHypothesesTab" : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualNoHypothesesTab := true }
+
+/-- The tab this level's Rewrite Mode opens on, by its label: an inventory tab such as
+`"+"`, or `"Hypotheses"`. Example: `VisualStartTab "+"` -/
+elab "VisualStartTab" tab:str : command => do
+  modifyCurLevel fun lvl => pure { lvl with visualStartTab? := some tab.getString }
+
+/-- Limit how often a tactic of Visual Lean's tray can be used along one branch of a
+proof: its card shows the uses left, as `x1`, and once they are spent on a branch it is
+greyed out there and in the branches that come from it. In a level file it applies to
+that level; in a world file, to every level of the world.
+Example: `VisualTacticUses induction 1` -/
+elab "VisualTacticUses" tactic:ident uses:num : command => do
+  let limit : VisualTacticUses := { tactic := tactic.getId.toString, uses := uses.getNat }
+  let add (limits : Array VisualTacticUses) :=
+    (limits.filter (·.tactic != limit.tactic)).push limit
+  match ← getCurLayer with
+  | .Level => modifyCurLevel fun lvl => pure { lvl with visualTacticUses := add lvl.visualTacticUses }
+  | .World => modifyCurWorld fun world => pure { world with visualTacticUses := add world.visualTacticUses }
+  | .Game => throwError "VisualTacticUses belongs in a world or level file"
+
 /-- Refuse Rewrite Mode on this level's goal: opening it shows a warning instead, so the
 player proves the equality like any other proposition. Rewrite Mode on a hypothesis
 stays available. -/

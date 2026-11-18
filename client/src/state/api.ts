@@ -122,6 +122,14 @@ export interface LevelInfo {
   visualHideSwapSides?: boolean,
   /** Rewrite Mode on the goal is refused with a warning (`VisualNoRewriteMode`). */
   visualNoRewriteMode?: boolean,
+  /** Rewrite Mode has no tabs (`VisualNoRewriteTabs`). */
+  visualNoRewriteTabs?: boolean,
+  /** Rewrite Mode has no Hypotheses tab (`VisualNoHypothesesTab`). */
+  visualNoHypothesesTab?: boolean,
+  /** The tab Rewrite Mode opens on, by its label (`VisualStartTab`). */
+  visualStartTab?: string | null,
+  /** Uses of a tactic along one branch of the proof (`VisualTacticUses`). */
+  visualTacticUses?: Array<{ tactic: string; uses: number }>,
 }
 
 /** Used to display the inventory on the welcome page */
