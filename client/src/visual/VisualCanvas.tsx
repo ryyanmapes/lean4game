@@ -171,8 +171,20 @@ function resolveCollisions(
       }
     })
 
-  for (const id of obstacleIds) {
-    const goalEl = document.getElementById(id)
+  // The goal on screen may belong to none of the streams asked about: a solved
+  // branch stays on screen until the player moves on, and it is no longer among
+  // the live streams. Its stack is where every branch's goal is shown, so it is
+  // in the way all the same; without it, cards pushed out of the proof graph's
+  // corner landed on the goal's place, under its hint, in the other branches.
+  const goalStackOnScreen = options.phonePortrait || obstacleIds.some(id =>
+    id !== PROOF_TREE_PANEL_ID && document.getElementById(id) !== null)
+    ? null
+    : document.querySelector<HTMLElement>('.visual-page .goal-card-with-info')
+  const obstacleElements: { id: string; goalEl: HTMLElement | null }[] = [
+    ...obstacleIds.map(id => ({ id, goalEl: document.getElementById(id) })),
+    ...(goalStackOnScreen ? [{ id: 'goal-stack-on-screen', goalEl: goalStackOnScreen }] : []),
+  ]
+  for (const { id, goalEl } of obstacleElements) {
     // On desktop / landscape we use the full .goal-card-with-info wrapper
     // (which grows with tutorial info text) so hyps get pushed below the
     // entire goal stack. On phone portrait the wrapper is full-width and
@@ -3242,7 +3254,9 @@ export function VisualCanvas({
     const canvasBounds = getCombiningCanvasBounds()
     setCanvasState(stableUpdater(prev =>
       resolveCanvasStateCollisions(prev, canvasBounds, { phonePortrait: isPhonePortrait })))
-  }, [collisionStructureKey, goalStackHeight, goalsTopOverride, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight, proofTree])
+  // `activeStreamId`: another branch's goal can be wider or carry another hint, so
+  // its cards are looked at again when the player moves to it.
+  }, [collisionStructureKey, goalStackHeight, goalsTopOverride, isPhonePortrait, showProofSidebar, layoutVersion, trayHeight, proofTree, activeStreamId])
 
   useLayoutEffect(() => {
     const panel = proofTreePanelRef.current

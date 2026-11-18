@@ -926,6 +926,113 @@ describe('Natural Numbers Video Game', () => {
     shouldBeCompleted()
   })
 
+  it('keeps every card within reach of a click, whatever order the branches are played in', () => {
+    // A fixed, seeded walk through the ∧ associativity level: split goals and
+    // hypotheses, finish branches, undo, and jump about the proof graph. A card
+    // used to end up under the goal's hint in another branch once a branch had been
+    // finished (the finished branch stays on screen, and its goal stack wasn't
+    // counted as being in the way), and a click on such a card never reached it.
+    cy.viewport(1280, 720)
+    openCanvasLevel('Proposition', 8)
+    type Snapshot = {
+      streamId: string, goalType: string, goalPlayTactic: string | null
+      hypTypes: Record<string, string>, hypPlayTactics: Record<string, string | null>
+    }
+    type Walker = {
+      getProofAudit(): { completed: boolean, processing: boolean }
+      getCurrentStreamSnapshot(): Snapshot
+      dragHypToGoal(name: string): Promise<void>
+    }
+    cy.window({ timeout: LOAD_TIMEOUT }).then({ timeout: 240000 }, async win => {
+      // mulberry32, so the walk is the same every run.
+      let state = 53
+      const random = () => {
+        state = (state + 0x6D2B79F5) | 0
+        let t = Math.imul(state ^ (state >>> 15), 1 | state)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+      }
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+      const walker = (win as unknown as { __visualTestHarness: Walker }).__visualTestHarness
+      const idle = async () => {
+        for (let tries = 0; tries < 400; tries += 1) {
+          await sleep(60)
+          if (walker.getProofAudit().processing) continue
+          await sleep(280)
+          if (!walker.getProofAudit().processing) return
+        }
+        throw new Error('the canvas never came to rest')
+      }
+      const snapshot = (): Snapshot | null => { try { return walker.getCurrentStreamSnapshot() } catch { return null } }
+      const shown = <T extends Element>(selector: string) =>
+        Array.from(win.document.querySelectorAll<T>(selector)).filter(el => el.getBoundingClientRect().width > 0)
+      const covered: string[] = []
+      const refused: string[] = []
+      for (let step = 0; step < 64; step += 1) {
+        await idle()
+        if (walker.getProofAudit().completed) break
+        await sleep(450)
+        // What the pointer finds at each card: the card itself, or something over it.
+        for (const card of shown<HTMLElement>('[data-testid="hyp-card"], [data-testid="goal-card"]')) {
+          const box = card.getBoundingClientRect()
+          const top = win.document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+          if (top && !card.contains(top)) {
+            covered.push(`step ${step}: ${card.dataset.hypName ?? 'the goal'} is under ${(top as HTMLElement).className}`)
+          }
+        }
+        const before = snapshot()
+        type Action = { name: string, weight: number, changes?: boolean, run: () => Promise<void> | void }
+        const actions: Action[] = shown<HTMLButtonElement>('[data-testid^="stream-nav-"]').filter(el => !el.disabled)
+          .map(el => ({ name: 'another branch', weight: 1, run: () => el.click() }))
+        const undo = shown<HTMLButtonElement>('button[aria-label="Undo"]').find(el => !el.disabled)
+        if (undo) actions.push({ name: 'undo', weight: 1.5, run: () => undo.click() })
+        for (const leaf of Array.from(win.document.querySelectorAll<SVGElement>('[data-testid="proof-stream-leaf"]'))) {
+          actions.push({
+            name: 'a branch of the proof graph',
+            weight: 2,
+            run: () => { leaf.dispatchEvent(new (win as unknown as { MouseEvent: typeof MouseEvent }).MouseEvent('click', { bubbles: true })) },
+          })
+        }
+        if (before) {
+          for (const [name, type] of Object.entries(before.hypTypes)) {
+            if (before.hypPlayTactics[name]) {
+              actions.push({
+                name: `click ${name} : ${type}`, weight: 3, changes: true,
+                run: () => shown<HTMLElement>('[data-testid="hyp-card"]').find(card => card.dataset.hypName === name)!.click(),
+              })
+            }
+            if (type === before.goalType) {
+              actions.push({ name: `drag ${name} to the goal ${type}`, weight: 2, changes: true, run: () => walker.dragHypToGoal(name) })
+            }
+          }
+          if (before.goalPlayTactic) {
+            actions.push({
+              name: `click the goal ${before.goalType}`, weight: 3, changes: true,
+              run: () => shown<HTMLElement>('[data-testid="goal-card"]')[0]!.click(),
+            })
+          }
+        }
+        if (actions.length === 0) break
+        let pick = random() * actions.reduce((sum, action) => sum + action.weight, 0)
+        const action = actions.find(candidate => (pick -= candidate.weight) < 0) ?? actions[0]!
+        await action.run()
+        await sleep(350)
+        await idle()
+        const after = snapshot()
+        if (action.changes && before && after && after.streamId === before.streamId
+          && after.goalType === before.goalType && JSON.stringify(after.hypTypes) === JSON.stringify(before.hypTypes)
+          && !walker.getProofAudit().completed) {
+          refused.push(`step ${step}: ${action.name} did nothing`)
+        }
+      }
+      return { covered, refused }
+    }).then(({ covered, refused }) => {
+      expect(covered, 'cards something else is drawn over').to.deep.equal([])
+      expect(refused, 'moves that did nothing').to.deep.equal([])
+    })
+    cy.viewport(1000, 660)
+  })
+
   it('opens the ‘if and only if’ level for disjunctions', () => {
     openCanvasLevel('PropositionRight', 3)
     headerShouldNameLevel('10', 'If and Only If (Disjunctions)')
