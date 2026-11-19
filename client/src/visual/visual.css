@@ -1,285 +1,196 @@
 /* Visual Proof Page — mirrors the EqTransformer combining-mode aesthetic exactly.
    All styles are self-contained; no lean4game classes are overridden. */
 
-/* ── CSS variables (scoped so they don't bleed into lean4game) ── */
+/* ── Colours ──
+   Every colour comes from the palette (palette.css, where each is written as its
+   red, green and blue). The tokens below say what the interface uses each one
+   for and at which opacity; the rest of this file only uses tokens and palette
+   colours, never a colour of its own. Both are scoped to `.app`, so they don't
+   bleed into lean4game. */
+@import './palette.css';
+
 .app {
-  --visual-bg-gradient-start: #0f172a;
-  --visual-bg-gradient-end: #1e293b;
-  --visual-text-primary: #f8fafc;
-  --visual-text-secondary: #94a3b8;
-  --visual-text-muted: #64748b;
-  --visual-text-bright: #e2e8f0;
-  --visual-text-on-accent: #f8fafc;
-  --visual-accent: #8b5cf6;
-  --visual-accent-soft: #a78bfa;
-  --visual-accent-strong: #c4b5fd;
-  --visual-accent-glow: rgba(139, 92, 246, 0.5);
-  --visual-glass-bg: rgba(255, 255, 255, 0.05);
-  --visual-glass-bg-hover: rgba(255, 255, 255, 0.1);
-  --visual-glass-border: rgba(255, 255, 255, 0.1);
-  --visual-surface: rgba(15, 23, 42, 0.88);
-  --visual-surface-strong: rgba(15, 23, 42, 0.95);
-  --visual-surface-elevated: rgba(15, 23, 42, 0.82);
-  --visual-surface-panel: rgba(15, 23, 42, 0.94);
-  --visual-surface-solid: #1e293b;
-  --visual-border-subtle: rgba(255, 255, 255, 0.08);
-  --visual-border-faint: rgba(255, 255, 255, 0.06);
-  --visual-shadow-strong: rgba(0, 0, 0, 0.37);
-  --visual-shadow-panel: rgba(0, 0, 0, 0.5);
-  --visual-track-dot: #475569;
-  --visual-loading-ball-core: #8b5cf6;
-  --visual-loading-ball-highlight: #c4b5fd;
-  --visual-loading-ball-glow: rgba(139, 92, 246, 0.45);
-  --visual-scrollbar-track: rgba(255, 255, 255, 0.04);
-  --visual-scrollbar-thumb: rgba(139, 92, 246, 0.4);
-  --visual-scrollbar-thumb-hover: rgba(139, 92, 246, 0.65);
-  --visual-tree-edge: rgba(148, 163, 184, 0.4);
-  --visual-tree-branch: rgba(148, 163, 184, 0.6);
-  --visual-stream-complete: #22c55e;
-  --visual-stream-pending: #f97316;
-  --visual-stream-current-ring: #8b5cf6;
-  --visual-proof-overlay: rgba(0, 0, 0, 0.6);
-  --visual-info: #93c5fd;
-  --visual-info-border: rgba(96, 165, 250, 0.4);
-  --visual-info-bg: rgba(96, 165, 250, 0.08);
-  --visual-info-bg-strong: rgba(96, 165, 250, 0.1);
-  --visual-info-ring: rgba(96, 165, 250, 0.5);
-  --visual-warning: #facc15;
-  --visual-warning-soft: rgba(234, 179, 8, 0.7);
-  --visual-warning-bg: rgba(250, 204, 21, 0.1);
-  --visual-warning-glow: rgba(234, 179, 8, 0.4);
-  --visual-success: #4ade80;
-  --visual-success-soft: rgba(34, 197, 94, 0.8);
-  --visual-success-bg: rgba(34, 197, 94, 0.18);
-  --visual-success-bg-strong: rgba(34, 197, 94, 0.3);
-  --visual-success-border: rgba(34, 197, 94, 0.55);
-  --visual-success-glow: rgba(34, 197, 94, 0.25);
-  --visual-success-card-border: rgba(52, 211, 153, 0.4);
-  --visual-success-card-bg: rgba(52, 211, 153, 0.06);
-  --visual-success-card-text: #6ee7b7;
-  --visual-danger: #f87171;
-  --visual-danger-ring: rgba(248, 113, 113, 0.4);
-  --visual-danger-bg: rgba(239, 68, 68, 0.2);
-  --visual-danger-border: rgba(239, 68, 68, 0.55);
-  --visual-error-text: #f87171;
-  --visual-expression-bg: rgba(255, 255, 255, 0.03);
-  --visual-expression-bg-strong: rgba(255, 255, 255, 0.06);
-  --visual-drop-target-border: #8b5cf6;
-  --visual-drop-target-glow: rgba(139, 92, 246, 0.4);
-  --visual-drop-target-bg: rgba(139, 92, 246, 0.15);
-  --visual-invalid-target-border: #64748b;
-  --visual-invalid-target-bg: rgba(100, 116, 139, 0.1);
-  --visual-sidebar-active-bg: rgba(139, 92, 246, 0.18);
-  --visual-sidebar-active-border: rgba(139, 92, 246, 0.45);
-  --visual-sidebar-active-text: #c4b5fd;
-  --visual-choice-border: rgba(139, 92, 246, 0.3);
-  --visual-choice-bg: rgba(139, 92, 246, 0.08);
-  --visual-choice-bg-hover: rgba(139, 92, 246, 0.2);
-  --visual-choice-border-hover: rgba(139, 92, 246, 0.6);
-  --visual-choice-label: #8b5cf6;
-  --visual-slot-border: rgba(167, 139, 250, 0.55);
-  --visual-slot-border-strong: rgba(167, 139, 250, 0.85);
-  --visual-slot-bg: rgba(167, 139, 250, 0.07);
-  --visual-slot-bg-hover: rgba(167, 139, 250, 0.14);
-  --visual-slot-bg-active: rgba(167, 139, 250, 0.22);
-  --visual-slot-bg-drop: rgba(167, 139, 250, 0.28);
-  --visual-slot-text: #a78bfa;
-  --visual-slot-glow: rgba(167, 139, 250, 0.45);
-  --visual-slot-glow-strong: rgba(167, 139, 250, 0.5);
-  --visual-forall-footer: rgba(148, 163, 184, 0.95);
-  --visual-tab-bg: rgba(255, 255, 255, 0.03);
-  --visual-win-gradient-start: rgba(139, 92, 246, 0.2);
-  --visual-win-gradient-end: rgba(96, 165, 250, 0.2);
-  --visual-win-title-start: #a78bfa;
-  --visual-win-title-end: #60a5fa;
-  --visual-tactic-text: #fecaca;
-  --visual-hyp-text: #c4b5fd;
-  --visual-construction-body: #fbbf24;
-  --visual-function-text: #60a5fa;
-  --visual-header-complete-bg: rgba(6, 48, 22, 0.94);
-  --visual-header-complete-border: rgba(52, 211, 153, 0.45);
-  --visual-title-shadow: rgba(0, 0, 0, 0.8);
-  --visual-map-toggle-bg: rgba(255, 255, 255, 0.06);
-  --visual-map-toggle-active-bg: rgba(139, 92, 246, 0.18);
-  --visual-map-toggle-border: rgba(255, 255, 255, 0.1);
-  --visual-map-toggle-text: #94a3b8;
-  --visual-map-toggle-active-text: #f8fafc;
+  --visual-bg-gradient-start: rgb(var(--pal-bg-start));
+  --visual-bg-gradient-end: rgb(var(--pal-bg-end));
+  --visual-text-primary: rgb(var(--pal-text));
+  --visual-text-secondary: rgb(var(--pal-text-secondary));
+  --visual-text-muted: rgb(var(--pal-text-muted));
+  --visual-text-bright: rgb(var(--pal-text-bright));
+  --visual-text-on-accent: rgb(var(--pal-on-accent));
+  --visual-accent: rgb(var(--pal-accent));
+  --visual-accent-soft: rgb(var(--pal-accent-soft));
+  --visual-accent-strong: rgb(var(--pal-accent-strong));
+  --visual-accent-glow: rgba(var(--pal-accent), 0.5);
+  --visual-glass-bg: rgba(var(--pal-card), 0.05);
+  --visual-glass-bg-hover: rgba(var(--pal-card), 0.1);
+  --visual-glass-border: rgba(var(--pal-line), 0.1);
+  --visual-surface: rgba(var(--pal-surface), 0.88);
+  --visual-surface-strong: rgba(var(--pal-surface), 0.95);
+  --visual-surface-elevated: rgba(var(--pal-surface), 0.82);
+  --visual-surface-panel: rgba(var(--pal-bg-start), 0.94);
+  --visual-surface-solid: rgb(var(--pal-surface-solid));
+  --visual-border-subtle: rgba(var(--pal-line), 0.08);
+  --visual-border-faint: rgba(var(--pal-line), 0.06);
+  --visual-shadow-strong: rgba(var(--pal-shadow), 0.37);
+  --visual-shadow-panel: rgba(var(--pal-shadow), 0.5);
+  --visual-track-dot: rgb(var(--pal-track));
+  --visual-loading-ball-core: rgb(var(--pal-accent));
+  --visual-loading-ball-highlight: rgb(var(--pal-accent-pale));
+  --visual-loading-ball-glow: rgba(var(--pal-accent), 0.45);
+  --visual-scrollbar-track: rgba(var(--pal-line), 0.04);
+  --visual-scrollbar-thumb: rgba(var(--pal-accent), 0.4);
+  --visual-scrollbar-thumb-hover: rgba(var(--pal-accent), 0.65);
+  --visual-tree-edge: rgba(var(--pal-text-secondary), 0.4);
+  --visual-tree-branch: rgba(var(--pal-text-secondary), 0.6);
+  --visual-stream-complete: rgb(var(--pal-stream-complete));
+  --visual-stream-pending: rgb(var(--pal-stream-pending));
+  --visual-stream-current-ring: rgb(var(--pal-accent));
+  --visual-proof-overlay: rgba(var(--pal-shadow), 0.6);
+  --visual-info: rgb(var(--pal-info-text));
+  --visual-info-border: rgba(var(--pal-info), 0.4);
+  --visual-info-bg: rgba(var(--pal-info), 0.08);
+  --visual-info-bg-strong: rgba(var(--pal-info), 0.1);
+  --visual-info-ring: rgba(var(--pal-info), 0.5);
+  --visual-warning: rgb(var(--pal-warning));
+  --visual-warning-soft: rgba(var(--pal-warning-soft), 0.7);
+  --visual-warning-bg: rgba(var(--pal-warning), 0.1);
+  --visual-warning-glow: rgba(var(--pal-warning-soft), 0.4);
+  --visual-success: rgb(var(--pal-success-text));
+  --visual-success-soft: rgba(var(--pal-success), 0.8);
+  --visual-success-bg: rgba(var(--pal-success), 0.18);
+  --visual-success-bg-strong: rgba(var(--pal-success), 0.3);
+  --visual-success-border: rgba(var(--pal-success), 0.55);
+  --visual-success-glow: rgba(var(--pal-success), 0.25);
+  --visual-success-card-border: rgba(var(--pal-derived-tint), 0.4);
+  --visual-success-card-bg: rgba(var(--pal-derived-tint), 0.06);
+  --visual-success-card-text: rgb(var(--pal-derived-text));
+  --visual-danger: rgb(var(--pal-danger-text));
+  --visual-danger-ring: rgba(var(--pal-danger-text), 0.4);
+  --visual-danger-bg: rgba(var(--pal-danger), 0.2);
+  --visual-danger-border: rgba(var(--pal-danger), 0.55);
+  --visual-error-text: rgb(var(--pal-danger-text));
+  --visual-expression-bg: rgba(var(--pal-line), 0.03);
+  --visual-expression-bg-strong: rgba(var(--pal-line), 0.06);
+  --visual-drop-target-border: rgb(var(--pal-accent));
+  --visual-drop-target-glow: rgba(var(--pal-accent), 0.4);
+  --visual-drop-target-bg: rgba(var(--pal-accent), 0.15);
+  --visual-invalid-target-border: rgb(var(--pal-inactive));
+  --visual-invalid-target-bg: rgba(var(--pal-inactive), 0.1);
+  --visual-sidebar-active-bg: rgba(var(--pal-accent), 0.18);
+  --visual-sidebar-active-border: rgba(var(--pal-accent), 0.45);
+  --visual-sidebar-active-text: rgb(var(--pal-accent-text-strong));
+  --visual-choice-border: rgba(var(--pal-accent), 0.3);
+  --visual-choice-bg: rgba(var(--pal-accent), 0.08);
+  --visual-choice-bg-hover: rgba(var(--pal-accent), 0.2);
+  --visual-choice-border-hover: rgba(var(--pal-accent), 0.6);
+  --visual-choice-label: rgb(var(--pal-accent));
+  --visual-slot-border: rgba(var(--pal-accent-soft), 0.55);
+  --visual-slot-border-strong: rgba(var(--pal-accent-soft), 0.85);
+  --visual-slot-bg: rgba(var(--pal-accent-soft), 0.07);
+  --visual-slot-bg-hover: rgba(var(--pal-accent-soft), 0.14);
+  --visual-slot-bg-active: rgba(var(--pal-accent-soft), 0.22);
+  --visual-slot-bg-drop: rgba(var(--pal-accent-soft), 0.28);
+  --visual-slot-text: rgb(var(--pal-accent-soft));
+  --visual-slot-glow: rgba(var(--pal-accent-soft), 0.45);
+  --visual-slot-glow-strong: rgba(var(--pal-accent-soft), 0.5);
+  --visual-forall-footer: rgba(var(--pal-text-secondary), 0.95);
+  --visual-tab-bg: rgba(var(--pal-line), 0.03);
+  --visual-win-gradient-start: rgba(var(--pal-accent), 0.2);
+  --visual-win-gradient-end: rgba(var(--pal-info), 0.2);
+  --visual-win-title-start: rgb(var(--pal-accent-soft));
+  --visual-win-title-end: rgb(var(--pal-info));
+  --visual-tactic-text: rgb(var(--pal-tactic-text));
+  --visual-hyp-text: rgb(var(--pal-accent-text));
+  --visual-construction-body: rgb(var(--pal-construction));
+  --visual-function-text: rgb(var(--pal-info));
+  --visual-header-complete-bg: rgba(var(--pal-complete-header), 0.94);
+  --visual-header-complete-border: rgba(var(--pal-derived-tint), 0.45);
+  --visual-title-shadow: rgba(var(--pal-shadow), 0.8);
+  --visual-map-toggle-bg: rgba(var(--pal-card), 0.06);
+  --visual-map-toggle-active-bg: rgba(var(--pal-accent), 0.18);
+  --visual-map-toggle-border: rgba(var(--pal-line), 0.1);
+  --visual-map-toggle-text: rgb(var(--pal-text-secondary));
+  --visual-map-toggle-active-text: rgb(var(--pal-text));
+  /* Construction view: the boxes of a function applied to its argument */
+  --cn-app-bg: rgba(var(--pal-info), 0.08);
+  --cn-app-border: rgba(var(--pal-info), 0.22);
 }
 
+/* The light scheme: only what differs from the above in more than its palette colour. */
 .app[data-visual-theme='light'] {
-  --visual-bg-gradient-start: #f8fafc;
-  --visual-bg-gradient-end: #e2e8f0;
-  --visual-text-primary: #0f172a;
-  --visual-text-secondary: #475569;
-  --visual-text-muted: #64748b;
-  --visual-text-bright: #1e293b;
-  --visual-text-on-accent: #ffffff;
-  --visual-accent: #6366f1;
-  --visual-accent-soft: #6366f1;
-  --visual-accent-strong: #4f46e5;
-  --visual-accent-glow: rgba(99, 102, 241, 0.25);
-  --visual-glass-bg: rgba(255, 255, 255, 0.72);
-  --visual-glass-bg-hover: rgba(255, 255, 255, 0.9);
-  --visual-glass-border: rgba(148, 163, 184, 0.28);
-  --visual-surface: rgba(255, 255, 255, 0.88);
-  --visual-surface-strong: rgba(255, 255, 255, 0.96);
-  --visual-surface-elevated: rgba(255, 255, 255, 0.94);
-  --visual-surface-panel: rgba(248, 250, 252, 0.96);
-  --visual-surface-solid: #ffffff;
-  --visual-border-subtle: rgba(148, 163, 184, 0.24);
-  --visual-border-faint: rgba(148, 163, 184, 0.18);
-  --visual-shadow-strong: rgba(15, 23, 42, 0.12);
-  --visual-shadow-panel: rgba(15, 23, 42, 0.18);
-  --visual-track-dot: #cbd5e1;
-  --visual-loading-ball-core: #6366f1;
-  --visual-loading-ball-highlight: #c7d2fe;
-  --visual-loading-ball-glow: rgba(99, 102, 241, 0.22);
-  --visual-scrollbar-track: rgba(148, 163, 184, 0.16);
-  --visual-scrollbar-thumb: rgba(99, 102, 241, 0.28);
-  --visual-scrollbar-thumb-hover: rgba(99, 102, 241, 0.45);
-  --visual-tree-edge: rgba(100, 116, 139, 0.35);
-  --visual-tree-branch: rgba(100, 116, 139, 0.48);
-  --visual-stream-current-ring: #6366f1;
-  --visual-proof-overlay: rgba(15, 23, 42, 0.24);
-  --visual-info: #2563eb;
-  --visual-info-border: rgba(37, 99, 235, 0.22);
-  --visual-info-bg: rgba(37, 99, 235, 0.06);
-  --visual-info-bg-strong: rgba(37, 99, 235, 0.08);
-  --visual-info-ring: rgba(37, 99, 235, 0.25);
-  --visual-warning: #ca8a04;
-  --visual-warning-soft: rgba(202, 138, 4, 0.82);
-  --visual-warning-bg: rgba(202, 138, 4, 0.12);
-  --visual-warning-glow: rgba(202, 138, 4, 0.22);
-  --visual-success: #16a34a;
-  --visual-success-soft: rgba(22, 163, 74, 0.82);
-  --visual-success-bg: rgba(22, 163, 74, 0.12);
-  --visual-success-bg-strong: rgba(22, 163, 74, 0.18);
-  --visual-success-border: rgba(22, 163, 74, 0.26);
-  --visual-success-glow: rgba(22, 163, 74, 0.2);
-  --visual-success-card-border: rgba(16, 185, 129, 0.22);
-  --visual-success-card-bg: rgba(16, 185, 129, 0.08);
-  --visual-success-card-text: #047857;
-  --visual-danger: #dc2626;
-  --visual-danger-ring: rgba(220, 38, 38, 0.22);
-  --visual-danger-bg: rgba(220, 38, 38, 0.1);
-  --visual-danger-border: rgba(220, 38, 38, 0.24);
-  --visual-error-text: #dc2626;
-  --visual-expression-bg: rgba(148, 163, 184, 0.12);
-  --visual-expression-bg-strong: rgba(148, 163, 184, 0.18);
-  --visual-drop-target-border: #4f46e5;
-  --visual-drop-target-glow: rgba(99, 102, 241, 0.18);
-  --visual-drop-target-bg: rgba(99, 102, 241, 0.12);
-  --visual-invalid-target-border: #94a3b8;
-  --visual-invalid-target-bg: rgba(148, 163, 184, 0.16);
-  --visual-sidebar-active-bg: rgba(99, 102, 241, 0.12);
-  --visual-sidebar-active-border: rgba(99, 102, 241, 0.24);
-  --visual-sidebar-active-text: #3730a3;
-  --visual-choice-border: rgba(99, 102, 241, 0.22);
-  --visual-choice-bg: rgba(99, 102, 241, 0.06);
-  --visual-choice-bg-hover: rgba(99, 102, 241, 0.12);
-  --visual-choice-border-hover: rgba(99, 102, 241, 0.32);
-  --visual-choice-label: #4338ca;
-  --visual-slot-border: rgba(99, 102, 241, 0.35);
-  --visual-slot-border-strong: rgba(99, 102, 241, 0.55);
-  --visual-slot-bg: rgba(99, 102, 241, 0.06);
-  --visual-slot-bg-hover: rgba(99, 102, 241, 0.1);
-  --visual-slot-bg-active: rgba(99, 102, 241, 0.16);
-  --visual-slot-bg-drop: rgba(99, 102, 241, 0.2);
-  --visual-slot-text: #4f46e5;
-  --visual-slot-glow: rgba(99, 102, 241, 0.18);
-  --visual-slot-glow-strong: rgba(99, 102, 241, 0.22);
-  --visual-forall-footer: #475569;
-  --visual-tab-bg: rgba(148, 163, 184, 0.12);
-  --visual-win-gradient-start: rgba(99, 102, 241, 0.12);
-  --visual-win-gradient-end: rgba(37, 99, 235, 0.12);
-  --visual-win-title-start: #4f46e5;
-  --visual-win-title-end: #2563eb;
-  --visual-tactic-text: #b91c1c;
-  --visual-hyp-text: #4338ca;
-  --visual-construction-body: #b45309;
-  --visual-function-text: #2563eb;
-  --visual-header-complete-bg: rgba(220, 252, 231, 0.92);
-  --visual-header-complete-border: rgba(16, 185, 129, 0.35);
-  --visual-title-shadow: rgba(255, 255, 255, 0.6);
-  --visual-map-toggle-bg: rgba(255, 255, 255, 0.78);
-  --visual-map-toggle-active-bg: rgba(99, 102, 241, 0.14);
-  --visual-map-toggle-border: rgba(148, 163, 184, 0.28);
-  --visual-map-toggle-text: #475569;
-  --visual-map-toggle-active-text: #3730a3;
-  /* Construction view: function-app boxes in light mode use a solid blue tint */
-  --cn-app-bg: rgba(37, 99, 235, 0.07);
-  --cn-app-border: rgba(37, 99, 235, 0.28);
+  --visual-accent-glow: rgba(var(--pal-accent), 0.25);
+  --visual-glass-bg: rgba(var(--pal-card), 0.72);
+  --visual-glass-bg-hover: rgba(var(--pal-card), 0.9);
+  --visual-glass-border: rgba(var(--pal-line), 0.28);
+  --visual-surface-strong: rgba(var(--pal-surface), 0.96);
+  --visual-surface-elevated: rgba(var(--pal-surface), 0.94);
+  --visual-surface-panel: rgba(var(--pal-bg-start), 0.96);
+  --visual-border-subtle: rgba(var(--pal-line), 0.24);
+  --visual-border-faint: rgba(var(--pal-line), 0.18);
+  --visual-shadow-strong: rgba(var(--pal-shadow), 0.12);
+  --visual-shadow-panel: rgba(var(--pal-shadow), 0.18);
+  --visual-loading-ball-glow: rgba(var(--pal-accent), 0.22);
+  --visual-scrollbar-track: rgba(var(--pal-line), 0.16);
+  --visual-scrollbar-thumb: rgba(var(--pal-accent), 0.28);
+  --visual-scrollbar-thumb-hover: rgba(var(--pal-accent), 0.45);
+  --visual-tree-edge: rgba(var(--pal-text-muted), 0.35);
+  --visual-tree-branch: rgba(var(--pal-text-muted), 0.48);
+  --visual-proof-overlay: rgba(var(--pal-shadow), 0.24);
+  --visual-info-border: rgba(var(--pal-info), 0.22);
+  --visual-info-bg: rgba(var(--pal-info), 0.06);
+  --visual-info-bg-strong: rgba(var(--pal-info), 0.08);
+  --visual-info-ring: rgba(var(--pal-info), 0.25);
+  --visual-warning-soft: rgba(var(--pal-warning-soft), 0.82);
+  --visual-warning-bg: rgba(var(--pal-warning), 0.12);
+  --visual-warning-glow: rgba(var(--pal-warning-soft), 0.22);
+  --visual-success-soft: rgba(var(--pal-success), 0.82);
+  --visual-success-bg: rgba(var(--pal-success), 0.12);
+  --visual-success-bg-strong: rgba(var(--pal-success), 0.18);
+  --visual-success-border: rgba(var(--pal-success), 0.26);
+  --visual-success-glow: rgba(var(--pal-success), 0.2);
+  --visual-success-card-border: rgba(var(--pal-derived-tint), 0.22);
+  --visual-success-card-bg: rgba(var(--pal-derived-tint), 0.08);
+  --visual-danger-ring: rgba(var(--pal-danger-text), 0.22);
+  --visual-danger-bg: rgba(var(--pal-danger), 0.1);
+  --visual-danger-border: rgba(var(--pal-danger), 0.24);
+  --visual-expression-bg: rgba(var(--pal-line), 0.12);
+  --visual-expression-bg-strong: rgba(var(--pal-line), 0.18);
+  --visual-drop-target-border: rgb(var(--pal-accent-strong));
+  --visual-drop-target-glow: rgba(var(--pal-accent), 0.18);
+  --visual-drop-target-bg: rgba(var(--pal-accent), 0.12);
+  --visual-invalid-target-bg: rgba(var(--pal-inactive), 0.16);
+  --visual-sidebar-active-bg: rgba(var(--pal-accent), 0.12);
+  --visual-sidebar-active-border: rgba(var(--pal-accent), 0.24);
+  --visual-choice-border: rgba(var(--pal-accent), 0.22);
+  --visual-choice-bg: rgba(var(--pal-accent), 0.06);
+  --visual-choice-bg-hover: rgba(var(--pal-accent), 0.12);
+  --visual-choice-border-hover: rgba(var(--pal-accent), 0.32);
+  --visual-choice-label: rgb(var(--pal-accent-text));
+  --visual-slot-border: rgba(var(--pal-accent-soft), 0.35);
+  --visual-slot-border-strong: rgba(var(--pal-accent-soft), 0.55);
+  --visual-slot-bg: rgba(var(--pal-accent-soft), 0.06);
+  --visual-slot-bg-hover: rgba(var(--pal-accent-soft), 0.1);
+  --visual-slot-bg-active: rgba(var(--pal-accent-soft), 0.16);
+  --visual-slot-bg-drop: rgba(var(--pal-accent-soft), 0.2);
+  --visual-slot-text: rgb(var(--pal-accent-strong));
+  --visual-slot-glow: rgba(var(--pal-accent-soft), 0.18);
+  --visual-slot-glow-strong: rgba(var(--pal-accent-soft), 0.22);
+  --visual-forall-footer: rgb(var(--pal-text-secondary));
+  --visual-tab-bg: rgba(var(--pal-line), 0.12);
+  --visual-win-gradient-start: rgba(var(--pal-accent), 0.12);
+  --visual-win-gradient-end: rgba(var(--pal-info), 0.12);
+  --visual-win-title-start: rgb(var(--pal-accent-strong));
+  --visual-header-complete-bg: rgba(var(--pal-complete-header), 0.92);
+  --visual-header-complete-border: rgba(var(--pal-derived-tint), 0.35);
+  --visual-title-shadow: rgba(var(--pal-surface-solid), 0.6);
+  --visual-map-toggle-bg: rgba(var(--pal-card), 0.78);
+  --visual-map-toggle-active-bg: rgba(var(--pal-accent), 0.14);
+  --visual-map-toggle-border: rgba(var(--pal-line), 0.28);
+  --visual-map-toggle-active-text: rgb(var(--pal-accent-text-strong));
+  --cn-app-bg: rgba(var(--pal-info), 0.07);
+  --cn-app-border: rgba(var(--pal-info), 0.28);
 }
 
-/* ── Elevator Pitch (VisualTest) accent: green in place of purple ──
-   Scoped by game so the Natural Numbers Game keeps its own palette. Generated
-   from the accent-bearing declarations above; keep them in step. */
-.app[data-game-id='g/local/VisualTest'] {
-  --visual-accent: #4bd8bd;
-  --visual-accent-soft: #7ee5cf;
-  --visual-accent-strong: #a7f0e2;
-  --visual-accent-glow: rgba(75, 216, 189, 0.5);
-  --visual-loading-ball-core: #4bd8bd;
-  --visual-loading-ball-highlight: #a7f0e2;
-  --visual-loading-ball-glow: rgba(75, 216, 189, 0.45);
-  --visual-scrollbar-thumb: rgba(75, 216, 189, 0.4);
-  --visual-scrollbar-thumb-hover: rgba(75, 216, 189, 0.65);
-  --visual-stream-current-ring: #4bd8bd;
-  --visual-drop-target-border: #4bd8bd;
-  --visual-drop-target-glow: rgba(75, 216, 189, 0.4);
-  --visual-drop-target-bg: rgba(75, 216, 189, 0.15);
-  --visual-sidebar-active-bg: rgba(75, 216, 189, 0.18);
-  --visual-sidebar-active-border: rgba(75, 216, 189, 0.45);
-  --visual-sidebar-active-text: #a7f0e2;
-  --visual-choice-border: rgba(75, 216, 189, 0.3);
-  --visual-choice-bg: rgba(75, 216, 189, 0.08);
-  --visual-choice-bg-hover: rgba(75, 216, 189, 0.2);
-  --visual-choice-border-hover: rgba(75, 216, 189, 0.6);
-  --visual-choice-label: #4bd8bd;
-  --visual-slot-text: #7ee5cf;
-  --visual-win-gradient-start: rgba(75, 216, 189, 0.2);
-  --visual-win-title-start: #7ee5cf;
-  --visual-hyp-text: #a7f0e2;
-  --visual-map-toggle-active-bg: rgba(75, 216, 189, 0.18);
-}
-
-.app[data-visual-theme='light'][data-game-id='g/local/VisualTest'] {
-  --visual-accent: #0d9488;
-  --visual-accent-soft: #0d9488;
-  --visual-accent-strong: #0f766e;
-  --visual-accent-glow: rgba(13, 148, 136, 0.25);
-  --visual-loading-ball-core: #0d9488;
-  --visual-loading-ball-highlight: #99f6e4;
-  --visual-loading-ball-glow: rgba(13, 148, 136, 0.22);
-  --visual-scrollbar-thumb: rgba(13, 148, 136, 0.28);
-  --visual-scrollbar-thumb-hover: rgba(13, 148, 136, 0.45);
-  --visual-stream-current-ring: #0d9488;
-  --visual-drop-target-border: #0f766e;
-  --visual-drop-target-glow: rgba(13, 148, 136, 0.18);
-  --visual-drop-target-bg: rgba(13, 148, 136, 0.12);
-  --visual-sidebar-active-bg: rgba(13, 148, 136, 0.12);
-  --visual-sidebar-active-border: rgba(13, 148, 136, 0.24);
-  --visual-sidebar-active-text: #115e59;
-  --visual-choice-border: rgba(13, 148, 136, 0.22);
-  --visual-choice-bg: rgba(13, 148, 136, 0.06);
-  --visual-choice-bg-hover: rgba(13, 148, 136, 0.12);
-  --visual-choice-border-hover: rgba(13, 148, 136, 0.32);
-  --visual-choice-label: #0f766e;
-  --visual-slot-border: rgba(13, 148, 136, 0.35);
-  --visual-slot-border-strong: rgba(13, 148, 136, 0.55);
-  --visual-slot-bg: rgba(13, 148, 136, 0.06);
-  --visual-slot-bg-hover: rgba(13, 148, 136, 0.1);
-  --visual-slot-bg-active: rgba(13, 148, 136, 0.16);
-  --visual-slot-bg-drop: rgba(13, 148, 136, 0.2);
-  --visual-slot-text: #0f766e;
-  --visual-slot-glow: rgba(13, 148, 136, 0.18);
-  --visual-slot-glow-strong: rgba(13, 148, 136, 0.22);
-  --visual-win-gradient-start: rgba(13, 148, 136, 0.12);
-  --visual-win-title-start: #0f766e;
-  --visual-hyp-text: #0f766e;
-  --visual-map-toggle-active-bg: rgba(13, 148, 136, 0.14);
-  --visual-map-toggle-active-text: #115e59;
-}
 
 
 /* Large windows scale the visual interface up, to stay readable at a distance. It's
@@ -362,7 +273,7 @@
   padding: 0.6rem 1.25rem;
   font: inherit;
   font-weight: 600;
-  color: #fff;
+  color: rgb(var(--pal-on-solid));
   background: var(--visual-accent);
   border: none;
   border-radius: 9999px;
@@ -673,7 +584,7 @@
 
 .visual-page .statement-card.variable-card.visual-emphasize,
 .visual-page .statement-card.variable-only-tactic.visual-emphasize {
-  --bevel-border-color: rgba(167, 139, 250, 0.9);
+  --bevel-border-color: rgba(var(--pal-emphasis), 0.9);
 }
 
 .visual-page .statement-card.variable-card.drag-fail,
@@ -714,8 +625,8 @@
 .visual-page .statement-card.theorem-copy-card,
 .visual-page .statement-card.theorem-tray-card,
 .visual-page .statement-card.derived-theorem-card {
-  border-color: rgba(52, 211, 153, 0.4);
-  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(var(--pal-derived), 0.4);
+  background: rgba(var(--pal-derived), 0.08);
   max-width: min(40rem, calc(100vw - 6rem));
   white-space: normal;
   overflow: hidden;
@@ -725,34 +636,34 @@
 .visual-page .statement-card.theorem-copy-card:hover,
 .visual-page .statement-card.theorem-tray-card:hover,
 .visual-page .statement-card.derived-theorem-card:hover {
-  border-color: rgba(52, 211, 153, 0.4);
-  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(var(--pal-derived), 0.4);
+  background: rgba(var(--pal-derived), 0.14);
 }
 
 /* Integer notation remains blue inside a theorem, but theorem outlines use
    the same green affordance as every other reusable theorem. */
 .visual-page .statement-card.int-theorem {
-  border-color: rgba(52, 211, 153, 0.4);
-  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(var(--pal-derived), 0.4);
+  background: rgba(var(--pal-derived), 0.08);
 }
 .visual-page .statement-card.int-theorem:hover {
-  background: rgba(52, 211, 153, 0.14);
+  background: rgba(var(--pal-derived), 0.14);
 }
 
 /* Visual Lean emphasis — soft glow on highlighted inventory items and nav buttons */
 .visual-emphasize {
-  box-shadow: 0 0 10px 2px rgba(167, 139, 250, 0.38);
+  box-shadow: 0 0 10px 2px rgba(var(--pal-emphasis), 0.38);
   transition: box-shadow 0.2s ease;
 }
 
 .visual-emphasize-btn {
-  box-shadow: 0 0 7px 2px rgba(167, 139, 250, 0.45);
+  box-shadow: 0 0 7px 2px rgba(var(--pal-emphasis), 0.45);
   transition: box-shadow 0.2s ease;
 }
 
 /* Integer notation symbols rendered in blue */
 .int-op {
-  color: #60a5fa;
+  color: rgb(var(--pal-integer));
   font-weight: 600;
 }
 
@@ -786,7 +697,7 @@
 }
 
 .visual-page .statement-card.tactic-tray-card.tactic-ellipse-card:hover {
-  background: color-mix(in srgb, var(--visual-danger-bg) 88%, white 12%);
+  background: color-mix(in srgb, var(--visual-danger-bg) 88%, rgb(var(--pal-card)) 12%);
 }
 
 .visual-page .statement-card.tactic-tray-card.tactic-ellipse-card .tactic-label {
@@ -857,8 +768,8 @@
   position: relative;
   z-index: 20;
   cursor: default;
-  box-shadow: 0 0 30px rgba(234, 179, 8, 0.5), 0 0 60px rgba(234, 179, 8, 0.3);
-  border-color: #eab308;
+  box-shadow: 0 0 30px rgba(var(--pal-goal), 0.5), 0 0 60px rgba(var(--pal-goal), 0.3);
+  border-color: rgb(var(--pal-goal));
 }
 
 /* The goal card stretches to the width of an info callout below it; centre its
@@ -902,7 +813,7 @@
   position: relative;
   z-index: 30;
   align-self: stretch;
-  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(96, 165, 250, 0.18);
+  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(var(--pal-hint-ring), 0.18);
 }
 
 .visual-page .goal-info.below {
@@ -946,7 +857,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--visual-accent, #a78bfa);
+  color: var(--visual-accent);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -956,7 +867,7 @@
 
 .visual-page .visual-info-reveal-button:hover,
 .visual-page .visual-info-reveal-button:focus-visible {
-  color: #c4b5fd;
+  color: var(--visual-accent-strong);
 }
 
 .visual-page .combining-info {
@@ -1021,7 +932,7 @@
   border-radius: 14px;
   background: color-mix(in srgb, var(--visual-surface-elevated) 96%, transparent);
   color: var(--visual-text-primary);
-  box-shadow: 0 18px 70px var(--visual-shadow-strong), 0 0 0 1px rgba(139, 92, 246, 0.12);
+  box-shadow: 0 18px 70px var(--visual-shadow-strong), 0 0 0 1px rgba(var(--pal-accent), 0.12);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -1118,17 +1029,17 @@
 }
 
 .visual-page .goal-info-arrow path {
-  stroke: #5a6370;
+  stroke: rgb(var(--pal-guide-arrow));
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 3px rgba(var(--pal-shadow), 0.35));
 }
 
 .visual-page .goal-info-arrow polygon {
-  fill: #5a6370;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+  fill: rgb(var(--pal-guide-arrow));
+  filter: drop-shadow(0 1px 3px rgba(var(--pal-shadow), 0.35));
 }
 
 .visual-page .stream-navigator {
@@ -1169,9 +1080,9 @@
 }
 
 .visual-page .stream-nav-btn.toward-incomplete:not(:disabled) {
-  border-color: rgba(250, 204, 21, 0.72);
-  box-shadow: 0 0 7px 2px rgba(250, 204, 21, 0.42);
-  color: #fde68a;
+  border-color: rgba(var(--pal-attention), 0.72);
+  box-shadow: 0 0 7px 2px rgba(var(--pal-attention), 0.42);
+  color: rgb(var(--pal-attention-text));
 }
 
 .visual-page .stream-label {
@@ -1224,7 +1135,7 @@
 }
 
 .visual-page .proof-graph-info {
-  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(96, 165, 250, 0.18);
+  box-shadow: 0 10px 30px var(--visual-shadow-strong), 0 0 0 1px rgba(var(--pal-hint-ring), 0.18);
 }
 
 .visual-page .proof-tree-diagram {
@@ -1687,7 +1598,7 @@
 }
 
 .visual-header-check {
-  color: #34d399;
+  color: rgb(var(--pal-derived));
   font-size: 1rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -1758,13 +1669,13 @@
 .visual-page .statement-card.theorem-tray-card,
 .visual-page .statement-card.derived-theorem-card {
   /* Theorem identity wins over constructable/clickable/hover state. */
-  border-color: rgba(52, 211, 153, 0.4) !important;
+  border-color: rgba(var(--pal-derived), 0.4) !important;
 }
 
 .visual-page .statement-card.theorem-copy-card:hover,
 .visual-page .statement-card.theorem-tray-card:hover,
 .visual-page .statement-card.derived-theorem-card:hover {
-  border-color: rgba(52, 211, 153, 0.4) !important;
+  border-color: rgba(var(--pal-derived), 0.4) !important;
 }
 
 /* A solved/revisited goal must never inherit the ordinary yellow hover glow,
@@ -1796,24 +1707,24 @@
 }
 
 .visual-header-nav-btn.emphasized {
-  background: rgba(52, 211, 153, 0.18);
-  border-color: rgba(52, 211, 153, 0.55);
-  color: #34d399;
+  background: rgba(var(--pal-derived), 0.18);
+  border-color: rgba(var(--pal-derived), 0.55);
+  color: rgb(var(--pal-derived));
   font-weight: 700;
   padding: 0.3rem 1rem;
-  box-shadow: 0 0 14px rgba(52, 211, 153, 0.2);
+  box-shadow: 0 0 14px rgba(var(--pal-derived), 0.2);
   animation: nextLevelPulse 2s ease-in-out infinite;
 }
 
 .visual-header-nav-btn.emphasized:hover {
-  background: rgba(52, 211, 153, 0.3);
-  border-color: rgba(52, 211, 153, 0.8);
-  box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+  background: rgba(var(--pal-derived), 0.3);
+  border-color: rgba(var(--pal-derived), 0.8);
+  box-shadow: 0 0 20px rgba(var(--pal-derived), 0.4);
 }
 
 @keyframes nextLevelPulse {
-  0%, 100% { box-shadow: 0 0 14px rgba(52, 211, 153, 0.2); }
-  50%       { box-shadow: 0 0 22px rgba(52, 211, 153, 0.5); }
+  0%, 100% { box-shadow: 0 0 14px rgba(var(--pal-derived), 0.2); }
+  50%       { box-shadow: 0 0 22px rgba(var(--pal-derived), 0.5); }
 }
 
 /* In transformation overlay, raise header above the processing blocker */
@@ -2054,17 +1965,17 @@
 }
 
 .visual-page .visual-instruction-arrow path {
-  stroke: #5a6370;
+  stroke: rgb(var(--pal-guide-arrow));
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 3px rgba(var(--pal-shadow), 0.35));
 }
 
 .visual-page .visual-instruction-arrow polygon {
-  fill: #5a6370;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
+  fill: rgb(var(--pal-guide-arrow));
+  filter: drop-shadow(0 1px 3px rgba(var(--pal-shadow), 0.35));
 }
 
 /* Undo / Reset controls — bottom-left, as far from the edge as from each other */
@@ -2421,18 +2332,17 @@
   background: var(--visual-info-bg);
 }
 .visual-page .tr-eq-card h3 { color: var(--visual-info); }
-/* An axiom is a theorem with a double outline: a second line just inside the border. */
-.visual-page .tr-axiom-card {
-  position: relative;
-  border-color: var(--visual-info);
+/* An axiom is a theorem with a double border: the theorems' border, drawn twice.
+   The padding gives back what the wider border takes, so the card keeps its size. */
+.visual-page .tr-axiom-card,
+.visual-page.tr-overlay .tr-axiom-card {
+  border: 4px double var(--visual-info-border);
 }
-.visual-page .tr-axiom-card::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 1px solid var(--visual-info);
-  border-radius: 9px;
-  pointer-events: none;
+.visual-page .tr-axiom-card {
+  padding: calc(0.75rem - 3px) calc(1rem - 3px);
+}
+.visual-page.tr-overlay .tr-axiom-card {
+  padding: calc(0.6rem - 3px) calc(0.9rem - 3px);
 }
 /* The level's own hypotheses look as they do in Proposition Mode: grey, or the
    green of a proposition the player derived. */
@@ -2442,8 +2352,8 @@
 }
 .visual-page .tr-eq-card.tr-hyp-rule-card h3 { color: var(--visual-hyp-text); }
 .visual-page .tr-eq-card.tr-derived-rule-card {
-  border-color: rgba(52, 211, 153, 0.4);
-  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(var(--pal-derived), 0.4);
+  background: rgba(var(--pal-derived), 0.08);
 }
 .visual-page .tr-eq-card.tr-derived-rule-card h3 { color: var(--visual-success-card-text); }
 
@@ -3235,11 +3145,11 @@
 
   .visual-page.phone-portrait .combining-canvas > .statement-card.theorem-copy-card:hover,
   .visual-page.phone-portrait .combining-canvas > .statement-card.derived-theorem-card:hover {
-    background: rgba(52, 211, 153, 0.08);
+    background: rgba(var(--pal-derived), 0.08);
   }
 
   .visual-page.phone-portrait .combining-canvas > .statement-card.int-theorem:hover {
-    background: rgba(96, 165, 250, 0.08);
+    background: rgba(var(--pal-integer), 0.08);
   }
 
   .visual-page.phone-portrait .theorem-tray-panel .statement-card:not(.goal) {
@@ -3306,7 +3216,7 @@
     border-radius: 10px;
     white-space: normal;
     text-align: center;
-    box-shadow: 0 0 22px rgba(234, 179, 8, 0.4), 0 0 42px rgba(234, 179, 8, 0.18);
+    box-shadow: 0 0 22px rgba(var(--pal-goal), 0.4), 0 0 42px rgba(var(--pal-goal), 0.18);
   }
 
   .visual-page.phone-portrait .statement-card.goal.solved {
@@ -3666,11 +3576,11 @@
   .visual-page.phone-portrait .statement-card.theorem-copy-card:hover,
   .visual-page.phone-portrait .statement-card.theorem-tray-card:hover,
   .visual-page.phone-portrait .statement-card.derived-theorem-card:hover {
-    background: rgba(52, 211, 153, 0.08);
+    background: rgba(var(--pal-derived), 0.08);
   }
 
   .visual-page.phone-portrait .statement-card.int-theorem:hover {
-    background: rgba(96, 165, 250, 0.08);
+    background: rgba(var(--pal-integer), 0.08);
   }
 
   .visual-page.phone-portrait .statement-card.tactic-tray-card:hover {
@@ -3682,7 +3592,7 @@
   .visual-page.phone-portrait .statement-card.goal.constructable:hover,
   .visual-page.phone-portrait .statement-card.goal.transformable:hover {
     background: var(--glass-bg);
-    box-shadow: 0 0 22px rgba(234, 179, 8, 0.4), 0 0 42px rgba(234, 179, 8, 0.18);
+    box-shadow: 0 0 22px rgba(var(--pal-goal), 0.4), 0 0 42px rgba(var(--pal-goal), 0.18);
   }
 
   .visual-page.phone-portrait .statement-card.goal.solved:hover {
@@ -3910,7 +3820,7 @@
 .visual-map-auto-branch-toggle.active {
   background: var(--visual-map-toggle-active-bg);
   color: var(--visual-map-toggle-active-text);
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 1px rgba(var(--pal-accent), 0.12);
 }
 
 @media (max-width: 720px) {
@@ -4092,7 +4002,7 @@
 }
 
 .visual-map-page .visual-ending-world.complete:focus-visible {
-  outline: 2px solid var(--visual-accent, #b79dff);
+  outline: 2px solid var(--visual-accent);
   outline-offset: 4px;
 }
 
@@ -4236,8 +4146,8 @@
   background: var(--visual-glass-bg);
 }
 .visual-page .cn-expr.cn-app {
-  background: var(--cn-app-bg, rgba(96, 165, 250, 0.08));
-  border-color: var(--cn-app-border, rgba(96, 165, 250, 0.22));
+  background: var(--cn-app-bg);
+  border-color: var(--cn-app-border);
 }
 /* Hide the explicit parens for `succ(...)` since the box already delimits the argument. */
 /* .cn-paren-vis is used for parens that must always show (e.g. min's argument list). */
@@ -4575,14 +4485,14 @@
   transform: translateX(-50%);
   font-size: 0.85em;
   line-height: 1;
-  color: #8b5cf6;
+  color: rgb(var(--pal-iff-forward));
   font-weight: 700;
   pointer-events: none;
   user-select: none;
 }
 
 .iff-op.iff-reverse .iff-arrow {
-  color: #ec4899;
+  color: rgb(var(--pal-iff-reverse));
 }
 
 /* ── Rewrite Mode's lessons and check mark ────────────────────────────────
@@ -4622,13 +4532,14 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  /* Glowing in the orange of an open goal's card while it waits to be clicked;
-     green once the proof is done. */
-  border: 2px solid #eab308;
+  /* A plain button whose check mark is the orange of an open goal's card while it
+     waits to be clicked; green once the proof is done. */
+  border: 1px solid var(--visual-glass-border);
   border-radius: 9999px;
   background: var(--visual-glass-bg);
-  color: #eab308;
-  box-shadow: 0 0 14px 2px rgba(234, 179, 8, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgb(var(--pal-goal));
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1;
@@ -4636,25 +4547,20 @@
   -webkit-appearance: none;
   appearance: none;
   transition: background 0.2s, color 0.2s, border-color 0.2s;
-  animation: tr-check-appear 0.25s ease-out, tr-check-glow 1.6s ease-in-out 0.25s infinite;
+  animation: tr-check-appear 0.25s ease-out;
 }
 
 .visual-page .tr-check-btn:hover:not(:disabled) {
-  background: rgba(234, 179, 8, 0.22);
+  background: var(--visual-glass-bg-hover);
 }
 
 .visual-page .tr-check-btn.completed {
   border-color: var(--visual-stream-complete);
   background: var(--visual-stream-complete);
-  color: #fff;
+  color: rgb(var(--pal-on-solid));
   box-shadow: 0 0 12px var(--visual-success-glow);
   animation: none;
   cursor: default;
-}
-
-@keyframes tr-check-glow {
-  0%, 100% { box-shadow: 0 0 10px 1px rgba(234, 179, 8, 0.45); }
-  50% { box-shadow: 0 0 22px 6px rgba(234, 179, 8, 0.8); }
 }
 
 @keyframes tr-check-appear {
@@ -4672,8 +4578,8 @@
   max-width: 100%;
   padding: 0 0.3rem;
   border-radius: 4px;
-  background: rgba(167, 139, 250, 0.22);
-  box-shadow: 0 0 8px 1px rgba(167, 139, 250, 0.45);
+  background: rgba(var(--pal-emphasis), 0.22);
+  box-shadow: 0 0 8px 1px rgba(var(--pal-emphasis), 0.45);
   color: var(--visual-text-bright, var(--text-primary));
   font-weight: 700;
 }
@@ -4747,7 +4653,7 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(2, 6, 23, 0.55);
+  background: rgba(var(--pal-backdrop), 0.55);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
 }

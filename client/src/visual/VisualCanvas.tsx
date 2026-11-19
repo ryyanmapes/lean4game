@@ -1137,6 +1137,17 @@ function hypothesisDropWouldSubstitute(first: HypCardType, second: HypCardType):
   )
 }
 
+/** Two cards that state the same proposition. Dropping one on the other merges
+ * them: Lean's `drag_to` clears the dragged one. Variables are not propositions,
+ * so two of one type never merge. */
+function hypothesesAreIdentical(first: HypCardType, second: HypCardType): boolean {
+  if (first.id === second.id) return false
+  const isProposition = (card: HypCardType) => Boolean(card.hyp.isAssumption || card.isTheorem)
+  if (!isProposition(first) || !isProposition(second)) return false
+  return hypCardFormula(first) === hypCardFormula(second)
+    && normalizeFormulaText(first.hyp.forallFooter ?? '') === normalizeFormulaText(second.hyp.forallFooter ?? '')
+}
+
 function parsedGoalTarget(stream: GoalStream, allowComparisons: boolean): ParsedTransformTarget | null {
   const parsed = parseTransformTarget(TaggedText_stripTags(stream.goal.type).trim())
   if (!parsed) return null
@@ -1921,6 +1932,10 @@ function inferLeanTacticFromVisualInteraction(
     const secondName = dragTo[2]!
     const firstCard = findHypCardByName(stream, firstName)
     const secondCard = findHypCardByName(stream, secondName)
+    // Two identical propositions merge: the dragged one is cleared.
+    if (firstCard && secondCard && hypothesesAreIdentical(firstCard, secondCard)) {
+      return `clear ${firstName}`
+    }
     if (firstCard && secondCard) {
       const firstType = normalizeFormulaText(TaggedText_stripTags(firstCard.hyp.type))
       const secondType = normalizeFormulaText(TaggedText_stripTags(secondCard.hyp.type))
@@ -2892,6 +2907,15 @@ export function VisualCanvas({
   }, [propositionTheorems])
 
   const [transformTarget, setTransformTarget] = useState<TransformTarget | null>(null)
+  // Rewrite Mode was opened on a finished proof, to look at a statement: its rules
+  // are shown, but nothing there changes the proof (no rewrite, undo or reset).
+  const [transformReviewOnly, setTransformReviewOnly] = useState(false)
+  /** The stream a card of the finished proof on screen belongs to. */
+  function reviewedStream(streamId: string): GoalStream | undefined {
+    return canvasState.streams.find(stream => stream.id === streamId)
+      ?? displayCanvasState.streams.find(stream => stream.id === streamId)
+      ?? streamSnapshots[streamId]
+  }
   // A refusal explained in place, such as Rewrite Mode being off for the goal.
   const [canvasWarning, setCanvasWarning] = useState<string | null>(null)
   const canvasWarningTimerRef = useRef<number | null>(null)
@@ -2914,6 +2938,7 @@ export function VisualCanvas({
   function dismissTransformationView() {
     lastTransformPropsRef.current = null
     setTransformTarget(null)
+    setTransformReviewOnly(false)
   }
   const [proofSteps, setProofSteps] = useState<ProofStepRecord[]>(() => resumeState?.proofSteps ?? [])
   // Appending a step and reporting it go together, so the telemetry log replays
@@ -4212,16 +4237,27 @@ export function VisualCanvas({
     width: number,
     height: number,
   ) {
-    setCanvasState(prev => {
-      const canvasBounds = getCombiningCanvasBounds()
-      const obstacleIds = prev.streams.map(s => s.id)
-      const streams = prev.streams.map(stream => {
+    const canvasBounds = getCombiningCanvasBounds()
+    const position = clampCanvasPosition(x, y, width, height, 0)
+    // On a finished proof a card can be let go over the goal, where a live proof
+    // would have taken that as a move. It isn't left underneath: it counts as
+    // not placed by hand, so the resolver finds it the nearest clear spot.
+    const goalStack = canvasState.completed
+      ? document.querySelector<HTMLElement>('.visual-page .goal-card-with-info')?.getBoundingClientRect()
+      : undefined
+    const underGoalStack = goalStack != null
+      && position.x < goalStack.right - canvasBounds.left && position.x + width > goalStack.left - canvasBounds.left
+      && position.y < goalStack.bottom - canvasBounds.top && position.y + height > goalStack.top - canvasBounds.top
+    const moveIn = (streams: GoalStream[]): GoalStream[] => {
+      const obstacleIds = streams.map(s => s.id)
+      return streams.map(stream => {
+        if (!stream.hyps.some(h => h.id === activeId)) return stream
         const moved = stream.hyps.map(h => {
           if (h.id !== activeId) return h
           return {
             ...h,
-            userPlaced: true,
-            position: clampCanvasPosition(x, y, width, height, 0),
+            userPlaced: !underGoalStack,
+            position,
           }
         })
         return {
@@ -4229,8 +4265,16 @@ export function VisualCanvas({
           hyps: resolveCollisions(moved, obstacleIds, canvasBounds, { phonePortrait: isPhonePortrait }),
         }
       })
-      return { ...prev, streams }
-    })
+    }
+    setCanvasState(prev => ({ ...prev, streams: moveIn(prev.streams) }))
+    // A finished proof is shown from what was on screen last, and a finished
+    // branch from its snapshot, so a card moved there is moved in those.
+    if (canvasState.completed || !canvasState.streams.some(stream => stream.hyps.some(h => h.id === activeId))) {
+      setDisplayCanvasState(prev => ({ ...prev, streams: moveIn(prev.streams) }))
+      setStreamSnapshots(prev => Object.fromEntries(
+        Object.entries(prev).map(([streamId, stream]) => [streamId, moveIn([stream])[0]!]),
+      ))
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -4500,6 +4544,14 @@ export function VisualCanvas({
     const refuseDrop = (reason: string, command: string, details: Record<string, unknown> = {}) => {
       lastDragDebugRef.current = { ...lastDragDebugRef.current, refused: reason, ...details }
       onGesture?.({ kind: 'rejected', command, reason })
+    }
+
+    // A finished proof can be looked over but not changed: a card dropped on
+    // another card or on the goal is only moved there, like one dropped on the
+    // empty canvas, and a derived proposition is not thrown back in the tray.
+    if (canvasState.completed) {
+      if (tacticTemplate) return
+      if (overId !== THEOREM_TRAY_ID || sourceCard) overId = undefined
     }
 
     // A premise dropped onto a workspace theorem is unambiguously function
@@ -4860,6 +4912,19 @@ export function VisualCanvas({
         // copies are checked on the same terms as local cards: `drag_to` will
         // otherwise substitute an equality into a theorem's statement and
         // produce a hypothesis the player never asked for.
+        // A proposition dropped on an identical one merges with it: the
+        // duplicate goes, and the card it was dropped on stays where it is.
+        if (sourceCard && targetCard && hypothesesAreIdentical(sourceCard, targetCard)) {
+          applyDroppedInteraction(
+            interactionToPlayTactic({ type: 'drag_to', nameA: sourceName, nameB: targetName }),
+            activeId,
+            {
+              ...(targetStream ? { targetStreamId: targetStream.id } : {}),
+              ...(isMobileTheoremCard(targetCard) ? { mobileInsertAfter: hypMobileKey(targetCard) } : {}),
+            },
+          )
+          return
+        }
         if (sourceCard && targetCard && hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
 
         // When dropping a hyp onto a constructable theorem copy, use drag_apply
@@ -5246,8 +5311,11 @@ export function VisualCanvas({
   }
 
   function handleHypTransformDoubleClick(streamId: string, cardId: string) {
-    if (canvasState.completed) return
-    const stream = canvasState.streams.find(candidate => candidate.id === streamId)
+    // On a finished proof Rewrite Mode opens to look at the statement only.
+    const reviewOnly = canvasState.completed
+    const stream = reviewOnly
+      ? reviewedStream(streamId)
+      : canvasState.streams.find(candidate => candidate.id === streamId)
     const card = stream?.hyps.find(h => h.id === cardId)
     if (!stream || !card) return
     const hypRef = interactionHypName(card) ?? (card.hyp.names[0] ?? '?')
@@ -5257,10 +5325,11 @@ export function VisualCanvas({
     }
     if (!hypIsTransformable(card, comparisonTransformEnabled)) return
     closeReductionTooltip()
-    setSolvedGoalId(null)
+    if (!reviewOnly) setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformationVersion(0)
+    setTransformReviewOnly(reviewOnly)
     setTransformTarget({
       kind: 'hyp',
       streamId: stream.id,
@@ -5288,7 +5357,8 @@ export function VisualCanvas({
   }
 
   function handleGoalTransformDoubleClick(streamId: string) {
-    if (canvasState.completed) return
+    // On a finished proof Rewrite Mode opens to look at the goal only.
+    const reviewOnly = canvasState.completed
     if (isProcessing) {
       onGesture?.({ kind: 'rejected', command: 'transform goal', reason: 'busy' })
       return
@@ -5298,14 +5368,16 @@ export function VisualCanvas({
       onGesture?.({ kind: 'rejected', command: 'transform goal', reason: 'no-rewrite-mode' })
       return
     }
-    const stream = canvasState.streams.find(s => s.id === streamId)
+    const stream = reviewOnly ? reviewedStream(streamId) : canvasState.streams.find(s => s.id === streamId)
     if (!stream) return
-    if (!goalIsTransformable(stream, comparisonTransformEnabled, noGoalRfl)) return
+    if (!goalIsTransformable(stream, comparisonTransformEnabled, noGoalRfl || reviewOnly)) return
     closeReductionTooltip()
-    setSolvedGoalId(null)
+    // The finished goal stays marked as solved while it is looked at.
+    if (!reviewOnly) setSolvedGoalId(null)
     setPendingTransformSync(null)
     setIsTransformReverse(false)
     setTransformationVersion(0)
+    setTransformReviewOnly(reviewOnly)
     setTransformTarget({ kind: 'goal', streamId })
     onGesture?.({ kind: 'view', command: 'transform goal' })
   }
@@ -6058,6 +6130,7 @@ export function VisualCanvas({
     ? canvasState.streams.find(s => s.id === transformTarget.streamId)
       // A solved Rewrite-only level reopened later keeps showing its last goal.
       ?? (rewriteOnly ? displayCanvasState.streams.find(s => s.id === transformTarget.streamId) : undefined)
+      ?? (transformReviewOnly ? reviewedStream(transformTarget.streamId) : undefined)
     : null
 
   const computedTransformProps: TransformViewPresentation | null = (() => {
@@ -6526,6 +6599,9 @@ export function VisualCanvas({
     }
   }, [isPhonePortrait, orderedMobileTheorems, orderedMobileVariables, visualGoalInfos])
   const streamInteractionsEnabled = currentStreamIsLive && !currentStreamIsCompleted && !canvasState.completed
+  // A finished proof can still be looked over: its cards move about and open in
+  // Rewrite Mode, but nothing done there is a move in the proof.
+  const reviewingFinishedProof = canvasState.completed
   const proofGraphVisible = totalLeafCount > 1
   const proofGraphOccupiesMainView = proofGraphVisible && !isPhonePortrait
   const displayGoalText = displayStream
@@ -6571,9 +6647,9 @@ export function VisualCanvas({
     }
   }, [displayGoalText, displayHypTypeTexts, proofGraphVisible, visibleHyps, visibleVisualGoalInfos,
     visualHypGoalInfos, visualProofGraphInfos, visualTacticHypInfos])
-  // A finished proof keeps no hints about moves still to make.
+  // The hints stay up when the level is finished, like after any other move.
   const canvasHints = usePersistentHints(
-    persistentHints && !canvasState.completed, proofSteps.length, matchingCanvasHints,
+    persistentHints, proofSteps.length, matchingCanvasHints,
     canvasHintsEmpty, canvasHintsKept,
   )
   const shownGoalInfos = React.useMemo(() => withText(canvasHints.goal), [canvasHints.goal])
@@ -7104,7 +7180,8 @@ export function VisualCanvas({
     const stream = requireInteractiveCurrentStream()
     const sourceCard = requireHypCard(stream, sourceName)
     const targetCard = requireHypCard(stream, targetName)
-    if (hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
+    if (!hypothesesAreIdentical(sourceCard, targetCard)
+      && hypothesisDropWouldSubstitute(sourceCard, targetCard)) return
     const playTactic = interactionToPlayTactic({
       type: 'drag_to',
       nameA: interactionHypName(sourceCard) ?? sourceName,
@@ -7660,7 +7737,8 @@ export function VisualCanvas({
       ? displayStream?.hyps.find(candidate => candidate.id === activeDragId)
       : undefined
     const blocksHypothesisSubstitution = Boolean(
-      draggedHypCard && hypothesisDropWouldSubstitute(draggedHypCard, card),
+      draggedHypCard && !hypothesesAreIdentical(draggedHypCard, card)
+        && hypothesisDropWouldSubstitute(draggedHypCard, card),
     )
     return (
       <HypCard
@@ -7672,10 +7750,11 @@ export function VisualCanvas({
           marker.hypId === card.id || marker.hypName === (card.hyp.names[0] ?? '')
         )}
         isInteractive={streamInteractionsEnabled}
+        isMovable={streamInteractionsEnabled || (reviewingFinishedProof && !mobileList)}
         isFailing={failingCardId === card.id}
         isClickable={streamInteractionsEnabled && isClickable}
         clickTooltip={clickAction?.tooltip}
-        isTransformable={streamInteractionsEnabled && isTransformable}
+        isTransformable={(streamInteractionsEnabled || reviewingFinishedProof) && isTransformable}
         isConstructable={streamInteractionsEnabled && isConstructable}
         showDropTarget={activeDraggedTactic
           ? isTacticTarget
@@ -7687,7 +7766,7 @@ export function VisualCanvas({
             ? () => handleHypConstructionClick(displayStream.id, card.id)
             : () => handleHypClick(displayStream.id, card.id, clickAction)
           : undefined}
-        onDoubleClick={streamInteractionsEnabled && displayStream && isTransformable
+        onDoubleClick={(streamInteractionsEnabled || reviewingFinishedProof) && displayStream && isTransformable
           ? () => handleHypTransformDoubleClick(displayStream.id, card.id)
           : undefined}
         onContextMenu={hypCardIsIff(card) ? (event) => handleHypContextMenu(event, card) : undefined}
@@ -7792,7 +7871,8 @@ export function VisualCanvas({
       ? undefined
       : offeredClickAction
     const isClickable = hasClickAction(clickAction)
-    const isTransformable = goalIsTransformable(liveGoalStream, comparisonTransformEnabled, noGoalRfl)
+    const isTransformable = goalIsTransformable(
+      liveGoalStream, comparisonTransformEnabled, noGoalRfl || reviewingFinishedProof)
     const isConstructable = goalIsConstructable(liveGoalStream)
     const isTacticTarget = activeDraggedTactic
       ? tacticCanTargetGoal(activeDraggedTactic, liveGoalStream)
@@ -7811,7 +7891,7 @@ export function VisualCanvas({
         id={stream.id}
         goal={stream.goal}
         isInteractive={streamInteractionsEnabled}
-        isTransformable={streamInteractionsEnabled && isTransformable}
+        isTransformable={(streamInteractionsEnabled || reviewingFinishedProof) && isTransformable}
         isConstructable={streamInteractionsEnabled && isConstructable}
         isClickable={streamInteractionsEnabled && isClickable}
         clickTooltip={clickAction?.tooltip}
@@ -7832,7 +7912,9 @@ export function VisualCanvas({
             ? () => handleGoalConstructionClick(liveGoalStream.id)
             : () => handleGoalClick(liveGoalStream.id, clickAction, renderedGoalText)
           : undefined}
-        onDoubleClick={streamInteractionsEnabled && isTransformable ? () => handleGoalTransformDoubleClick(liveGoalStream.id) : undefined}
+        onDoubleClick={(streamInteractionsEnabled || reviewingFinishedProof) && isTransformable
+          ? () => handleGoalTransformDoubleClick(liveGoalStream.id)
+          : undefined}
       />
     )
   }
@@ -8370,12 +8452,13 @@ export function VisualCanvas({
           emphasizeForall={emphasizeForall}
           onCheck={goalCheckAvailable ? handleRewriteCheck : undefined}
           completed={canvasState.completed}
+          reviewOnly={transformReviewOnly}
           onRewrite={handleRewrite}
           onSwap={handleSwapSides}
           onUndo={undoLastStep}
-          canUndo={canUndo}
+          canUndo={canUndo && !transformReviewOnly}
           onReset={resetTransformation}
-          canReset={rewriteOnly ? proofSteps.length > 0 : transformationVersion > 0}
+          canReset={!transformReviewOnly && (rewriteOnly ? proofSteps.length > 0 : transformationVersion > 0)}
           onClose={() => {
             onGesture?.({ kind: 'view', command: 'close' })
             closeTransformationView()

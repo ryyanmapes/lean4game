@@ -26,6 +26,11 @@ test('rejects incompatible conclusions and False elimination', () => {
 
 test('accepts either usable side of an iff', () => {
   assert.equal(statementCanTargetGoal('a = b ↔ b = a', 'x = y', '∀ (a b : ℕ)'), true)
+  // A quantified side is bracketed in the statement, but not in the goal it rewrites.
+  const lemIffDne = '(∀ (P : Prop), P ∨ ¬P) ↔ ∀ (P : Prop), ¬¬P → P'
+  assert.equal(statementCanTargetGoal(lemIffDne, '∀ (P : Prop), P ∨ ¬P'), true)
+  assert.equal(statementCanTargetGoal(lemIffDne, '∀ (P : Prop), ¬¬P → P'), true)
+  assert.equal(statementCanTargetGoal(lemIffDne, '∀ (P : Prop), P ∧ ¬P'), false)
 })
 
 test('a disequality hypothesis can be applied to a False goal', () => {

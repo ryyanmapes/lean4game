@@ -4,7 +4,8 @@
  * Every level is a node. A world is a column of its levels, top to bottom;
  * worlds split and join along the game's dependency edges, and a bonus world
  * (`VisualBonusOf`) sprouts sideways off one level of another world, with its
- * levels in a row. A path that can't run down its own column, because another
+ * levels in a row, beside the levels that follow on the path it left. A path
+ * that can't run down its own column, because another
  * world carries on there, leaves to the side first; where two paths cross, one
  * bridges the other; and a world's title moves beside its path when something
  * is in the way above it. The layout is pure, so progress only changes how its
@@ -96,9 +97,10 @@ const TURN_ROWS_ABOVE = 0.9
 /** Distance between the levels of a bonus world's row, as a fraction of a column. */
 const BONUS_STEP_FRACTION = 0.6
 const MIN_BONUS_STEP = 60
-/** Where several bonus branches leave one level, they leave its path once, down a
- * shared stem beside it, and fan out from the stem. The stem's distance from the
- * path, and how much further out the branches' levels then sit, in bonus steps. */
+/** Where several bonus branches leave one level, or the path's next levels are
+ * listed beside a branch, the branches leave the path once, down a shared stem
+ * beside it, and fan out from the stem. The stem's distance from the path, and
+ * how much further out the branches' levels then sit, in bonus steps. */
 const BONUS_STEM_FRACTION = 0.5
 const BONUS_FAN_SHIFT_FRACTION = 0.25
 /** Clear space between a world's title and the top of the path below it. */
@@ -240,22 +242,40 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     ;(branchesAt[key] ??= []).push(world)
   }
 
-  // Rows: a world's levels go down one row at a time, with a row after a level
-  // for each bonus that branches off it, so the branches have room beside the path.
+  // Rows: a world's levels go down one row at a time. The bonuses that branch
+  // off a level take a row each below it, beside the path, and the world's next
+  // levels are listed in those same rows. A level with branches of its own waits
+  // until the branches above it are behind it, so that two levels' branches
+  // never share a row.
   const row: Record<string, Record<number, number>> = {}
   const branchRows = (world: string, level: number) => branchesAt[`${world}:${level}`]?.length ?? 0
   const placeLevels = (world: string, startRow: number) => {
     row[world] = {}
     let current = startRow
+    let branchesUntil = -Infinity
     for (const level of levelsOf[world]!) {
+      const branches = branchRows(world, level)
+      if (branches > 0) {
+        current = Math.max(current, branchesUntil)
+        branchesUntil = current + branches
+      }
       row[world]![level] = current
-      current += 1 + branchRows(world, level)
+      current += 1
     }
   }
   const startRowOf = (world: string) => row[world]![levelsOf[world]![0]!]!
-  const endRowOf = (world: string) => {
-    const last = levelsOf[world]!.at(-1)!
-    return row[world]![last]! + branchRows(world, last)
+  /** The last row a world takes up: its last level, or a branch that ends below it. */
+  const endRowOf = (world: string) =>
+    Math.max(...levelsOf[world]!.map(level => row[world]![level]! + branchRows(world, level)))
+  /** Whether the branches off a level leave its path sideways and run down a stem
+   * beside it: when there are several, and when a later level of the world sits
+   * beside a branch, where a branch that followed the path down would seem to
+   * leave from that level. */
+  const branchesUseStem = (world: string, level: number) => {
+    const count = branchRows(world, level)
+    if (count > 1) return true
+    const at = row[world]![level]!
+    return levelsOf[world]!.some(other => row[world]![other]! > at && row[world]![other]! <= at + count)
   }
   const minStartRow: Record<string, number> = {}
   // A path joining a world from the side turns in just above the world's first
@@ -331,7 +351,7 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     const branchRow = row[anchor.world]![from]! + 1 + siblings.indexOf(world!)
     row[world!] = Object.fromEntries(levelsOf[world!]!.map(level => [level, branchRow]))
     // Branches that fan out from a stem start past it.
-    const fanShift = siblings.length > 1 ? BONUS_FAN_SHIFT_FRACTION * bonusStep : 0
+    const fanShift = branchesUseStem(anchor.world, from) ? BONUS_FAN_SHIFT_FRACTION * bonusStep : 0
     levelX[world!] = Object.fromEntries(levelsOf[world!]!.map((level, levelIndex) =>
       [level, anchorX + side * ((levelIndex + 1) * bonusStep + fanShift)]))
   }
@@ -490,10 +510,10 @@ export function computePathMapLayout(input: PathMapInput, options: PathMapLayout
     const firstPoint = position(world, levelsOf[world]![0]!)
     const siblings = branchesAt[`${anchor.world}:${from}`]!
     let points = [anchorPoint, { x: anchorPoint.x, y: firstPoint.y }, firstPoint]
-    if (siblings.length > 1) {
-      // Several branches off one level: the first leaves the level sideways and
-      // turns down a stem beside the path, and each later one carries the stem
-      // on from the branch above it, so the path is left only once.
+    if (branchesUseStem(anchor.world, from)) {
+      // The first branch leaves the level sideways and turns down a stem beside
+      // the path, and each later one carries the stem on from the branch above
+      // it, so the path is left only once and its next levels stay clear.
       const stemX = anchorPoint.x + Math.sign(firstPoint.x - anchorPoint.x) * BONUS_STEM_FRACTION * bonusStep
       const index = siblings.indexOf(world)
       const above = index > 0 ? position(siblings[index - 1]!, levelsOf[siblings[index - 1]!]![0]!) : undefined

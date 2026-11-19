@@ -29,31 +29,22 @@ import {
 import { visualInterfaceScale } from './interfaceScale'
 import { bonusAnchorsOf, computeVisualProgressFrontier, isVisualLevelUnlocked } from './visualWorldProgress'
 
-/** Fill and edge of each named world colour. */
-const WORLD_COLORS: Record<string, { fill: string; edge: string }> = {
-  grey: { fill: '#94a3b8', edge: '#64748b' },
-  purple: { fill: '#8b5cf6', edge: '#6d28d9' },
-  blue: { fill: '#3b82f6', edge: '#1d4ed8' },
-  sky: { fill: '#38bdf8', edge: '#0284c7' },
-  teal: { fill: '#14b8a6', edge: '#0f766e' },
-  green: { fill: '#22c55e', edge: '#15803d' },
-  amber: { fill: '#f59e0b', edge: '#b45309' },
-  orange: { fill: '#f97316', edge: '#c2410c' },
-  red: { fill: '#ef4444', edge: '#b91c1c' },
-  pink: { fill: '#ec4899', edge: '#be185d' },
-  indigo: { fill: '#6366f1', edge: '#4338ca' },
-  lime: { fill: '#84cc16', edge: '#4d7c0f' },
-}
+/** The named world colours. Their fill and edge are in the palette (palette.css),
+ * as `--pal-world-<name>` and `--pal-world-<name>-edge`. */
+const WORLD_COLOR_NAMES = new Set([
+  'grey', 'purple', 'blue', 'sky', 'teal', 'green', 'amber', 'orange', 'red', 'pink', 'indigo', 'lime',
+])
 
-interface PathMapTheme {
-  background: string
+/** The map's own colours, from the palette of the scheme in use. */
+const THEME = {
+  background: 'rgb(var(--pal-bg-start))',
   /** Outline of paths and levels not reached yet. */
-  shadow: string
-  lockedText: string
+  shadow: 'rgb(var(--pal-track))',
+  lockedText: 'rgb(var(--pal-inactive))',
+  /** The number of a finished level, on its world's colour. */
+  completedText: 'rgb(var(--pal-on-solid))',
 }
-
-const DARK_THEME: PathMapTheme = { background: '#0f172a', shadow: '#475569', lockedText: '#64748b' }
-const LIGHT_THEME: PathMapTheme = { background: '#f8fafc', shadow: '#cbd5e1', lockedText: '#94a3b8' }
+type PathMapTheme = typeof THEME
 
 const PATH_OUTER_WIDTH = 16
 const PATH_INNER_WIDTH = 10
@@ -72,7 +63,8 @@ interface LevelMeta {
 }
 
 function worldColor(name: string) {
-  return WORLD_COLORS[name] ?? WORLD_COLORS.purple!
+  const known = WORLD_COLOR_NAMES.has(name) ? name : 'purple'
+  return { fill: `rgb(var(--pal-world-${known}))`, edge: `rgb(var(--pal-world-${known}-edge))` }
 }
 
 /** Each game's level metadata, kept for the session: coming back from a level
@@ -140,7 +132,7 @@ function PathMapLevel({ node, meta, state, theme, onOpen }: {
   const activate = () => onOpen?.()
   const stroke = state === 'completed' ? color.edge : state === 'frontier' ? color.fill : theme.shadow
   const fill = state === 'completed' ? color.fill : theme.background
-  const textColor = state === 'completed' ? '#ffffff' : state === 'frontier' ? color.fill : theme.lockedText
+  const textColor = state === 'completed' ? theme.completedText : state === 'frontier' ? color.fill : theme.lockedText
   const radius = meta?.boss ? PATH_MAP_BOSS_NODE_RADIUS : PATH_MAP_NODE_RADIUS
   return (<>
     <g
@@ -218,9 +210,8 @@ function TextLevelDialog({ title, introduction, onClose }: {
   )
 }
 
-export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
+export function VisualPathMap({ gameInfo, openAnyLevel }: {
   gameInfo: GameInfo
-  isLightMode: boolean
   /** The "Open Any Level" setting: locked levels open too. */
   openAnyLevel: boolean
 }) {
@@ -229,7 +220,7 @@ export function VisualPathMap({ gameInfo, isLightMode, openAnyLevel }: {
   const dispatch = useAppDispatch()
   const [searchParams, setSearchParams] = useSearchParams()
   const scrollRef = React.useRef<HTMLDivElement>(null)
-  const theme = isLightMode ? LIGHT_THEME : DARK_THEME
+  const theme = THEME
   // Subscribe so completions and imports repaint the map.
   useAppSelector(selectProgress(gameId))
   const meta = useLevelMeta(gameId, gameInfo.worldSize)

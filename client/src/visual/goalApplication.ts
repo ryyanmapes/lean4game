@@ -122,8 +122,10 @@ export function statementCanTargetGoal(
     mentionsAll(pattern, values) && formulaMatchesGoal(pattern, normalizedGoal, wildcards)
   if (matches(normalizedStatement)) return true
 
+  // A side that is itself quantified is bracketed, as in `(∀ P, P ∨ ¬P) ↔ …`;
+  // the brackets are not part of what the goal has to read.
   const iff = splitTopLevel(normalizedStatement, '↔')
-  if (iff && (matches(iff[0]) || matches(iff[1]))) return true
+  if (iff && iff.some(side => matches(stripOuterParentheses(side)))) return true
 
   return matches(terminalConclusion(normalizedStatement))
 }

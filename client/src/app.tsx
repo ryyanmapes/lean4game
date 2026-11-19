@@ -8,6 +8,8 @@ import '@fontsource/roboto/700.css';
 
 import './css/reset.css';
 import './css/app.css';
+// The visual interface's colours, which the page background below is taken from.
+import './visual/palette.css';
 import { PreferencesContext, WorldLevelIdContext} from './components/infoview/context';
 import UsePreferences from "./state/hooks/use_preferences"
 import { loadGameLightModePreference } from './state/local_storage'
@@ -56,7 +58,11 @@ function App({ owner, repo }: { owner?: string, repo?: string } = {}) {
   }, [gameId])
 
   React.useLayoutEffect(() => {
-    const background = isVisualLightMode ? '#f8fafc' : '#0f172a'
+    // The page's own background is the palette's (visual/palette.css), read from
+    // the app root that this render gave the scheme to.
+    const appRoot = document.querySelector('.app')
+    const paletteBackground = appRoot ? getComputedStyle(appRoot).getPropertyValue('--pal-bg-start').trim() : ''
+    const background = paletteBackground ? `rgb(${paletteBackground})` : ''
     const scheme = isVisualLightMode ? 'light' : 'dark'
     document.documentElement.style.backgroundColor = background
     document.documentElement.style.colorScheme = scheme

@@ -15,6 +15,9 @@ interface HypCardProps {
   streamId?: string
   positionOverride?: { x: number; y: number }
   isInteractive?: boolean
+  /** The card can be picked up and put down elsewhere; by default, when it is
+   *  interactive. A finished proof's cards move without being interactive. */
+  isMovable?: boolean
   isFailing?: boolean
   isClickable?: boolean
   clickTooltip?: string
@@ -37,6 +40,7 @@ export function HypCard({
   streamId,
   positionOverride,
   isInteractive = true,
+  isMovable = isInteractive,
   isFailing = false,
   isClickable = false,
   isTransformable = false,
@@ -55,7 +59,7 @@ export function HypCard({
   const clickTimeoutRef = React.useRef<number | null>(null)
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
     id: card.id,
-    disabled: !isInteractive,
+    disabled: !isMovable,
     data: { hypCard: true, card },
   })
 
@@ -142,11 +146,11 @@ export function HypCard({
       style={style}
       className={classes}
       onClick={isInteractive && isClickable && !isDragging ? handleClick : undefined}
-      onDoubleClick={isInteractive && isTransformable && !isDragging ? handleDoubleClick : undefined}
+      onDoubleClick={onDoubleClick && isTransformable && !isDragging ? handleDoubleClick : undefined}
       onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
-      {...(isInteractive ? listeners : {})}
-      {...(isInteractive ? attributes : {})}
+      {...(isMovable ? listeners : {})}
+      {...(isMovable ? attributes : {})}
     >
       <HypCardContent card={card} iffDirection={iffDirection} atomicContextNames={atomicContextNames} />
     </div>

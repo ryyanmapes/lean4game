@@ -11,7 +11,7 @@ import { EqualityHypCard } from './TransformRuleCard'
 import { ConnectionArrow } from './ConnectionArrow'
 import { VisualInfoText } from './VisualInfoText'
 import { ResetIcon, RewriteDirectionIcon, SwapSidesIcon, UndoIcon } from './ControlIcons'
-import { useSwipePaging } from './useSwipePaging'
+import { useHorizontalSwipe, useSwipePaging } from './useSwipePaging'
 import { packAdaptivePages, renderedCardGap } from './adaptivePagination'
 import type { VisualTransformInfo } from './types'
 import { usePersistentHints } from './hintPersistence'
@@ -366,6 +366,9 @@ interface Props {
   onCheck?: () => Promise<boolean>
   /** The level is solved: the check mark is shown green. */
   completed?: boolean
+  /** Opened on a finished proof to look at a statement: nothing can be changed,
+   *  and the check mark only shows over a relation whose sides match. */
+  reviewOnly?: boolean
   /** Show the check mark once both sides match although the level isn't Rewrite-only
    *  (`VisualRewriteCheck`, on a goal). */
   rewriteCheck?: boolean
@@ -394,7 +397,7 @@ export function TransformationView({
   selectedTab, onSelectedTabChange, pageIndexByTab, onPageIndexChange, rewriteStepCount, headerSlot, style,
   isPhonePortrait = false, emphasizeItems, axioms, visualInfos = [],
   rewriteOnly = false, hideRewriteDirection = false, hideSwapSides = false, emphasizeForall, onCheck, completed = false,
-  rewriteCheck = false, persistentHints = false, noTabs = false, noHypothesesTab = false,
+  rewriteCheck = false, persistentHints = false, noTabs = false, noHypothesesTab = false, reviewOnly = false,
 }: Props) {
   const instanceIdRef = useRef(++transformationViewInstanceCounter)
   const initialLhs = useCallback(() => {
@@ -781,10 +784,21 @@ export function TransformationView({
     }
   }, [cardGap, dockLayoutKey, hasMeasurements, measuredWidths])
 
+  // On a touch screen a sideways swipe on the lower menu sets the rewrite direction:
+  // to the right for left-to-right rules, to the left for right-to-left ones (a
+  // right-click swaps it with a mouse). The pages are turned with their buttons.
+  // Where the direction is fixed, a swipe turns the page as it does elsewhere.
+  const directionSwipe = useHorizontalSwipe(
+    direction => {
+      const reverse = direction === 'left'
+      if (reverse !== isReverse) onIsReverseChange(reverse)
+    },
+    hideRewriteDirection || isProcessing,
+  )
   const pageSwipeHandlers = useSwipePaging({
     currentPage: clampedPage,
     totalPages,
-    disabled: !hasRules || isProcessing,
+    disabled: !hideRewriteDirection || !hasRules || isProcessing,
     onPageChange: page => {
       onPageIndexChange(selectedTab, page)
       setHoveredId(null)
@@ -836,8 +850,9 @@ export function TransformationView({
     : undefined
   // The check mark closes the goal once both sides are the same: always in a
   // Rewrite-only level, and on any goal in a game with `VisualRewriteCheck`.
-  const showCheck = (rewriteOnly || rewriteCheck) && (currentSidesMatch || completed)
-  const checkInfo = showCheck && !completed
+  const showCheck = (rewriteOnly || rewriteCheck) && (currentSidesMatch || (completed && !reviewOnly))
+  // The hint stays once the check mark has been clicked, like every other hint.
+  const checkInfo = showCheck
     ? activeVisualInfos.find(info => info.kind === 'check' && info.text)
     : undefined
   const rewriteInfos = useMemo(
@@ -1257,6 +1272,8 @@ export function TransformationView({
 
   const handleDragStart = (event: DragStartEvent) => {
     suppressRuleClickRef.current = true
+    // The touch is dragging a rule, not swiping the menu.
+    directionSwipe.cancel()
     const id = event.active.id as string
     setActiveId(id)
     const el = document.getElementById(id)
@@ -1693,6 +1710,7 @@ export function TransformationView({
           aria-busy={!dockPresentationReady}
           style={dockPresentationReady ? undefined : { opacity: 0, pointerEvents: 'none' }}
           onContextMenu={e => { e.preventDefault(); if (!isProcessing && !hideRewriteDirection) onIsReverseChange(!isReverse) }}
+          {...directionSwipe.handlers}
         >
           {/* Cards row */}
           <div className="tr-dock-cards">

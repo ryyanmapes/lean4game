@@ -240,8 +240,10 @@ export function GoalCard({
         data-stream-id={id}
         data-goal-text={goalText}
         className={classes}
-        onClick={isInteractive ? handleClick : undefined}
-        onDoubleClick={isInteractive ? handleDoubleClick : undefined}
+        // A finished goal is not interactive but can still be opened to look at
+        // (the click is what a double-click's sequence starts from).
+        onClick={isInteractive || onDoubleClick ? handleClick : undefined}
+        onDoubleClick={isInteractive || onDoubleClick ? handleDoubleClick : undefined}
         onContextMenu={onContextMenu}
         onMouseLeave={onMouseLeave}
       >

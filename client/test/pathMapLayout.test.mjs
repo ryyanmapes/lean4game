@@ -68,21 +68,30 @@ test('worlds are columns of their levels, split after the shared opening', () =>
   assert.ok(node(layout, 'Rewrite', 2).y > node(layout, 'Rewrite', 1).y)
 })
 
-test('a bonus is a row of levels sprouting from its anchor, pushing the main path down', () => {
+test('a bonus is a row of levels sprouting from its anchor, beside the next level of the path', () => {
   const layout = computePathMapLayout(nnvg)
   const anchor = node(layout, 'Rewrite', 3)
   const next = node(layout, 'Rewrite', 4)
   const first = node(layout, 'RewriteBonus', 1)
   const second = node(layout, 'RewriteBonus', 2)
-  // Outward from a left column, between the anchor and the next main level.
+  // Outward from a left column, one row below the anchor, where the path's next
+  // level is listed too.
   assert.ok(first.x < anchor.x)
   assert.ok(second.x < first.x)
   assert.equal(second.y, first.y)
-  assert.ok(first.y > anchor.y && first.y < next.y)
+  assert.equal(first.y, anchor.y + PATH_MAP_ROW_HEIGHT)
+  assert.equal(next.y, first.y)
   assert.equal(first.color, 'amber')
   const branch = segment(layout, 'bonus:Rewrite:3:RewriteBonus')
   assert.deepEqual(branch.source, { world: 'Rewrite', level: 3 })
   assert.deepEqual(branch.points.at(-1), { x: first.x, y: first.y })
+  // It leaves the anchor sideways and runs down a stem, clear of the next level.
+  const stemX = branch.points[1].x
+  assert.deepEqual(branch.points.slice(0, 3), [
+    { x: anchor.x, y: anchor.y }, { x: stemX, y: anchor.y }, { x: stemX, y: first.y },
+  ])
+  assert.ok(anchor.x - stemX > 31 + 8, 'the stem is clear of the next level, even a boss')
+  assert.ok(stemX - first.x > 22 + PATH_MAP_CORNER_RADIUS, 'the branch has room to turn off the stem')
   // The bonus's own levels are joined along the row.
   assert.deepEqual(segment(layout, 'level:RewriteBonus:1').points, [
     { x: first.x, y: first.y },
@@ -632,7 +641,47 @@ test('bonus branches off one level leave its path once and fan out from a stem',
     // Both light up with the level they leave.
     assert.deepEqual(toSecond.source, { world, level })
   }
-  // A single branch still drops straight down from its level.
-  const lone = segment(layout, 'bonus:PropositionRight:2:PropositionBonus')
-  assert.equal(lone.points[1].x, node(layout, 'PropositionRight', 2).x)
+  // A single branch off the last level of its world still drops straight down from it.
+  const lone = segment(layout, 'bonus:NeqJoined:1:NeqBoss')
+  assert.equal(lone.points[1].x, node(layout, 'NeqJoined', 1).x)
+  // One with the path's next level beside it leaves by a stem too.
+  const beside = segment(layout, 'bonus:PropositionRight:2:PropositionBonus')
+  assert.notEqual(beside.points[1].x, node(layout, 'PropositionRight', 2).x)
+  assert.equal(beside.points[1].y, node(layout, 'PropositionRight', 2).y)
+})
+
+test('the levels after a branching level are listed beside its branches', () => {
+  const layout = computePathMapLayout(nnvg7)
+  assertNoPathOverLevels(layout)
+  // Rewrite World's levels are a row apart all the way down, bonuses or not.
+  for (let level = 1; level < 6; level += 1) {
+    assert.equal(node(layout, 'Rewrite', level + 1).y - node(layout, 'Rewrite', level).y, PATH_MAP_ROW_HEIGHT)
+  }
+  // Its two branches sit beside the two levels after the one they leave.
+  assert.equal(node(layout, 'RewriteBonus', 1).y, node(layout, 'Rewrite', 4).y)
+  assert.equal(node(layout, 'RewriteBonusB', 1).y, node(layout, 'Rewrite', 5).y)
+  // Branches off a world's last level still have their rows below it, and the next
+  // world starts below them.
+  const boss = node(layout, 'PropositionRight', 8)
+  assert.equal(node(layout, 'PropositionBonusC', 1).y, boss.y + 2 * PATH_MAP_ROW_HEIGHT)
+  assert.ok(node(layout, 'Neq', 1).y > node(layout, 'PropositionBonusC', 1).y)
+})
+
+test('a level with branches of its own waits for the branches above it', () => {
+  const layout = computePathMapLayout({
+    worlds: {
+      Main: { title: 'Main World' },
+      First: { title: 'Bonus', bonusOf: { world: 'Main', level: 1 } },
+      Second: { title: 'Bonus', bonusOf: { world: 'Main', level: 1 } },
+      Third: { title: 'Bonus', bonusOf: { world: 'Main', level: 2 } },
+    },
+    edges: [['Main', 'First'], ['Main', 'Second'], ['Main', 'Third']],
+    worldSize: { Main: 4, First: 1, Second: 1, Third: 1 },
+  })
+  const rowOf = (world, level) => node(layout, world, level).y / PATH_MAP_ROW_HEIGHT
+  assert.deepEqual([rowOf('First', 1), rowOf('Second', 1)], [1, 2])
+  // Level 2 would be beside the first branch, but its own branch needs a free row.
+  assert.equal(rowOf('Main', 2), 2)
+  assert.equal(rowOf('Third', 1), 3)
+  assert.deepEqual([rowOf('Main', 3), rowOf('Main', 4)], [3, 4])
 })

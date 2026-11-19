@@ -82,38 +82,22 @@ interface VisualMapPalette {
   unlockedPath: string
 }
 
-const DARK_MAP_PALETTE: VisualMapPalette = {
-  background: '#0f172a',
-  lockedLevel: '#475569',
-  unlockedLevel: '#475569',
-  startedLevel: '#8b5cf6',
-  unlockedLevelOutline: '#8b5cf6',
-  completedLevel: '#10b981',
-  lockedWorld: '#334155',
-  unlockedWorld: '#6d28d9',
-  completedWorld: '#059669',
-  lockedLabel: '#475569',
-  unlockedLabel: '#5b21b6',
-  completedLabel: '#047857',
-  lockedPath: '#1e293b',
-  unlockedPath: '#064e3b',
-}
-
-const LIGHT_MAP_PALETTE: VisualMapPalette = {
-  background: '#f8fafc',
-  lockedLevel: '#94a3b8',
-  unlockedLevel: '#cbd5e1',
-  startedLevel: '#6366f1',
-  unlockedLevelOutline: '#6366f1',
-  completedLevel: '#10b981',
-  lockedWorld: '#cbd5e1',
-  unlockedWorld: '#818cf8',
-  completedWorld: '#34d399',
-  lockedLabel: '#94a3b8',
-  unlockedLabel: '#4f46e5',
-  completedLabel: '#059669',
-  lockedPath: '#64748b',
-  unlockedPath: '#065f46',
+/** The map's colours, from the palette of the scheme in use (palette.css). */
+const MAP_PALETTE: VisualMapPalette = {
+  background: 'rgb(var(--pal-bg-start))',
+  lockedLevel: 'rgb(var(--pal-map-level-locked))',
+  unlockedLevel: 'rgb(var(--pal-map-level-unlocked))',
+  startedLevel: 'rgb(var(--pal-map-level-started))',
+  unlockedLevelOutline: 'rgb(var(--pal-map-level-started))',
+  completedLevel: 'rgb(var(--pal-map-level-completed))',
+  lockedWorld: 'rgb(var(--pal-map-world-locked))',
+  unlockedWorld: 'rgb(var(--pal-map-world-unlocked))',
+  completedWorld: 'rgb(var(--pal-map-world-completed))',
+  lockedLabel: 'rgb(var(--pal-map-label-locked))',
+  unlockedLabel: 'rgb(var(--pal-map-label-unlocked))',
+  completedLabel: 'rgb(var(--pal-map-label-completed))',
+  lockedPath: 'rgb(var(--pal-map-path-locked))',
+  unlockedPath: 'rgb(var(--pal-map-path-unlocked))',
 }
 
 function toIconProp(icon: unknown): IconProp {
@@ -615,7 +599,7 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
   useRetryUntilData(gameInfo)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const svgRef = React.useRef<SVGSVGElement>(null)
-  const mapPalette = isVisualLightMode ? LIGHT_MAP_PALETTE : DARK_MAP_PALETTE
+  const mapPalette = MAP_PALETTE
   const { worlds, worldSize, skippedLevels, completionNeutralLevels, title } = gameInfo.data ?? {}
   const [levelTitles, setLevelTitles] = React.useState<Record<string, Record<number, string>>>({})
   // Subscribe so completion/import updates redraw the imperative selector results below.
@@ -1010,7 +994,6 @@ export function VisualWorldMap({ levelMode = 'visual' }: { levelMode?: MapLevelM
         {appBar}
         <VisualPathMap
           gameInfo={gameInfo.data}
-          isLightMode={isVisualLightMode}
           openAnyLevel={isVisualOpenAnyLevel}
         />
       </div>

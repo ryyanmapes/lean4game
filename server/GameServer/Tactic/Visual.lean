@@ -328,6 +328,28 @@ private def projectIffOperand (operand : ResolvedVisualOperand) (isReverse : Boo
   | none =>
       pure operand
 
+/-- Two cards that state the same proposition merge into one: the dragged
+    hypothesis `a` goes and `b`, the one it was dropped on, stays. Only local
+    propositions merge (never two variables of one type, nor an inventory
+    theorem). Returns whether the two were merged. -/
+private def mergeIdenticalHypotheses (a b : Ident) : TacticM Bool := withMainContext do
+  let lctx ← getLCtx
+  let some aDecl := lctx.findFromUserName? a.getId | return false
+  let some bDecl := lctx.findFromUserName? b.getId | return false
+  if aDecl.fvarId == bDecl.fvarId then return false
+  let aType ← instantiateMVars aDecl.type
+  let bType ← instantiateMVars bDecl.type
+  unless (← isProp aType) do return false
+  -- `==` on expressions ignores binder names, as the cards' text does not.
+  unless aType == bType do return false
+  let goal ← getMainGoal
+  try
+    replaceMainGoal [← goal.clear aDecl.fvarId]
+  catch _ =>
+    -- Something still refers to the dragged proof; the other copy can go instead.
+    replaceMainGoal [← goal.clear bDecl.fvarId]
+  return true
+
 syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
 
 @[tactic drag_to] def evalDragTo : Tactic := fun stx => do
@@ -335,6 +357,8 @@ syntax (name := drag_to) "drag_to" ("←")? ident ident : tactic
   let a : Ident := ⟨stx[2]⟩
   let b : Ident := ⟨stx[3]⟩
   withMainContext do
+    if ← mergeIdenticalHypotheses a b then return
+
     -- Preserve global theorem foralls until premise matching. Elaborating a
     -- bare theorem as a term can eagerly create an application metavariable;
     -- after the application context is restored that makes the dragged

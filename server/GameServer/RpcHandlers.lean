@@ -824,6 +824,16 @@ private def rwAnnotationForParsedHyp? (rw : ParsedDragRwHyp) (goal : MVarId) : M
 
 private def dragToAnnotationForParsed? (drag : ParsedDragTo) (goal : MVarId) :
     MetaM (Option String) := goal.withContext do
+  -- Two local cards stating the same proposition merge: the dragged one goes
+  -- (`mergeIdenticalHypotheses` in Tactic/Visual.lean).
+  let lctx ← getLCtx
+  if let (some sourceDecl, some targetDecl) :=
+      (lctx.findFromUserName? drag.sourceName, lctx.findFromUserName? drag.targetName) then
+    let sourceType ← instantiateMVars sourceDecl.type
+    if sourceDecl.fvarId != targetDecl.fvarId && (← isProp sourceType)
+        && sourceType == (← instantiateMVars targetDecl.type) then
+      return some s!"clear {drag.sourceName}"
+
   let some sourceOperand ← resolveAnnotationOperand? drag.sourceName | return none
   let some targetOperand ← resolveAnnotationOperand? drag.targetName | return none
 

@@ -1,0 +1,236 @@
+/* The palette of the visual interface: every colour it uses, in one place.
+
+   A colour is written as its red, green and blue, each 0 to 255, so that the
+   stylesheet can use it at any opacity: `rgb(var(--pal-accent))` is the colour
+   itself and `rgba(var(--pal-accent), 0.5)` is half see-through. The comment
+   after a colour gives it as hex; when you change one by hand, change the three
+   numbers (the hex is only there to read).
+
+   The first block is the dark scheme, which is the default, and the second the
+   light scheme, which a game with a path map offers beside its menu. Both list
+   the same colours in the same order. What each is used at which opacity is
+   in visual.css, right below its `@import` of this file; the maps read theirs
+   in VisualPathMap.tsx and VisualWorldMap.tsx.
+
+   To try colours out, open palette-picker/index.html at the root of NNG2: it
+   shows the game's views in the palette as it is edited, and exports this file. */
+
+/* ══ Dark scheme ══ */
+.app {
+  /* ── Page ── */
+  --pal-bg-start:      15, 23, 42;      /* #0f172a  The page behind everything, at the top left of its gradient; also the maps' background */
+  --pal-bg-end:        30, 41, 59;      /* #1e293b  The page at the bottom right of its gradient */
+  --pal-surface:       15, 23, 42;      /* #0f172a  Panels and bars over the page: the header, the lower menu, the proof graph */
+  --pal-surface-solid: 30, 41, 59;      /* #1e293b  Opaque panels: menus, dialogs, tooltips */
+  --pal-card:          255, 255, 255;   /* #ffffff  The glass of cards and buttons */
+  --pal-line:          255, 255, 255;   /* #ffffff  Hairlines and faint fills: card borders, dividers, the tabs, formula backgrounds */
+  --pal-shadow:        0, 0, 0;         /* #000000  Shadows, and the dimming behind a panel */
+  --pal-backdrop:      2, 6, 23;        /* #020617  The dimmed page behind a text level's dialog */
+
+  /* ── Text ── */
+  --pal-text:           248, 250, 252;   /* #f8fafc  Text */
+  --pal-text-bright:    226, 232, 240;   /* #e2e8f0  Formulas and other text that should stand out a little less than titles */
+  --pal-text-secondary: 148, 163, 184;   /* #94a3b8  Secondary text: labels, icons, the lines of the proof graph */
+  --pal-text-muted:     100, 116, 139;   /* #64748b  Muted text: page numbers, placeholders */
+  --pal-on-accent:      248, 250, 252;   /* #f8fafc  Text on an accent-coloured button */
+  --pal-on-solid:       255, 255, 255;   /* #ffffff  Text on a solid colour: a finished level on the map, the green check mark */
+  --pal-inactive:       100, 116, 139;   /* #64748b  What can't be used: a locked level's number, a card that won't take the drop */
+  --pal-track:          71, 85, 105;     /* #475569  Paths and levels of the map not reached yet; the dots of a pager */
+
+  /* ── Accent ── */
+  --pal-accent:             139, 92, 246;    /* #8b5cf6  The accent: drop targets, the current branch, scroll bars, active toggles */
+  --pal-accent-soft:        167, 139, 250;   /* #a78bfa  A softer accent: the slots of the term builder, the rewrite direction */
+  --pal-accent-strong:      196, 181, 253;   /* #c4b5fd  A stronger accent, for text and outlines on the accent */
+  --pal-accent-pale:        196, 181, 253;   /* #c4b5fd  The highlight of the loading screen's ball */
+  --pal-accent-text:        196, 181, 253;   /* #c4b5fd  Accent-coloured text: a hypothesis' name, the label of a choice */
+  --pal-accent-text-strong: 196, 181, 253;   /* #c4b5fd  Text of the active tab or toggle */
+  --pal-emphasis:           167, 139, 250;   /* #a78bfa  The glow of an emphasized card or button */
+  --pal-iff-forward:        139, 92, 246;    /* #8b5cf6  An if-and-only-if's arrow, read left to right */
+  --pal-iff-reverse:        236, 72, 153;    /* #ec4899  An if-and-only-if's arrow, read right to left */
+
+  /* ── Statements ── */
+  --pal-goal:         234, 179, 8;     /* #eab308  The goal card's outline and glow, and Rewrite Mode's check mark */
+  --pal-info:         96, 165, 250;    /* #60a5fa  Theorems and hints: the tint and border of their cards */
+  --pal-info-text:    147, 197, 253;   /* #93c5fd  A theorem's name; the text accents of hints */
+  --pal-hint-ring:    96, 165, 250;    /* #60a5fa  The thin ring around a hint on the canvas */
+  --pal-derived:      52, 211, 153;    /* #34d399  A proposition the player derived: its card; also a finished level's tick and Next button */
+  --pal-derived-tint: 52, 211, 153;    /* #34d399  The tint of a derived proposition's card and of a finished level's header */
+  --pal-derived-text: 110, 231, 183;   /* #6ee7b7  A derived proposition's name */
+  --pal-integer:      96, 165, 250;    /* #60a5fa  Integer expressions (the Real Numbers Game) */
+  --pal-construction: 251, 191, 36;    /* #fbbf24  The body of the statement being built in the specialization view */
+  --pal-tactic-text:  254, 202, 202;   /* #fecaca  A tactic card's text */
+
+  /* ── Feedback ── */
+  --pal-success:         34, 197, 94;     /* #22c55e  Success: tints, borders and glows */
+  --pal-success-text:    74, 222, 128;    /* #4ade80  Success text */
+  --pal-complete-header: 6, 48, 22;       /* #063016  The header of a finished level */
+  --pal-stream-complete: 34, 197, 94;     /* #22c55e  A finished branch in the proof graph; the check mark once clicked */
+  --pal-stream-pending:  249, 115, 22;    /* #f97316  An open branch in the proof graph */
+  --pal-warning:         250, 204, 21;    /* #facc15  Warnings, and the Undo button when it can undo */
+  --pal-warning-soft:    234, 179, 8;     /* #eab308  The softer outline and glow of a warning */
+  --pal-attention:       250, 204, 21;    /* #facc15  A branch arrow that leads to an unfinished branch: outline and glow */
+  --pal-attention-text:  253, 230, 138;   /* #fde68a  A branch arrow that leads to an unfinished branch: the arrow */
+  --pal-danger:          239, 68, 68;     /* #ef4444  Errors and tactic cards: tints and borders */
+  --pal-danger-text:     248, 113, 113;   /* #f87171  Error text */
+  --pal-guide-arrow:     90, 99, 112;     /* #5a6370  The arrows that hints point with */
+
+  /* ── Worlds on the path map ── */
+  --pal-world-grey:        148, 163, 184;   /* #94a3b8  Sections that belong to no world: finished levels and paths */
+  --pal-world-grey-edge:   100, 116, 139;   /* #64748b  Their outline */
+  --pal-world-purple:      139, 92, 246;    /* #8b5cf6  Purple worlds (`VisualWorldColor purple`): finished levels and paths */
+  --pal-world-purple-edge: 109, 40, 217;    /* #6d28d9  Their outline */
+  --pal-world-blue:        59, 130, 246;    /* #3b82f6  Blue worlds (`VisualWorldColor blue`): finished levels and paths */
+  --pal-world-blue-edge:   29, 78, 216;     /* #1d4ed8  Their outline */
+  --pal-world-sky:         56, 189, 248;    /* #38bdf8  Sky worlds (`VisualWorldColor sky`): finished levels and paths */
+  --pal-world-sky-edge:    2, 132, 199;     /* #0284c7  Their outline */
+  --pal-world-teal:        20, 184, 166;    /* #14b8a6  Teal worlds (`VisualWorldColor teal`): finished levels and paths */
+  --pal-world-teal-edge:   15, 118, 110;    /* #0f766e  Their outline */
+  --pal-world-green:       34, 197, 94;     /* #22c55e  Green worlds (`VisualWorldColor green`): finished levels and paths */
+  --pal-world-green-edge:  21, 128, 61;     /* #15803d  Their outline */
+  --pal-world-amber:       245, 158, 11;    /* #f59e0b  Amber worlds (`VisualWorldColor amber`): finished levels and paths */
+  --pal-world-amber-edge:  180, 83, 9;      /* #b45309  Their outline */
+  --pal-world-orange:      249, 115, 22;    /* #f97316  Orange worlds (`VisualWorldColor orange`): finished levels and paths */
+  --pal-world-orange-edge: 194, 65, 12;     /* #c2410c  Their outline */
+  --pal-world-red:         239, 68, 68;     /* #ef4444  Red worlds (`VisualWorldColor red`): finished levels and paths */
+  --pal-world-red-edge:    185, 28, 28;     /* #b91c1c  Their outline */
+  --pal-world-pink:        236, 72, 153;    /* #ec4899  Pink worlds (`VisualWorldColor pink`): finished levels and paths */
+  --pal-world-pink-edge:   190, 24, 93;     /* #be185d  Their outline */
+  --pal-world-indigo:      99, 102, 241;    /* #6366f1  Indigo worlds (`VisualWorldColor indigo`): finished levels and paths */
+  --pal-world-indigo-edge: 67, 56, 202;     /* #4338ca  Their outline */
+  --pal-world-lime:        132, 204, 22;    /* #84cc16  Lime worlds (`VisualWorldColor lime`): finished levels and paths */
+  --pal-world-lime-edge:   77, 124, 15;     /* #4d7c0f  Their outline */
+
+  /* ── The world map of games without a path map ── */
+  --pal-map-level-locked:    71, 85, 105;     /* #475569  A locked level */
+  --pal-map-level-unlocked:  71, 85, 105;     /* #475569  A level that can be played */
+  --pal-map-level-started:   139, 92, 246;    /* #8b5cf6  A level that was started, and the outline of one that can be played */
+  --pal-map-level-completed: 16, 185, 129;    /* #10b981  A finished level */
+  --pal-map-world-locked:    51, 65, 85;      /* #334155  A locked world */
+  --pal-map-world-unlocked:  109, 40, 217;    /* #6d28d9  A world that can be played */
+  --pal-map-world-completed: 5, 150, 105;     /* #059669  A finished world */
+  --pal-map-label-locked:    71, 85, 105;     /* #475569  A locked world's title */
+  --pal-map-label-unlocked:  91, 33, 182;     /* #5b21b6  The title of a world that can be played */
+  --pal-map-label-completed: 4, 120, 87;      /* #047857  A finished world's title */
+  --pal-map-path-locked:     30, 41, 59;      /* #1e293b  A path to a locked world */
+  --pal-map-path-unlocked:   6, 78, 59;       /* #064e3b  A path to a world that can be played */
+}
+
+/* ══ Light scheme ══ */
+.app[data-visual-theme='light'] {
+  /* ── Page ── */
+  --pal-bg-start:      248, 250, 252;   /* #f8fafc  The page behind everything, at the top left of its gradient; also the maps' background */
+  --pal-bg-end:        226, 232, 240;   /* #e2e8f0  The page at the bottom right of its gradient */
+  --pal-surface:       255, 255, 255;   /* #ffffff  Panels and bars over the page: the header, the lower menu, the proof graph */
+  --pal-surface-solid: 255, 255, 255;   /* #ffffff  Opaque panels: menus, dialogs, tooltips */
+  --pal-card:          255, 255, 255;   /* #ffffff  The glass of cards and buttons */
+  --pal-line:          148, 163, 184;   /* #94a3b8  Hairlines and faint fills: card borders, dividers, the tabs, formula backgrounds */
+  --pal-shadow:        15, 23, 42;      /* #0f172a  Shadows, and the dimming behind a panel */
+  --pal-backdrop:      2, 6, 23;        /* #020617  The dimmed page behind a text level's dialog */
+
+  /* ── Text ── */
+  --pal-text:           15, 23, 42;      /* #0f172a  Text */
+  --pal-text-bright:    30, 41, 59;      /* #1e293b  Formulas and other text that should stand out a little less than titles */
+  --pal-text-secondary: 71, 85, 105;     /* #475569  Secondary text: labels, icons, the lines of the proof graph */
+  --pal-text-muted:     100, 116, 139;   /* #64748b  Muted text: page numbers, placeholders */
+  --pal-on-accent:      255, 255, 255;   /* #ffffff  Text on an accent-coloured button */
+  --pal-on-solid:       255, 255, 255;   /* #ffffff  Text on a solid colour: a finished level on the map, the green check mark */
+  --pal-inactive:       148, 163, 184;   /* #94a3b8  What can't be used: a locked level's number, a card that won't take the drop */
+  --pal-track:          203, 213, 225;   /* #cbd5e1  Paths and levels of the map not reached yet; the dots of a pager */
+
+  /* ── Accent ── */
+  --pal-accent:             99, 102, 241;    /* #6366f1  The accent: drop targets, the current branch, scroll bars, active toggles */
+  --pal-accent-soft:        99, 102, 241;    /* #6366f1  A softer accent: the slots of the term builder, the rewrite direction */
+  --pal-accent-strong:      79, 70, 229;     /* #4f46e5  A stronger accent, for text and outlines on the accent */
+  --pal-accent-pale:        199, 210, 254;   /* #c7d2fe  The highlight of the loading screen's ball */
+  --pal-accent-text:        67, 56, 202;     /* #4338ca  Accent-coloured text: a hypothesis' name, the label of a choice */
+  --pal-accent-text-strong: 55, 48, 163;     /* #3730a3  Text of the active tab or toggle */
+  --pal-emphasis:           167, 139, 250;   /* #a78bfa  The glow of an emphasized card or button */
+  --pal-iff-forward:        139, 92, 246;    /* #8b5cf6  An if-and-only-if's arrow, read left to right */
+  --pal-iff-reverse:        236, 72, 153;    /* #ec4899  An if-and-only-if's arrow, read right to left */
+
+  /* ── Statements ── */
+  --pal-goal:         234, 179, 8;     /* #eab308  The goal card's outline and glow, and Rewrite Mode's check mark */
+  --pal-info:         37, 99, 235;     /* #2563eb  Theorems and hints: the tint and border of their cards */
+  --pal-info-text:    37, 99, 235;     /* #2563eb  A theorem's name; the text accents of hints */
+  --pal-hint-ring:    96, 165, 250;    /* #60a5fa  The thin ring around a hint on the canvas */
+  --pal-derived:      52, 211, 153;    /* #34d399  A proposition the player derived: its card; also a finished level's tick and Next button */
+  --pal-derived-tint: 16, 185, 129;    /* #10b981  The tint of a derived proposition's card and of a finished level's header */
+  --pal-derived-text: 4, 120, 87;      /* #047857  A derived proposition's name */
+  --pal-integer:      96, 165, 250;    /* #60a5fa  Integer expressions (the Real Numbers Game) */
+  --pal-construction: 180, 83, 9;      /* #b45309  The body of the statement being built in the specialization view */
+  --pal-tactic-text:  185, 28, 28;     /* #b91c1c  A tactic card's text */
+
+  /* ── Feedback ── */
+  --pal-success:         22, 163, 74;     /* #16a34a  Success: tints, borders and glows */
+  --pal-success-text:    22, 163, 74;     /* #16a34a  Success text */
+  --pal-complete-header: 220, 252, 231;   /* #dcfce7  The header of a finished level */
+  --pal-stream-complete: 34, 197, 94;     /* #22c55e  A finished branch in the proof graph; the check mark once clicked */
+  --pal-stream-pending:  249, 115, 22;    /* #f97316  An open branch in the proof graph */
+  --pal-warning:         202, 138, 4;     /* #ca8a04  Warnings, and the Undo button when it can undo */
+  --pal-warning-soft:    202, 138, 4;     /* #ca8a04  The softer outline and glow of a warning */
+  --pal-attention:       250, 204, 21;    /* #facc15  A branch arrow that leads to an unfinished branch: outline and glow */
+  --pal-attention-text:  253, 230, 138;   /* #fde68a  A branch arrow that leads to an unfinished branch: the arrow */
+  --pal-danger:          220, 38, 38;     /* #dc2626  Errors and tactic cards: tints and borders */
+  --pal-danger-text:     220, 38, 38;     /* #dc2626  Error text */
+  --pal-guide-arrow:     90, 99, 112;     /* #5a6370  The arrows that hints point with */
+
+  /* ── Worlds on the path map ── */
+  --pal-world-grey:        148, 163, 184;   /* #94a3b8  Sections that belong to no world: finished levels and paths */
+  --pal-world-grey-edge:   100, 116, 139;   /* #64748b  Their outline */
+  --pal-world-purple:      139, 92, 246;    /* #8b5cf6  Purple worlds (`VisualWorldColor purple`): finished levels and paths */
+  --pal-world-purple-edge: 109, 40, 217;    /* #6d28d9  Their outline */
+  --pal-world-blue:        59, 130, 246;    /* #3b82f6  Blue worlds (`VisualWorldColor blue`): finished levels and paths */
+  --pal-world-blue-edge:   29, 78, 216;     /* #1d4ed8  Their outline */
+  --pal-world-sky:         56, 189, 248;    /* #38bdf8  Sky worlds (`VisualWorldColor sky`): finished levels and paths */
+  --pal-world-sky-edge:    2, 132, 199;     /* #0284c7  Their outline */
+  --pal-world-teal:        20, 184, 166;    /* #14b8a6  Teal worlds (`VisualWorldColor teal`): finished levels and paths */
+  --pal-world-teal-edge:   15, 118, 110;    /* #0f766e  Their outline */
+  --pal-world-green:       34, 197, 94;     /* #22c55e  Green worlds (`VisualWorldColor green`): finished levels and paths */
+  --pal-world-green-edge:  21, 128, 61;     /* #15803d  Their outline */
+  --pal-world-amber:       245, 158, 11;    /* #f59e0b  Amber worlds (`VisualWorldColor amber`): finished levels and paths */
+  --pal-world-amber-edge:  180, 83, 9;      /* #b45309  Their outline */
+  --pal-world-orange:      249, 115, 22;    /* #f97316  Orange worlds (`VisualWorldColor orange`): finished levels and paths */
+  --pal-world-orange-edge: 194, 65, 12;     /* #c2410c  Their outline */
+  --pal-world-red:         239, 68, 68;     /* #ef4444  Red worlds (`VisualWorldColor red`): finished levels and paths */
+  --pal-world-red-edge:    185, 28, 28;     /* #b91c1c  Their outline */
+  --pal-world-pink:        236, 72, 153;    /* #ec4899  Pink worlds (`VisualWorldColor pink`): finished levels and paths */
+  --pal-world-pink-edge:   190, 24, 93;     /* #be185d  Their outline */
+  --pal-world-indigo:      99, 102, 241;    /* #6366f1  Indigo worlds (`VisualWorldColor indigo`): finished levels and paths */
+  --pal-world-indigo-edge: 67, 56, 202;     /* #4338ca  Their outline */
+  --pal-world-lime:        132, 204, 22;    /* #84cc16  Lime worlds (`VisualWorldColor lime`): finished levels and paths */
+  --pal-world-lime-edge:   77, 124, 15;     /* #4d7c0f  Their outline */
+
+  /* ── The world map of games without a path map ── */
+  --pal-map-level-locked:    148, 163, 184;   /* #94a3b8  A locked level */
+  --pal-map-level-unlocked:  203, 213, 225;   /* #cbd5e1  A level that can be played */
+  --pal-map-level-started:   99, 102, 241;    /* #6366f1  A level that was started, and the outline of one that can be played */
+  --pal-map-level-completed: 16, 185, 129;    /* #10b981  A finished level */
+  --pal-map-world-locked:    203, 213, 225;   /* #cbd5e1  A locked world */
+  --pal-map-world-unlocked:  129, 140, 248;   /* #818cf8  A world that can be played */
+  --pal-map-world-completed: 52, 211, 153;    /* #34d399  A finished world */
+  --pal-map-label-locked:    148, 163, 184;   /* #94a3b8  A locked world's title */
+  --pal-map-label-unlocked:  79, 70, 229;     /* #4f46e5  The title of a world that can be played */
+  --pal-map-label-completed: 5, 150, 105;     /* #059669  A finished world's title */
+  --pal-map-path-locked:     100, 116, 139;   /* #64748b  A path to a locked world */
+  --pal-map-path-unlocked:   6, 95, 70;       /* #065f46  A path to a world that can be played */
+}
+
+/* ══ Elevator Pitch (VisualTest): green in place of the accent ══
+   Scoped by game, so the other games keep the palette above. */
+.app[data-game-id='g/local/VisualTest'] {
+  --pal-accent:             75, 216, 189;    /* #4bd8bd */
+  --pal-accent-soft:        126, 229, 207;   /* #7ee5cf */
+  --pal-accent-strong:      167, 240, 226;   /* #a7f0e2 */
+  --pal-accent-pale:        167, 240, 226;   /* #a7f0e2 */
+  --pal-accent-text:        167, 240, 226;   /* #a7f0e2 */
+  --pal-accent-text-strong: 167, 240, 226;   /* #a7f0e2 */
+}
+
+.app[data-visual-theme='light'][data-game-id='g/local/VisualTest'] {
+  --pal-accent:             13, 148, 136;    /* #0d9488 */
+  --pal-accent-soft:        13, 148, 136;    /* #0d9488 */
+  --pal-accent-strong:      15, 118, 110;    /* #0f766e */
+  --pal-accent-pale:        153, 246, 228;   /* #99f6e4 */
+  --pal-accent-text:        15, 118, 110;    /* #0f766e */
+  --pal-accent-text-strong: 17, 94, 89;      /* #115e59 */
+}
